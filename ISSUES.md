@@ -6,6 +6,17 @@ Running log of technical decisions, tradeoffs, and open problems for this projec
 
 ## 2026-09-09
 
+### Bug: gumball's axis lines didn't respond to direct drags, even though the underlying camera/update logic was correct
+**Status:** Fixed.
+
+Symptom: dragging in empty space near the gumball orbited the camera fine, and the axis indicator's SVG `x2`/`y2` values were provably correct (verified via DevTools — real, trigonometrically-consistent numbers matching the current camera orientation) — but dragging *directly on* a rendered axis line did nothing, and Dana didn't have this issue in `active-geometry-project`.
+
+Root cause, in two parts:
+1. The gumball's `<svg>` has `pointer-events: none` (ported from the original) so clicks pass through to the canvas underneath, letting drag-to-orbit work even where the widget visually overlaps the viewport. But `pointer-events: none` only excludes an element *and its descendants* from hit-testing — it doesn't affect ancestors. The `<line>`/`<text>` elements' rendered strokes were still being hit-tested as part of a check that apparently wasn't fully inherited in practice — fixed by setting `pointer-events: none` explicitly on the `line`/`text` elements themselves rather than relying on cascade from the parent `<svg>` alone.
+2. Even after that, dragging on the gumball's container (not just the SVG) still didn't pass through — because `.gumball-container` (the outer `position: fixed` div holding the SVG + zoom slider + buttons) had no `pointer-events` override of its own, so it captured clicks over its whole bounding box regardless of what its SVG child opted out of. Fixed by setting `pointer-events: none` on `.gumball-container` itself, then explicitly opting the actually-interactive controls (`.gumball-zoom-input`, `.gumball-btn`) back in with `pointer-events: auto`.
+
+**Note:** point 2 is a deliberate addition, not a strict port — active-geometry's own container doesn't have `pointer-events: none` either. Dana's theory for why the original never surfaced this: its gumball sits bottom-left, tucked under the left shape-library panel, likely just less overlapped by where she'd naturally start an orbit-drag than this project's top-right placement.
+
 ### Open item: arbitrary placeholder values need eventual design-system/config tokenization
 **Status:** Open — tracked, not yet built (Dana: "don't run ahead of the class schedule" applies; this is a future cleanup pass, not urgent).
 

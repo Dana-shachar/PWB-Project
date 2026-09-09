@@ -1,0 +1,299 @@
+/* Design system — the single CSS source of truth for this app. All values
+   below are ported directly from active-geometry-project's design system
+   (js/uiDesign.js CSS variables, style.css), not arbitrary placeholders,
+   kept consistent with that project's look. Any component's styling rules
+   live here, not in per-component stylesheets — see CLAUDE.md/README.md
+   for why. */
+
+/* Actual licensed Helvetica files, ported from active-geometry-project
+   (app/public/fonts/, copied from that project's assets/font/) — without
+   these, --font-ui falls back to a generic system sans-serif and nothing
+   matches active-geometry's actual look (wrong metrics, wrong weights). */
+@font-face {
+  font-family: 'Helvetica';
+  src: url('/fonts/HelveticaLTStd-Light.ttf') format('truetype');
+  font-weight: 300;
+}
+@font-face {
+  font-family: 'Helvetica';
+  src: url('/fonts/HelveticaLTStd-Roman.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Helvetica';
+  src: url('/fonts/HelveticaLTStd-Bold.ttf') format('truetype');
+  font-weight: 700;
+}
+
+:root {
+  --color-bg: #000;
+  --color-text: #ffffff;
+  --color-track: #5b5b5b;
+  --color-accent: #e5c11f;
+  --color-input-fill: rgba(242, 242, 247, 0.15);
+  --color-input-stroke: #f2f2f7;
+  --color-panel-bg: #49494a;
+  --color-divider: rgba(255, 255, 255, 0.2);
+  --divider-weight: 0.5px;
+  --color-btn-bg: #0c0c0d;
+  --color-btn-hover-bg: #1a1a1a;
+  --color-axis-x: #ff4444;
+  --color-axis-y: #44ff88;
+  --color-axis-z: #4488ff;
+  --font-ui: 'Helvetica', sans-serif;
+  --font-mono: monospace;
+  --font-size-sm: 12px;
+  --font-size-xs: 10px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --panel-radius: 4px;
+  --panel-padding: 16px;
+  --panel-max-width: 360px;
+}
+
+/* ── Base layout ──────────────────────────────────────────── */
+/* The SceneCanvas's <canvas> sizes itself off its own element, so
+   html/body/#root need an explicit size to fill. */
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  overflow: hidden; /* no scrollbars around the 3D viewport */
+  background: var(--color-bg);
+}
+
+/* ── App layout (App.tsx) ──────────────────────────────────── */
+/* Panel + viewport as flex siblings (not the panel floating via
+   position:fixed over a full-bleed canvas) — otherwise the 3D scene centers
+   on the whole window instead of the actually-visible viewport area. */
+
+.app-layout {
+  display: flex;
+  width: 100vw;
+  height: 100vh;
+}
+
+.app-viewport {
+  flex: 1;
+  min-width: 0; /* lets this shrink below its content's natural width in a flex row */
+  height: 100%;
+}
+
+/* ── Slider (ui/UIElements.tsx) ───────────────────────────── */
+
+.ui-slider-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.ui-slider-label {
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+input[type='range'].ui-slider-track {
+  -webkit-appearance: none;
+  appearance: none;
+  flex: 1;
+  height: 2px;
+  background: var(--color-track);
+  border-radius: 1px;
+  cursor: pointer;
+  outline: none;
+}
+input[type='range'].ui-slider-track::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text);
+  cursor: pointer;
+}
+input[type='range'].ui-slider-track::-moz-range-thumb {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text);
+  border: none;
+  cursor: pointer;
+}
+
+.ui-slider-field {
+  flex: 0 0 36px; /* matches active-geometry's ag-slider-value min-width (the "value next to a track" role) */
+  min-width: 0;
+  cursor: ew-resize;
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+  color: var(--color-text);
+  font: 300 var(--font-size-sm) var(--font-ui);
+  line-height: 0.9;
+  padding: 6px 4px 4px;
+  text-align: center;
+}
+.ui-slider-field:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+/* ── Color picker (ui/UIElements.tsx) ─────────────────────── */
+/* Not ported from active-geometry — no color-picker convention exists there.
+   Plain native color input, styled to match the panel's existing tokens. */
+
+.ui-color-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.ui-color-label {
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.ui-color-swatch {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 28px;
+  height: 20px;
+  padding: 0;
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+  background: none;
+  cursor: pointer;
+}
+.ui-color-swatch::-webkit-color-swatch-wrapper { padding: 0; }
+.ui-color-swatch::-webkit-color-swatch { border: none; border-radius: 2px; }
+.ui-color-swatch:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
+/* ── Control panel (Panel.tsx) ────────────────────────────── */
+
+.panel-outer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: var(--panel-max-width);
+  min-height: 100vh;
+  max-height: 100vh;
+  background: var(--color-panel-bg);
+  border-radius: var(--panel-radius); /* matches active-geometry's flat 4px all around, not split */
+  z-index: 50; /* matches active-geometry's ag-right-outer exactly */
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-content {
+  padding: var(--panel-padding);
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow-y: auto; /* scrolls here, not on panel-outer — matches ag-right-content */
+  gap: var(--gap-md);
+}
+
+.panel-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+}
+
+.panel-section-title {
+  font: 700 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+}
+
+.panel-section-divider {
+  width: 100%;
+  min-height: 1px;
+  height: var(--divider-weight);
+  background: var(--color-divider);
+  flex-shrink: 0;
+}
+
+/* ── Gumball (ui/Gumball.tsx) ──────────────────────────────── */
+/* Ported from active-geometry-project's gumball.js — values are its exact
+   inline styles, moved here to keep one CSS source of truth. Positioned
+   top-right (original is bottom-left) since the control panel is on the
+   left in this project. Axis indicator ordered first (closest to the
+   corner) with zoom/view controls below it — a deliberate change from the
+   original's ordering, not a borrowed convention. */
+
+.gumball-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  /* Click-through by default, not just the inner svg — a child's own
+     pointer-events:none only excludes that child from hit-testing, the
+     parent container still captures clicks over the same screen area
+     otherwise. The actual interactive controls (zoom input, buttons) opt
+     back in below. This makes the whole widget's empty space (including
+     directly on the axis lines) drag-through-to-orbit, which the original
+     doesn't do either (its container has the same gap) — a deliberate
+     addition per Dana's request, not a strict port. */
+  pointer-events: none;
+}
+
+.gumball-svg {
+  pointer-events: none;
+  margin-bottom: var(--gap-md);
+}
+
+.gumball-zoom-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.gumball-zoom-label {
+  font: 700 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+
+.gumball-zoom-input {
+  width: 80px;
+  height: 2px;
+  accent-color: var(--color-text);
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--color-track);
+  border-radius: 1px;
+  outline: none;
+  pointer-events: auto; /* opts back in — container above is click-through */
+}
+
+.gumball-btn {
+  padding: 8px 8px 4px;
+  cursor: pointer;
+  font: 400 var(--font-size-xs) var(--font-ui);
+  line-height: 0.9;
+  background: var(--color-btn-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-track);
+  pointer-events: auto; /* opts back in — container above is click-through */
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.gumball-btn:hover {
+  background: var(--color-btn-hover-bg);
+}

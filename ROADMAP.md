@@ -10,28 +10,28 @@ The main doc for planning and progress tracking on Procedural World Building —
 This is the main doc for tracking progress and planning — updated as work progresses, so Claude (or Dana) can pick up where things left off without scanning for context each time. `README.md` is the external-facing reference (repo structure, code-organization conventions, written for anyone with zero context on the project); `ISSUES.md` holds the *why* behind technical decisions; this file is where planning happens and progress gets tracked — current implementation state, staged plans, feature ideas.
 
 ### Current implementation state (`app/`)
-Vite + React + TypeScript + Three.js app, scaffolded but **not yet wired up or tested in the browser** — nothing has been run via `npm run dev` yet, so none of this is confirmed working end to end.
+Vite + React + TypeScript + Three.js app — **running and tested in-browser** (`npm run dev`, http://localhost:5173/). A blue placeholder-colored planet sits on a grid, orbit-controllable, with a left-side control panel (sections: Scene controls, Planet controls) and a top-right gumball (orientation axis indicator + zoom slider + view presets + reset), all live-wired to React state in `App.tsx`.
 
-Files that exist so far, all under `app/src/`:
+Files, all under `app/src/`:
 
-- `scene/scene.ts` — plain `THREE.Scene` instance (no params needed).
-- `scene/renderer.ts` — builds the `WebGLRenderer` given a canvas (antialiasing on, pixel ratio set). Sizing/resize handled elsewhere.
-- `scene/camera.ts` — builds the `PerspectiveCamera`, positioned per active-geometry-project's defaults (distance 80, split evenly on x/y/z, looking at origin).
-- `scene/controls.ts` — builds `OrbitControls` with active-geometry-project's config (damping 0.05, LEFT=rotate/MIDDLE=dolly/RIGHT=pan).
-- `scene/grid.ts` — builds a plain `THREE.GridHelper` (size 200, divisions 50 by default) — not the shader-based grid from active-geometry, since this project isn't raymarching (see `ISSUES.md`).
-- `scene/planet.ts` — builds the planet: `SphereGeometry` (radius 20, 64×32 segments, all placeholder values — see `TODO(DS)` comments) + a custom `ShaderMaterial` using `shaders/vertex.glsl` + `shaders/fragment.glsl` (basic diffuse/Lambertian lighting, no terrain/noise yet).
-- `scene/SceneCanvas.tsx` — the React wrapper: mounts a `<canvas>` via ref, builds everything above inside a `useEffect` (never React state, per the class's React↔Three.js convention), runs the render loop, handles resize via `ResizeObserver`, disposes everything on unmount.
-- `shaders/vertex.glsl` / `shaders/fragment.glsl` — the planet's shader pair; generic basic-lit shading, reusable by future objects, not planet-specific despite living alongside the planet work.
+- `App.tsx` — owns all settings state (radius in km, base color, ambient light, light X/Y, grid divisions), renders `Panel` + the viewport, in a flex layout (`app-layout`/`app-viewport` in `design.css`) so the 3D view centers on the actually-visible area next to the panel, not the whole window.
+- `design.css` — the single CSS source of truth (see README.md's code-organization section) — design tokens, base layout, and every component's styling, including the actual licensed Helvetica font files ported from active-geometry (`app/public/fonts/`, loaded via `@font-face` — without these, everything silently falls back to a generic system sans-serif and nothing matches active-geometry's real look).
+- `scene/` — `scene.ts`, `renderer.ts`, `camera.ts` (exports `DEFAULT_CAMERA_DISTANCE`, bumped from active-geometry's 80 to 200 — 80 was calibrated for small CAD shapes, not a 20-unit-radius planet), `controls.ts`, `grid.ts`, `planet.ts` (+ `planetGeometry()` split out for cheap radius-only rebuilds), `SceneCanvas.tsx` (the React wrapper — mounts everything in a `useEffect`, reactive per-prop effects for radius/grid-resolution/lighting-and-color, render loop, `ResizeObserver`), `Gumball.tsx` (the orientation/navigation widget — see below).
+- `shaders/vertex.glsl` / `shaders/fragment.glsl` — the planet's shader pair; generic basic-lit shading, not planet-specific.
+- `ui/` — `UIElements.tsx` (`Slider`, `ColorPicker` — generic, feature-grouped, not split per-component), `Panel.tsx` (the sectioned control panel).
 
-**Still needed before anything is visible:** `App.tsx` needs to render `<SceneCanvas />` instead of the current Vite template, and `index.css`/`App.css` need the old template's centered/max-width layout replaced so the canvas actually fills the viewport. This hasn't been done yet — it got deferred while UI-component work (the slider) took priority.
+`app/src/engine/Entity.ts` (an early, abandoned attempt at the class's Entity/World OOP pattern) was removed early on — not part of this project's architecture. See `ISSUES.md` (2026-09-02 entry) for why.
 
-`app/src/engine/Entity.ts` (an early, abandoned attempt at the class's Entity/World OOP pattern) has been removed — not part of this project's architecture. See `ISSUES.md` (2026-09-02 entry) for why.
+**Bugs found and fixed along the way** (see `ISSUES.md` for the technical detail on the trickier ones): a real StrictMode-related leak that duplicated the grid on resolution change (cleanup was tearing down a stale closure reference instead of the ref's current value); the planet rendering off-center (canvas was full-bleed behind the panel — fixed via the flex layout above); and the gumball's axis indicator not responding to drags directly on its lines (a `pointer-events` cascade issue — the container needed to be click-through with only its actual controls opted back in, not just the SVG).
 
 ### Plan / next steps, in order
-1. **Slider UI component** — a blended component: a visible draggable range track + an editable/scrubbable number field, wired together. Ported from two separate patterns in `active-geometry-project`'s `js/uiDesign.js`: `addSlider` (the range track) and `numInput`/`makeScrubber` (the click-drag-to-scrub, click-to-type text field). Goes in a shared `app/src/ui/UIElements.tsx` file (feature-grouped, not its own component folder), first used for planet radius in km (a narrative/fictional-scale value, mapped internally to the small render-scale radius the scene actually uses). **In progress.**
-2. **Wire up the dev server** so Dana can actually test in-browser — includes finishing the `App.tsx` + CSS wiring noted above as a prerequisite. **Not started.**
-3. **Gumball** — port the orientation/navigation widget from `active-geometry-project`'s `js/gumball.js`, as its own `app/src/ui/Gumball.tsx` file. Reuse the existing camera/OrbitControls calibration logic as-is rather than re-deriving it (it was hard-won in that project). Reposition to **top-right** of the viewport (active-geometry has it bottom-left, tucked under its left shape-library panel — doesn't fit here since this project's single control menu is going on the left instead). A detailed plan will be presented before implementation starts. **Not started.**
-4. Broader control-panel structure (scene controls, lighting, general controls) ported from active-geometry, adapted to a single left-side menu instead of active-geometry's split left-library/right-properties layout. **Not started, not yet planned in detail.**
+1. ~~Slider UI component~~ — **Done.**
+2. ~~Wire up the dev server~~ — **Done.**
+3. ~~Sectioned control panel~~ (Scene controls: lighting, grid resolution; Planet controls: radius, base color) — **Done**, moved ahead of the gumball per Dana's request.
+4. ~~Gumball~~ — **Done**, including debugging the pointer-events issue above.
+5. **Color picker refinement** — currently a plain native `<input type="color">` (works, follows the real swatch-opens-picker convention, but the picker panel itself is generic OS/browser chrome, not themed to match the app). Open decision from earlier discussion, not yet made: keep native, add a small dependency (e.g. `react-colorful`) for a themed picker, or hand-build one. **Not started.**
+6. Terrain (heightmap via GPU fragment shader → render target texture, sampled by the planet's vertex/fragment shaders; CPU reads back specific texels on demand for agent/road placement rather than duplicating the noise algorithm — see `ISSUES.md`, 2026-09-02 entry, for the full agreed approach). **Not started** — matches where the class currently is in the syllabus (Session 3, procedural topography/shaders).
+7. Design-system/config tokenization pass for the various `TODO(DS)` placeholder values scattered through the code (arbitrary colors, light direction, ambient level, planet radius/segments, grid size, camera distance, the km-to-scene-unit conversion). **Not started**, tracked as an open item (see `ISSUES.md`, 2026-09-09 entry).
 
 ## 2026-09-02
 
