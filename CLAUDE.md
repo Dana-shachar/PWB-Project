@@ -19,7 +19,7 @@ Project-specific working rules for Procedural World Building (Cornell Tech, DESI
 
 - **Log architecture/technical decisions and open questions** in `ISSUES.md` as they come up (see below) — don't let reasoning like "GLSL vs. raymarching vs. plain Three.js" live only in chat history.
 
-- **Log weekly progress** in `ROADMAP.md`, dated, newest entry on top — doubles as the syllabus's required weekly project log.
+- **Log weekly progress** in `ROADMAP.md`, dated, newest entry on top. Separately, log the syllabus's graded **Weekly Push** report in `WEEKLY-PUSHES.md` each week (due start of Wednesday class) — its own file, not merged into `ROADMAP.md`, since it's a dated/append-only log like `ROADMAP.md` but for a different audience (the instructor grading it) with a fixed required structure (what was attempted/completed, how AI-assisted tools were used, what worked/didn't/comes next).
 
 ## Where project-specific content lives
 
@@ -27,5 +27,6 @@ This file holds general working rules only — how Dana and Claude work together
 
 - **`README.md`** (repo root) is written for anyone with zero context on the project — what it is, and where everything is organized: repo structure, and code-organization conventions in effect (e.g. file-by-feature not file-by-component, the `active-geometry-project` patterns being followed, `.tsx`-everywhere). Kept up to date as the project changes, not a dated log.
 - **`ROADMAP.md`** is the main planning-and-progress doc — current implementation state, staged plans with progress status, and feature ideas (including ones from Dana's Obsidian notes). Dated entries, newest on top. This is where work picks up from without needing to scan for context each time.
+- **`WEEKLY-PUSHES.md`** holds the syllabus's graded Weekly Push reports — a separate append-only log from `ROADMAP.md` despite the format similarity, because its audience (the instructor) and required structure (fixed 3-part format) are different from `ROADMAP.md`'s internal-continuity purpose. Write these for that audience — no internal/meta commentary about the file's own purpose.
 - **`ISSUES.md`** holds the *why* behind technical decisions, tradeoffs considered, and open problems (e.g. "GLSL vs. raymarching vs. plain Three.js").
-- This repo root is also Dana's Obsidian vault (`.obsidian/`) — any `.md` file placed anywhere in the repo is automatically part of it, no extra sync step. All four project docs (`CLAUDE.md`, `README.md`, `ROADMAP.md`, `ISSUES.md`) sit flat at the repo root — `CLAUDE.md` specifically must stay there to keep auto-loading each session, and the other three were flattened out of a former `MDs/` subfolder for consistency (2026-09-09).
+- This repo root is also Dana's Obsidian vault (`.obsidian/`) — any `.md` file placed anywhere in the repo is automatically part of it, no extra sync step. All project docs (`CLAUDE.md`, `README.md`, `ROADMAP.md`, `ISSUES.md`, `WEEKLY-PUSHES.md`) sit flat at the repo root — `CLAUDE.md` specifically must stay there to keep auto-loading each session; `README.md`/`ROADMAP.md`/`ISSUES.md` were flattened out of a former `MDs/` subfolder for consistency (2026-09-09).

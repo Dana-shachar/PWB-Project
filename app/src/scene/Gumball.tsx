@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DEFAULT_CAMERA_DISTANCE } from './camera';
+import { DEFAULT_CAMERA_DISTANCE, defaultCameraPosition } from './camera';
 
 type ViewPreset = 'top' | 'front' | 'side' | 'perspective';
 
@@ -147,8 +147,7 @@ export class Gumball {
   };
 
   resetScene(): void {
-    const perspDist = DEFAULT_CAMERA_DISTANCE / Math.sqrt(3);
-    this.camera.position.set(perspDist, perspDist, perspDist);
+    this.camera.position.copy(defaultCameraPosition());
     this.camera.up.set(0, 1, 0);
     this.cameraControls.target.set(0, 0, 0);
     this.cameraControls.update();

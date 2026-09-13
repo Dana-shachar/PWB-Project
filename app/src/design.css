@@ -184,18 +184,19 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
 /* ── Control panel (Panel.tsx) ────────────────────────────── */
 
 .panel-outer {
-  position: fixed;
-  top: 0;
-  left: 0;
+  /* A normal flex child of .app-layout now, not position:fixed — fixed
+     positioning takes an element out of document flow entirely, so
+     .app-viewport (flex:1) was expanding to the full window width
+     underneath it regardless, leaving the camera centered on the whole
+     window again instead of the visible viewport. */
   width: max-content;
   max-width: var(--panel-max-width);
-  min-height: 100vh;
-  max-height: 100vh;
+  height: 100%;
   background: var(--color-panel-bg);
   border-radius: var(--panel-radius); /* matches active-geometry's flat 4px all around, not split */
-  z-index: 50; /* matches active-geometry's ag-right-outer exactly */
   display: flex;
   flex-direction: column;
+  flex-shrink: 0; /* don't let the flex row shrink the panel to make room for the viewport */
 }
 
 .panel-content {

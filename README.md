@@ -1,6 +1,6 @@
 # Procedural World Building
 
-Cornell Tech, DESIGN 6197/4197. This README is written for anyone with zero context on this project — what it is, and where everything is organized (repo structure, code-organization conventions). Kept up to date as the project changes, not a dated log. Planning and progress tracking happen in `ROADMAP.md`; technical-decision rationale lives in `ISSUES.md`.
+Cornell Tech, DESIGN 6197/4197. This README is written for anyone with zero context on this project — what it is, and where everything is organized (repo structure, code-organization conventions). Kept up to date as the project changes, not a dated log. Planning and progress tracking happen in `ROADMAP.md`; technical-decision rationale lives in `ISSUES.md`; weekly progress reports (per the syllabus) live in `WEEKLY-PUSHES.md`.
 
 This will eventually grow into the fuller README the course's final deliverable requires (conceptual premise, procedural systems/algorithms used, AI-assisted process, run instructions, credits) — for now, at setup stage, it covers what actually exists.
 
@@ -9,6 +9,7 @@ This will eventually grow into the fuller README the course's final deliverable 
 - `app/` — the actual Vite + React + TypeScript + Three.js project (course requires TypeScript; new student projects use Vite, not the older Create React App demo in the class repo).
 - `.obsidian/` — this repo root is also Dana's Obsidian vault; any `.md` file placed anywhere in the repo is automatically part of it, no extra sync step.
 - `ROADMAP.md` — planning/progress log only (see below).
+- `WEEKLY-PUSHES.md` — the syllabus's graded Weekly Push reports, dated, newest on top.
 - `ISSUES.md` — running log of technical decisions, tradeoffs, and open problems (the *why*).
 - `CLAUDE.md` — general working rules (how Dana and Claude work together), not project-specific content. Stays at the repo root specifically — that's the one location it auto-loads from each session.
 - `README.md` (this file) — external-facing reference for current project structure and conventions.

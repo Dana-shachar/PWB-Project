@@ -9,18 +9,32 @@ import * as THREE from 'three';
 // Exported so Gumball.tsx can share this exact baseline for its zoom-percent
 // calibration, rather than a second hardcoded copy.
 export const DEFAULT_CAMERA_DISTANCE = 200;
-// Equal x/y/z offset that keeps the camera DEFAULT_CAMERA_DISTANCE away overall
-// (distance / sqrt(3) on each axis gives that isometric-ish default view).
-const DEFAULT_PERSPECTIVE_DISTANCE = DEFAULT_CAMERA_DISTANCE / Math.sqrt(3);
 
-// Builds the perspective camera, positioned per your active-geometry-project defaults.
+// Elevation angle above the horizontal plane. A true isometric view (equal
+// x/y/z) sits at ~35.26deg. Since the camera always looks directly at the
+// origin (which sits on the grid/horizon), a SHALLOWER angle than that is
+// what pushes the horizon down toward the lower third of the frame (more
+// sky/space above, less ground below) — a steeper angle does the opposite,
+// tilting toward a top-down view (this was backwards in an earlier pass).
+// TODO(DS): arbitrary placeholder — adjust to taste.
+export const DEFAULT_ELEVATION_DEGREES = 15;
+
+// The default camera position — shared by camera() below and Gumball's
+// resetScene(), so there's one formula for "the default view" instead of two
+// separately-hardcoded copies that could drift out of sync.
+export function defaultCameraPosition(distance = DEFAULT_CAMERA_DISTANCE): THREE.Vector3 {
+  const elevationRad = (DEFAULT_ELEVATION_DEGREES * Math.PI) / 180;
+  const horizontalDistance = distance * Math.cos(elevationRad);
+  const y = distance * Math.sin(elevationRad);
+  const x = horizontalDistance / Math.sqrt(2);
+  const z = horizontalDistance / Math.sqrt(2);
+  return new THREE.Vector3(x, y, z);
+}
+
+// Builds the perspective camera, positioned per the default view above.
 export function camera(aspect: number): THREE.PerspectiveCamera {
   const perspectiveCamera = new THREE.PerspectiveCamera(50, aspect, 0.1, 10000);
-  perspectiveCamera.position.set(
-    DEFAULT_PERSPECTIVE_DISTANCE,
-    DEFAULT_PERSPECTIVE_DISTANCE,
-    DEFAULT_PERSPECTIVE_DISTANCE,
-  );
+  perspectiveCamera.position.copy(defaultCameraPosition());
   perspectiveCamera.lookAt(0, 0, 0);
   return perspectiveCamera;
 }
