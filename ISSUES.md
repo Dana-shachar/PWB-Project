@@ -4,6 +4,26 @@ Running log of technical decisions, tradeoffs, and open problems for this projec
 
 ---
 
+## 2026-09-14
+
+### Right-side panel structure: tabs by technique/effect, not by the planet's parts
+**Status:** Decided.
+
+Question raised while designing the noise system's UI: should the right-side panel (and any future panel like it) be organized around the planet's *parts* (Terrain, Population, Climate, Vegetation, ...) or around *techniques/effects* (Noise, Paint, Erosion, Color, ...)?
+
+**Decided: by technique/effect.** Everything currently planned — noise generation, paint-authored terrain, erosion, biome-style coloring — operates on the *same* underlying data (the heightmap + texture), composing as sequential operations rather than being independent domains with their own state. This mirrors why World Machine/Gaea (both already referenced as inspiration) organize around operations/nodes rather than planet-parts: their entire premise is a pipeline of techniques feeding into each other. "By the planet's parts" would only become the right structure once a feature is a genuinely independent system with its own data (e.g. a real population simulation, not just something that reads the heightmap) — nothing on the roadmap is that yet, including the mentioned future agent/road placement (see 2026-09-02 entry below), which reads values off the existing heightmap rather than maintaining separate state.
+
+Implemented as `ui/RightPanel.tsx`'s tab bar, ported from active-geometry's `buildStageTabs`/`.ag-stage-tab` convention (`js/uiDesign.js`), reimplemented with React state instead of the original's imperative DOM class-toggling. Tabs so far: Noise (real), Paint/Erosion/Color (empty placeholders — ROADMAP.md items 7-9 — get real content when those features are built).
+
+**Known cosmetic issue, not urgent (Dana: "it can be fixed later"):** the placeholder tabs don't currently match the Noise tab's width exactly.
+
+### Bug: gumball widget rendered on top of the new right-side panel instead of the 3D viewport
+**Status:** Fixed.
+
+`.gumball-container` was `position: fixed` and appended to `document.body` — positioned relative to the whole browser window. That was correct while the 3D viewport extended to the window's right edge, but once the right-side `RightPanel` was added there, the widget's `bottom/right: 16px` offset landed on top of the new panel instead of the actual 3D view.
+
+Fixed by mounting the widget inside `.app-viewport` (passed in as a constructor param, `canvas.parentElement`) instead of `document.body`, and switching `.gumball-container` from `position: fixed` to `position: absolute` against `.app-viewport` (given `position: relative`) instead of the window. The 16px bottom/right inset is unchanged — it now measures from the viewport's own corner, not the window's.
+
 ## 2026-09-09
 
 ### Bug: gumball's axis lines didn't respond to direct drags, even though the underlying camera/update logic was correct
