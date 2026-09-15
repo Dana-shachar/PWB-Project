@@ -1,10 +1,15 @@
 import { useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { HeightmapPipeline } from './heightmap';
+import { HeightmapPipeline, type NoiseType } from './heightmap';
 
 interface MapViewProps {
   seed: number;
   frequency: number;
+  noiseType: NoiseType;
+  octaves: number;
+  persistence: number;
+  lacunarity: number;
+  terraceSteps: number;
 }
 
 // The flat 2D preview of the heightmap. Deliberately simple for this first
@@ -14,7 +19,15 @@ interface MapViewProps {
 // generation is cheap (see Dana's performance question, 2026-09-14), so
 // this duplication is an acceptable simplification for now, not a final
 // design — worth revisiting if it ever actually matters.
-export function MapView({ seed, frequency }: MapViewProps) {
+export function MapView({
+  seed,
+  frequency,
+  noiseType,
+  octaves,
+  persistence,
+  lacunarity,
+  terraceSteps,
+}: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const heightmapPipelineRef = useRef<HeightmapPipeline | null>(null);
@@ -72,11 +85,19 @@ export function MapView({ seed, frequency }: MapViewProps) {
     const displayCamera = displayCameraRef.current;
     if (!webglRenderer || !heightmapPipeline || !displayMaterial || !displayScene || !displayCamera) return;
 
-    const heightmapTexture = heightmapPipeline.render(webglRenderer, { seed, frequency });
+    const heightmapTexture = heightmapPipeline.render(webglRenderer, {
+      seed,
+      frequency,
+      noiseType,
+      octaves,
+      persistence,
+      lacunarity,
+      terraceSteps,
+    });
     displayMaterial.map = heightmapTexture;
     displayMaterial.needsUpdate = true;
     webglRenderer.render(displayScene, displayCamera);
-  }, [seed, frequency]);
+  }, [seed, frequency, noiseType, octaves, persistence, lacunarity, terraceSteps]);
 
   return <canvas ref={canvasRef} style={{ width: '100%', height: '200px', display: 'block' }} />;
 }

@@ -30,7 +30,7 @@ const AXIS_CONFIGS: AxisConfig[] = [
 // - View presets are a <select> dropdown, not 4 separate buttons (too much space).
 // - Has dispose() — the original never needed to tear down its DOM.
 //
-// Usage: const gumball = new Gumball(camera, cameraControls);
+// Usage: const gumball = new Gumball(camera, cameraControls, mountElement);
 //        call gumball.update() every frame, gumball.dispose() on cleanup.
 export class Gumball {
   private camera: THREE.PerspectiveCamera;
@@ -46,13 +46,17 @@ export class Gumball {
   private container: HTMLDivElement;
   private svgElements: Record<string, { line: SVGLineElement; text: SVGTextElement }> = {};
 
-  constructor(camera: THREE.PerspectiveCamera, cameraControls: OrbitControls) {
+  // mountElement: the 3D viewport's own container, not document.body — keeps
+  // the widget confined to the viewport (position: absolute against it) so
+  // it doesn't drift onto whatever sits beside the viewport, e.g. the
+  // right-side NoisePanel added 2026-09-14.
+  constructor(camera: THREE.PerspectiveCamera, cameraControls: OrbitControls, mountElement: HTMLElement) {
     this.camera = camera;
     this.cameraControls = cameraControls;
     const initialDistance = camera.position.distanceTo(cameraControls.target);
     this.zoomLevel = Math.round((DEFAULT_CAMERA_DISTANCE * 100) / initialDistance);
     this.container = this.buildPanel();
-    document.body.appendChild(this.container);
+    mountElement.appendChild(this.container);
   }
 
   private buildPanel(): HTMLDivElement {

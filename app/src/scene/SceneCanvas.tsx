@@ -7,7 +7,7 @@ import { controls } from './controls';
 import { grid } from './grid';
 import { planet, planetGeometry } from './planet';
 import { Gumball } from './Gumball';
-import { HeightmapPipeline } from '../map/heightmap';
+import { HeightmapPipeline, type NoiseType } from '../map/heightmap';
 
 // TODO(DS): arbitrary placeholder line color, not borrowed from anywhere.
 // NOTE: built from the sphere's plain (undisplaced) geometry — displacement
@@ -31,6 +31,11 @@ interface SceneCanvasProps {
   gridVisible: boolean;
   noiseSeed: number;
   noiseFrequency: number;
+  noiseType: NoiseType;
+  noiseOctaves: number;
+  noisePersistence: number;
+  noiseLacunarity: number;
+  noiseTerraceSteps: number;
 }
 
 // React places this <canvas> on the page; everything Three.js-related lives
@@ -47,6 +52,11 @@ export function SceneCanvas({
   gridVisible,
   noiseSeed,
   noiseFrequency,
+  noiseType,
+  noiseOctaves,
+  noisePersistence,
+  noiseLacunarity,
+  noiseTerraceSteps,
 }: SceneCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const planetMeshRef = useRef<THREE.Mesh | null>(null);
@@ -64,7 +74,9 @@ export function SceneCanvas({
     const orbitControls = controls(perspectiveCamera, canvas);
     const gridMesh = grid(gridSpacing);
     const planetMesh = planet(radius);
-    planetMesh.position.y = radius; // sit on top of the grid (y=0), not centered through it
+    // Centered at the origin (matches the camera/orbit-controls target) so
+    // changing the radius grows/shrinks the planet symmetrically in place,
+    // rather than anchoring one edge and letting the center drift.
     const wireframeOverlay = buildWireframeOverlay(planetMesh.geometry);
     wireframeOverlay.visible = displayMode === 'wireframe';
     planetMesh.add(wireframeOverlay); // child of the mesh — inherits its position/scale
@@ -80,7 +92,9 @@ export function SceneCanvas({
     // Gumball has no reactive props of its own (driven entirely by camera/
     // controls, both local to this effect) — no ref needed, nothing else
     // ever reassigns it, so there's no leak risk the way grid/planet had.
-    const gumball = new Gumball(perspectiveCamera, orbitControls);
+    // canvas.parentElement is .app-viewport — confines the widget to the
+    // 3D viewport instead of the whole window, see Gumball.tsx.
+    const gumball = new Gumball(perspectiveCamera, orbitControls, canvas.parentElement!);
 
     function resize() {
       // Non-null assertions: TS can't prove `canvas` is still non-null inside
@@ -169,7 +183,6 @@ export function SceneCanvas({
     if (!planetMesh || !wireframeOverlay) return; // not mounted yet — the effect above uses the current radius on first build
     planetMesh.geometry.dispose();
     planetMesh.geometry = planetGeometry(radius);
-    planetMesh.position.y = radius;
 
     wireframeOverlay.geometry.dispose();
     wireframeOverlay.geometry = new THREE.WireframeGeometry(planetMesh.geometry);
@@ -222,10 +235,23 @@ export function SceneCanvas({
     const heightmapTexture = heightmapPipeline.render(webglRenderer, {
       seed: noiseSeed,
       frequency: noiseFrequency,
+      noiseType,
+      octaves: noiseOctaves,
+      persistence: noisePersistence,
+      lacunarity: noiseLacunarity,
+      terraceSteps: noiseTerraceSteps,
     });
     const material = planetMesh.material as THREE.ShaderMaterial;
     material.uniforms.uHeightMap.value = heightmapTexture;
-  }, [noiseSeed, noiseFrequency]);
+  }, [
+    noiseSeed,
+    noiseFrequency,
+    noiseType,
+    noiseOctaves,
+    noisePersistence,
+    noiseLacunarity,
+    noiseTerraceSteps,
+  ]);
 
   return <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />;
 }

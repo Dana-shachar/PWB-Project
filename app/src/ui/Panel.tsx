@@ -4,7 +4,6 @@ const DISPLAY_MODE_OPTIONS = [
   { value: 'shaded', label: 'Shaded' },
   { value: 'wireframe', label: 'Wireframe' },
 ];
-import { MapView } from '../map/MapView';
 
 interface PanelProps {
   // Scene controls
@@ -25,12 +24,11 @@ interface PanelProps {
   onBaseColorChange: (value: string) => void;
   displayMode: string; // 'shaded' | 'wireframe'
   onDisplayModeChange: (value: string) => void;
-  // Noise (temporary placement — the real "add noise layer" / left-right
-  // panel layer system is a later step; this proves the pipeline for now)
-  noiseSeed: number;
-  onNoiseSeedChange: (value: number) => void;
-  noiseFrequency: number;
-  onNoiseFrequencyChange: (value: number) => void;
+  // Master bypass for the noise system (the real controls now live in the
+  // right-side NoisePanel) — when off, the planet renders with no
+  // displacement regardless of the selected noise type/layer.
+  noiseEnabled: boolean;
+  onNoiseEnabledChange: (value: boolean) => void;
 }
 
 // Left-side control panel, divided into titled sections — ported from
@@ -57,10 +55,8 @@ export function Panel({
   onBaseColorChange,
   displayMode,
   onDisplayModeChange,
-  noiseSeed,
-  onNoiseSeedChange,
-  noiseFrequency,
-  onNoiseFrequencyChange,
+  noiseEnabled,
+  onNoiseEnabledChange,
 }: PanelProps) {
   return (
     <div className="panel-outer">
@@ -125,34 +121,7 @@ export function Panel({
             precision={0}
           />
           <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
-        </div>
-
-        <div className="panel-section-divider" />
-
-        <div className="panel-section">
-          {/* Temporary section — becomes the "add noise layer" left/right
-              layer system in a later step. Only Perlin is wired up so far;
-              noise.glsl already has Random/Simplex/Voronoi/Ridged ready for
-              when the type dropdown is added. */}
-          <div className="panel-section-title">Noise (Perlin, temporary UI)</div>
-          <Slider
-            label="Seed"
-            value={noiseSeed}
-            onChange={onNoiseSeedChange}
-            min={0}
-            max={1000}
-            step={1}
-            precision={0}
-          />
-          <Slider
-            label="Frequency"
-            value={noiseFrequency}
-            onChange={onNoiseFrequencyChange}
-            min={0.5}
-            max={20}
-            step={0.1}
-          />
-          <MapView seed={noiseSeed} frequency={noiseFrequency} />
+          <Toggle label="Enable noise" value={noiseEnabled} onChange={onNoiseEnabledChange} />
         </div>
       </div>
     </div>

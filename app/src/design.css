@@ -50,6 +50,9 @@
   --panel-padding: 16px;
   --panel-max-width: 360px;
   --gumball-control-width: 180px; /* TODO(DS): arbitrary placeholder, adjust to taste */
+  --color-tab-inactive: #3a3a3b; /* ported from active-geometry's --bg-tab-inactive */
+  --tab-height: 32px; /* ported from active-geometry's --tab-height */
+  --tab-padding: 8px; /* ported from active-geometry's --tab-padding */
 }
 
 /* ── Base layout ──────────────────────────────────────────── */
@@ -82,6 +85,7 @@ body {
 }
 
 .app-viewport {
+  position: relative; /* anchors .gumball-container to this box, not the window */
   flex: 1;
   min-width: 0; /* lets this shrink below its content's natural width in a flex row */
   height: 100%;
@@ -278,6 +282,39 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
   flex-shrink: 0;
 }
 
+/* ── Right panel tabs (ui/RightPanel.tsx) ──────────────────── */
+/* Ported from active-geometry's buildStageTabs/.ag-stage-tab convention —
+   inactive tabs dimmed, active tab matches the panel background. */
+
+.right-panel-tabs {
+  display: flex;
+  flex-shrink: 0;
+  width: 100%;
+}
+
+.right-panel-tab {
+  flex: 1;
+  height: var(--tab-height);
+  padding: 0 var(--tab-padding);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 400 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  opacity: 0.4;
+  background: var(--color-tab-inactive);
+  cursor: pointer;
+  border: none;
+  white-space: nowrap;
+}
+.right-panel-tab:hover {
+  opacity: 0.7;
+}
+.right-panel-tab--active {
+  background: var(--color-panel-bg);
+  opacity: 1;
+}
+
 /* ── Gumball (ui/Gumball.tsx) ──────────────────────────────── */
 /* Ported from active-geometry-project's gumball.js — values are its exact
    inline styles, moved here to keep one CSS source of truth. Positioned
@@ -287,7 +324,7 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
    original's ordering, not a borrowed convention. */
 
 .gumball-container {
-  position: fixed;
+  position: absolute; /* relative to .app-viewport, not the window — see App.tsx/SceneCanvas.tsx */
   bottom: 16px;
   right: 16px;
   display: flex;
@@ -360,4 +397,33 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
 }
 .gumball-view-select:hover {
   background: var(--color-btn-hover-bg);
+}
+
+/* ── Noise panel (ui/NoisePanel.tsx) ───────────────────────── */
+/* Layer-list skeleton — not ported from anywhere, no layer-stack convention
+   exists yet in this project or active-geometry. */
+
+.noise-layer-row {
+  padding: 6px 8px;
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+}
+
+/* Matches the panel's other input elements (.ui-select, .ui-slider-field)
+   instead of the gumball's high-contrast floating-button style, which is
+   tuned to stand out over the 3D scene, not sit inside a panel. */
+.noise-add-layer-btn {
+  padding: 6px 8px;
+  cursor: pointer;
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+}
+.noise-add-layer-btn:hover {
+  background: rgba(242, 242, 247, 0.25); /* one step up from --color-input-fill's 0.15 alpha */
 }
