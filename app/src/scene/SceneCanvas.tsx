@@ -7,6 +7,18 @@ import { controls } from './controls';
 import { grid } from './grid';
 import { planet, planetGeometry } from './planet';
 import { Gumball } from './Gumball';
+import { HeightmapPipeline } from '../map/heightmap';
+
+// TODO(DS): arbitrary placeholder line color, not borrowed from anywhere.
+// NOTE: built from the sphere's plain (undisplaced) geometry — displacement
+// happens only in the GPU vertex shader, so this overlay won't track the
+// actual bumpy noise-displaced surface. Fine for now (surface is flat),
+// revisit once real terrain height makes this mismatch visible.
+function buildWireframeOverlay(geometry: THREE.BufferGeometry): THREE.LineSegments {
+  const wireframeGeometry = new THREE.WireframeGeometry(geometry);
+  const material = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
+  return new THREE.LineSegments(wireframeGeometry, material);
+}
 
 interface SceneCanvasProps {
   radius: number; // planet radius, in scene units (already converted from km by the caller)
@@ -14,7 +26,11 @@ interface SceneCanvasProps {
   ambientLight: number;
   lightDirX: number;
   lightDirY: number;
-  gridDivisions: number;
+  displayMode: string; // 'shaded' | 'wireframe'
+  gridSpacing: number; // minor grid cell size, in world units
+  gridVisible: boolean;
+  noiseSeed: number;
+  noiseFrequency: number;
 }
 
 // React places this <canvas> on the page; everything Three.js-related lives
@@ -26,11 +42,18 @@ export function SceneCanvas({
   ambientLight,
   lightDirX,
   lightDirY,
-  gridDivisions,
+  displayMode,
+  gridSpacing,
+  gridVisible,
+  noiseSeed,
+  noiseFrequency,
 }: SceneCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const planetMeshRef = useRef<THREE.Mesh | null>(null);
-  const gridHelperRef = useRef<THREE.GridHelper | null>(null);
+  const wireframeOverlayRef = useRef<THREE.LineSegments | null>(null);
+  const gridMeshRef = useRef<THREE.Mesh | null>(null);
+  const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const heightmapPipelineRef = useRef<HeightmapPipeline | null>(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,13 +62,19 @@ export function SceneCanvas({
     const webglRenderer = renderer(canvas);
     const perspectiveCamera = camera(canvas.clientWidth / canvas.clientHeight);
     const orbitControls = controls(perspectiveCamera, canvas);
-    const gridHelper = grid(500, gridDivisions);
+    const gridMesh = grid(gridSpacing);
     const planetMesh = planet(radius);
     planetMesh.position.y = radius; // sit on top of the grid (y=0), not centered through it
+    const wireframeOverlay = buildWireframeOverlay(planetMesh.geometry);
+    wireframeOverlay.visible = displayMode === 'wireframe';
+    planetMesh.add(wireframeOverlay); // child of the mesh — inherits its position/scale
     planetMeshRef.current = planetMesh;
-    gridHelperRef.current = gridHelper;
+    wireframeOverlayRef.current = wireframeOverlay;
+    gridMeshRef.current = gridMesh;
+    webglRendererRef.current = webglRenderer;
+    heightmapPipelineRef.current = new HeightmapPipeline();
 
-    scene.add(gridHelper);
+    scene.add(gridMesh);
     scene.add(planetMesh);
 
     // Gumball has no reactive props of its own (driven entirely by camera/
@@ -92,23 +121,34 @@ export function SceneCanvas({
       orbitControls.dispose();
       webglRenderer.dispose();
 
+      heightmapPipelineRef.current?.dispose();
+      heightmapPipelineRef.current = null;
+      webglRendererRef.current = null;
+
       // Remove/dispose whatever the refs *currently* point to, not the
-      // `gridHelper`/`planetMesh` this specific effect run created — the grid
-      // resolution effect below can have since replaced gridHelperRef.current
+      // `gridMesh`/`planetMesh` this specific effect run created — the grid
+      // spacing effect below can have since replaced gridMeshRef.current
       // with a newer object. Cleaning up the stale closure variable instead of
       // the ref's current value leaked the old object under React StrictMode's
       // mount->cleanup->mount dev cycle, which duplicated the grid on screen.
-      const currentGrid = gridHelperRef.current;
+      const currentGrid = gridMeshRef.current;
       if (currentGrid) {
         scene.remove(currentGrid);
         currentGrid.geometry.dispose();
         (currentGrid.material as THREE.Material).dispose();
       }
-      gridHelperRef.current = null;
+      gridMeshRef.current = null;
+
+      const currentOverlay = wireframeOverlayRef.current;
+      if (currentOverlay) {
+        currentOverlay.geometry.dispose();
+        (currentOverlay.material as THREE.Material).dispose();
+      }
+      wireframeOverlayRef.current = null;
 
       const currentPlanet = planetMeshRef.current;
       if (currentPlanet) {
-        scene.remove(currentPlanet);
+        scene.remove(currentPlanet); // also removes the overlay, added as its child
         currentPlanet.geometry.dispose();
         (currentPlanet.material as THREE.Material).dispose();
       }
@@ -120,28 +160,35 @@ export function SceneCanvas({
     // slider drag); this effect only handles first-mount setup and teardown.
   }, []);
 
-  // Radius: rebuilds just the sphere geometry and repositions it.
+  // Radius: rebuilds the sphere geometry and repositions it — and the
+  // wireframe overlay with it, since WireframeGeometry is a one-time
+  // snapshot, not dynamically linked to the source geometry.
   useEffect(() => {
     const planetMesh = planetMeshRef.current;
-    if (!planetMesh) return; // not mounted yet — the effect above uses the current radius on first build
+    const wireframeOverlay = wireframeOverlayRef.current;
+    if (!planetMesh || !wireframeOverlay) return; // not mounted yet — the effect above uses the current radius on first build
     planetMesh.geometry.dispose();
     planetMesh.geometry = planetGeometry(radius);
     planetMesh.position.y = radius;
+
+    wireframeOverlay.geometry.dispose();
+    wireframeOverlay.geometry = new THREE.WireframeGeometry(planetMesh.geometry);
   }, [radius]);
 
-  // Grid resolution: rebuilds the grid helper (GridHelper has no way to change
-  // its divisions in place, unlike the sphere which is a plain uniform swap).
+  // Grid spacing: rebuilds the grid mesh (its cell size is baked into a
+  // shader uniform at construction, simplest to just rebuild it).
   useEffect(() => {
-    const oldGrid = gridHelperRef.current;
+    const oldGrid = gridMeshRef.current;
     if (!oldGrid) return;
     scene.remove(oldGrid);
     oldGrid.geometry.dispose();
     (oldGrid.material as THREE.Material).dispose();
 
-    const newGrid = grid(500, gridDivisions);
+    const newGrid = grid(gridSpacing);
+    newGrid.visible = gridVisible;
     scene.add(newGrid);
-    gridHelperRef.current = newGrid;
-  }, [gridDivisions]);
+    gridMeshRef.current = newGrid;
+  }, [gridSpacing, gridVisible]);
 
   // Lighting + base color: no rebuild needed, just mutate the shader's uniforms.
   useEffect(() => {
@@ -152,6 +199,33 @@ export function SceneCanvas({
     material.uniforms.uAmbient.value = ambientLight;
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, 1);
   }, [baseColor, ambientLight, lightDirX, lightDirY]);
+
+  // Display mode: toggles the wireframe overlay's visibility (it renders
+  // alongside the shaded surface, doesn't replace it).
+  useEffect(() => {
+    const wireframeOverlay = wireframeOverlayRef.current;
+    if (!wireframeOverlay) return;
+    wireframeOverlay.visible = displayMode === 'wireframe';
+  }, [displayMode]);
+
+  // Noise seed/frequency: regenerates the heightmap texture on demand (not
+  // every frame — only when a param actually changes), then points the
+  // planet's uHeightMap at it. The planet's vertex shader samples this same
+  // texture reference every frame regardless, so the sphere updates live
+  // with no extra wiring needed here beyond assigning the uniform once.
+  useEffect(() => {
+    const planetMesh = planetMeshRef.current;
+    const webglRenderer = webglRendererRef.current;
+    const heightmapPipeline = heightmapPipelineRef.current;
+    if (!planetMesh || !webglRenderer || !heightmapPipeline) return;
+
+    const heightmapTexture = heightmapPipeline.render(webglRenderer, {
+      seed: noiseSeed,
+      frequency: noiseFrequency,
+    });
+    const material = planetMesh.material as THREE.ShaderMaterial;
+    material.uniforms.uHeightMap.value = heightmapTexture;
+  }, [noiseSeed, noiseFrequency]);
 
   return <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />;
 }

@@ -49,6 +49,7 @@
   --panel-radius: 4px;
   --panel-padding: 16px;
   --panel-max-width: 360px;
+  --gumball-control-width: 180px; /* TODO(DS): arbitrary placeholder, adjust to taste */
 }
 
 /* ── Base layout ──────────────────────────────────────────── */
@@ -181,6 +182,56 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
   border-color: var(--color-accent);
 }
 
+/* ── Toggle (ui/UIElements.tsx) ────────────────────────────── */
+
+.ui-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.ui-toggle-label {
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.ui-toggle-checkbox {
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+/* ── Select (ui/UIElements.tsx) ────────────────────────────── */
+
+.ui-select-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.ui-select-label {
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  flex-shrink: 0;
+  min-width: 80px;
+}
+
+.ui-select {
+  flex: 1;
+  padding: 6px 4px;
+  cursor: pointer;
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+  color: var(--color-text);
+  font: 300 var(--font-size-sm) var(--font-ui);
+}
+.ui-select:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
 /* ── Control panel (Panel.tsx) ────────────────────────────── */
 
 .panel-outer {
@@ -237,31 +288,27 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
 
 .gumball-container {
   position: fixed;
-  top: 16px;
+  bottom: 16px;
   right: 16px;
   display: flex;
   flex-direction: column;
-  gap: var(--gap-sm);
-  /* Click-through by default, not just the inner svg — a child's own
-     pointer-events:none only excludes that child from hit-testing, the
-     parent container still captures clicks over the same screen area
-     otherwise. The actual interactive controls (zoom input, buttons) opt
-     back in below. This makes the whole widget's empty space (including
-     directly on the axis lines) drag-through-to-orbit, which the original
-     doesn't do either (its container has the same gap) — a deliberate
-     addition per Dana's request, not a strict port. */
+  align-items: center;
+  gap: var(--gap-md);
+  /* Click-through by default; children opt back in individually so drag
+     works over the whole widget, including the axis lines. */
   pointer-events: none;
 }
 
 .gumball-svg {
   pointer-events: none;
-  margin-bottom: var(--gap-md);
+  margin-bottom: var(--gap-sm);
 }
 
 .gumball-zoom-row {
   display: flex;
   align-items: center;
   gap: var(--gap-sm);
+  width: var(--gumball-control-width);
 }
 
 .gumball-zoom-label {
@@ -271,7 +318,7 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
 }
 
 .gumball-zoom-input {
-  width: 80px;
+  flex: 1; /* fills the row's fixed width, whatever the label's length */
   height: 2px;
   accent-color: var(--color-text);
   cursor: pointer;
@@ -284,6 +331,7 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
 }
 
 .gumball-btn {
+  width: var(--gumball-control-width);
   padding: 8px 8px 4px;
   cursor: pointer;
   font: 400 var(--font-size-xs) var(--font-ui);
@@ -296,5 +344,20 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
   white-space: nowrap;
 }
 .gumball-btn:hover {
+  background: var(--color-btn-hover-bg);
+}
+
+.gumball-view-select {
+  width: var(--gumball-control-width);
+  padding: 8px;
+  cursor: pointer;
+  font: 400 var(--font-size-xs) var(--font-ui);
+  background: var(--color-btn-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-track);
+  border-radius: 4px;
+  pointer-events: auto; /* opts back in — container is click-through */
+}
+.gumball-view-select:hover {
   background: var(--color-btn-hover-bg);
 }

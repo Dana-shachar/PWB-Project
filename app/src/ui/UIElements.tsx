@@ -141,3 +141,49 @@ export function ColorPicker({ label, value, onChange }: ColorPickerProps) {
     </div>
   );
 }
+
+interface ToggleProps {
+  label: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+// Native checkbox, accent-colored — matches active-geometry's own checkbox
+// convention (js/uiDesign.js's `checkbox()` helper), not a custom pill/switch.
+export function Toggle({ label, value, onChange }: ToggleProps) {
+  return (
+    <div className="ui-toggle-row">
+      <label className="ui-toggle-label">{label}</label>
+      <input
+        type="checkbox"
+        className="ui-toggle-checkbox"
+        checked={value}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </div>
+  );
+}
+
+interface SelectProps {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: { value: string; label: string }[];
+}
+
+// Plain <select>, styled to match the panel's other controls — the React
+// equivalent of the gumball's vanilla-DOM view-preset dropdown.
+export function Select({ label, value, onChange, options }: SelectProps) {
+  return (
+    <div className="ui-select-row">
+      <label className="ui-select-label">{label}</label>
+      <select className="ui-select" value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}

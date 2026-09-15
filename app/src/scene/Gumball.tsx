@@ -26,7 +26,8 @@ const AXIS_CONFIGS: AxisConfig[] = [
 //
 // Deliberate differences from the original (see Roadmap.md):
 // - No shared `settings` object — zoomLevel is this class's own field.
-// - Positioned top-right, not bottom-left; axis indicator ordered first.
+// - Positioned bottom-right, not bottom-left (panel is on the left here).
+// - View presets are a <select> dropdown, not 4 separate buttons (too much space).
 // - Has dispose() — the original never needed to tear down its DOM.
 //
 // Usage: const gumball = new Gumball(camera, cameraControls);
@@ -58,7 +59,6 @@ export class Gumball {
     const container = document.createElement('div');
     container.className = 'gumball-container';
 
-    // Axis indicator first — closest to the corner.
     const svgNS = 'http://www.w3.org/2000/svg';
     const svg = document.createElementNS(svgNS, 'svg');
     svg.setAttribute('width', '80');
@@ -75,10 +75,8 @@ export class Gumball {
       line.setAttribute('stroke', color);
       line.setAttribute('stroke-width', '2');
       line.setAttribute('stroke-linecap', 'round');
-      // Explicit, not just inherited from the parent <svg>'s CSS class — a
-      // rendered stroke was still capturing drag events even with the
-      // parent's pointer-events:none, breaking click-through-to-canvas
-      // orbiting specifically when dragging directly on a line.
+      // Explicit, not just inherited from the parent svg's class — a
+      // rendered stroke still captured drag events otherwise.
       line.setAttribute('pointer-events', 'none');
       svg.appendChild(line);
 
@@ -118,15 +116,27 @@ export class Gumball {
     zoomRow.appendChild(this.zoomInput);
     container.appendChild(zoomRow);
 
-    // View preset buttons
+    // View preset dropdown — was 4 separate buttons, took up too much
+    // screen space (Dana, 2026-09-14).
+    const viewSelect = document.createElement('select');
+    viewSelect.className = 'gumball-view-select';
+    const placeholderOption = document.createElement('option');
+    placeholderOption.value = '';
+    placeholderOption.textContent = 'View...';
+    placeholderOption.disabled = true;
+    placeholderOption.selected = true;
+    viewSelect.appendChild(placeholderOption);
     const presets: ViewPreset[] = ['top', 'front', 'side', 'perspective'];
     for (const preset of presets) {
-      const btn = document.createElement('button');
-      btn.textContent = preset.toUpperCase();
-      btn.className = 'gumball-btn';
-      btn.addEventListener('click', () => this.snapToView(preset));
-      container.appendChild(btn);
+      const option = document.createElement('option');
+      option.value = preset;
+      option.textContent = preset.toUpperCase();
+      viewSelect.appendChild(option);
     }
+    viewSelect.addEventListener('change', () => {
+      this.snapToView(viewSelect.value as ViewPreset);
+    });
+    container.appendChild(viewSelect);
 
     // Reset view button
     const resetBtn = document.createElement('button');

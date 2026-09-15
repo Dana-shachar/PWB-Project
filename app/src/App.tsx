@@ -16,7 +16,11 @@ function App() {
   const [ambientLight, setAmbientLight] = useState(0.15);
   const [lightDirX, setLightDirX] = useState(1);
   const [lightDirY, setLightDirY] = useState(1);
-  const [gridDivisions, setGridDivisions] = useState(50);
+  const [displayMode, setDisplayMode] = useState('shaded'); // 'shaded' | 'wireframe'
+  const [gridSpacing, setGridSpacing] = useState(10);
+  const [gridVisible, setGridVisible] = useState(true);
+  const [noiseSeed, setNoiseSeed] = useState(0);
+  const [noiseFrequency, setNoiseFrequency] = useState(4);
 
   return (
     <div className="app-layout">
@@ -27,12 +31,20 @@ function App() {
         onLightDirXChange={setLightDirX}
         lightDirY={lightDirY}
         onLightDirYChange={setLightDirY}
-        gridDivisions={gridDivisions}
-        onGridDivisionsChange={setGridDivisions}
+        gridSpacing={gridSpacing}
+        onGridSpacingChange={setGridSpacing}
+        gridVisible={gridVisible}
+        onGridVisibleChange={setGridVisible}
         radiusKm={radiusKm}
         onRadiusKmChange={setRadiusKm}
         baseColor={baseColor}
         onBaseColorChange={setBaseColor}
+        displayMode={displayMode}
+        onDisplayModeChange={setDisplayMode}
+        noiseSeed={noiseSeed}
+        onNoiseSeedChange={setNoiseSeed}
+        noiseFrequency={noiseFrequency}
+        onNoiseFrequencyChange={setNoiseFrequency}
       />
       {/* The 3D viewport fills the remaining space next to the panel (not the
           full window) — SceneCanvas's ResizeObserver picks up this box's
@@ -44,7 +56,11 @@ function App() {
           ambientLight={ambientLight}
           lightDirX={lightDirX}
           lightDirY={lightDirY}
-          gridDivisions={gridDivisions}
+          displayMode={displayMode}
+          gridSpacing={gridSpacing}
+          gridVisible={gridVisible}
+          noiseSeed={noiseSeed}
+          noiseFrequency={noiseFrequency}
         />
       </div>
     </div>

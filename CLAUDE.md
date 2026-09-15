@@ -17,6 +17,8 @@ Project-specific working rules for Procedural World Building (Cornell Tech, DESI
 
 - **No unsolicited authorship/attribution** in commits, code, or docs (global rule, restated here) — see `~/.claude/CLAUDE.md`.
 
+- **Verify reference code/algorithms before adding them, don't just reproduce from memory.** When adding a "well-established reference implementation" (a noise function, a standard algorithm, etc.) — first search for and fetch the actual current canonical source, diff what's about to be added against it, and fix any discrepancy before committing to it. `npm run build` does not catch GLSL errors (shader source is an opaque string to TypeScript via the `?raw` import) — a build passing is not evidence the shader code is correct. This caught a real bug on 2026-09-14 (a wrong constant in a hand-reproduced 3D Perlin noise function). Credit the verified source in `README.md`'s References section.
+
 - **Log architecture/technical decisions and open questions** in `ISSUES.md` as they come up (see below) — don't let reasoning like "GLSL vs. raymarching vs. plain Three.js" live only in chat history.
 
 - **Log weekly progress** in `ROADMAP.md`, dated, newest entry on top. Separately, log the syllabus's graded **Weekly Push** report in `WEEKLY-PUSHES.md` each week (due start of Wednesday class) — its own file, not merged into `ROADMAP.md`, since it's a dated/append-only log like `ROADMAP.md` but for a different audience (the instructor grading it) with a fixed required structure (what was attempted/completed, how AI-assisted tools were used, what worked/didn't/comes next).

@@ -28,3 +28,9 @@ Dana wants the app to use the patterns from her own `active-geometry-project`, n
 - Arbitrary placeholder values (colors, lighting, radius, etc.) are flagged inline with `// TODO(DS): ...` comments, tracked for an eventual design-system/config-tokenization pass (not yet built).
 
 Current implementation state and progress live in `ROADMAP.md`, not here.
+
+## References
+
+Third-party reference code/algorithms used directly (not original work), for credit and for verifying correctness against the actual source when adding this kind of thing — see `CLAUDE.md`'s working rules for the standing rule to search for and confirm the current canonical version before adding any such snippet, not just reproduce from memory.
+
+- **3D Perlin noise (`app/src/shaders/noise.glsl`, `perlinNoise3D`)** — "cnoise", classic 3D noise. Author: Stefan Gustavson (stefan.gustavson@liu.se); permutation/gradient-selection ideas: Ian McEwan of Ashima Arts. MIT license. Source: [github.com/stegu/webgl-noise](https://github.com/stegu/webgl-noise), `src/classicnoise3D.glsl`. Verified against this source 2026-09-14 (an earlier transcription had the wrong constant in `permute()` — `+1.0` instead of the correct `+10.0` — caught and fixed by this verification).

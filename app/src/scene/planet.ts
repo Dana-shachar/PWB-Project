@@ -16,6 +16,15 @@ export function planetGeometry(
   return new THREE.SphereGeometry(radius, widthSegments, heightSegments);
 }
 
+// A flat mid-gray 1x1 texture — "no displacement" per vertex.glsl's
+// (height - 0.5) centering — used until a real heightmap texture is
+// assigned, so the sphere isn't broken/black before that happens.
+function flatHeightmapPlaceholder(): THREE.DataTexture {
+  const texture = new THREE.DataTexture(new Uint8Array([128, 128, 128, 255]), 1, 1);
+  texture.needsUpdate = true;
+  return texture;
+}
+
 // Builds the planet: real sphere geometry, shaded by a custom GLSL ShaderMaterial
 // basic diffuse lighting
 export function planet(radius = 20, widthSegments = 64, heightSegments = 32): THREE.Mesh {
@@ -30,6 +39,9 @@ export function planet(radius = 20, widthSegments = 64, heightSegments = 32): TH
       uLightDirection: { value: new THREE.Vector3(1, 1, 1) },
       // TODO(DS): arbitrary placeholder — future design-system token (ambient light level)
       uAmbient: { value: 0.15 },
+      uHeightMap: { value: flatHeightmapPlaceholder() },
+      // TODO(DS): arbitrary placeholder — "global height" multiplier (Stage B, 2026-09-14 plan)
+      uDisplacementAmplitude: { value: radius * 0.15 },
     },
   });
   return new THREE.Mesh(geometry, material);
