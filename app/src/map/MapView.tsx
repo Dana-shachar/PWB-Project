@@ -27,7 +27,6 @@ export function MapView({
   sizePx = 300,
 }: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const lastPaintUvRef = useRef<{ x: number; y: number } | null>(null); // last dab's UV, for stroke interpolation below
 
   function refreshDisplay() {
     const canvas = canvasRef.current;
@@ -52,40 +51,31 @@ export function MapView({
     return { x, y };
   }
 
-  function paintAt(uv: { x: number; y: number }, radiusUV: number) {
-    sceneHandleRef.current?.paintStroke(selectedLayerId, uv, radiusUV, brushValue, feather);
-  }
-
-  // Dabs one stroke segment, filling in extra dabs between the last painted
-  // point and this one so fast drags don't leave gaps between discrete
-  // pointermove events — standard technique in paint tools.
+  // Adds one point to the active stroke — the shader connects it to the
+  // previous point as part of the whole stroke's path, so no manual gap-
+  // filling between pointermove events is needed here. See
+  // shaders/strokePath.frag.glsl and ISSUES.md, 2026-09-22.
   function paintStrokeTo(uv: { x: number; y: number }) {
     const radiusUV = brushRadiusPx / HEIGHTMAP_WIDTH; // px is relative to the texture, not the display size
-    const last = lastPaintUvRef.current;
-    if (last) {
-      const dist = Math.hypot(uv.x - last.x, uv.y - last.y);
-      const spacing = radiusUV * 0.35; // dab spacing as a fraction of brush radius, for smooth overlap
-      const steps = Math.ceil(dist / spacing);
-      for (let i = 1; i < steps; i++) {
-        const t = i / steps;
-        paintAt({ x: last.x + (uv.x - last.x) * t, y: last.y + (uv.y - last.y) * t }, radiusUV);
-      }
-    }
-    paintAt(uv, radiusUV);
-    lastPaintUvRef.current = uv;
+    sceneHandleRef.current?.paintStroke(selectedLayerId, uv, radiusUV, brushValue, feather);
     refreshDisplay();
   }
 
   function handlePointerDown(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
-    lastPaintUvRef.current = null; // new stroke — don't interpolate from a previous stroke's endpoint
-    paintStrokeTo(uvFromPointer(event));
+    const uv = uvFromPointer(event);
+    sceneHandleRef.current?.beginStroke(selectedLayerId, uv);
+    paintStrokeTo(uv);
   }
 
   function handlePointerMove(event: React.PointerEvent<HTMLCanvasElement>) {
     if (event.buttons !== 1) return; // only while the primary button is held
     paintStrokeTo(uvFromPointer(event));
+  }
+
+  function handlePointerUp() {
+    sceneHandleRef.current?.endStroke();
   }
 
   return (
@@ -96,6 +86,8 @@ export function MapView({
       style={{ width: sizePx, height: sizePx, display: 'block', cursor: 'crosshair' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
     />
   );
 }

@@ -14,7 +14,9 @@ import { HeightmapPipeline, type NoiseLayer, type UV } from '../map/heightmap';
 // ISSUES.md, 2026-09-15, for why the pipeline has to live with this
 // component's renderer specifically, not a separate instance.
 export interface SceneCanvasHandle {
+  beginStroke(layerId: string, uv: UV): void;
   paintStroke(layerId: string, uv: UV, radius: number, brushValue?: number, feather?: number): void;
+  endStroke(): void;
   getPreviewImageData(): ImageData | null;
 }
 
@@ -60,6 +62,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   useImperativeHandle(
     handleRef,
     () => ({
+      beginStroke(layerId, uv) {
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRendererRef.current || !heightmapPipeline) return;
+        heightmapPipeline.beginStroke(layerId, uv);
+      },
       paintStroke(layerId, uv, radius, brushValue = 1, feather = 1) {
         const webglRenderer = webglRendererRef.current;
         const heightmapPipeline = heightmapPipelineRef.current;
@@ -69,6 +76,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         // Re-composite so the planet's displacement reflects the new stroke immediately.
         const heightmapTexture = heightmapPipeline.render(webglRenderer, { layers: layersRef.current });
         (planetMesh.material as THREE.ShaderMaterial).uniforms.uHeightMap.value = heightmapTexture;
+      },
+      endStroke() {
+        heightmapPipelineRef.current?.endStroke();
       },
       getPreviewImageData() {
         const webglRenderer = webglRendererRef.current;

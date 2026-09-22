@@ -178,7 +178,11 @@ void main() {
 
   // Layers composite bottom-to-top (index 0 = bottom/base, last = top),
   // matching Photoshop's stacking convention — see ISSUES.md, 2026-09-15.
-  float composite = 0.0;
+  // Starts at 0.5 (gray/neutral, "no displacement") not 0.0 (black) — matches
+  // the same convention used elsewhere (planet.ts's flat placeholder texture,
+  // vertex.glsl's height-centering); 0.0 made painted black indistinguishable
+  // from an empty/no-fill layer. See ISSUES.md, 2026-09-22.
+  float composite = 0.5;
   for (int i = 0; i < MAX_LAYERS; i++) {
     if (i >= int(uLayerCount)) break;
     vec3 p = basePosition * uLayerFrequency[i];
@@ -188,9 +192,18 @@ void main() {
       uLayerTerraceSteps[i], uLayerWarpStrength[i], poleFalloff
     );
     vec2 paint = samplePaintTexture(i, paintUV); // (value, mask)
-    float layerHeight = mix(raw * 0.5 + 0.5, paint.x, paint.y); // blend toward painted value by mask
+    // A 'none' layer has no content of its own — true "no fill" — so its
+    // height is purely the painted value, with no placeholder gray blended
+    // in at all; paint.y (the mask) is applied exactly once, as coverage
+    // below, not also folded into layerHeight (that double application
+    // caused a compounded/ridged edge at soft stroke boundaries). A noise
+    // layer keeps the old per-pixel paint-overrides-noise blend and always
+    // has full coverage. See ISSUES.md, 2026-09-22.
+    bool isNoneType = uLayerNoiseType[i] > 4.5 && uLayerNoiseType[i] < 5.5;
+    float layerHeight = isNoneType ? paint.x : mix(raw * 0.5 + 0.5, paint.x, paint.y);
+    float coverage = isNoneType ? paint.y : 1.0;
     float blended = applyBlendMode(composite, layerHeight, uLayerBlendMode[i]);
-    composite = mix(composite, blended, uLayerOpacity[i]);
+    composite = mix(composite, blended, uLayerOpacity[i] * coverage);
   }
 
   gl_FragColor = vec4(vec3(clamp(composite, 0.0, 1.0)), 1.0);

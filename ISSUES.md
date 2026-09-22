@@ -1,116 +1,136 @@
 # Decisions & Issues
 
-Running log of technical decisions, tradeoffs, and open problems for this project — separate from `ROADMAP.md`, which tracks weekly progress. Newest entry on top. Each entry: what was considered, what was decided (or is still open), and why.
+Technical decisions, tradeoffs, and bugs for this project — organized by category (not chronologically; `ROADMAP.md` tracks current stage/feature status and points here for detail; `WEEKLY-PUSHES.md` is the chronological log).
+
+Each entry:
+> 🐛 **Bug** or 🧭 **Decision** — one-line title
+> **Status:** ✅ Fixed/Decided · 🟡 Partial · 🔴 Open — with the date(s)
+>
+> Short labeled points: **Symptom/Cause/Fix**, or **Considered/Decided/Why**.
 
 ---
 
-## 2026-09-16
+## 🏗️ Foundation & Architecture
 
-### Paint accumulation: ping-pong render targets, not GPU blending
-**Status:** Decided, implemented.
+### 🧭 Mesh-based Three.js, not raymarching
+**Status:** ✅ Decided (2026-09-02)
 
-First attempt at persistent paint strokes used `THREE.CustomBlending` (toggling `blendEquation` between Add/ReverseSubtract for paint/erase) into a `HalfFloatType` render target. Erase did nothing — traced to WebGL clamping fragment output to [0,1] *before* blending, so a negative "erase" delta was silently clamped to 0. Switching the shader to always output a positive magnitude and using `ReverseSubtractEquation` for erase still didn't work: GPU blending into a float/half-float render target requires the `EXT_float_blend`/`EXT_color_buffer_half_float` extensions, which are not reliably supported across browsers/GPUs (verified via web search — not Baseline per MDN).
+> Raymarching/SDFs fit `active-geometry-project`'s boolean CSG editor specifically. This project needs real mesh objects (agents, instanced vegetation, roads, LOD) — GLSL shaders still used, just on real mesh geometry (`ShaderMaterial`), not for raymarching.
 
-**Decided:** ping-pong render targets instead — each paint layer gets a *pair* of `HalfFloatType` targets. Each stroke samples the currently-active one as `uPrevious`, computes the complete new frame in-shader (not via GPU blending hardware), writes to the inactive one, then swaps which is "active". Portable, no extension dependency. See `map/heightmap.ts`'s `paintTargets`/`paintActiveIndex` maps and `paintStroke()`.
+### 🧭 Heightmap pipeline: GPU render-target texture, CPU reads on demand
+**Status:** ✅ Decided (2026-09-02), built later
 
-### Paint compositing: Porter-Duff "over", not naive linear blend
-**Status:** Decided, implemented.
+> Fragment shader → off-screen render target; the planet's vertex shader samples it for displacement. CPU reads back specific texels via `readRenderTargetPixels()` only when it actually needs a value (future agent/road placement) — the shader stays the single source of truth, never duplicated in JS.
 
-A first pass blended both `value` and `mask` toward the brush's target at the same rate per dab. Symptom: a partial-opacity touch read as diluted toward black/the unpainted placeholder instead of the correct color at reduced strength — e.g. a light gray dab at 50% strength looked dark, not light-gray-at-half-opacity.
+### 📋 Design-system/config tokenization — not built yet
+**Status:** 🔴 Open, tracked, not urgent (2026-09-09)
 
-**Fixed** with the standard Porter-Duff "over" formula: `newMask = falloff + previousMask*(1-falloff)`; `newValue = (targetValue*falloff + previousValue*previousMask*(1-falloff)) / newMask`. Weights by each side's *relative opacity contribution*, not raw falloff, so partial strokes read correctly regardless of what's underneath. See `shaders/paintbrush.frag.glsl`.
+> Scattered arbitrary placeholder values (colors, lighting, radius, segments, camera distance) need eventual centralizing — CSS custom properties for visual values, a separate scene-config file for Three.js geometry values. Convention in the meantime: flag every one inline with `// TODO(DS): arbitrary placeholder`.
 
-### GLSL ES 1.00 forbids dynamic sampler-array indexing — worked around with named uniforms
-**Status:** Decided, implemented.
+---
 
-Three.js's `ShaderMaterial` compiles as GLSL ES 1.00 by default even on a WebGL2 context. Looping over an array of paint textures with `uLayerPaintTexture[i]` where `i` is a loop variable fails to compile: `'[' : array index for samplers must be constant integral expressions`. Worked around with `MAX_LAYERS` (currently 16) separately-named uniforms (`uLayerPaintTexture0`..`uLayerPaintTexture15`) plus an if/else chain to select by constant index (`samplePaintTexture()` in `shaders/heightmap.frag.glsl`, `paintTextureUniformName()` in `map/heightmap.ts`). `MAX_LAYERS` may need to go higher later — mechanical extension of the same pattern, not urgent now.
+## 🖥️ UI & Panel Architecture
 
-### Planet lighting: analytic sphere tangent basis, not screen-space-derivative normals
-**Status:** Decided, implemented.
+### 🧭 Right panel tabs: by technique, not by the planet's parts
+**Status:** ✅ Decided (2026-09-14)
 
-The planet's fragment shader had no real per-pixel normal — lighting couldn't show terrain bumps at all. First fix attempt used `dFdx`/`dFdy` of the interpolated vertex position (a real, generally-valid technique) to reconstruct a normal. Regression: since screen-space derivatives are ~constant within one triangle, this produced a severely faceted, "low-poly" look across the *whole* sphere, not just the painted terrain — mesh-resolution-dependent, not what was wanted as the default (Dana did note she likes that faceted look as a potential future style *option*, just not as the default — see `ROADMAP.md` item 13).
+> Noise/Paint/Erosion/Color all operate on the *same* underlying heightmap+texture data as sequential operations, not independent domains — mirrors World Machine/Gaea's own node-pipeline organization. "By planet part" only makes sense once a feature has genuinely independent state (e.g. a real population sim) — nothing today is that.
 
-**Fixed** with an analytic tangent basis derived from the same `uvToSpherePosition`-style parametrization already used for noise sampling (`dPdu`, `dPdv` — exact calculus derivatives of the sphere's UV parametrization) — smooth and mesh-resolution-independent. Cross-product winding (`cross(dPdv, dPdu)` vs. `cross(dPdu, dPdv)`) was verified by hand-computing a concrete point (longitude=0, latitude=0), not guessed. Perturbed by the heightmap's own central-difference gradient (`dHdu`/`dHdv`, sampled 16 texels away rather than the immediate neighbor, to avoid amplifying per-texel noise into visible roughness) for fine per-texel bump detail on top of the smooth base. The analytic tangent vectors are unit-sphere-relative while the displacement amplitude is world-space-scaled (`radius * 0.15`) — without scaling the tangents by the actual world-space radius (new `uRadius` uniform, `planet.ts`/`fragment.glsl`), the height term dwarfed the smooth base term and caused exaggerated roughness, especially near the poles.
+### 🐛 Gumball rendered on top of the new right panel
+**Status:** ✅ Fixed (2026-09-14)
 
-Also fixed along the way: `'normalMatrix' : undeclared identifier` — Three.js auto-*sets* this built-in uniform but only auto-*declares* it in the vertex stage, not the fragment stage; needs an explicit `uniform mat3 normalMatrix;` to use it in a fragment shader.
+> **Cause:** `position: fixed` against the whole window, so the panel covered it once the right panel existed.
+> **Fix:** mount inside `.app-viewport`, `position: absolute` against it instead.
 
-### Brush hardness/feather: which model, and why it took several tries
-**Status:** Decided (fixed-radius, percentage-based) — logged in detail since the reasoning genuinely changed direction multiple times and shouldn't only live in chat history.
+### 🐛 Gumball axis lines didn't respond to direct drags
+**Status:** ✅ Fixed (2026-09-09)
 
-Four different models were tried, in order:
-1. **Feather as a fraction of radius, radius fixed** (original): `innerRadius = radius*(1-feather)`. Bug found: since the *absolute* width of the soft ring scales with radius, the same feather value looked far less soft on a small brush than a large one ("the feathering should stay constant unrelated to brush size").
-2. **Feather as an absolute px width, additive** (`radius+feather`, Dana's explicit request, citing Photoshop): grew the total brush footprint outward by the feather amount. Bug found on testing: at a small radius with a large feather, the brush ballooned far bigger than expected — flagged as a bug, even though it was the literally-requested behavior; testing it revealed it wasn't actually what was wanted.
-3. **Feather as an absolute px width, subtractive, radius fixed** (`innerRadius = radius - feather`, capped at 0): total size locked to radius, feather only carves inward. This is what "feather shouldn't affect brush size at all" actually meant. Bug found on testing: since feather can't reduce `innerRadius` below 0, any feather value ≥ the current radius produces the identical "fully soft" result — different feather values "all looked the same" once past that point. Briefly extended to let feather > 1 grow the region past the radius again (to give small brushes a visibly bigger soft glow), but that reintroduced problem #2's "just increases size" complaint and was reverted.
-4. **Feather as a fraction of radius, radius fixed** (`innerRadius = radius*(1-feather)`, outer edge always = radius) — **same formula as #1**, but explicitly chosen this time (via a direct fixed-size-vs-percentage question) over the absolute-px alternative, and left at that: total brush size never changes with feather; a given feather value's *absolute* softness naturally scales with brush radius (true Photoshop Hardness behavior — Hardness is itself a percentage of Size, not an absolute px value, which is why model #2 doesn't actually match Photoshop despite citing it).
+> **Cause:** two `pointer-events` gaps — the SVG's children weren't individually opted out of hit-testing, and the outer container had no override of its own.
+> **Fix:** explicit `pointer-events: none` on the `line`/`text` elements and the container, with just the real controls opted back in via `pointer-events: auto`.
 
-**Open, unresolved by the above:** a small brush at feather=1 (fully soft) still barely reads as "soft" visually, since the entire soft transition only spans the (small) radius in the first place. Diagnosed as likely compounded by the stroke-overlap bug below (many overlapping dabs along a drag re-saturating what should be a soft edge) rather than purely the fixed-size formula itself — not yet confirmed/fixed.
+---
 
-### Open bug: stroke-drag opacity buildup on overlapping dabs
-**Status:** Open — diagnosed, fix proposed, not implemented.
+## 🧱 Layer Compositing & Noise
 
-A stroke (`pointerdown` → drag → `pointerup`) places many dabs along the path (interpolated for continuity at fast drag speed — see `map/MapView.tsx`'s `paintStrokeTo()`), each composited "over" the paint layer's previous state via the Porter-Duff formula above. That's correct *across* separate, independent strokes (later strokes should layer on top of earlier ones). But *within* one continuous drag, with dabs spaced closer together than their soft radius, this same sequential-over compositing causes many weak/partial contributions to stack and saturate toward full opacity well before a single dab's own falloff would suggest — effectively flattening a soft/feathered edge into a hard one, even though each individual dab's math is a correct smooth gradient.
+### 🐛 New layer visually erased existing painted terrain
+**Status:** ✅ Fixed — 2 attempts (2026-09-22)
 
-**Proposed fix** (standard technique — how real paint tools avoid "opacity buildup" on a single stroke): accumulate the *current* stroke's dabs into a separate temporary buffer via a MAX combine (not sequential "over"), so overlapping dabs within one drag never exceed what a single dab alone would contribute at that point; only composite that stroke's finished/live accumulated mask onto the persistent paint layer via the normal "over" blend. Requires a new per-stroke ping-pong buffer (reset at `pointerdown`) in `map/heightmap.ts`, plus a new MAX-combine shader pass. Not yet implemented.
+> **Symptom:** "+ Add layer" made painted terrain on layers beneath it disappear. No data was actually lost — purely a compositing bug.
+> **Cause:** an empty layer's flat mid-gray placeholder read as real opaque content at `Normal`/full opacity, fully replacing everything beneath it.
+> **Fix attempt 1 (wrong):** added a `coverage` gate but kept the old gray-blend formula too — applied the paint mask twice, causing a ridged double-edge at stroke boundaries.
+> **Fix attempt 2:** fixed the double-blend, but then black paint became indistinguishable from "nothing painted" (both read as the composite's starting value, black).
+> **Actual fix:** `layerHeight = paint.x` (no gray blended in) + `coverage = paint.y` applied exactly once; composite starts at 0.5 (gray/neutral) instead of 0.0 (black), matching the convention already used elsewhere (`planet.ts`, `vertex.glsl`).
 
-### Bug: brush radius used the canvas's CSS display size instead of the actual texture resolution
-**Status:** Fixed.
+### 🧭 GLSL ES 1.00 forbids dynamic sampler-array indexing
+**Status:** ✅ Decided/worked around (2026-09-16)
 
-`MapView.tsx` converted brush radius from px to a UV fraction by dividing by the canvas's *displayed* CSS size (`sizePx` — 300 normally, larger when the noise-canvas expand mode ships). That's wrong: the paint texture's actual resolution is fixed at `HEIGHTMAP_WIDTH` (1024px) regardless of how big the preview canvas is drawn on screen, and regardless of the planet's own radius. A "20px" brush radius consequently covered a much bigger real fraction of the sphere than intended, and would have felt inconsistent between the compact and expanded canvas views. Fixed by exporting `HEIGHTMAP_WIDTH` from `map/heightmap.ts` and dividing by that fixed constant instead.
+> **Issue:** looping over paint textures with a variable index fails to compile under GLSL ES 1.00 (Three.js's default `ShaderMaterial` mode).
+> **Fix:** `MAX_LAYERS` (16) separately-named uniforms + an if/else chain to select by constant index, instead of a real array.
 
-## 2026-09-14
+---
 
-### Right-side panel structure: tabs by technique/effect, not by the planet's parts
-**Status:** Decided.
+## 🎨 Paint & Brush System
 
-Question raised while designing the noise system's UI: should the right-side panel (and any future panel like it) be organized around the planet's *parts* (Terrain, Population, Climate, Vegetation, ...) or around *techniques/effects* (Noise, Paint, Erosion, Color, ...)?
+### 🐛 Stroke-drag opacity buildup → jagged 3D terrain
+**Status:** 🟡 Partially fixed — smoother, still jagged; tabled (2026-09-16 → 2026-09-22)
 
-**Decided: by technique/effect.** Everything currently planned — noise generation, paint-authored terrain, erosion, biome-style coloring — operates on the *same* underlying data (the heightmap + texture), composing as sequential operations rather than being independent domains with their own state. This mirrors why World Machine/Gaea (both already referenced as inspiration) organize around operations/nodes rather than planet-parts: their entire premise is a pipeline of techniques feeding into each other. "By the planet's parts" would only become the right structure once a feature is a genuinely independent system with its own data (e.g. a real population simulation, not just something that reads the heightmap) — nothing on the roadmap is that yet, including the mentioned future agent/road placement (see 2026-09-02 entry below), which reads values off the existing heightmap rather than maintaining separate state.
+> **Symptom:** dragging a soft/feathered stroke hardened into a solid edge; after fixing that, painted terrain still displaced with jagged/pointed ridges.
+> **Cause (v1):** each dab composited "over" the previous state — fine across separate strokes, but within one drag this stacked/saturated a soft edge into a hard one.
+> **Fix v1 (2026-09-16):** per-stroke MAX-accumulation buffer instead of sequential "over" — fixed the hardening, but MAX-of-circles leaves a crease in the falloff's *slope* wherever two dabs are equidistant, invisible in flat color but visible as ridges once it drives 3D displacement.
+> **Fix v2 (2026-09-22):** replaced MAX-accumulation with a true distance-to-polyline computation (`shaders/strokePath.frag.glsl`) — one smooth "capsule chain" along the whole stroke path, no crease. Net simplification: the separate mask-accumulation buffer/pass is gone.
+> **Still open:** terrain is still visibly jagged, feather still not very noticeable. Likely cause, unconfirmed: the sphere's mesh resolution (64×32 segments) is too coarse for a narrow painted feature — displacement only happens at actual vertices, linearly interpolated per-triangle. Dana's call: tabled, revisit after erosion (which might help incidentally).
 
-Implemented as `ui/RightPanel.tsx`'s tab bar, ported from active-geometry's `buildStageTabs`/`.ag-stage-tab` convention (`js/uiDesign.js`), reimplemented with React state instead of the original's imperative DOM class-toggling. Tabs so far: Noise (real), Paint/Erosion/Color (empty placeholders — ROADMAP.md items 7-9 — get real content when those features are built).
+### 🐛 Brush strokes cut off at the sphere's UV seam
+**Status:** ✅ Fixed (2026-09-22)
 
-**Known cosmetic issue, not urgent (Dana: "it can be fixed later"):** the placeholder tabs don't currently match the Noise tab's width exactly.
+> **Symptom:** a stroke near the seam only painted on one side; paint misalignment plus an actual crack in the terrain geometry at the seam.
+> **Cause:** brush falloff used a plain UV-space `distance()`, which doesn't know U=0 and U=1 are the same wrapped longitude.
+> **Fix:** wrap the horizontal distance component (`du = min(du, 1.0-du)`). Doesn't retroactively fix strokes painted before the fix.
 
-### Bug: gumball widget rendered on top of the new right-side panel instead of the 3D viewport
-**Status:** Fixed.
+### 🐛 Paint erase did nothing
+**Status:** ✅ Fixed (2026-09-16)
 
-`.gumball-container` was `position: fixed` and appended to `document.body` — positioned relative to the whole browser window. That was correct while the 3D viewport extended to the window's right edge, but once the right-side `RightPanel` was added there, the widget's `bottom/right: 16px` offset landed on top of the new panel instead of the actual 3D view.
+> **Symptom:** painting toward black had no visible effect.
+> **Cause:** WebGL clamps fragment output to [0,1] before GPU blending, silently zeroing a negative "erase" delta — underlying cause: GPU blending into a float render target needs `EXT_float_blend`, not reliably supported cross-browser.
+> **Fix:** ping-pong render targets instead of GPU blending — each stroke computes the complete new frame in-shader.
 
-Fixed by mounting the widget inside `.app-viewport` (passed in as a constructor param, `canvas.parentElement`) instead of `document.body`, and switching `.gumball-container` from `position: fixed` to `position: absolute` against `.app-viewport` (given `position: relative`) instead of the window. The 16px bottom/right inset is unchanged — it now measures from the viewport's own corner, not the window's.
+### 🐛 Partial-opacity strokes looked diluted/dark
+**Status:** ✅ Fixed (2026-09-16)
 
-## 2026-09-09
+> **Symptom:** a light-colored dab at reduced strength looked dark instead of light-at-half-opacity.
+> **Cause:** value and mask were blended toward the target at the same naive rate.
+> **Fix:** standard Porter-Duff "over" compositing — weights by relative opacity contribution, not raw falloff.
 
-### Bug: gumball's axis lines didn't respond to direct drags, even though the underlying camera/update logic was correct
-**Status:** Fixed.
+### 🐛 Brush radius used display size, not texture resolution
+**Status:** ✅ Fixed (2026-09-16)
 
-Symptom: dragging in empty space near the gumball orbited the camera fine, and the axis indicator's SVG `x2`/`y2` values were provably correct (verified via DevTools — real, trigonometrically-consistent numbers matching the current camera orientation) — but dragging *directly on* a rendered axis line did nothing, and Dana didn't have this issue in `active-geometry-project`.
+> **Symptom:** a "20px" brush covered a much bigger real fraction of the sphere than intended.
+> **Cause:** px→UV conversion divided by the canvas's CSS display size, not the fixed texture resolution.
+> **Fix:** divide by the exported `HEIGHTMAP_WIDTH` (1024) constant instead.
 
-Root cause, in two parts:
-1. The gumball's `<svg>` has `pointer-events: none` (ported from the original) so clicks pass through to the canvas underneath, letting drag-to-orbit work even where the widget visually overlaps the viewport. But `pointer-events: none` only excludes an element *and its descendants* from hit-testing — it doesn't affect ancestors. The `<line>`/`<text>` elements' rendered strokes were still being hit-tested as part of a check that apparently wasn't fully inherited in practice — fixed by setting `pointer-events: none` explicitly on the `line`/`text` elements themselves rather than relying on cascade from the parent `<svg>` alone.
-2. Even after that, dragging on the gumball's container (not just the SVG) still didn't pass through — because `.gumball-container` (the outer `position: fixed` div holding the SVG + zoom slider + buttons) had no `pointer-events` override of its own, so it captured clicks over its whole bounding box regardless of what its SVG child opted out of. Fixed by setting `pointer-events: none` on `.gumball-container` itself, then explicitly opting the actually-interactive controls (`.gumball-zoom-input`, `.gumball-btn`) back in with `pointer-events: auto`.
+### 🧭 Brush hardness/feather model — 4 attempts
+**Status:** ✅ Decided — fixed-radius, percentage-based (2026-09-16)
 
-**Note:** point 2 is a deliberate addition, not a strict port — active-geometry's own container doesn't have `pointer-events: none` either. Dana's theory for why the original never surfaced this: its gumball sits bottom-left, tucked under the left shape-library panel, likely just less overlapped by where she'd naturally start an orbit-drag than this project's top-right placement.
+> Four models tried in order, each only revealing its problem once tested:
+> 1. Feather as % of radius — absolute softness scaled with brush size (original complaint).
+> 2. Feather additive (`radius+feather`) — brush ballooned bigger than expected.
+> 3. Feather subtractive px, radius fixed — values above radius all looked identical.
+> 4. **Landed here:** feather as % of radius, radius fixed (same formula as #1, chosen deliberately this time) — matches true Photoshop Hardness behavior.
 
-### Open item: arbitrary placeholder values need eventual design-system/config tokenization
-**Status:** Open — tracked, not yet built (Dana: "don't run ahead of the class schedule" applies; this is a future cleanup pass, not urgent).
+---
 
-While building `scene/planet.ts` and its shaders, several numeric/color values were chosen arbitrarily (a placeholder base color, light direction, ambient light level, sphere radius, and segment counts) with no design rationale behind the specific numbers — they just needed *some* value to get a working first pass on screen. Dana wants these eventually tokenized/tracked centrally rather than left as scattered magic numbers, so they can be adjusted in one place instead of hunting through files.
+## 💡 Lighting & Normals
 
-Two different destinations, not one, since they're different kinds of values:
-- **Visual/styling values** (colors, lighting levels) — natural fit for a CSS custom-property-based design-system file, the way `active-geometry-project` and the class demo app both already use CSS variables for their own styling.
-- **Scene/geometry configuration values** (sphere radius, segment counts, camera distance, grid size/divisions, etc.) — not stylable via CSS (they feed directly into Three.js constructors, not the DOM/CSS), so these need their own scene-config/constants file instead.
+### 🐛 No real per-pixel normal → terrain bumps didn't show in lighting
+**Status:** ✅ Fixed (2026-09-16)
 
-**Convention adopted in the meantime:** flag every arbitrary placeholder value inline with a `// TODO(DS): arbitrary placeholder — ...` comment at the point it's defined, so they're all easy to find (grep for `TODO(DS)`) once it's time to build the actual tokenization/config file(s). First applied in `scene/planet.ts` (2026-09-09).
+> **Attempt 1 (regression):** screen-space-derivative normal (`dFdx`/`dFdy`) — faceted the *whole* sphere since derivatives are ~constant per triangle. (Dana liked the look as a future style *option*, not the default.)
+> **Fix:** analytic sphere tangent basis (`dPdu`/`dPdv`, exact calculus derivatives) — smooth, mesh-resolution-independent. Winding verified by hand-computing a concrete point, not guessed. Perturbed by the heightmap's own gradient (sampled 16 texels away, not the immediate neighbor, to avoid amplifying noise) for fine bump detail.
+> **Also fixed:** a units mismatch (`uRadius` uniform added — tangent vectors were unit-sphere-relative while displacement was world-space-scaled, dwarfing the base term) and a `normalMatrix` compile error (Three.js auto-sets it but only auto-declares it in the vertex stage).
 
-## 2026-09-02
+---
 
-### Rendering approach: mesh-based Three.js, not raymarching — GLSL shaders still used
-**Status:** Decided (no raymarching; GLSL-shader terrain approach agreed in principle) — implementation not yet started, since terrain isn't being built yet.
+## 2026-09-02 — early notes, pre-dating this structure
 
-- Considered whether to build the world using raymarching/SDFs (the technique Dana's `active-geometry-project` uses for its CSG boolean shape editor) versus traditional Three.js mesh geometry.
-- **Decided against raymarching for the world as a whole.** It fits `active-geometry-project` specifically because SDFs make boolean union/subtract/intersect cheap without regenerating mesh topology. It doesn't fit this project: agents/populations, instanced vegetation, voxels, roads, and LOD/culling all assume real mesh objects — that's also what the class's own demo app and Three.js conventions use (real `SphereGeometry`, vertex displacement, `MeshStandardMaterial`).
-- **Still using GLSL shaders**, just not for raymarching — custom `ShaderMaterial`/vertex+fragment shaders on real mesh geometry, per Dana's request and matching the syllabus (Session 3 covers shaders explicitly). Dana's reasoning: doing terrain/materials purely in Three.js (i.e., computing height/color in JavaScript on the CPU, the way the class demo app currently does) is a performance concern as the terrain gets more complex, so GLSL should be used to keep that work on the GPU.
-- **Agreed combo for terrain (2026-09-02, confirmed by Dana — not yet built):** compute the heightmap in a fragment shader into an off-screen render target (texture). The terrain mesh's vertex shader samples that texture to displace vertices (GPU-side, fast regardless of noise/erosion complexity); the fragment shader samples it for coloring/biomes. When the CPU needs a height value — placing an agent, laying a road, painting erosion — it reads back the specific texel from that same texture via `renderer.readRenderTargetPixels()`, on demand, rather than recomputing anything in JavaScript. This avoids running the noise function twice in two languages (once in GLSL for rendering, once in JS/TS to keep CPU queries in sync) — the shader stays the single source of truth; the CPU just asks it "what's the value here" when it actually needs to know, not every frame.
-- Revisit and confirm the concrete implementation details when terrain work actually starts (this entry records the agreed *approach*, not a finished design).
-
-### Grid: plain `THREE.GridHelper`, not a ported shader grid
-Dana's active-geometry project draws its grid procedurally inside its raymarching fragment shader (anti-aliased minor/major lines, distance fade) — not portable on its own since it depends on that project's ray-marching pipeline. Since this project isn't raymarching, using a plain built-in `THREE.GridHelper` instead.
+### Grid: plain `THREE.GridHelper` at first (later replaced)
+`active-geometry-project`'s procedural grid depends on its raymarching pipeline, not portable on its own — used `THREE.GridHelper` initially. Superseded 2026-09-14 by a shader-based plane (see `ROADMAP.md`, Stage 01), since the plain helper looked like bounded CAD-software floor rather than empty space.

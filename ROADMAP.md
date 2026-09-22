@@ -1,83 +1,278 @@
 # Roadmap / Project Log
 
-The main doc for planning and progress tracking on Procedural World Building — where work picks up from without needing to scan for context each time. New entries are added at the top, dated. (The syllabus's graded Weekly Push reports live in `WEEKLY-PUSHES.md`; technical decision *rationale* lives in `ISSUES.md`; external-facing structure/conventions reference lives in `README.md`.)
+The main doc for planning and progress tracking on Procedural World Building — organized by **product stage and feature**, not chronologically, so it reads as current state rather than a log to scan through. (The syllabus's graded Weekly Push reports, which *are* chronological, live in `WEEKLY-PUSHES.md`; technical decision *rationale* and bug detail live in `ISSUES.md`; external-facing structure/conventions reference lives in `README.md`.)
+
+Each feature follows the same template, boxed as a quote block so it's visually clear where one feature ends and the next begins:
+> ✅ **Done:** what's actually built and working — each change dated `(YYYY-MM-DD)`.
+>
+> 📋 **To do:** what's known to still be missing/open, not yet built.
+>
+> 🐛 **Bugs:** short pointers only — full technical detail lives in `ISSUES.md`, cross-referenced by date.
+
+Each stage has a progress bar (e.g. 🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ 55%) instead of a status label — a rough visual read of how open vs. done that stage's features are, **not** an exact/measured metric.
+
+Stages are numbered in roughly the order they were/are being built, matching how work actually proceeds through this roadmap (see `CLAUDE.md`'s working rules — earlier stages finish before later ones start). A separate "Potential Features / Ideas" section at the end holds reference/brainstorm material that isn't scheduled as a stage at all.
+
+---
+---
+
+## Stage 01 — Foundation & Scene Setup
+🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
+
+#### Project scaffold
+> ✅ **Done:** Vite + React + TypeScript + Three.js project scaffolded (2026-09-09), following `active-geometry-project`'s own conventions (see `README.md`'s code-organization section) rather than the class repo's Entity/World OOP pattern — an early Entity/World attempt (`app/src/engine/Entity.ts`) was tried and removed (2026-09-02; see `ISSUES.md` for why).
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** —
 
 ---
 
-## 2026-09-09
+#### 3D scene, camera, controls, grid
+> ✅ **Done:** scene/camera/orbit-controls setup (2026-09-09); `DEFAULT_CAMERA_DISTANCE` bumped from active-geometry's 80 to 200 (2026-09-09 — that value was calibrated for small CAD shapes, not a planet); a shader-based infinite-looking grid plane (`scene/grid.ts`, `shaders/grid.vert.glsl`/`grid.frag.glsl`) replacing `THREE.GridHelper` (2026-09-14), reusing active-geometry's minor/major fwidth-anti-aliased line math and distance fade; a "Grid lines" toggle and "Grid spacing" slider in Scene controls (2026-09-14); grid `fadeDistance` widened 400→3000 (2026-09-16 — was fading out at moderate zoom-out).
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** a real React StrictMode-related leak duplicated the grid on resolution change (cleanup was tearing down a stale closure reference instead of the ref's current value) — fixed (2026-09-09). See `ISSUES.md`, 2026-09-09.
 
-### Purpose of this section
-This is the main doc for tracking progress and planning — updated as work progresses, so Claude (or Dana) can pick up where things left off without scanning for context each time. `README.md` is the external-facing reference (repo structure, code-organization conventions, written for anyone with zero context on the project); `ISSUES.md` holds the *why* behind technical decisions; `WEEKLY-PUSHES.md` holds the syllabus's graded weekly progress reports; this file is where planning happens and progress gets tracked — current implementation state, staged plans, feature ideas.
+---
 
-### Current implementation state (`app/`)
-Vite + React + TypeScript + Three.js app — **running and tested in-browser** (`npm run dev`, http://localhost:5173/). A light placeholder-colored planet, centered at the origin, sits on a grid, orbit-controllable, with real GPU-driven noise displacement plus user-painted terrain. Three-way layout: a left control panel, the 3D viewport, and a right-side noise panel — all live-wired to React state in `App.tsx`.
+#### Gumball navigation widget
+> ✅ **Done:** ported/debugged the orientation/navigation widget (axis indicator, zoom slider, view presets, reset) (2026-09-09), reusing active-geometry's camera-calibration math; mounts inside `.app-viewport` (`position: absolute` against it) instead of `document.body`/`fixed` against the window (2026-09-14), so it stays confined to the 3D viewport.
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** axis lines didn't respond to direct drags — a `pointer-events` cascade issue — fixed (2026-09-09); the widget drifted onto the new right panel once it existed — fixed by scoping its positioning to the viewport (2026-09-14). See `ISSUES.md`, 2026-09-09 and 2026-09-14.
 
-**Update, 2026-09-16:** the description below (files list, `map/heightmap.ts` bullet especially) reflects the state as of 2026-09-09/09-14. Since then: a real paint-brush system was added (see item 7), the heightmap pipeline changed from a per-component duplicated instance to a single shared instance owned by `SceneCanvas` (Dana, 2026-09-15: "have the threejs be the manager for the system" — required, not just simpler, since the planet's `uHeightMap` sampling happens inside that renderer's own draw call and WebGL textures aren't shareable across separate renderer/context instances), and the noise system became a real multi-layer stack with blend modes (see item 6). Superseding detail below rather than rewriting it in place, per this file's own newest-on-top convention.
+---
 
-Files, all under `app/src/`:
+#### Control panel UI system
+> ✅ **Done:** a generic UI component set (`Slider` — draggable + scrubbable/typeable field; `ColorPicker`; `Toggle`; `Select`) in `ui/UIElements.tsx` (2026-09-09), feature-grouped rather than split per-component, matching active-geometry's own convention; left `Panel.tsx` (Scene controls, Planet controls, sectioned) (2026-09-09); right `RightPanel.tsx` tab bar (2026-09-14, ported from active-geometry's `buildStageTabs`/`.ag-stage-tab` convention, reimplemented with React state) — tabs organized by technique/effect (Noise/Erosion/Color), not by the planet's parts (see `ISSUES.md`, 2026-09-14, for the reasoning); `Slider` gained an optional `trackClassName` for the black-white brush-strength gradient track (2026-09-16).
+>
+> 📋 **To do:** the placeholder tabs (Erosion/Color) don't match the Noise tab's width — cosmetic, deferred (2026-09-14).
+>
+> 🐛 **Bugs:** the planet initially rendered off-center (canvas was full-bleed behind the panel) — fixed via the flex layout (`app-layout`/`app-viewport` in `design.css`) (2026-09-09).
 
-- `App.tsx` — owns all settings state (radius in km, base color, ambient light, light X/Y, grid spacing, display mode, the noise layer stack, brush radius/value/feather), renders `Panel` + the viewport + `RightPanel`, in a flex layout (`app-layout`/`app-viewport` in `design.css`) so the 3D view centers on the actually-visible area between the two panels, not the whole window. The left panel's old "Enable noise" master toggle was removed (Dana, 2026-09-16: "i'm thinking it's unnecessary anyway and yu can remove it") — a layer's own noise type of `'none'` now does that job per-layer instead.
-- `design.css` — the single CSS source of truth (see README.md's code-organization section) — design tokens, base layout, and every component's styling, including the actual licensed Helvetica font files ported from active-geometry (`app/public/fonts/`, loaded via `@font-face` — without these, everything silently falls back to a generic system sans-serif and nothing matches active-geometry's real look).
-- `scene/` — `scene.ts`, `renderer.ts`, `camera.ts` (exports `DEFAULT_CAMERA_DISTANCE`, bumped from active-geometry's 80 to 200 — 80 was calibrated for small CAD shapes, not a 20-unit-radius planet), `controls.ts`, `grid.ts` (shader-based infinite-looking plane, not `THREE.GridHelper` — see item 12; `fadeDistance` widened 400→3000, 2026-09-16, it was fading out at moderate zoom-out), `planet.ts` (+ `planetGeometry()` split out for cheap radius-only rebuilds; planet stays centered at the origin as radius changes; carries `uRadius` alongside `uDisplacementAmplitude` so the fragment shader's normal math can scale into world-space units, see `ISSUES.md` 2026-09-16), `SceneCanvas.tsx` (the React wrapper — mounts everything in a `useEffect`, reactive per-prop effects for radius/grid-spacing/lighting-and-color/display-mode/layers, render loop, `ResizeObserver`; also exposes an imperative handle — `paintStroke()`/`getPreviewImageData()` — so `MapView.tsx` can drive the shared `HeightmapPipeline` it owns), `Gumball.tsx` (the orientation/navigation widget — mounts inside `.app-viewport`, `position: absolute` against it instead of `fixed` against the window).
-- `shaders/vertex.glsl` / `shaders/fragment.glsl` — the planet's shader pair; fragment shader now reconstructs the surface normal analytically from the sphere's own UV parametrization (not a screen-space derivative, which faceted per-triangle) plus the heightmap's central-difference gradient, for lighting that actually shows terrain bumps — see `ISSUES.md`, 2026-09-16. `shaders/heightmapBrush.vert.glsl` (renamed from `heightmap.vert.glsl`, 2026-09-16, since it's shared by both the noise-compositing pass and the paint-brush pass — a plain full-screen-quad pass-through, identical either way) / `shaders/heightmap.frag.glsl` (noise-layer compositing, blend modes, reads the per-layer paint textures) / `shaders/paintbrush.frag.glsl` (new — renders one brush dab via ping-pong accumulation, Porter-Duff "over" compositing) / `shaders/noise.glsl` (shared noise-function library) / `shaders/grid.vert.glsl` / `shaders/grid.frag.glsl`.
-- `map/heightmap.ts` — `HeightmapPipeline`, now the single shared instance for the whole app (see update note above). Holds: the noise-compositing render target/material (`NoiseLayer[]`, up to `MAX_LAYERS = 16`, `BlendMode` verified against Gaea's Combine node docs); and, per layer, a persistent **paint texture** — a ping-pong pair of `HalfFloatType` render targets (not GPU blending — `EXT_float_blend` isn't reliably supported, see `ISSUES.md`) storing (value, mask) so painted areas show an absolute painted value while unpainted areas keep showing live procedural noise underneath. `paintStroke()` renders one dab via `paintbrush.frag.glsl`, swaps the active target. `map/MapView.tsx` — the flat 2D preview canvas (1024×512, no WebGL context of its own — reads back pixels from the shared pipeline via `SceneCanvas`'s imperative handle), also captures pointer input for painting: converts brush radius from px to UV using the fixed texture resolution (`HEIGHTMAP_WIDTH`, not the canvas's CSS display size — an earlier bug used the display size, making a "20px" brush cover a much bigger real fraction of the sphere than intended), and interpolates extra dabs along fast drag segments so strokes stay continuous.
-- `ui/` — `UIElements.tsx` (`Slider` — gained an optional `trackClassName` for the black-white brush-strength gradient track — `ColorPicker`, `Toggle`, `Select`), `Panel.tsx` (left panel: Scene controls, Planet controls), `RightPanel.tsx` (right panel: tab bar, 3 tabs — Noise real, Erosion/Color empty placeholders; there's no separate Paint tab, see item 7), `NoisePanel.tsx` (the "Noise" tab's content: the 2D paint canvas + Brush radius/Brush(value)/Feather controls, the real Layers list with drag-to-reorder and delete, noise type + params for the selected layer, conditional Modifiers section).
+---
+---
 
-`app/src/engine/Entity.ts` (an early, abandoned attempt at the class's Entity/World OOP pattern) was removed early on — not part of this project's architecture. See `ISSUES.md` (2026-09-02 entry) for why.
+## Stage 02 — Planet Base
+🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 90% *(done, ongoing tuning)*
 
-**Bugs found and fixed along the way** (see `ISSUES.md` for the technical detail on the trickier ones): a real StrictMode-related leak that duplicated the grid on resolution change (cleanup was tearing down a stale closure reference instead of the ref's current value); the planet rendering off-center (canvas was full-bleed behind the panel — fixed via the flex layout above); the gumball's axis indicator not responding to drags directly on its lines (a `pointer-events` cascade issue — the container needed to be click-through with only its actual controls opted back in, not just the SVG); a wrong constant in a hand-reproduced 3D Perlin noise function, caught by diffing against the canonical source (see README.md's References section); a sphere UV-seam artifact from Three.js's duplicated seam vertices sampling non-identical texels, fixed via `texture.wrapS = THREE.RepeatWrapping`; and the gumball drifting onto the new right panel once it existed, fixed by scoping its positioning to the viewport instead of the window (`ISSUES.md`, 2026-09-14).
+#### Sphere geometry & radius control
+> ✅ **Done:** `planetGeometry()` split out from `planet()` for cheap radius-only rebuilds (2026-09-14); the planet stays centered at the origin as radius changes, not anchored to the grid (2026-09-14); a Radius slider (km, narrative-scale, mapped down via `KM_PER_SCENE_UNIT = 300`, an arbitrary placeholder conversion) — its range was retuned several times against the actual camera/grid setup (1,000–15,000 on 2026-09-09/14 → 500,000 → 150,000 → **1,000–100,000 km** (2026-09-16), the range it's on now) so the planet stays framed/visible: at the 100,000km max, scene radius ≈333 units, comfortably under the grid's 3,000-unit fade distance and the camera's 10,000-unit far clip.
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** radius changes weren't updating the shader material's `uDisplacementAmplitude`/`uRadius` uniforms (only the geometry itself was rebuilt) — fixed alongside the lighting fix (2026-09-16), see Stage 05.
 
-**More bugs found and fixed, 2026-09-16** (see `ISSUES.md`'s 2026-09-16 entries for the full technical detail): paint strokes' "erase" doing nothing (WebGL clamps fragment output to [0,1] before GPU blending, so a negative "erase" delta was silently clamped to 0 — root-caused further to float-render-target GPU blending not being reliably supported at all, fixed by switching to ping-pong accumulation with no GPU blending); GLSL ES 1.00 forbidding dynamic sampler-array indexing (`'[' : array index for samplers must be constant integral expressions`) — worked around with 16 separately-named uniforms instead of a real array; dark/diluted-looking partial-opacity paint strokes, fixed with proper Porter-Duff "over" compositing math instead of blending value and mask toward the target at the same naive rate; a pole-geometry tear in painted terrain, fixed by pole-snapping the paint texture's sample UV the same way the noise sampling already was; a severe "low-poly" faceting regression from an initial screen-space-derivative normal fix, replaced with an analytic sphere tangent basis (mesh-resolution-independent) — the faceted look itself was liked as a potential future style *option*, just not as the default, see item 13; a `'normalMatrix' : undeclared identifier` compile error, since Three.js auto-*sets* that built-in but doesn't auto-*declare* it in the fragment stage (only the vertex stage) — fixed with an explicit `uniform mat3 normalMatrix;`; visible per-texel grain in the displaced terrain, fixed by widening the height-gradient's sample offset (1→16 texels) and by scaling the analytic tangent vectors into world-space units via a new `uRadius` uniform (they were unit-sphere-relative, so the height term was dwarfing them); and the brush-radius-to-UV conversion using the canvas's CSS display size instead of the fixed texture resolution, making a small px radius cover a much bigger real fraction of the sphere than intended.
+---
 
-**Open bug, diagnosed but not yet fixed, 2026-09-16:** dragging a paint stroke places many overlapping dabs, each composited "over" the previous state — correct across separate strokes, but within one continuous drag the overlapping soft edges stack and saturate toward full opacity well before the dab's true edge, flattening a soft/feathered brush into an effectively hard boundary even though each individual dab's own falloff is a correct smooth gradient. Standard fix (how real paint tools avoid this): accumulate one stroke's dabs into a temporary buffer via MAX, not sequential "over", and composite that onto the persistent layer once. Not yet implemented.
+#### Base color, ambient light, display mode
+> ✅ **Done:** base color `ColorPicker` (native `<input type="color">`); ambient light + light X/Y sliders; display mode `Select` (Shaded/Wireframe) — all 2026-09-09; base color lightened (`#3a7bd5` → `#c9dbea`) and ambient light retuned (0.15 → 0.12) for visible shading contrast on the terrain bumps (2026-09-16).
+>
+> 📋 **To do:** color-picker theming — currently native OS/browser chrome, not themed to match the app. Open decision, not yet made: keep native, add a small dependency (e.g. `react-colorful`), or hand-build one.
+>
+> 🐛 **Bugs:** —
 
-### Plan / next steps, in order
-1. ~~Slider UI component~~ — **Done.**
-2. ~~Wire up the dev server~~ — **Done.**
-3. ~~Sectioned control panel~~ (Scene controls: lighting, grid resolution; Planet controls: radius, base color) — **Done**, moved ahead of the gumball per Dana's request.
-4. ~~Gumball~~ — **Done**, including debugging the pointer-events issue above.
-5. **2D mapping / texture creation** — reordered ahead of noise generation on 2026-09-14 (Dana: "the 2d map comes before the noise generation"). Build the flat 2D map surface first — including **a system/interface for manipulating the 2D image before it's applied to the 3D planet** (Dana's addition, 2026-09-14 — not just auto-generate-and-apply; an intermediate authoring/editing step). The professor is using 2D maps to generate different textures (biome-style texturing); this is the surface noise generation (below) then populates. **Done, 2026-09-16:** the manipulation/authoring interface is the paint-brush system, see item 7 — the live 2D preview (`map/MapView.tsx`) now also captures paint input, reflected live on both the 2D canvas and the 3D planet.
-6. **Noise generation** — procedural terrain height via noise functions (Session 3, Sep 9 class assignment), generated into the 2D map surface from item 5. Computed via the already-agreed GPU-heightmap-texture approach (fragment shader → render target texture, sampled by the planet's vertex/fragment shaders for displacement + coloring; CPU reads back specific texels on demand for agent/road placement rather than duplicating the algorithm — see `ISSUES.md`, 2026-09-02 entry, for the full approach). **Base pipeline done (2026-09-14):** 8 selectable types — Random, Perlin, Simplex, Voronoi (base generators, 3D-position-sampled to avoid sphere pole/seam artifacts), Ridged and Octaves/fBm and Terrace (modifiers applied to Perlin), Domain warp, and None (flat, no displacement). Perlin3D/Simplex3D verified against the canonical Stefan Gustavson/Ashima Arts source (see README.md's References section); the fBm formula verified against thebookofshaders.com/13. **Multi-layer stacking done, 2026-09-16:** the right panel's "Layers" section is a real Photoshop-style stack now (bottom of the array = base/applied first, top = applied last — the visual list renders reversed to match Photoshop's own panel convention) — add/delete/drag-to-reorder, up to `MAX_LAYERS = 16`, each with its own noise type/params/opacity/blend mode (Normal/Add/Subtract/Multiply/Max/Min/Screen, verified against Gaea's actual Combine node docs, docs.quadspinner.com). **Still open:** the modifier architecture — right now Ridged/Octaves/Terrace/Domain warp are separate *noise types* you pick instead of a base type, rather than independently-toggleable modifiers layered onto a base type in a fixed order (Domain warp → generator/Octaves → Ridged → Terrace) the way a tool like Gaea structures it; a per-layer "height control" (amplitude, distinct from Opacity) was also asked for. Discussed, not implemented.
-7. **Paint-like board for user-authored noise** (Dana's own idea, not a class assignment) — a canvas/paint UI letting the user draw/influence their own custom terrain noise, rather than relying purely on procedural randomness. Reordered ahead of erosion on 2026-09-14 (Dana: "obvs" — erosion needs a heightmap to act on, so authoring it comes first). **Built, 2026-09-16 — not a separate tab** (decided 2026-09-15: painting generates displacement the same way procedural noise does, so it's brush controls inside the Noise tab, targeting whichever layer is selected, rather than its own tab/domain). An absolute "set to this gray" brush (not additive — clarified 2026-09-16 after the wrong one was first built: with a layer's noise type set to `'none'`, painting *is* the layer's content), with a black-white "Brush" strength slider (-1 erase/black .. 1 paint/white) and a Feather slider (0=hard edge, 1=fully soft — a fraction of the brush radius, Photoshop-Hardness-style; several other models were tried and reverted, see `ISSUES.md` 2026-09-16 for the full back-and-forth and why fixed-radius-percentage is where it landed), painted via a persistent per-layer paint texture composited under/over the live procedural noise. **Known bug, not yet fixed:** stroke-drag opacity buildup, see the "Open bug" note above.
-   - **Design note, 2026-09-14:** the actual displacement/noise texture is an equirectangular projection (needed to wrap the sphere seamlessly, per the noise-generation fix), which looks visibly distorted near the poles — bad to paint on directly. Primary approach taken: paint on the flat 2D canvas (equirectangular, same as the underlying texture) rather than raycasting onto the 3D sphere directly — the pole-snapping fix (see `ISSUES.md`, 2026-09-16) handles the seam/pole distortion without needing a separate undistorted authoring space. Secondary mode worth adding later: paint directly on the 3D sphere itself (raycast the brush onto the surface) — useful for precise/localized edits, the way Substance Painter/Blender's texture paint work — not built.
-   - **Open item, 2026-09-16 (was "Enable noise" toggle):** the left panel's old "Enable noise" master toggle was removed rather than restyled (Dana: "i'm thinking it's unnecessary anyway") — a layer's own noise type of `'none'` now covers that case per-layer.
-   - **Open item, 2026-09-16:** the "Expand" button (above the 2D canvas) still opens a dark overlay on top of the 3D viewport — Dana asked for it to instead *replace* the 3D viewport's content while keeping both side panels visible (`.app-viewport`'s content swapped, not an overlay), since a richer expanded-mode brush toolset is still planned to land there (per the 2026-09-16 idea below). Not yet done.
-   - **Idea, 2026-09-16:** the noise canvas's planned expand/fullscreen mode (see above) is where richer brush controls (strength, size beyond radius, shape) should land — the compact panel view stays radius-only. Not built yet, noting the intended split.
-   - **Open item, 2026-09-14:** the right panel's placeholder tabs (Erosion/Color) don't currently match the Noise tab's width — cosmetic, Dana: "it can be fixed later."
-8. **Erosion simulation on a timeline** — hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/visualize its progression rather than a single static end state (assigned for the Sep 16 class — "Map simulations - Erosion simulation - Biomes" per the syllabus). **Not started** — has an empty placeholder "Erosion" tab reserved for it in the right panel.
-9. **Color picker refinement** — currently a plain native `<input type="color">` (works, follows the real swatch-opens-picker convention, but the picker panel itself is generic OS/browser chrome, not themed to match the app). Open decision from earlier discussion, not yet made: keep native, add a small dependency (e.g. `react-colorful`) for a themed picker, or hand-build one. **Not started** — has an empty placeholder "Color" tab reserved for it in the right panel (biome-style texturing likely also lands here, per item 5's professor's-tool note).
-10. Design-system/config tokenization pass for the various `TODO(DS)` placeholder values scattered through the code (arbitrary colors, light direction, ambient level, planet radius/segments, grid size, camera distance, the km-to-scene-unit conversion). **Not started**, tracked as an open item (see `ISSUES.md`, 2026-09-09 entry).
-11. Make the control panel adjustable/flexible (e.g. resizable width, possibly collapsible) rather than its current fixed `max-width`. Dana's explicit call to defer this — noted so it doesn't get lost, not urgent. **Not started.** Raised again 2026-09-16 (Dana referenced PHASE's own drag-to-resize handle as the model) — still not started; whether this is its own step or gets bundled with other panel work is an open scope question, not yet answered.
-12. ~~Grid~~ — **Done** (2026-09-14). Replaced `THREE.GridHelper` with a shader-based plane (`scene/grid.ts`, `shaders/grid.vert.glsl`/`grid.frag.glsl`), reusing active-geometry's own minor/major fwidth-anti-aliased grid-line math and distance fade, real alpha transparency between lines. Added a "Grid lines" toggle and a "Grid spacing" slider (world-unit cell size, replacing the old GridHelper-specific "divisions" concept) in Scene controls.
-    - **Known limitation, not urgent (Dana: "not very important for now"):** the "Wireframe" display mode (Planet controls) overlays a `THREE.LineSegments` built from the sphere's plain, undisplaced CPU geometry — it won't track the actual GPU-shader-displaced terrain surface once real height is applied (invisible today since the surface is still flat). Proper fix: give the overlay its own shader sampling the same heightmap/displacement as the planet's vertex shader.
-13. Terrain-generation feature (items 5-8 above) — design notes from 2026-09-14 planning session, all deferred until the base pipeline exists:
-    - **Idea, 2026-09-16:** a "flat/faceted" shading style, as a `Display` mode option alongside the existing Shaded/Wireframe — while fixing a real faceting *bug* (see `ISSUES.md`), Dana noted she actually likes that low-poly look as a deliberate style choice, just not as the default. Not built.
-    - **Chunk/tile terrain viewing** — inspired by World Machine's ability to view/work on a square chunk of the terrain rather than the whole thing at once. Filed for later, not urgent.
-    - **History/undo tracking** — noted for later, not urgent.
-    - **Topography-line overlay** — contour lines rendered directly on the terrain surface as a visual guide (standard in this category of tool, e.g. World Machine).
-    - **No node-based UI** — explicit decision: the left-panel-list / right-panel-details structure already planned is correct; not building a node graph like World Machine/Gaea/Substance Designer use.
-    - **Feature ideas pasted from World Machine's website, 2026-09-14** — not committed to building any/all of this, kept as reference for later since Dana isn't yet sure how much of it applies:
-      - **Selectors (masking tools)** — richer masking than plain elevation/slope for orchestrating where materials go: *Basic* — elevation and slope, with directional falloff (a north face can read differently from a south one); *Advanced* — roughness, wetness, water, surface convexity (with adjustable smoothing); *Natural filter outputs* — every simulation produces its own masks (sedimentation, wear, talus, snow, etc.); *Comparative* — a "Compare Maps" tool returns a soft comparison between any two maps (e.g. select where sediment landed, or where one pass differs from another); *By identity* — "Select by ID" / "ID Convert" build masks from discrete region IDs rather than continuous values. Point: "put gravel where the water ran and lichen where it never does."
-      - **Weightmaps** — texture weightmaps/splat-maps: RGBA bitmaps whose channels weight the distribution of each material across the world (what every game-engine terrain shader expects). Combine any selectors/erosion masks; a "Weightmap" device keeps channels normalized and coverage where set.
-      - **Built for comparing** — most viewport time goes to judging whether a change helped, so tools are built around that: side-by-side A:B comparison of two states in one view, or a sliding wipe between them, comparing a device's input against its output; display guides stackable over the terrain (a slope overlay for where the ground exceeds what the engine will let a player walk on, contour lines to read elevation topographically, a terrain grid showing where the real data resolution sits); camera slots on keys 1-8 to recheck the same vantage points after every change instead of re-flying the terrain; an orthographic camera that transitions smoothly out of perspective, for judging layout/scale without foreshortening.
-      - **Worlds bigger than memory** — for large open worlds, one asset for the whole region stops being workable. Export a set of tiles covering the region instead (Professional Edition+); each tile builds separately, buying extreme detail with world size bounded by disk rather than RAM. Tiles read back too — a "Tiled File Input" device points at the file collection and the whole set comes in, cached at multiple resolutions, so a world far larger than memory can be opened/edited as if it were a single file. A long build that fails resumes from where it stopped rather than restarting, and finished tiles merge as they go rather than waiting on one long final pass.
+---
+---
 
-## 2026-09-02
+## Stage 03 — Terrain: Noise Generation
+🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ 55%
 
-### 1. Project setup
-- Set up the project: a Three.js canvas, 3D view, 3D grid.
-- Use PHASE as a base (active geometry project).
+#### Base noise types
+> ✅ **Done:** 8 selectable types — Random, Perlin, Simplex, Voronoi (base generators, 3D-position-sampled to avoid sphere pole/seam artifacts), Ridged, Octaves/fBm, Terrace (2026-09-14), and Domain warp (2026-09-15), plus None (flat/no displacement). Perlin3D/Simplex3D verified against the canonical Stefan Gustavson/Ashima Arts source (2026-09-14, see `README.md`'s References section); the fBm formula verified against thebookofshaders.com/13 (2026-09-14).
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** a wrong constant in a hand-reproduced Perlin noise function, caught by diffing against the canonical source (2026-09-14). See `README.md`'s References section and `ISSUES.md`, 2026-09-14.
 
-### 2. Basic structure
-- Decide on basic structure — side menu or not?
-  - If so: are all functions available there, or spread out / divided into stages (basic world builder first, then continue to more detailed features once complete)?
-- Cover all setup needed from the syllabus: terrain, plants, water, shaders.
+---
 
-### 3. Procedural narrative
-Idea: insert storytelling into the builder — since this is a procedural building class, the narrative should also be procedural. Directions to explore:
+#### Multi-layer stack & blend modes
+> ✅ **Done:** the heightmap pipeline became a single shared instance owned by `SceneCanvas` rather than duplicated per-component (2026-09-15, "have the threejs be the manager for the system"); a real Photoshop-style layer stack (bottom of the array = base/applied first, top = applied last — the visual list renders reversed to match Photoshop's own panel convention) — add/delete/drag-to-reorder, up to `MAX_LAYERS = 16`, each with its own noise type/params/opacity/blend mode (Normal/Add/Subtract/Multiply/Max/Min/Screen, verified against Gaea's actual Combine node docs, docs.quadspinner.com) (2026-09-16).
+>
+> 📋 **To do:** layer naming — layers currently display their noise-type label, not a real name; want auto-assigned sequential names ("Layer 01", "Layer 02", ... from an ever-incrementing counter so deleted numbers aren't reused) plus a rename option (proposed: double-click the name to edit inline) (requested 2026-09-22, not yet built).
+>
+> 🐛 **Bugs:** a newly-added layer visually erases existing painted terrain beneath it (found 2026-09-22) — root cause: an empty layer (no noise, no paint) still outputs a flat "height" value rather than true zero-coverage/transparency, and at `Normal` blend + full opacity that flat value fully replaces the composite beneath it. No data is actually lost (each layer's paint texture is untouched), but the compositing needs real per-layer coverage/alpha, not just opacity. Diagnosed, fix proposed, not yet implemented. See `ISSUES.md`, 2026-09-22.
 
-- **Population growth** — choose an area to place population, let the project run and observe how it grows/develops. Choose their starting development level (cavemen, agricultural society, medieval, etc.) and let them progress along a timeline.
-- **Apocalyptic scenarios**:
+---
+
+#### Modifier architecture
+> ✅ **Done:** —
+>
+> 📋 **To do:** Ridged/Octaves/Terrace/Domain warp currently exist as separate selectable *noise types* rather than independently-toggleable modifiers layered onto a base type in a fixed order (Domain warp → generator/Octaves → Ridged → Terrace), the way a tool like Gaea structures it. A per-layer "height control" (amplitude, distinct from Opacity) was also requested (2026-09-15/16). Discussed, not implemented.
+>
+> 🐛 **Bugs:** —
+
+---
+---
+
+## Stage 04 — Terrain: Paint Authoring
+🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ 85%
+
+#### 2D heightmap canvas
+> ✅ **Done:** a flat 2D preview canvas (`map/MapView.tsx`, 1024×512, no WebGL context of its own) reflecting the composited terrain live (2026-09-14); wired to also capture paint input, reading back pixels from the shared `HeightmapPipeline` via `SceneCanvas`'s imperative handle (2026-09-16).
+>
+> 📋 **To do:** the "Expand" button above the canvas still opens a dark overlay on top of the 3D viewport — should instead *replace* the 3D viewport's content while keeping both side panels visible, since a richer expanded-mode brush toolset (strength, size beyond radius, shape) is planned to land there (requested 2026-09-16, not yet done).
+>
+> 🐛 **Bugs:** —
+
+---
+
+#### Brush system
+> ✅ **Done:** an absolute "set to this gray" brush, not additive (2026-09-16 — a layer's noise type of `'none'` plus painting *is* the layer's content); a black-white "Brush" strength slider (-1 erase/black .. 1 paint/white) (2026-09-16); a Feather slider (0=hard edge, 1=fully soft — a fixed fraction of the brush radius, true Photoshop-Hardness-style: total brush size never changes with feather) (2026-09-16 — several earlier models tried and reverted first, full history in `ISSUES.md`); brush radius correctly converts px→UV using the fixed texture resolution (`HEIGHTMAP_WIDTH`), not the canvas's CSS display size (2026-09-16); strokes interpolate extra dabs along fast drag segments so they stay visually continuous (2026-09-16).
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** stroke-drag opacity buildup (found 2026-09-16, fixed 2026-09-22 — see `ISSUES.md`). **Still open, tabled 2026-09-22:** painted terrain still displaces as visibly jagged/faceted, and feather still isn't very noticeable, even after fixing the compositing math. Likely root cause: the sphere's mesh resolution (64×32 segments) is too coarse to smoothly represent a narrow painted feature — the GPU only displaces actual vertices and linearly interpolates between them per-triangle, so a sharp/narrow height gradient facets no matter how mathematically smooth the underlying paint data is. Dana's call: table this for now, come back to it — possibly erosion's own smoothing will help. See `ISSUES.md`, 2026-09-22.
+
+---
+
+#### Paint persistence pipeline
+> ✅ **Done:** a persistent per-layer paint texture — a ping-pong pair of `HalfFloatType` render targets, since GPU blending into a float target isn't reliably supported, so each stroke computes the full new state in-shader instead (2026-09-16); Porter-Duff "over" compositing, fixing partial-opacity strokes reading as diluted/dark instead of correct-color-at-reduced-strength (2026-09-16); pole-snapped sampling to avoid a geometry tear at the sphere's poles (2026-09-16).
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** GLSL ES 1.00 (this material's default compile mode) forbids dynamic sampler-array indexing — worked around with 16 separately-named uniforms instead of a real array (2026-09-16). See `ISSUES.md`, 2026-09-16.
+
+---
+---
+
+## Stage 05 — Terrain: Displacement & Lighting
+🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
+
+#### GPU heightmap → displacement pipeline
+> ✅ **Done:** fragment shader → render-target texture (`HeightmapPipeline`), sampled by the planet's vertex shader for displacement (2026-09-14); CPU can read back specific texels on demand (`readRenderTargetPixels()`) for future agent/road placement rather than duplicating the noise algorithm in JS (approach agreed 2026-09-02, see `ISSUES.md`).
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** a sphere UV-seam artifact from Three.js's duplicated seam vertices sampling non-identical texels — fixed via `texture.wrapS = THREE.RepeatWrapping` (2026-09-14).
+
+---
+
+#### Surface normal / lighting
+> ✅ **Done:** the fragment shader reconstructs the surface normal analytically from the sphere's own UV parametrization (`dPdu`/`dPdv`, exact calculus derivatives — winding verified by hand-computing a concrete point, not guessed) plus the heightmap's own central-difference gradient, sampled 16 texels away rather than the immediate neighbor to avoid amplifying per-texel noise into visible roughness, scaled into world-space units via a `uRadius` uniform (2026-09-16).
+>
+> 📋 **To do:** a "flat/faceted" shading style as a deliberate `Display` mode option (alongside Shaded/Wireframe) — while fixing the faceting bug below, the low-poly look itself was liked as a future style *choice*, just not as the default (noted 2026-09-16). Not built.
+>
+> 🐛 **Bugs:** an initial screen-space-derivative normal approach faceted the *whole* sphere, mesh-resolution-dependent — replaced with the analytic approach above (2026-09-16); a `'normalMatrix' : undeclared identifier` compile error, since Three.js auto-*sets* that built-in but only auto-*declares* it in the vertex stage — fixed with an explicit `uniform mat3 normalMatrix;` (2026-09-16). See `ISSUES.md`, 2026-09-16.
+
+---
+---
+
+## Stage 06 — Project Persistence
+🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ 65%
+
+Right now nothing else in the app persists at all — everything else lives only in React state in `App.tsx`, and a refresh loses the whole project. Surfaced as a real problem (2026-09-22) by the Stage 03 layer-compositing bug, which made a newly-added layer *appear* to erase existing painted terrain.
+
+**Decided architecture** (2026-09-16, refined 2026-09-22 — see `ISSUES.md` for the full reasoning):
+- **Backend: Firebase (Auth + Firestore),** not browser-only storage — Dana wants the app to recognize her as a user and auto-load saved projects, which `localStorage`/IndexedDB can't do at all (no concept of identity, doesn't follow you across devices/browsers).
+- **Auth: anonymous now, real sign-in later.** Firebase's anonymous auth gives zero-friction auto-recognition immediately (a persistent per-browser identity, no login UI). A later upgrade to real sign-in (Google, and/or a Touch-ID/Face-ID-backed passkey via WebAuthn) uses Firebase's account-*linking* feature — same underlying user ID, so every project already saved carries over with no migration.
+- **Data model: stroke logs, not just a baked raster.** "This is a procedural system so even the painting should be retraceable, that means saving the strokes" (2026-09-22) — so a painted layer's saved source-of-truth is its stroke log (raw pointer path + brush settings per stroke), replayed on load through the same dab-interpolation logic already in `paintStrokeTo()` to reconstruct an identical raster. The rendered paint texture is still cached alongside the log for fast loading, but the log is authoritative — this also sets up a near-free future "undo/history" feature (see Potential Features / Ideas below).
+
+#### Firebase setup & anonymous identity
+> ✅ **Done:** Firebase project created (`PWBdashboard` — Firestore in Production mode, Anonymous auth enabled); `firebase` SDK installed; `app/src/state/firebase.ts` (SDK init, exports `auth`/`db` — the public web config is committed as plain source, it isn't a secret) and `app/src/state/useCurrentUser.ts` (signs in anonymously on load, tracks the resulting user), wired into `App.tsx` (all 2026-09-22). Verified: a real anonymous UID logs to console on load, and the user appears in the Firebase console's Authentication → Users list.
+>
+> 📋 **To do:** —
+>
+> 🐛 **Bugs:** —
+
+---
+
+#### Save/load — layer settings
+> ✅ **Done:** Firebase CLI installed and authenticated (`229999390+Dana-shachar@users.noreply.github.com`); `.firebaserc`/`firebase.json`/`firestore.rules` added to the repo root and deployed via `firebase deploy --only firestore:rules` — Firestore now enforces that a user can only read/write the `projects/{userId}` document matching their own auth UID (2026-09-22); `state/storage.ts` (`saveLayers`/`loadLayers`, one Firestore document per user under `projects/{uid}`, holding just the layer stack's settings — not paint pixel data, that's the feature below) wired into `App.tsx` — loads the saved stack on sign-in, debounced (1s) save on every layer change, guarded so a save can't fire before the initial load resolves (2026-09-22). Build passes; not yet tested live.
+>
+> 📋 **To do:** live-test (reload the browser, confirm a change survives, confirm it's per-user not shared). Currently one project per user, not multiple named saves — that's a possible future extension, not planned yet.
+>
+> 🐛 **Bugs:** —
+
+---
+
+#### Save/load — paint stroke logs
+> ✅ **Done:** —
+>
+> 📋 **To do:** extend the data model above to also save each painted layer's stroke log (see "Data model" note above) and replay it on load to reconstruct the paint texture. Planned 2026-09-22, not started.
+>
+> 🐛 **Bugs:** —
+
+---
+---
+
+## Stage 07 — Erosion Simulation
+⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+
+Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/visualize its progression rather than a single static end state (syllabus: "Map simulations - Erosion simulation - Biomes"). An empty placeholder "Erosion" tab is already reserved for it in the right panel.
+
+---
+---
+
+## Stage 08 — Color / Biome Texturing
+⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+
+Biome-style surface texturing/coloring. An empty placeholder "Color" tab is already reserved for it in the right panel.
+
+---
+---
+
+## Stage 09 — Design System & UI Polish
+⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+
+#### Design-system / config tokenization
+> ✅ **Done:** —
+>
+> 📋 **To do:** a pass to centralize the scattered `TODO(DS)` placeholder values (arbitrary colors, light direction, ambient level, planet radius/segments, grid size, camera distance, the km-to-scene-unit conversion) into real design-system/config files instead of inline magic numbers. Tracked since 2026-09-09, not urgent. See `ISSUES.md`, 2026-09-09.
+>
+> 🐛 **Bugs:** —
+
+---
+
+#### Adjustable control panel
+> ✅ **Done:** —
+>
+> 📋 **To do:** make the control panel resizable/collapsible (e.g. a drag handle like `active-geometry-project`'s) rather than its current fixed `max-width`. Explicitly deferred by Dana (2026-09-09/14), raised again 2026-09-16 — whether this is its own step or bundled with other panel work is an open scope question, not yet answered.
+>
+> 🐛 **Bugs:** —
+
+---
+
+#### Wireframe overlay accuracy
+> ✅ **Done:** —
+>
+> 📋 **To do:** the "Wireframe" display mode overlays a `THREE.LineSegments` built from the sphere's plain, undisplaced CPU geometry — it won't track the actual GPU-shader-displaced terrain surface once real height is applied (noted 2026-09-14, not visible as a problem yet only because it's easy to miss). Proper fix: give the overlay its own shader sampling the same heightmap/displacement as the planet's vertex shader. Not urgent.
+>
+> 🐛 **Bugs:** —
+
+---
+---
+
+# 💡 Potential Features / Ideas
+
+Not stages — nothing below is scheduled or committed to being built. Reference material only, pulled in here so it doesn't only live in chat history/Obsidian notes.
+
+## Future Terrain Ideas
+
+Design notes and feature ideas from the 2026-09-14 planning session, not yet decided how much of this actually gets built:
+
+- **Chunk/tile terrain viewing** — inspired by World Machine's ability to view/work on a square chunk of terrain rather than the whole thing at once.
+- **History/undo tracking** — noted for later; Stage 06's stroke-log persistence approach sets most of this up already.
+- **Topography-line overlay** — contour lines rendered directly on the terrain surface as a visual guide (standard in this category of tool, e.g. World Machine).
+- **No node-based UI** — explicit decision: the left-panel-list/right-panel-details structure already in place is correct; not building a node graph like World Machine/Gaea/Substance Designer use.
+- **Feature ideas pasted from World Machine's website (2026-09-14)** — kept as reference, not committed to building any/all of it:
+  - **Selectors (masking tools)** — richer masking than plain elevation/slope for orchestrating where materials go: *Basic* — elevation and slope, with directional falloff (a north face can read differently from a south one); *Advanced* — roughness, wetness, water, surface convexity (with adjustable smoothing); *Natural filter outputs* — every simulation produces its own masks (sedimentation, wear, talus, snow, etc.); *Comparative* — a "Compare Maps" tool returns a soft comparison between any two maps (e.g. select where sediment landed, or where one pass differs from another); *By identity* — "Select by ID"/"ID Convert" build masks from discrete region IDs rather than continuous values. Point: "put gravel where the water ran and lichen where it never does."
+  - **Weightmaps** — texture weightmaps/splat-maps: RGBA bitmaps whose channels weight the distribution of each material across the world (what every game-engine terrain shader expects). Combine any selectors/erosion masks; a "Weightmap" device keeps channels normalized and coverage where set.
+  - **Built for comparing** — most viewport time goes to judging whether a change helped, so tools are built around that: side-by-side A:B comparison of two states in one view, or a sliding wipe between them, comparing a device's input against its output; display guides stackable over the terrain (a slope overlay for where the ground exceeds what the engine will let a player walk on, contour lines to read elevation topographically, a terrain grid showing where the real data resolution sits); camera slots on keys 1-8 to recheck the same vantage points after every change instead of re-flying the terrain; an orthographic camera that transitions smoothly out of perspective, for judging layout/scale without foreshortening.
+  - **Worlds bigger than memory** — for large open worlds, one asset for the whole region stops being workable. Export a set of tiles covering the region instead (Professional Edition+); each tile builds separately, buying extreme detail with world size bounded by disk rather than RAM. Tiles read back too — a "Tiled File Input" device points at the file collection and the whole set comes in, cached at multiple resolutions, so a world far larger than memory can be opened/edited as if it were a single file. A long build that fails resumes from where it stopped rather than restarting, and finished tiles merge as they go rather than waiting on one long final pass.
+
+---
+
+## Narrative Ideas *(early brainstorm, 2026-09-02)*
+
+From the very first planning session — inserting storytelling into the builder, since this is a procedural-building class the narrative should also be procedural:
+
+- **Population growth** — choose an area to place population, let the project run and observe how it grows/develops. Choose a starting development level (cavemen, agricultural society, medieval, etc.) and let it progress along a timeline.
+- **Apocalyptic scenarios:**
   - Nuclear bombing — destroys wide areas of the planet; configurable destructiveness (radius, number of bombs, destroyed areas, post-destruction radiation).
   - Meteor / space-related disaster.
   - Climate change / global warming — slow, gradual destruction.

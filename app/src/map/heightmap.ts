@@ -6,7 +6,7 @@ import noiseGlsl from '../shaders/noise.glsl?raw';
 // HeightmapPipeline constructor.
 import heightmapBrushVertexGlsl from '../shaders/heightmapBrush.vert.glsl?raw';
 import heightmapFragmentGlsl from '../shaders/heightmap.frag.glsl?raw'; // noise compositing (the "Noise" tab)
-import paintbrushFragmentGlsl from '../shaders/paintbrush.frag.glsl?raw'; // paint brush blending (the Brush controls)
+import strokePathFragmentGlsl from '../shaders/strokePath.frag.glsl?raw'; // brush stroke rendering, see beginStroke()/paintStroke()
 
 // TODO(DS): arbitrary placeholder resolution — detail/generation-cost
 // tradeoff (see Dana's question 2026-09-14); lower this first if
@@ -15,6 +15,9 @@ import paintbrushFragmentGlsl from '../shaders/paintbrush.frag.glsl?raw'; // pai
 // relative to the actual texture, not however big the canvas is displayed.
 export const HEIGHTMAP_WIDTH = 1024;
 const HEIGHTMAP_HEIGHT = 512;
+
+// Matches strokePath.frag.glsl's MAX_STROKE_POINTS.
+const MAX_STROKE_POINTS = 64;
 
 // Matches heightmap.frag.glsl's MAX_LAYERS.
 export const MAX_LAYERS = 16;
@@ -162,9 +165,14 @@ export class HeightmapPipeline {
   private paintTargets = new Map<string, [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]>();
   private paintActiveIndex = new Map<string, number>();
   private paintPlaceholder: THREE.DataTexture;
-  private paintScene: THREE.Scene;
-  private paintCamera: THREE.OrthographicCamera;
-  private paintMaterial: THREE.ShaderMaterial;
+  // The stroke currently being drawn, if any — its whole point path is kept
+  // here (not GPU-accumulated) and re-rendered fresh each dab by
+  // strokePathScene, against the layer's frozen pre-stroke base (baseIndex).
+  // See beginStroke()/paintStroke() below and ISSUES.md, 2026-09-22.
+  private strokePathScene: THREE.Scene;
+  private strokePathCamera: THREE.OrthographicCamera;
+  private strokePathMaterial: THREE.ShaderMaterial;
+  private activeStroke: { layerId: string; baseIndex: number; points: UV[] } | null;
 
   constructor() {
     this.renderTarget = new THREE.WebGLRenderTarget(HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT);
@@ -199,28 +207,55 @@ export class HeightmapPipeline {
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
     this.scene.add(quad);
 
-    this.paintScene = new THREE.Scene();
-    this.paintCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    this.paintMaterial = new THREE.ShaderMaterial({
+    this.strokePathScene = new THREE.Scene();
+    this.strokePathCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.strokePathMaterial = new THREE.ShaderMaterial({
       vertexShader: heightmapBrushVertexGlsl,
-      fragmentShader: paintbrushFragmentGlsl,
+      fragmentShader: strokePathFragmentGlsl,
       uniforms: {
-        uPrevious: { value: null },
-        uCenter: { value: new THREE.Vector2(0.5, 0.5) },
+        uLayerBase: { value: null },
+        uPoints: { value: new Array(MAX_STROKE_POINTS).fill(null).map(() => new THREE.Vector2()) },
+        uPointCount: { value: 0 },
         uRadius: { value: 0.05 },
-        uTargetValue: { value: 1 },
         uFeather: { value: 1 },
+        uTargetValue: { value: 1 },
       },
       depthTest: false,
       depthWrite: false,
     });
-    const paintQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.paintMaterial);
-    this.paintScene.add(paintQuad);
+    const strokePathQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.strokePathMaterial);
+    this.strokePathScene.add(strokePathQuad);
+
+    this.activeStroke = null;
   }
 
-  // Blends the pair's inactive target toward (targetValue, 1), then swaps
-  // active. brushValue: -1 (black) .. 1 (white) — an absolute target
-  // height, not a delta.
+  // Call at the start of a stroke (pointerdown, with its first point) —
+  // starts the point path and freezes which of the layer's ping-pong pair
+  // counts as "before this stroke" for the rest of it (paintStroke() below
+  // never writes there until the stroke ends, and always reads from it
+  // fresh, re-rendering the whole path each dab).
+  beginStroke(layerId: string, uv: UV): void {
+    if (!this.paintTargets.has(layerId)) return;
+    this.activeStroke = { layerId, baseIndex: this.paintActiveIndex.get(layerId) ?? 0, points: [uv] };
+  }
+
+  // Call at the end of a stroke (pointerup/pointercancel) — nothing to
+  // commit, the last dab's result is already sitting in the layer's active
+  // paint target; this just clears the "a stroke is in progress" state so
+  // the next beginStroke() re-freezes a fresh base.
+  endStroke(): void {
+    this.activeStroke = null;
+  }
+
+  // Adds a point to the currently-active stroke (see beginStroke()) and
+  // re-renders the whole path's distance field fresh against the stroke's
+  // frozen pre-stroke base — so overlapping/repeated coverage along one
+  // drag never stacks opacity, and the shape stays a smooth capsule chain
+  // rather than a union of separate circles (see ISSUES.md, 2026-09-22, and
+  // shaders/strokePath.frag.glsl). brushValue: -1 (black) .. 1 (white) — an
+  // absolute target height, not a delta; it's read fresh on every dab, so it
+  // must stay constant for the duration of one stroke (the UI doesn't let it
+  // change mid-drag).
   paintStroke(
     renderer: THREE.WebGLRenderer,
     layerId: string,
@@ -230,19 +265,27 @@ export class HeightmapPipeline {
     feather = 1,
   ): void {
     const pair = this.paintTargets.get(layerId);
-    if (!pair) return;
-    const activeIndex = this.paintActiveIndex.get(layerId) ?? 0;
-    const previous = pair[activeIndex];
-    const next = pair[1 - activeIndex];
-    this.paintMaterial.uniforms.uPrevious.value = previous.texture;
-    this.paintMaterial.uniforms.uCenter.value.set(uv.x, uv.y);
-    this.paintMaterial.uniforms.uRadius.value = radius;
-    this.paintMaterial.uniforms.uTargetValue.value = brushValue * 0.5 + 0.5;
-    this.paintMaterial.uniforms.uFeather.value = feather;
-    renderer.setRenderTarget(next);
-    renderer.render(this.paintScene, this.paintCamera);
+    if (!pair || !this.activeStroke || this.activeStroke.layerId !== layerId) return;
+
+    if (this.activeStroke.points.length < MAX_STROKE_POINTS) {
+      this.activeStroke.points.push(uv);
+    }
+
+    const baseIndex = this.activeStroke.baseIndex;
+    const previewIndex = 1 - baseIndex; // never the frozen base — always safe to overwrite every dab
+    const uniforms = this.strokePathMaterial.uniforms;
+    uniforms.uLayerBase.value = pair[baseIndex].texture;
+    this.activeStroke.points.forEach((point, i) => {
+      (uniforms.uPoints.value[i] as THREE.Vector2).set(point.x, point.y);
+    });
+    uniforms.uPointCount.value = this.activeStroke.points.length;
+    uniforms.uRadius.value = radius;
+    uniforms.uFeather.value = feather;
+    uniforms.uTargetValue.value = brushValue * 0.5 + 0.5;
+    renderer.setRenderTarget(pair[previewIndex]);
+    renderer.render(this.strokePathScene, this.strokePathCamera);
     renderer.setRenderTarget(null);
-    this.paintActiveIndex.set(layerId, 1 - activeIndex);
+    this.paintActiveIndex.set(layerId, previewIndex);
   }
 
   private getActivePaintTexture(layerId: string): THREE.Texture {
@@ -325,7 +368,7 @@ export class HeightmapPipeline {
     this.paintTargets.clear();
     this.paintActiveIndex.clear();
     this.paintPlaceholder.dispose();
-    this.paintMaterial.dispose();
-    this.paintScene.remove(this.paintScene.children[0]);
+    this.strokePathMaterial.dispose();
+    this.strokePathScene.remove(this.strokePathScene.children[0]);
   }
 }

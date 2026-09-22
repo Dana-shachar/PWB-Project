@@ -1,8 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
 import { createDefaultLayer, type NoiseLayer } from './map/heightmap';
+import { useCurrentUser } from './state/useCurrentUser';
+import { loadLayers, saveLayers } from './state/storage';
 
 // TODO(DS): arbitrary placeholder conversion — the UI shows/accepts a
 // narrative-scale planet radius in km (the tool's premise, per Dana), mapped
@@ -15,6 +17,8 @@ const KM_PER_SCENE_UNIT = 300;
 const INITIAL_LAYER_ID = 'layer-1';
 
 function App() {
+  const currentUser = useCurrentUser(); // signs in anonymously on load — see state/useCurrentUser.ts
+  const hasLoadedRef = useRef(false); // guards against saving the default layer over real saved data before the load below resolves
   const [radiusKm, setRadiusKm] = useState(6000);
   const [baseColor, setBaseColor] = useState('#c9dbea'); // TODO(DS): lighter placeholder, per Dana's 2026-09-16 request
   const [ambientLight, setAmbientLight] = useState(0.12); // lower = more shadow contrast on the bumps
@@ -29,6 +33,28 @@ function App() {
   const [brushValue, setBrushValue] = useState(1); // -1 (erase/black) .. 1 (paint/white)
   const [feather, setFeather] = useState(1); // 0=hard edge, 1=fully soft — a fraction of brushRadiusPx
   const sceneHandleRef = useRef<SceneCanvasHandle>(null);
+
+  // Loads the signed-in user's saved layer stack once, replacing the default
+  // starter layer if one exists. See state/storage.ts.
+  useEffect(() => {
+    if (!currentUser) return;
+    loadLayers(currentUser.uid).then((loaded) => {
+      if (loaded && loaded.length > 0) {
+        setLayers(loaded);
+        setSelectedLayerId(loaded[loaded.length - 1].id); // top of the stack, matching the selection convention elsewhere
+      }
+      hasLoadedRef.current = true;
+    });
+  }, [currentUser]);
+
+  // Debounced save on every layer change, only after the initial load above
+  // has resolved — otherwise this would overwrite real saved data with the
+  // default starter layer before loadLayers() had a chance to run.
+  useEffect(() => {
+    if (!currentUser || !hasLoadedRef.current) return;
+    const timeoutId = setTimeout(() => saveLayers(currentUser.uid, layers), 1000);
+    return () => clearTimeout(timeoutId);
+  }, [layers, currentUser]);
 
   function addLayer() {
     const id = crypto.randomUUID();
