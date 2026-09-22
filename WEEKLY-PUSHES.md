@@ -19,9 +19,9 @@ Graded Weekly Push report per the syllabus — what was attempted/completed, how
 - Diagnosed two separate rendering bugs from screenshots before proposing fixes (a double-application of the same paint mask causing a ridged edge; the MAX-accumulation crease causing jagged 3D terrain) — root-caused via the actual math, not guessed.
 
 ### 📊 Worked / didn't / next
-- ✅ **Worked:** screenshots + live testing surfaced two subtle math bugs (the double mask-blend, the MAX-accumulation crease) that weren't obvious from reading the shader code alone.
-- ⚠️ **Didn't work initially:** the layer-persistence-erasing fix took two real attempts — the first was mathematically incomplete (applied the same mask twice).
-- ⏭️ **Next:** erosion simulation (next syllabus topic — hydraulic vs. thermal and timeline-scrubbing are open questions); revisit the still-jagged painted-terrain issue (tabled, likely a mesh-resolution limitation), possibly after erosion.
+- <span style="color:#2da44e">✅ **Worked:**</span> screenshots + live testing surfaced two subtle math bugs (the double mask-blend, the MAX-accumulation crease) that weren't obvious from reading the shader code alone.
+- <span style="color:#bf8700">⚠️ **Didn't work initially:**</span> the layer-persistence-erasing fix took two real attempts — the first was mathematically incomplete (applied the same mask twice).
+- <span style="color:#0969da">⏭️ **Next:**</span> erosion simulation (next syllabus topic — hydraulic vs. thermal and timeline-scrubbing are open questions); revisit the still-jagged painted-terrain issue (tabled, likely a mesh-resolution limitation), possibly after erosion.
 
 ## 📅 2026-09-16
 
@@ -39,9 +39,9 @@ Graded Weekly Push report per the syllabus — what was attempted/completed, how
 - Diagnosed the stroke-opacity-buildup bug from a screenshot (fix landed the following week).
 
 ### 📊 Worked / didn't / next
-- ✅ **Worked:** testing live and iterating from what's actually on screen — several bugs (paint erase, the faceting regression, the brush-radius scale) only made sense once rendered.
-- ⚠️ **Didn't work initially:** the feather/hardness design took 4 attempts — the underlying design *intent* needed pinning down before implementing, not after.
-- ⏭️ **Next:** the stroke-opacity fix; rebuild "Expand" to replace the viewport instead of overlaying it; restructure noise modifiers; erosion simulation.
+- <span style="color:#2da44e">✅ **Worked:**</span> testing live and iterating from what's actually on screen — several bugs (paint erase, the faceting regression, the brush-radius scale) only made sense once rendered.
+- <span style="color:#bf8700">⚠️ **Didn't work initially:**</span> the feather/hardness design took 4 attempts — the underlying design *intent* needed pinning down before implementing, not after.
+- <span style="color:#0969da">⏭️ **Next:**</span> the stroke-opacity fix; rebuild "Expand" to replace the viewport instead of overlaying it; restructure noise modifiers; erosion simulation.
 
 ## 📅 2026-09-09
 
@@ -59,6 +59,6 @@ Graded Weekly Push report per the syllabus — what was attempted/completed, how
 - Researched and ported real code/values from `active-geometry-project` rather than inventing new conventions; architecture/tradeoff discussion (raymarching vs. mesh-based Three.js, the GPU-heightmap-texture approach); debugged a React StrictMode leak, an off-center 3D view, and a `pointer-events` cascade blocking the gumball's axis-line drags.
 
 ### 📊 Worked / didn't / next
-- ✅ **Worked:** going back to active-geometry's actual source values (not memory/assumption) — once real font files and exact CSS values were used, the UI actually matched. The confirm-before-acting workflow caught wrong turns early.
-- ⚠️ **Didn't work initially:** a few first-pass implementations drifted from the real source without being flagged (an invented slider width, a missing `@font-face`, an inverted camera-matrix ordering) — caught via direct side-by-side comparison, not memory.
-- ⏭️ **Next:** color-picker theming decision, terrain generation (GPU heightmap approach, already agreed in `ISSUES.md`), design-system tokenization pass.
+- <span style="color:#2da44e">✅ **Worked:**</span> going back to active-geometry's actual source values (not memory/assumption) — once real font files and exact CSS values were used, the UI actually matched. The confirm-before-acting workflow caught wrong turns early.
+- <span style="color:#bf8700">⚠️ **Didn't work initially:**</span> a few first-pass implementations drifted from the real source without being flagged (an invented slider width, a missing `@font-face`, an inverted camera-matrix ordering) — caught via direct side-by-side comparison, not memory.
+- <span style="color:#0969da">⏭️ **Next:**</span> color-picker theming decision, terrain generation (GPU heightmap approach, already agreed in `ISSUES.md`), design-system tokenization pass.
