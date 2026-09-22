@@ -11,14 +11,10 @@
             "id": "469db715b60082af",
             "type": "leaf",
             "state": {
-              "type": "markdown",
-              "state": {
-                "file": "app/README.md",
-                "mode": "source",
-                "source": false
-              },
+              "type": "empty",
+              "state": {},
               "icon": "lucide-file",
-              "title": "README"
+              "title": "New tab"
             }
           }
         ]
@@ -187,6 +183,7 @@
   },
   "active": "560983e41be485fa",
   "lastOpenFiles": [
+    "Untitled.md",
     "CLAUDE.md",
     "MDs/Roadmap.md",
     "Roadmap.md",
@@ -227,7 +224,6 @@
     "app/node_modules/vite/README.md",
     "app/node_modules/vite/LICENSE.md",
     "app/node_modules/react-dom/README.md",
-    "app/node_modules/oxlint/README.md",
     "app/src/assets/vite.svg",
     "app/src/assets/react.svg",
     "app/src/assets/hero.png",

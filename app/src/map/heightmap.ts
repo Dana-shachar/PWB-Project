@@ -1,13 +1,23 @@
 import * as THREE from 'three';
 import noiseGlsl from '../shaders/noise.glsl?raw';
-import heightmapVertexGlsl from '../shaders/heightmap.vert.glsl?raw';
-import heightmapFragmentGlsl from '../shaders/heightmap.frag.glsl?raw';
+// Shared by both passes below — a plain full-screen-quad pass-through, identical
+// either way since both render the same quad geometry through the same ortho
+// camera; only the fragment shader differs per feature. See heightmap.ts's
+// HeightmapPipeline constructor.
+import heightmapBrushVertexGlsl from '../shaders/heightmapBrush.vert.glsl?raw';
+import heightmapFragmentGlsl from '../shaders/heightmap.frag.glsl?raw'; // noise compositing (the "Noise" tab)
+import paintbrushFragmentGlsl from '../shaders/paintbrush.frag.glsl?raw'; // paint brush blending (the Brush controls)
 
 // TODO(DS): arbitrary placeholder resolution — detail/generation-cost
 // tradeoff (see Dana's question 2026-09-14); lower this first if
 // live-editing ever feels sluggish.
-const HEIGHTMAP_WIDTH = 1024;
+// Exported so brush radius (MapView.tsx) can convert px to a UV fraction
+// relative to the actual texture, not however big the canvas is displayed.
+export const HEIGHTMAP_WIDTH = 1024;
 const HEIGHTMAP_HEIGHT = 512;
+
+// Matches heightmap.frag.glsl's MAX_LAYERS.
+export const MAX_LAYERS = 16;
 
 export type NoiseType =
   | 'none'
@@ -17,11 +27,12 @@ export type NoiseType =
   | 'voronoi'
   | 'ridged'
   | 'octaves'
-  | 'terrace';
+  | 'terrace'
+  | 'domainWarp';
 
-// Matches heightmap.frag.glsl's uNoiseType if/else chain (0-7). Exported so
-// the UI (Panel.tsx) can build its dropdown from the same list instead of a
-// separately-maintained copy.
+// Matches heightmap.frag.glsl's evalLayerNoise if/else chain (0-8). Exported
+// so the UI (NoisePanel.tsx) can build its dropdown from the same list
+// instead of a separately-maintained copy.
 export const NOISE_TYPE_OPTIONS: { value: NoiseType; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'random', label: 'Random' },
@@ -31,10 +42,9 @@ export const NOISE_TYPE_OPTIONS: { value: NoiseType; label: string }[] = [
   { value: 'ridged', label: 'Ridged' },
   { value: 'octaves', label: 'Octaves (fBm)' },
   { value: 'terrace', label: 'Terrace' },
+  { value: 'domainWarp', label: 'Domain warp' },
 ];
 
-// 'none'/'octaves'/'terrace' are indices 5/6/7, not renumbered in — keeps
-// the already-verified 0-4 mapping for the other types unchanged.
 const NOISE_TYPE_INDEX: Record<NoiseType, number> = {
   random: 0,
   perlin: 1,
@@ -44,32 +54,117 @@ const NOISE_TYPE_INDEX: Record<NoiseType, number> = {
   none: 5,
   octaves: 6,
   terrace: 7,
+  domainWarp: 8,
 };
 
-// Octaves/persistence/lacunarity only affect the 'octaves' type, terraceSteps
-// only the 'terrace' type — all still always passed through, harmless when
-// unused, simpler than conditionally wiring them up per type.
-export interface HeightmapParams {
+// Per Gaea's Combine node conventions (verified against
+// docs.quadspinner.com, 2026-09-15) plus 'normal' — a plain opacity
+// crossfade, not a math operator.
+export type BlendMode = 'normal' | 'add' | 'subtract' | 'multiply' | 'max' | 'min' | 'screen';
+
+export const BLEND_MODE_OPTIONS: { value: BlendMode; label: string }[] = [
+  { value: 'normal', label: 'Normal' },
+  { value: 'add', label: 'Add' },
+  { value: 'subtract', label: 'Subtract' },
+  { value: 'multiply', label: 'Multiply' },
+  { value: 'max', label: 'Max' },
+  { value: 'min', label: 'Min' },
+  { value: 'screen', label: 'Screen' },
+];
+
+const BLEND_MODE_INDEX: Record<BlendMode, number> = {
+  normal: 0,
+  add: 1,
+  subtract: 2,
+  multiply: 3,
+  max: 4,
+  min: 5,
+  screen: 6,
+};
+
+// One layer in the stack — a Photoshop-style mental model (Dana, 2026-09-15):
+// bottom of the array is the base, applied first; each layer above composites
+// onto the running result using its own blendMode + opacity.
+export interface NoiseLayer {
+  id: string;
+  noiseType: NoiseType;
   seed: number;
   frequency: number;
-  noiseType: NoiseType;
   octaves: number;
   persistence: number;
   lacunarity: number;
   terraceSteps: number;
+  warpStrength: number;
+  opacity: number; // 0-1
+  blendMode: BlendMode;
+}
+
+export function createDefaultLayer(id: string): NoiseLayer {
+  return {
+    id,
+    noiseType: 'none',
+    seed: 0,
+    frequency: 4,
+    octaves: 4,
+    persistence: 0.5,
+    lacunarity: 2.0,
+    terraceSteps: 8,
+    warpStrength: 1.0,
+    opacity: 1,
+    blendMode: 'normal',
+  };
+}
+
+export interface HeightmapParams {
+  layers: NoiseLayer[];
+}
+
+// A UV coordinate, e.g. where a paint stroke lands.
+export interface UV {
+  x: number;
+  y: number;
+}
+
+function blackPaintPlaceholder(): THREE.DataTexture {
+  const texture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+  texture.needsUpdate = true;
+  return texture;
+}
+
+// Matches heightmap.frag.glsl's uLayerPaintTexture0..7 — 8 separately-named
+// uniforms instead of a real array, since GLSL ES 1.00 (this material's
+// default) requires constant indices for sampler arrays.
+function paintTextureUniformName(index: number): string {
+  return `uLayerPaintTexture${index}`;
 }
 
 // The render-to-texture pipeline for the 2D heightmap: an orthographic
-// camera + a full-screen quad + a WebGLRenderTarget. This is separate
-// machinery from SceneCanvas's 3D scene — it exists purely to compute a
-// texture (the "2D map"), not to display anything on its own. render()
-// regenerates the texture's contents on demand (only when parameters
-// actually change, not every frame — that's the caller's job to decide).
+// camera + a full-screen quad + a WebGLRenderTarget, plus one persistent
+// paint texture per layer (painted strokes accumulate there, unlike the
+// procedural noise which is recomputed fresh every render()).
+//
+// This is the single shared instance for the whole app (Dana, 2026-09-15:
+// "have the threejs be the manager for the system") — created once alongside
+// SceneCanvas's renderer, not duplicated per-component. That's required, not
+// just simpler: the planet's uHeightMap sampling happens inside SceneCanvas's
+// renderer's own draw call, so the render target it reads from must have
+// been created by that exact renderer — WebGL textures aren't shareable
+// across separate renderer/context instances. See ISSUES.md, 2026-09-15,
+// and active-geometry's main.js (one renderer, used for both the main scene
+// render and an off-screen picking pass + readRenderTargetPixels) for the
+// same pattern already established there.
 export class HeightmapPipeline {
   readonly renderTarget: THREE.WebGLRenderTarget;
   private scene: THREE.Scene;
   private camera: THREE.OrthographicCamera;
   private material: THREE.ShaderMaterial;
+  // Ping-pong pair per layer, not GPU blending — see paintStroke() below.
+  private paintTargets = new Map<string, [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]>();
+  private paintActiveIndex = new Map<string, number>();
+  private paintPlaceholder: THREE.DataTexture;
+  private paintScene: THREE.Scene;
+  private paintCamera: THREE.OrthographicCamera;
+  private paintMaterial: THREE.ShaderMaterial;
 
   constructor() {
     this.renderTarget = new THREE.WebGLRenderTarget(HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT);
@@ -78,34 +173,144 @@ export class HeightmapPipeline {
     this.renderTarget.texture.wrapS = THREE.RepeatWrapping;
     this.scene = new THREE.Scene();
     this.camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.paintPlaceholder = blackPaintPlaceholder();
+    const paintTextureUniforms: Record<string, { value: THREE.Texture }> = {};
+    for (let i = 0; i < MAX_LAYERS; i++) {
+      paintTextureUniforms[paintTextureUniformName(i)] = { value: this.paintPlaceholder };
+    }
     this.material = new THREE.ShaderMaterial({
-      vertexShader: heightmapVertexGlsl,
+      vertexShader: heightmapBrushVertexGlsl,
       fragmentShader: noiseGlsl + heightmapFragmentGlsl,
       uniforms: {
-        uSeed: { value: 0 },
-        uFrequency: { value: 4 },
-        uNoiseType: { value: 1 }, // 1 = perlin
-        // Standard fBm defaults (persistence 0.5, lacunarity 2.0) — halve
-        // amplitude and double frequency each octave, not derived from
-        // anything project-specific.
-        uOctaves: { value: 4 },
-        uPersistence: { value: 0.5 },
-        uLacunarity: { value: 2.0 },
-        uTerraceSteps: { value: 8 }, // TODO(DS): arbitrary placeholder step count
+        uLayerCount: { value: 0 },
+        uLayerNoiseType: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerSeed: { value: new Array(MAX_LAYERS).fill(0) },
+        uLayerFrequency: { value: new Array(MAX_LAYERS).fill(4) },
+        uLayerOctaves: { value: new Array(MAX_LAYERS).fill(4) },
+        uLayerPersistence: { value: new Array(MAX_LAYERS).fill(0.5) },
+        uLayerLacunarity: { value: new Array(MAX_LAYERS).fill(2.0) },
+        uLayerTerraceSteps: { value: new Array(MAX_LAYERS).fill(8) },
+        uLayerWarpStrength: { value: new Array(MAX_LAYERS).fill(1.0) },
+        uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
+        ...paintTextureUniforms,
       },
     });
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
     this.scene.add(quad);
+
+    this.paintScene = new THREE.Scene();
+    this.paintCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.paintMaterial = new THREE.ShaderMaterial({
+      vertexShader: heightmapBrushVertexGlsl,
+      fragmentShader: paintbrushFragmentGlsl,
+      uniforms: {
+        uPrevious: { value: null },
+        uCenter: { value: new THREE.Vector2(0.5, 0.5) },
+        uRadius: { value: 0.05 },
+        uTargetValue: { value: 1 },
+        uFeather: { value: 1 },
+      },
+      depthTest: false,
+      depthWrite: false,
+    });
+    const paintQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.paintMaterial);
+    this.paintScene.add(paintQuad);
+  }
+
+  // Blends the pair's inactive target toward (targetValue, 1), then swaps
+  // active. brushValue: -1 (black) .. 1 (white) — an absolute target
+  // height, not a delta.
+  paintStroke(
+    renderer: THREE.WebGLRenderer,
+    layerId: string,
+    uv: UV,
+    radius: number,
+    brushValue = 1,
+    feather = 1,
+  ): void {
+    const pair = this.paintTargets.get(layerId);
+    if (!pair) return;
+    const activeIndex = this.paintActiveIndex.get(layerId) ?? 0;
+    const previous = pair[activeIndex];
+    const next = pair[1 - activeIndex];
+    this.paintMaterial.uniforms.uPrevious.value = previous.texture;
+    this.paintMaterial.uniforms.uCenter.value.set(uv.x, uv.y);
+    this.paintMaterial.uniforms.uRadius.value = radius;
+    this.paintMaterial.uniforms.uTargetValue.value = brushValue * 0.5 + 0.5;
+    this.paintMaterial.uniforms.uFeather.value = feather;
+    renderer.setRenderTarget(next);
+    renderer.render(this.paintScene, this.paintCamera);
+    renderer.setRenderTarget(null);
+    this.paintActiveIndex.set(layerId, 1 - activeIndex);
+  }
+
+  private getActivePaintTexture(layerId: string): THREE.Texture {
+    const pair = this.paintTargets.get(layerId)!;
+    return pair[this.paintActiveIndex.get(layerId) ?? 0].texture;
+  }
+
+  // Reads the current composite texture back as ImageData, for MapView's
+  // plain 2D <canvas> to display via ctx.putImageData() — MapView has no
+  // WebGL context of its own, see ISSUES.md, 2026-09-15.
+  getCompositeImageData(renderer: THREE.WebGLRenderer): ImageData {
+    const buffer = new Uint8ClampedArray(HEIGHTMAP_WIDTH * HEIGHTMAP_HEIGHT * 4);
+    renderer.readRenderTargetPixels(this.renderTarget, 0, 0, HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT, buffer);
+    // readRenderTargetPixels returns rows bottom-to-top (GL convention);
+    // ImageData expects top-to-bottom — flip rows.
+    const flipped = new Uint8ClampedArray(buffer.length);
+    const rowBytes = HEIGHTMAP_WIDTH * 4;
+    for (let row = 0; row < HEIGHTMAP_HEIGHT; row++) {
+      const srcStart = row * rowBytes;
+      const destStart = (HEIGHTMAP_HEIGHT - 1 - row) * rowBytes;
+      flipped.set(buffer.subarray(srcStart, srcStart + rowBytes), destStart);
+    }
+    return new ImageData(flipped, HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT);
   }
 
   render(renderer: THREE.WebGLRenderer, params: HeightmapParams): THREE.Texture {
-    this.material.uniforms.uSeed.value = params.seed;
-    this.material.uniforms.uFrequency.value = params.frequency;
-    this.material.uniforms.uNoiseType.value = NOISE_TYPE_INDEX[params.noiseType];
-    this.material.uniforms.uOctaves.value = params.octaves;
-    this.material.uniforms.uPersistence.value = params.persistence;
-    this.material.uniforms.uLacunarity.value = params.lacunarity;
-    this.material.uniforms.uTerraceSteps.value = params.terraceSteps;
+    const { layers } = params;
+    const uniforms = this.material.uniforms;
+
+    // Sync paint targets to the current layer list — create missing, dispose orphaned.
+    const currentIds = new Set(layers.map((layer) => layer.id));
+    for (const [id, pair] of this.paintTargets) {
+      if (!currentIds.has(id)) {
+        pair[0].dispose();
+        pair[1].dispose();
+        this.paintTargets.delete(id);
+        this.paintActiveIndex.delete(id);
+      }
+    }
+    for (const layer of layers) {
+      if (this.paintTargets.has(layer.id)) continue;
+      // HalfFloatType so the accumulator can go negative, see ISSUES.md, 2026-09-16.
+      const makeTarget = () => {
+        const target = new THREE.WebGLRenderTarget(HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT, { type: THREE.HalfFloatType });
+        target.texture.wrapS = THREE.RepeatWrapping;
+        renderer.setRenderTarget(target);
+        renderer.clear(); // starts at 0 — no paint yet
+        renderer.setRenderTarget(null);
+        return target;
+      };
+      this.paintTargets.set(layer.id, [makeTarget(), makeTarget()]);
+      this.paintActiveIndex.set(layer.id, 0);
+    }
+
+    uniforms.uLayerCount.value = layers.length;
+    layers.forEach((layer, i) => {
+      uniforms.uLayerNoiseType.value[i] = NOISE_TYPE_INDEX[layer.noiseType];
+      uniforms.uLayerSeed.value[i] = layer.seed;
+      uniforms.uLayerFrequency.value[i] = layer.frequency;
+      uniforms.uLayerOctaves.value[i] = layer.octaves;
+      uniforms.uLayerPersistence.value[i] = layer.persistence;
+      uniforms.uLayerLacunarity.value[i] = layer.lacunarity;
+      uniforms.uLayerTerraceSteps.value[i] = layer.terraceSteps;
+      uniforms.uLayerWarpStrength.value[i] = layer.warpStrength;
+      uniforms.uLayerOpacity.value[i] = layer.opacity;
+      uniforms.uLayerBlendMode.value[i] = BLEND_MODE_INDEX[layer.blendMode];
+      uniforms[paintTextureUniformName(i)].value = this.getActivePaintTexture(layer.id);
+    });
     renderer.setRenderTarget(this.renderTarget);
     renderer.render(this.scene, this.camera);
     renderer.setRenderTarget(null);
@@ -116,5 +321,11 @@ export class HeightmapPipeline {
     this.renderTarget.dispose();
     this.material.dispose();
     this.scene.remove(this.scene.children[0]);
+    this.paintTargets.forEach((pair) => pair.forEach((target) => target.dispose()));
+    this.paintTargets.clear();
+    this.paintActiveIndex.clear();
+    this.paintPlaceholder.dispose();
+    this.paintMaterial.dispose();
+    this.paintScene.remove(this.paintScene.children[0]);
   }
 }

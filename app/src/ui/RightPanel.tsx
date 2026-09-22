@@ -1,44 +1,45 @@
-import { useState } from 'react';
+import { useState, type RefObject } from 'react';
 import { NoisePanel } from './NoisePanel';
-import type { NoiseType } from '../map/heightmap';
+import type { NoiseLayer } from '../map/heightmap';
+import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 
 // One tab per technique — see Dana's 2026-09-14 decision: tabs organized by
 // technique/effect, not by the planet's parts, since these operations all
 // compose onto one shared heightmap+texture rather than being independent
-// domains. Paint/Erosion/Color are empty placeholders (ROADMAP.md items
-// 7-9) — real content lands in each when that feature actually gets built.
-type RightPanelTab = 'noise' | 'paint' | 'erosion' | 'color';
+// domains. Erosion/Color are empty placeholders (ROADMAP.md items 8-9) —
+// real content lands in each when that feature actually gets built. Paint
+// isn't its own tab (2026-09-15 decision) — it's a brush tool that targets
+// whichever layer is selected in the Noise tab, since it generates
+// displacement the same way procedural noise does.
+type RightPanelTab = 'noise' | 'erosion' | 'color';
 
 const TABS: { key: RightPanelTab; label: string }[] = [
   { key: 'noise', label: 'Noise' },
-  { key: 'paint', label: 'Paint' },
   { key: 'erosion', label: 'Erosion' },
   { key: 'color', label: 'Color' },
 ];
 
 interface RightPanelProps {
-  noiseType: NoiseType;
-  onNoiseTypeChange: (value: NoiseType) => void;
-  noiseSeed: number;
-  onNoiseSeedChange: (value: number) => void;
-  noiseFrequency: number;
-  onNoiseFrequencyChange: (value: number) => void;
-  noiseOctaves: number;
-  onNoiseOctavesChange: (value: number) => void;
-  noisePersistence: number;
-  onNoisePersistenceChange: (value: number) => void;
-  noiseLacunarity: number;
-  onNoiseLacunarityChange: (value: number) => void;
-  noiseTerraceSteps: number;
-  onNoiseTerraceStepsChange: (value: number) => void;
+  layers: NoiseLayer[];
+  selectedLayerId: string;
+  onSelectLayer: (id: string) => void;
+  onAddLayer: () => void;
+  onDeleteLayer: (id: string) => void;
+  onReorderLayer: (draggedId: string, targetId: string) => void;
+  onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
+  brushRadiusPx: number;
+  onBrushRadiusPxChange: (value: number) => void;
+  brushValue: number;
+  onBrushValueChange: (value: number) => void;
+  feather: number;
+  onFeatherChange: (value: number) => void;
+  sceneHandleRef: RefObject<SceneCanvasHandle | null>;
 }
 
 // Right-side panel — a tab bar (ported from active-geometry's
 // buildStageTabs/.ag-stage-tab convention) above the panel content, so more
-// technique tabs (Paint, Erosion, ...) can be added later without
-// restructuring. Only 'noise' exists for now, so the tab bar always shows a
-// single active tab — it still switches via React state, not hardcoded,
-// so adding a second tab is just adding an entry to TABS.
+// technique tabs (Erosion, Color, ...) can be added later without
+// restructuring.
 export function RightPanel(props: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<RightPanelTab>('noise');
 

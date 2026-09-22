@@ -133,6 +133,20 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
   cursor: pointer;
 }
 
+/* Brush strength/direction (NoisePanel.tsx) — the track itself is the
+   black-to-white gradient, not a separate color-picker widget. */
+input[type='range'].ui-slider-track--bw {
+  background: linear-gradient(to right, #000, #fff);
+  height: 6px;
+  border-radius: 3px;
+}
+input[type='range'].ui-slider-track--bw::-webkit-slider-thumb {
+  border: 1px solid var(--color-track);
+}
+input[type='range'].ui-slider-track--bw::-moz-range-thumb {
+  border: 1px solid var(--color-track);
+}
+
 .ui-slider-field {
   flex: 0 0 36px; /* matches active-geometry's ag-slider-value min-width (the "value next to a track" role) */
   min-width: 0;
@@ -400,16 +414,82 @@ input[type='range'].ui-slider-track::-moz-range-thumb {
 }
 
 /* ── Noise panel (ui/NoisePanel.tsx) ───────────────────────── */
-/* Layer-list skeleton — not ported from anywhere, no layer-stack convention
-   exists yet in this project or active-geometry. */
+/* Layer list — no layer-stack convention exists yet in this project or
+   active-geometry, so this part is new. Photoshop-style mental model
+   (Dana, 2026-09-15): selected row highlighted, drag to reorder (cursor
+   change is the only affordance, no visible handle), click to select. */
 
 .noise-layer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gap-sm);
   padding: 6px 8px;
+  cursor: grab;
   font: 300 var(--font-size-sm) var(--font-ui);
   color: var(--color-text);
   background: var(--color-input-fill);
   border: 0.25px solid var(--color-input-stroke);
   border-radius: 2px;
+}
+.noise-layer-row--selected {
+  border-color: var(--color-accent);
+}
+
+.noise-layer-row-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Plain clickable glyph/text, no button chrome — no background, no border.
+   Shared by the layer-delete "×" and the noise-canvas expand/collapse control. */
+.panel-text-btn {
+  flex-shrink: 0;
+  padding: 0;
+  cursor: pointer;
+  font: 400 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  background: none;
+  border: none;
+}
+/* Matches active-geometry's .ag-eval-link:hover — plain clickable text with
+   no background uses an opacity dip for hover feedback, not a color change. */
+.panel-text-btn:hover:not(:disabled) {
+  opacity: 0.75;
+}
+.panel-text-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.panel-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Not ported — no fullscreen/overlay convention exists in active-geometry. */
+.noise-canvas-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-md);
+  background: rgba(0, 0, 0, 0.85);
+}
+
+.noise-canvas-overlay-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  width: 800px;
+  justify-content: space-between;
+  font: 700 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
 }
 
 /* Matches the panel's other input elements (.ui-select, .ui-slider-field)

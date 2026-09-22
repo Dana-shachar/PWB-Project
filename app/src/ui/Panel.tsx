@@ -24,11 +24,6 @@ interface PanelProps {
   onBaseColorChange: (value: string) => void;
   displayMode: string; // 'shaded' | 'wireframe'
   onDisplayModeChange: (value: string) => void;
-  // Master bypass for the noise system (the real controls now live in the
-  // right-side NoisePanel) — when off, the planet renders with no
-  // displacement regardless of the selected noise type/layer.
-  noiseEnabled: boolean;
-  onNoiseEnabledChange: (value: boolean) => void;
 }
 
 // Left-side control panel, divided into titled sections — ported from
@@ -55,8 +50,6 @@ export function Panel({
   onBaseColorChange,
   displayMode,
   onDisplayModeChange,
-  noiseEnabled,
-  onNoiseEnabledChange,
 }: PanelProps) {
   return (
     <div className="panel-outer">
@@ -116,12 +109,11 @@ export function Panel({
             value={radiusKm}
             onChange={onRadiusKmChange}
             min={1000}
-            max={15000}
+            max={100000}
             step={100}
             precision={0}
           />
           <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
-          <Toggle label="Enable noise" value={noiseEnabled} onChange={onNoiseEnabledChange} />
         </div>
       </div>
     </div>

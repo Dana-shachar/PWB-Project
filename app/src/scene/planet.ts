@@ -42,6 +42,9 @@ export function planet(radius = 20, widthSegments = 64, heightSegments = 32): TH
       uHeightMap: { value: flatHeightmapPlaceholder() },
       // TODO(DS): arbitrary placeholder — "global height" multiplier (Stage B, 2026-09-14 plan)
       uDisplacementAmplitude: { value: radius * 0.15 },
+      // So the fragment shader's unit-sphere tangent math can be scaled into
+      // the same real-world units as uDisplacementAmplitude — see ISSUES.md, 2026-09-16.
+      uRadius: { value: radius },
     },
   });
   return new THREE.Mesh(geometry, material);

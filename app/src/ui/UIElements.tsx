@@ -13,6 +13,7 @@ interface SliderProps {
   // ported from active-geometry-project's makeScrubber:
   sensitivity?: number; // value change per pixel dragged, default 0.1
   snapIncrement?: number; // value snapped to when Cmd/Ctrl is held, default 1
+  trackClassName?: string; // extra class on the range track, e.g. for a custom gradient
 }
 
 // Blended slider: a visible draggable range track (from active-geometry's
@@ -30,6 +31,7 @@ export function Slider({
   precision = 2,
   sensitivity = 0.1,
   snapIncrement = 1,
+  trackClassName,
 }: SliderProps) {
   const fieldRef = useRef<HTMLInputElement>(null);
 
@@ -99,7 +101,7 @@ export function Slider({
       </label>
       <input
         type="range"
-        className="ui-slider-track"
+        className={'ui-slider-track' + (trackClassName ? ` ${trackClassName}` : '')}
         min={min}
         max={max}
         step={step}

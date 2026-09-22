@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
 import * as THREE from 'three';
 import { scene } from './scene';
 import { renderer } from './renderer';
@@ -7,7 +7,16 @@ import { controls } from './controls';
 import { grid } from './grid';
 import { planet, planetGeometry } from './planet';
 import { Gumball } from './Gumball';
-import { HeightmapPipeline, type NoiseType } from '../map/heightmap';
+import { HeightmapPipeline, type NoiseLayer, type UV } from '../map/heightmap';
+
+// Exposed to sibling components (MapView, via App.tsx) that need to paint
+// onto or read the shared heightmap pipeline this component owns — see
+// ISSUES.md, 2026-09-15, for why the pipeline has to live with this
+// component's renderer specifically, not a separate instance.
+export interface SceneCanvasHandle {
+  paintStroke(layerId: string, uv: UV, radius: number, brushValue?: number, feather?: number): void;
+  getPreviewImageData(): ImageData | null;
+}
 
 // TODO(DS): arbitrary placeholder line color, not borrowed from anywhere.
 // NOTE: built from the sphere's plain (undisplaced) geometry — displacement
@@ -29,41 +38,47 @@ interface SceneCanvasProps {
   displayMode: string; // 'shaded' | 'wireframe'
   gridSpacing: number; // minor grid cell size, in world units
   gridVisible: boolean;
-  noiseSeed: number;
-  noiseFrequency: number;
-  noiseType: NoiseType;
-  noiseOctaves: number;
-  noisePersistence: number;
-  noiseLacunarity: number;
-  noiseTerraceSteps: number;
+  layers: NoiseLayer[];
 }
 
 // React places this <canvas> on the page; everything Three.js-related lives
 // in local variables/refs inside effects (never React state), per the class's
 // own React <-> Three.js convention: React owns layout, Three.js owns the stage.
-export function SceneCanvas({
-  radius,
-  baseColor,
-  ambientLight,
-  lightDirX,
-  lightDirY,
-  displayMode,
-  gridSpacing,
-  gridVisible,
-  noiseSeed,
-  noiseFrequency,
-  noiseType,
-  noiseOctaves,
-  noisePersistence,
-  noiseLacunarity,
-  noiseTerraceSteps,
-}: SceneCanvasProps) {
+export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(function SceneCanvas(
+  { radius, baseColor, ambientLight, lightDirX, lightDirY, displayMode, gridSpacing, gridVisible, layers },
+  handleRef,
+) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const planetMeshRef = useRef<THREE.Mesh | null>(null);
   const wireframeOverlayRef = useRef<THREE.LineSegments | null>(null);
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const heightmapPipelineRef = useRef<HeightmapPipeline | null>(null);
+  const layersRef = useRef<NoiseLayer[]>(layers); // lets the imperative handle read the current layers without re-creating itself
+  layersRef.current = layers;
+
+  useImperativeHandle(
+    handleRef,
+    () => ({
+      paintStroke(layerId, uv, radius, brushValue = 1, feather = 1) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        const planetMesh = planetMeshRef.current;
+        if (!webglRenderer || !heightmapPipeline || !planetMesh) return;
+        heightmapPipeline.paintStroke(webglRenderer, layerId, uv, radius, brushValue, feather);
+        // Re-composite so the planet's displacement reflects the new stroke immediately.
+        const heightmapTexture = heightmapPipeline.render(webglRenderer, { layers: layersRef.current });
+        (planetMesh.material as THREE.ShaderMaterial).uniforms.uHeightMap.value = heightmapTexture;
+      },
+      getPreviewImageData() {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return null;
+        return heightmapPipeline.getCompositeImageData(webglRenderer);
+      },
+    }),
+    [],
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -184,6 +199,11 @@ export function SceneCanvas({
     planetMesh.geometry.dispose();
     planetMesh.geometry = planetGeometry(radius);
 
+    // Keep these in sync with the new radius too, not just the geometry.
+    const material = planetMesh.material as THREE.ShaderMaterial;
+    material.uniforms.uDisplacementAmplitude.value = radius * 0.15;
+    material.uniforms.uRadius.value = radius;
+
     wireframeOverlay.geometry.dispose();
     wireframeOverlay.geometry = new THREE.WireframeGeometry(planetMesh.geometry);
   }, [radius]);
@@ -221,37 +241,21 @@ export function SceneCanvas({
     wireframeOverlay.visible = displayMode === 'wireframe';
   }, [displayMode]);
 
-  // Noise seed/frequency: regenerates the heightmap texture on demand (not
-  // every frame — only when a param actually changes), then points the
-  // planet's uHeightMap at it. The planet's vertex shader samples this same
-  // texture reference every frame regardless, so the sphere updates live
-  // with no extra wiring needed here beyond assigning the uniform once.
+  // Layers: regenerates the heightmap texture on demand (not every frame —
+  // only when the layer stack actually changes), then points the planet's
+  // uHeightMap at it. The planet's vertex shader samples this same texture
+  // reference every frame regardless, so the sphere updates live with no
+  // extra wiring needed here beyond assigning the uniform once.
   useEffect(() => {
     const planetMesh = planetMeshRef.current;
     const webglRenderer = webglRendererRef.current;
     const heightmapPipeline = heightmapPipelineRef.current;
     if (!planetMesh || !webglRenderer || !heightmapPipeline) return;
 
-    const heightmapTexture = heightmapPipeline.render(webglRenderer, {
-      seed: noiseSeed,
-      frequency: noiseFrequency,
-      noiseType,
-      octaves: noiseOctaves,
-      persistence: noisePersistence,
-      lacunarity: noiseLacunarity,
-      terraceSteps: noiseTerraceSteps,
-    });
+    const heightmapTexture = heightmapPipeline.render(webglRenderer, { layers });
     const material = planetMesh.material as THREE.ShaderMaterial;
     material.uniforms.uHeightMap.value = heightmapTexture;
-  }, [
-    noiseSeed,
-    noiseFrequency,
-    noiseType,
-    noiseOctaves,
-    noisePersistence,
-    noiseLacunarity,
-    noiseTerraceSteps,
-  ]);
+  }, [layers]);
 
   return <canvas ref={canvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />;
-}
+});

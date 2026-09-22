@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import { SceneCanvas } from './scene/SceneCanvas';
+import { useRef, useState } from 'react';
+import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
-import type { NoiseType } from './map/heightmap';
+import { createDefaultLayer, type NoiseLayer } from './map/heightmap';
 
 // TODO(DS): arbitrary placeholder conversion — the UI shows/accepts a
 // narrative-scale planet radius in km (the tool's premise, per Dana), mapped
@@ -12,31 +12,54 @@ import type { NoiseType } from './map/heightmap';
 // from anything. Revisit once there's a real scene-scale convention.
 const KM_PER_SCENE_UNIT = 300;
 
+const INITIAL_LAYER_ID = 'layer-1';
+
 function App() {
   const [radiusKm, setRadiusKm] = useState(6000);
-  const [baseColor, setBaseColor] = useState('#3a7bd5'); // TODO(DS): still the original arbitrary placeholder color
-  const [ambientLight, setAmbientLight] = useState(0.15);
+  const [baseColor, setBaseColor] = useState('#c9dbea'); // TODO(DS): lighter placeholder, per Dana's 2026-09-16 request
+  const [ambientLight, setAmbientLight] = useState(0.12); // lower = more shadow contrast on the bumps
   const [lightDirX, setLightDirX] = useState(1);
   const [lightDirY, setLightDirY] = useState(1);
   const [displayMode, setDisplayMode] = useState('shaded'); // 'shaded' | 'wireframe'
   const [gridSpacing, setGridSpacing] = useState(10);
   const [gridVisible, setGridVisible] = useState(true);
-  const [noiseEnabled, setNoiseEnabled] = useState(true);
-  const [noiseSeed, setNoiseSeed] = useState(0);
-  const [noiseFrequency, setNoiseFrequency] = useState(4);
-  const [noiseType, setNoiseType] = useState<NoiseType>('perlin'); // matches the shader's default uNoiseType
-  // Standard fBm defaults — matches the shader's own defaults, see heightmap.ts.
-  const [noiseOctaves, setNoiseOctaves] = useState(4);
-  const [noisePersistence, setNoisePersistence] = useState(0.5);
-  const [noiseLacunarity, setNoiseLacunarity] = useState(2.0);
-  const [noiseTerraceSteps, setNoiseTerraceSteps] = useState(8); // TODO(DS): arbitrary placeholder step count
+  const [layers, setLayers] = useState<NoiseLayer[]>([createDefaultLayer(INITIAL_LAYER_ID)]);
+  const [selectedLayerId, setSelectedLayerId] = useState(INITIAL_LAYER_ID);
+  const [brushRadiusPx, setBrushRadiusPx] = useState(20); // TODO(DS): arbitrary placeholder default
+  const [brushValue, setBrushValue] = useState(1); // -1 (erase/black) .. 1 (paint/white)
+  const [feather, setFeather] = useState(1); // 0=hard edge, 1=fully soft — a fraction of brushRadiusPx
+  const sceneHandleRef = useRef<SceneCanvasHandle>(null);
 
-  // The planet only ever sees 'none' when the master toggle is off — the
-  // user's actual selection in noiseType is preserved so switching back on
-  // restores it. The right-side NoisePanel's own dropdown/2D preview still
-  // use the real noiseType regardless, so you can keep tuning it while
-  // disabled (matches a node-bypass convention, not a per-layer one).
-  const appliedNoiseType: NoiseType = noiseEnabled ? noiseType : 'none';
+  function addLayer() {
+    const id = crypto.randomUUID();
+    setLayers([...layers, createDefaultLayer(id)]); // appended at the end — top of the stack
+    setSelectedLayerId(id);
+  }
+
+  function deleteLayer(id: string) {
+    if (layers.length === 1) return; // always keep at least one layer
+    const remaining = layers.filter((layer) => layer.id !== id);
+    setLayers(remaining);
+    if (selectedLayerId === id) {
+      setSelectedLayerId(remaining[remaining.length - 1].id);
+    }
+  }
+
+  // Moves draggedId to targetId's position in the stack — drag-to-reorder,
+  // called continuously as the pointer moves over other rows in NoisePanel.
+  function reorderLayer(draggedId: string, targetId: string) {
+    const draggedIndex = layers.findIndex((layer) => layer.id === draggedId);
+    const targetIndex = layers.findIndex((layer) => layer.id === targetId);
+    if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return;
+    const reordered = [...layers];
+    const [dragged] = reordered.splice(draggedIndex, 1);
+    reordered.splice(targetIndex, 0, dragged);
+    setLayers(reordered);
+  }
+
+  function updateSelectedLayer(patch: Partial<NoiseLayer>) {
+    setLayers(layers.map((layer) => (layer.id === selectedLayerId ? { ...layer, ...patch } : layer)));
+  }
 
   return (
     <div className="app-layout">
@@ -57,14 +80,13 @@ function App() {
         onBaseColorChange={setBaseColor}
         displayMode={displayMode}
         onDisplayModeChange={setDisplayMode}
-        noiseEnabled={noiseEnabled}
-        onNoiseEnabledChange={setNoiseEnabled}
       />
       {/* The 3D viewport fills the remaining space between the two panels —
           SceneCanvas's ResizeObserver picks up this box's actual size, so
           the camera centers on what's actually visible. */}
       <div className="app-viewport">
         <SceneCanvas
+          ref={sceneHandleRef}
           radius={radiusKm / KM_PER_SCENE_UNIT}
           baseColor={baseColor}
           ambientLight={ambientLight}
@@ -73,30 +95,24 @@ function App() {
           displayMode={displayMode}
           gridSpacing={gridSpacing}
           gridVisible={gridVisible}
-          noiseSeed={noiseSeed}
-          noiseFrequency={noiseFrequency}
-          noiseType={appliedNoiseType}
-          noiseOctaves={noiseOctaves}
-          noisePersistence={noisePersistence}
-          noiseLacunarity={noiseLacunarity}
-          noiseTerraceSteps={noiseTerraceSteps}
+          layers={layers}
         />
       </div>
       <RightPanel
-        noiseType={noiseType}
-        onNoiseTypeChange={setNoiseType}
-        noiseSeed={noiseSeed}
-        onNoiseSeedChange={setNoiseSeed}
-        noiseFrequency={noiseFrequency}
-        onNoiseFrequencyChange={setNoiseFrequency}
-        noiseOctaves={noiseOctaves}
-        onNoiseOctavesChange={setNoiseOctaves}
-        noisePersistence={noisePersistence}
-        onNoisePersistenceChange={setNoisePersistence}
-        noiseLacunarity={noiseLacunarity}
-        onNoiseLacunarityChange={setNoiseLacunarity}
-        noiseTerraceSteps={noiseTerraceSteps}
-        onNoiseTerraceStepsChange={setNoiseTerraceSteps}
+        layers={layers}
+        selectedLayerId={selectedLayerId}
+        onSelectLayer={setSelectedLayerId}
+        onAddLayer={addLayer}
+        onDeleteLayer={deleteLayer}
+        onReorderLayer={reorderLayer}
+        onUpdateSelectedLayer={updateSelectedLayer}
+        brushRadiusPx={brushRadiusPx}
+        onBrushRadiusPxChange={setBrushRadiusPx}
+        brushValue={brushValue}
+        onBrushValueChange={setBrushValue}
+        feather={feather}
+        onFeatherChange={setFeather}
+        sceneHandleRef={sceneHandleRef}
       />
     </div>
   );
