@@ -5,7 +5,7 @@ import { renderer } from './renderer';
 import { camera } from './camera';
 import { controls } from './controls';
 import { grid } from './grid';
-import { planet, planetGeometry } from './planet';
+import { planet, planetGeometry } from '../planet/mesh';
 import { Gumball } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 
@@ -17,10 +17,18 @@ export interface SceneCanvasHandle {
   beginStroke(layerId: string, uv: UV): void;
   paintStroke(layerId: string, uv: UV, radius: number, brushValue?: number, feather?: number): void;
   endStroke(): StrokeRecord | null;
-  // Rebuilds every layer's paint texture from scratch by replaying the given
-  // stroke history — used both to reconstruct a loaded project and for undo
-  // (re-deriving state from a shortened history). See ROADMAP.md, Stage 06.
+  // Rebuilds every current layer's paint texture from scratch by replaying
+  // the given stroke history — for undo (re-deriving state from a
+  // shortened history). See ROADMAP.md, Stage 06.
   applyStrokeHistory(strokeHistory: StrokeRecord[]): void;
+  // Loads a saved project: creates paint targets for `layers` and replays
+  // `strokeHistory` into them synchronously, before the caller touches React
+  // state at all — so by the time `layers` reaches props and any child's own
+  // layers-effect runs, the paint data is already correct. (The original
+  // approach replayed from a React effect *after* setLayers(), which raced
+  // SceneCanvas's/MapView's own layers-effects — they could fire first and
+  // read stale, pre-replay data. See ISSUES.md, 2026-09-22.)
+  loadProject(layers: NoiseLayer[], strokeHistory: StrokeRecord[]): void;
   getPreviewImageData(): ImageData | null;
 }
 
@@ -63,6 +71,30 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   const layersRef = useRef<NoiseLayer[]>(layers); // lets the imperative handle read the current layers without re-creating itself
   layersRef.current = layers;
 
+  // Shared by applyStrokeHistory() and loadProject() below: replays each of
+  // `layers`' stroke history (grouped by layer) and recomposites. Callers
+  // pass `layers` explicitly rather than reading layersRef — loadProject
+  // needs to run before that ref is updated (see its own comment).
+  function replayAndRecomposite(layers: NoiseLayer[], strokeHistory: StrokeRecord[]) {
+    const webglRenderer = webglRendererRef.current;
+    const heightmapPipeline = heightmapPipelineRef.current;
+    const planetMesh = planetMeshRef.current;
+    if (!webglRenderer || !heightmapPipeline || !planetMesh) return;
+    const recordsByLayer = new Map<string, StrokeRecord[]>();
+    for (const record of strokeHistory) {
+      const existing = recordsByLayer.get(record.layerId) ?? [];
+      existing.push(record);
+      recordsByLayer.set(record.layerId, existing);
+    }
+    // Every layer, not just ones with remaining history — a layer whose
+    // only stroke was just undone still needs clearing.
+    layers.forEach((layer) => {
+      heightmapPipeline.replayLayerHistory(webglRenderer, layer.id, recordsByLayer.get(layer.id) ?? []);
+    });
+    const heightmapTexture = heightmapPipeline.render(webglRenderer, { layers });
+    (planetMesh.material as THREE.ShaderMaterial).uniforms.uHeightMap.value = heightmapTexture;
+  }
+
   useImperativeHandle(
     handleRef,
     () => ({
@@ -87,23 +119,20 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         return heightmapPipeline.endStroke();
       },
       applyStrokeHistory(strokeHistory) {
+        replayAndRecomposite(layersRef.current, strokeHistory);
+      },
+      loadProject(layers, strokeHistory) {
         const webglRenderer = webglRendererRef.current;
         const heightmapPipeline = heightmapPipelineRef.current;
-        const planetMesh = planetMeshRef.current;
-        if (!webglRenderer || !heightmapPipeline || !planetMesh) return;
-        const recordsByLayer = new Map<string, StrokeRecord[]>();
-        for (const record of strokeHistory) {
-          const existing = recordsByLayer.get(record.layerId) ?? [];
-          existing.push(record);
-          recordsByLayer.set(record.layerId, existing);
-        }
-        // Every current layer, not just ones with remaining history — a
-        // layer whose only stroke was just undone still needs clearing.
-        layersRef.current.forEach((layer) => {
-          heightmapPipeline.replayLayerHistory(webglRenderer, layer.id, recordsByLayer.get(layer.id) ?? []);
-        });
-        const heightmapTexture = heightmapPipeline.render(webglRenderer, { layers: layersRef.current });
-        (planetMesh.material as THREE.ShaderMaterial).uniforms.uHeightMap.value = heightmapTexture;
+        if (!webglRenderer || !heightmapPipeline) return;
+        // Create paint targets for these layers before replaying into them
+        // — a fresh load has none yet; render()'s normal sync step creates
+        // any that are missing. Uses the explicit `layers` param, not
+        // layersRef — this runs before the caller has called setLayers(),
+        // so the ref (updated during this component's own render) hasn't
+        // caught up yet.
+        heightmapPipeline.render(webglRenderer, { layers });
+        replayAndRecomposite(layers, strokeHistory);
       },
       getPreviewImageData() {
         const webglRenderer = webglRendererRef.current;

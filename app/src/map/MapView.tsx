@@ -10,6 +10,7 @@ interface MapViewProps {
   feather: number; // 0=hard edge, 1=fully soft — a fraction of brushRadiusPx (Photoshop-style Hardness); never changes brush size
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
   onStrokeComplete: (record: StrokeRecord) => void; // logs the finished stroke for save/undo — see ROADMAP.md, Stage 06
+  paintVersion: number; // bumped by App.tsx when the paint texture changes for a reason `layers` alone wouldn't tell us (currently: undo)
   sizePx?: number; // CSS display size — NoisePanel passes a larger value when expanded
 }
 
@@ -26,6 +27,7 @@ export function MapView({
   feather,
   sceneHandleRef,
   onStrokeComplete,
+  paintVersion,
   sizePx = 300,
 }: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -40,11 +42,13 @@ export function MapView({
 
   // Redraws whenever the layer stack changes — relies on SceneCanvas's own
   // layers-effect having already re-rendered the shared texture first,
-  // which holds because it mounts earlier in App.tsx's JSX than this does.
+  // which holds because it mounts earlier in App.tsx's JSX than this does
+  // — and whenever paintVersion changes, for texture updates that don't
+  // change `layers` itself (currently: undo — see App.tsx's undo()).
   useEffect(() => {
     refreshDisplay();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshDisplay reads refs, not props/state
-  }, [layers]);
+  }, [layers, paintVersion]);
 
   function uvFromPointer(event: React.PointerEvent<HTMLCanvasElement>) {
     const rect = event.currentTarget.getBoundingClientRect();

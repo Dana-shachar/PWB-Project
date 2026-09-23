@@ -27,6 +27,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 > 1. **Scaffolded** — Vite + React + TypeScript + Three.js (2026-09-09).
 > 2. **Conventions** — follows `active-geometry-project`'s own conventions, not the class repo's Entity/World OOP pattern.
 > 3. **Entity/World removed** — an early attempt (`app/src/engine/Entity.ts`) was tried and removed (2026-09-02) — see `ISSUES.md`.
+> 4. **Fixed: `App.tsx` had become a five-feature monolith** — split into five feature-scoped hooks (`useSceneControls`, `usePlanetControls`, `useNoiseLayers`, `useBrush`, `useSaveProject`), `App.tsx` reduced to pure composition; `planet/` elevated to its own top-level folder, `project/` renamed `projectSettings/` (2026-09-22). See `ISSUES.md`.
 >
 > <span style="color:#0969da">📋 **To do**</span>
 > 1. _None._
@@ -251,7 +252,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ---
 
 ## Stage 06 — Project Persistence
-🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
+🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ 85%
 
 Right now this is the only thing keeping the app from being a real tool session-to-session. Surfaced as urgent (2026-09-22) by the Stage 03 layer-erasing bug.
 
@@ -271,15 +272,18 @@ Right now this is the only thing keeping the app from being a real tool session-
 
 ---
 
-#### Save/load — layer settings — 100%
+#### Save/load — layer settings — 60%
 > <span style="color:#2da44e">✅ **Done**</span>
 > 1. **CLI set up** — Firebase CLI installed and authenticated (2026-09-22).
 > 2. **Security rules deployed** — `firestore.rules`, a user can only read/write their own document (2026-09-22).
 > 3. **Save/load wired** — `firebase/storage.ts`, debounced 1s, wired into `App.tsx` (2026-09-22).
 > 4. **Live-tested and confirmed working by Dana** — layer add/opacity changes survive a reload (2026-09-22).
 >
-> <span style="color:#0969da">📋 **To do**</span>
-> 1. **Multiple named saves** — currently one project per user; a possible future extension, not planned.
+> <span style="color:#0969da">📋 **To do**</span> — **plan agreed 2026-09-22, being implemented now:**
+> 1. **Multi-project data model** — move from one document per user (`projects/{uid}`) to a subcollection of named planets (`projects/{uid}/planets/{planetId}`, each `{ name, layers, strokeHistory, updatedAt }`). Requires a matching `firestore.rules` update.
+> 2. **"Project" panel section** — new collapsible accordion section, above "Edit," in the left panel: a dropdown of saved planets by name with **"+ New Project"** as the last option; a **Rename** button (prompt-based, pre-filled with the current name); a **Save** button (prompts for a name if the current planet is unnamed, otherwise saves immediately under its existing name — covers both "Save As" and a manual "just in case" save with one button).
+> 3. **"Edit" section becomes an accordion too**, gains a **Reset** button — distinct from "New Project": clears the *currently open* planet's content back to blank without switching which named project is active. Gated behind a confirm (destructive, not part of the undo history).
+> 4. **Auto-save interval — kept as debounce, not a fixed timer**, per discussion: a flat 5-10 minute timer either saves needlessly or risks losing several minutes of work right before a tick; the existing ~1s-after-last-change debounce already only fires on real changes (and `strokeHistory` only updates once per *completed* stroke, not per dab) — widening it slightly (~3s) covers the actual goal (fewer writes) better than a fixed interval would.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
@@ -296,7 +300,7 @@ Right now this is the only thing keeping the app from being a real tool session-
 > 1. **Live-test** — paint, reload, confirm the terrain reconstructs identically.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
-> 1. _None._
+> 1. **Fixed: replayed strokes didn't show until clicked** — the 2D canvas (and briefly the 3D view) showed stale/empty content right after a reload, only refreshing once a paint click forced a re-read. Root cause was a real ordering bug — React fires child components' effects before a parent's, so the load-triggered replay (in `App.tsx`) ran *after* `SceneCanvas`'s/`MapView`'s own effects had already read the (still-empty) texture. Fixed by reordering, not patching: a new `SceneCanvasHandle.loadProject()` replays synchronously, before `setLayers()` is ever called, so no effect can read stale data in the first place — `pendingReplayRef`, the earlier workaround, is deleted entirely (2026-09-22).
 
 ---
 
@@ -306,6 +310,7 @@ Right now this is the only thing keeping the app from being a real tool session-
 > 2. **Rebuild** — rebuilds every layer's paint texture from what remains, via the same replay mechanism as save/load (2026-09-22).
 > 3. **Edit panel button** — a new left-panel "Edit" section with an "Undo" button, disabled when there's nothing to undo (2026-09-22).
 > 4. **Live-tested and confirmed working by Dana** (2026-09-22).
+> 5. **Fixed: 2D canvas didn't refresh after undo** — the 3D view updated instantly, but the 2D preview stayed stale until clicked, confirmed by Dana. Different cause from the reload bug above — not an ordering issue, `MapView` simply had no connection to `strokeHistory` at all (it only watches `layers`, and undo never touches `layers`). Fixed with a small `paintVersion` counter, bumped in `undo()` and threaded down as a prop `MapView`'s refresh effect also watches (2026-09-22).
 >
 > <span style="color:#0969da">📋 **To do**</span>
 > 1. **Redo** — no redo yet, deliberately deferred as a natural fast-follow on the same history array.

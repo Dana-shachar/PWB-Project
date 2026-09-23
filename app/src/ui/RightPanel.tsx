@@ -35,6 +35,7 @@ interface RightPanelProps {
   onFeatherChange: (value: number) => void;
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
   onStrokeComplete: (record: StrokeRecord) => void;
+  paintVersion: number;
 }
 
 // Right-side panel — a tab bar (ported from active-geometry's

@@ -20,6 +20,7 @@ interface NoisePanelProps {
   onFeatherChange: (value: number) => void;
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
   onStrokeComplete: (record: StrokeRecord) => void;
+  paintVersion: number;
 }
 
 const EXPANDED_CANVAS_SIZE_PX = 800; // TODO(DS): arbitrary placeholder — richer brush controls for this mode land later, see ROADMAP.md
@@ -46,6 +47,7 @@ export function NoisePanel({
   onFeatherChange,
   sceneHandleRef,
   onStrokeComplete,
+  paintVersion,
 }: NoisePanelProps) {
   const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) ?? layers[0];
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -121,6 +123,7 @@ export function NoisePanel({
           feather={feather}
           sceneHandleRef={sceneHandleRef}
           onStrokeComplete={onStrokeComplete}
+          paintVersion={paintVersion}
         />
       </div>
 
@@ -280,6 +283,7 @@ export function NoisePanel({
             feather={feather}
             sceneHandleRef={sceneHandleRef}
             onStrokeComplete={onStrokeComplete}
+            paintVersion={paintVersion}
             sizePx={EXPANDED_CANVAS_SIZE_PX}
           />
         </div>

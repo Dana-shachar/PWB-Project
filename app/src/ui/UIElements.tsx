@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 interface SliderProps {
   label: string;
@@ -186,6 +186,28 @@ export function Select({ label, value, onChange, options }: SelectProps) {
           </option>
         ))}
       </select>
+    </div>
+  );
+}
+
+interface AccordionProps {
+  title: string;
+  defaultOpen?: boolean;
+  children: ReactNode;
+}
+
+// A collapsible section — same visual weight as a plain panel-section, just
+// toggleable, for sections that don't need to stay visible all the time
+// (Dana, 2026-09-22).
+export function Accordion({ title, defaultOpen = true, children }: AccordionProps) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <div className="ui-accordion">
+      <button type="button" className="ui-accordion-header" onClick={() => setIsOpen(!isOpen)}>
+        <span>{title}</span>
+        <span className={'ui-accordion-chevron' + (isOpen ? ' ui-accordion-chevron--open' : '')}>▾</span>
+      </button>
+      {isOpen && <div className="ui-accordion-content">{children}</div>}
     </div>
   );
 }

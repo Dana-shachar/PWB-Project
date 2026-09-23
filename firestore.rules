@@ -1,12 +1,12 @@
 rules_version = '2';
 
-// A user can only read/write their own project document — the "projects"
-// collection's document ID is that user's Firebase Auth UID (anonymous or
-// real, doesn't matter, see ROADMAP.md's Stage 06). See CLAUDE.md/ISSUES.md
+// A user can only read/write their own saved planets — each user's planets
+// live in a subcollection keyed by their own Firebase Auth UID (anonymous
+// or real, doesn't matter, see ROADMAP.md's Stage 06). See CLAUDE.md/ISSUES.md
 // for why: nothing here is meant to be publicly readable/writable.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /projects/{userId} {
+    match /projects/{userId}/planets/{planetId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
   }

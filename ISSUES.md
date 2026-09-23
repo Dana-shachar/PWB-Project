@@ -33,6 +33,20 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 >
 > **Why:** the shader stays the single source of truth — never duplicated in JS just to keep CPU queries in sync.
 
+### 🐛 App.tsx became a five-feature monolith
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-22)</span>
+
+> **Symptom:** lighting/grid, planet appearance, layer-stack management, brush/painting, and project persistence had all accumulated as loose `useState`/`useEffect` calls directly in `App.tsx` as each was built — caught by Dana, not proactively split ("why do I need to catch you instead of you following directions??").
+>
+> **Cause:** each new feature was wired straight into `App.tsx` at the point it was built, rather than getting its own hook file at that time.
+>
+> **Fix:**
+> 1. **Five feature-scoped hooks extracted** — `useSceneControls` (`scene/sceneControls.ts`, lighting/grid), `usePlanetControls` (`planet/planetControls.ts`, radius/color/display mode + km↔scene-unit conversion), `useNoiseLayers` (`map/noiseLayers.ts`, layer-stack CRUD), `useBrush` (`map/2Dbrush.ts`, brush settings + stroke history + undo), `useSaveProject` (`projectSettings/saveProject.ts`, multi-project load/save/rename/new/reset).
+> 2. **`App.tsx` reduced to composition only** — calls each hook, wires the results into JSX props; no feature state/logic lives there directly anymore.
+> 3. **`planet/` elevated to its own top-level folder** — `scene/planet.ts` → `planet/mesh.ts` (mesh/shader), alongside the new `planetControls.ts`; `map/` deliberately stays standalone, not nested under it (see `README.md`'s code-organization section for why).
+> 4. **`project/` renamed `projectSettings/`** for clarity (naming is per feature/functionality, not a vague role).
+> 5. **Working rule added** — `CLAUDE.md` now states explicitly: split a feature into its own hook the moment it adds state to `App.tsx`, don't wait to accumulate.
+
 ### 📋 Design-system/config tokenization — not built yet
 **Status:** <span style="color:#cf222e">🔴 Open, tracked, not urgent (2026-09-09)</span>
 
@@ -182,6 +196,19 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 > 3. **Always full replay** — reconstruction always replays the *full* desired history from scratch (clear + replay every stroke in order) rather than incrementally patching state; one code path for both loading a saved project and undoing, not two to keep in sync.
 >
 > **Why:** a stroke log, not a baked raster, is what makes painting genuinely retraceable/procedural — and undo falls out of the same data almost for free.
+
+### 🐛 Replayed strokes/undo didn't visually update until clicked
+**Status:** <span style="color:#2da44e">✅ Fixed — two different causes (2026-09-22)</span>
+
+> **Symptom:** on reload, the 2D canvas (and briefly the 3D view) showed stale/empty content until a paint click forced a redraw. After Cmd+Z, the 3D view updated instantly but the 2D canvas stayed stale until clicked.
+>
+> **Cause 1 (reload) — a genuine ordering bug:** `App.tsx` called `setLayers()` first, then replayed strokes in a separate `useEffect`. React fires a child component's effects *before* its parent's, within the same commit — so `SceneCanvas`'s and `MapView`'s own `[layers]`-effects (reading whatever paint texture currently existed) both ran before `App.tsx`'s effect got around to actually replaying the strokes.
+>
+> **Fix 1 — reordered, not patched:** first proposed a `paintVersion` counter to force a second read after the fact; rejected — "it sounds like the order of actions needs revising," correctly. Real fix: a new `SceneCanvasHandle.loadProject(layers, strokeHistory)` does target-creation + replay + recomposite *synchronously*, called before `setLayers()` is ever invoked — so by the time any effect fires, the data is already correct. `pendingReplayRef`, the workaround this replaces, is deleted entirely rather than left in place alongside a new signal.
+>
+> **Cause 2 (undo) — not an ordering issue, a missing connection:** `MapView`'s 2D canvas only refreshes off its `layers` prop. `undo()` only ever changes `strokeHistory`, which `MapView` never receives — no ordering fix could address this, since there's no relevant order between two things that aren't connected at all.
+>
+> **Fix 2:** a small `paintVersion` counter in `App.tsx`, bumped once inside `undo()`, threaded down as a prop that `MapView`'s refresh effect also watches (`[layers, paintVersion]`). This one *is* a legitimate use of a counter-as-signal — the two fixes look similar on the surface but address genuinely different classes of bug (see also the general note logged for this in Claude's own memory: fix the actual order when it's an ordering bug, add a signal only when there's truly no other connection).
 
 ---
 
