@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
-import { createDefaultLayer, type NoiseLayer } from './map/heightmap';
+import { createDefaultLayer, type NoiseLayer, type StrokeRecord } from './map/heightmap';
 import { useCurrentUser } from './state/useCurrentUser';
-import { loadLayers, saveLayers } from './state/storage';
+import { loadProject, saveProject } from './state/storage';
 
 // TODO(DS): arbitrary placeholder conversion — the UI shows/accepts a
 // narrative-scale planet radius in km (the tool's premise, per Dana), mapped
@@ -32,29 +32,82 @@ function App() {
   const [brushRadiusPx, setBrushRadiusPx] = useState(20); // TODO(DS): arbitrary placeholder default
   const [brushValue, setBrushValue] = useState(1); // -1 (erase/black) .. 1 (paint/white)
   const [feather, setFeather] = useState(1); // 0=hard edge, 1=fully soft — a fraction of brushRadiusPx
+  // Every completed stroke, across all layers, in the order painted — the
+  // retraceable source of truth for painted terrain (not just a baked
+  // raster), and what Cmd+Z undoes from. See ROADMAP.md, Stage 06.
+  const [strokeHistory, setStrokeHistory] = useState<StrokeRecord[]>([]);
   const sceneHandleRef = useRef<SceneCanvasHandle>(null);
+  // A loaded project's stroke history, waiting for SceneCanvas's own
+  // layers-effect to create that project's paint targets before it's safe
+  // to replay — consumed by the effect below once `layers` actually
+  // changes (React runs a child's effects before its parent's within the
+  // same commit, so SceneCanvas's targets already exist by then).
+  const pendingReplayRef = useRef<StrokeRecord[] | null>(null);
 
-  // Loads the signed-in user's saved layer stack once, replacing the default
+  // Loads the signed-in user's saved project once, replacing the default
   // starter layer if one exists. See state/storage.ts.
   useEffect(() => {
     if (!currentUser) return;
-    loadLayers(currentUser.uid).then((loaded) => {
-      if (loaded && loaded.length > 0) {
-        setLayers(loaded);
-        setSelectedLayerId(loaded[loaded.length - 1].id); // top of the stack, matching the selection convention elsewhere
+    loadProject(currentUser.uid).then((project) => {
+      if (project && project.layers.length > 0) {
+        setLayers(project.layers);
+        setSelectedLayerId(project.layers[project.layers.length - 1].id); // top of the stack, matching the selection convention elsewhere
+        setStrokeHistory(project.strokeHistory);
+        pendingReplayRef.current = project.strokeHistory;
       }
       hasLoadedRef.current = true;
     });
   }, [currentUser]);
 
-  // Debounced save on every layer change, only after the initial load above
-  // has resolved — otherwise this would overwrite real saved data with the
-  // default starter layer before loadLayers() had a chance to run.
+  // Replays a just-loaded project's paint strokes once the layer change
+  // above has actually taken effect (and so SceneCanvas has created paint
+  // targets for those layers) — see pendingReplayRef's comment.
+  useEffect(() => {
+    if (pendingReplayRef.current === null) return;
+    const toReplay = pendingReplayRef.current;
+    pendingReplayRef.current = null;
+    sceneHandleRef.current?.applyStrokeHistory(toReplay);
+  }, [layers]);
+
+  // Debounced save on every layer/stroke change, only after the initial load
+  // above has resolved — otherwise this would overwrite real saved data with
+  // the default starter layer before loadProject() had a chance to run.
   useEffect(() => {
     if (!currentUser || !hasLoadedRef.current) return;
-    const timeoutId = setTimeout(() => saveLayers(currentUser.uid, layers), 1000);
+    const timeoutId = setTimeout(() => saveProject(currentUser.uid, { layers, strokeHistory }), 1000);
     return () => clearTimeout(timeoutId);
-  }, [layers, currentUser]);
+  }, [layers, strokeHistory, currentUser]);
+
+  function handleStrokeComplete(record: StrokeRecord) {
+    setStrokeHistory((previous) => [...previous, record]); // live paint already reflects it — no replay needed here
+  }
+
+  // Undoes the single most recent stroke, regardless of which layer it was
+  // painted on (matching standard undo behavior) — pops it from the history
+  // and rebuilds every layer's paint texture from what remains. Uses the
+  // functional setState form so this can be called from a keydown listener
+  // registered once (see the effect below) without going stale.
+  function undo() {
+    setStrokeHistory((previous) => {
+      if (previous.length === 0) return previous;
+      const next = previous.slice(0, -1);
+      sceneHandleRef.current?.applyStrokeHistory(next);
+      return next;
+    });
+  }
+
+  // Cmd+Z (Mac) / Ctrl+Z (Windows/Linux) — Shift excluded so it doesn't also
+  // fire on a future Cmd+Shift+Z redo shortcut.
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      const isUndoShortcut = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey;
+      if (!isUndoShortcut) return;
+      event.preventDefault();
+      undo();
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   function addLayer() {
     const id = crypto.randomUUID();
@@ -106,6 +159,8 @@ function App() {
         onBaseColorChange={setBaseColor}
         displayMode={displayMode}
         onDisplayModeChange={setDisplayMode}
+        canUndo={strokeHistory.length > 0}
+        onUndo={undo}
       />
       {/* The 3D viewport fills the remaining space between the two panels —
           SceneCanvas's ResizeObserver picks up this box's actual size, so
@@ -139,6 +194,7 @@ function App() {
         feather={feather}
         onFeatherChange={setFeather}
         sceneHandleRef={sceneHandleRef}
+        onStrokeComplete={handleStrokeComplete}
       />
     </div>
   );

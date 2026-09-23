@@ -128,6 +128,18 @@ export interface UV {
   y: number;
 }
 
+// One completed stroke's full path + the brush settings it was painted
+// with — enough to exactly reproduce it via replayLayerHistory() below, so
+// painting is retraceable rather than just a baked raster. See ROADMAP.md,
+// Stage 06.
+export interface StrokeRecord {
+  layerId: string;
+  points: UV[];
+  radius: number; // UV units, same as paintStroke()'s radius param
+  feather: number;
+  brushValue: number; // -1 (black) .. 1 (white), same as paintStroke()'s brushValue param
+}
+
 function blackPaintPlaceholder(): THREE.DataTexture {
   const texture = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
   texture.needsUpdate = true;
@@ -172,7 +184,7 @@ export class HeightmapPipeline {
   private strokePathScene: THREE.Scene;
   private strokePathCamera: THREE.OrthographicCamera;
   private strokePathMaterial: THREE.ShaderMaterial;
-  private activeStroke: { layerId: string; baseIndex: number; points: UV[] } | null;
+  private activeStroke: { layerId: string; baseIndex: number; points: UV[]; radius: number; feather: number; brushValue: number } | null;
 
   constructor() {
     this.renderTarget = new THREE.WebGLRenderTarget(HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT);
@@ -236,15 +248,32 @@ export class HeightmapPipeline {
   // fresh, re-rendering the whole path each dab).
   beginStroke(layerId: string, uv: UV): void {
     if (!this.paintTargets.has(layerId)) return;
-    this.activeStroke = { layerId, baseIndex: this.paintActiveIndex.get(layerId) ?? 0, points: [uv] };
+    this.activeStroke = {
+      layerId,
+      baseIndex: this.paintActiveIndex.get(layerId) ?? 0,
+      points: [uv],
+      radius: 0.05,
+      feather: 1,
+      brushValue: 1,
+    };
   }
 
-  // Call at the end of a stroke (pointerup/pointercancel) — nothing to
-  // commit, the last dab's result is already sitting in the layer's active
-  // paint target; this just clears the "a stroke is in progress" state so
-  // the next beginStroke() re-freezes a fresh base.
-  endStroke(): void {
+  // Call at the end of a stroke (pointerup/pointercancel). Nothing to commit
+  // visually — the last dab's result is already sitting in the layer's
+  // active paint target — but returns the completed stroke's full record
+  // (for the caller to persist/log, see ROADMAP.md Stage 06) before
+  // clearing the "a stroke is in progress" state.
+  endStroke(): StrokeRecord | null {
+    const stroke = this.activeStroke;
     this.activeStroke = null;
+    if (!stroke) return null;
+    return {
+      layerId: stroke.layerId,
+      points: stroke.points,
+      radius: stroke.radius,
+      feather: stroke.feather,
+      brushValue: stroke.brushValue,
+    };
   }
 
   // Adds a point to the currently-active stroke (see beginStroke()) and
@@ -270,6 +299,12 @@ export class HeightmapPipeline {
     if (this.activeStroke.points.length < MAX_STROKE_POINTS) {
       this.activeStroke.points.push(uv);
     }
+    // Remembered so endStroke() can report the full record — a stroke's
+    // radius/feather/brushValue don't change mid-drag (the UI doesn't
+    // expose that), so the latest values are the whole stroke's values.
+    this.activeStroke.radius = radius;
+    this.activeStroke.feather = feather;
+    this.activeStroke.brushValue = brushValue;
 
     const baseIndex = this.activeStroke.baseIndex;
     const previewIndex = 1 - baseIndex; // never the frozen base — always safe to overwrite every dab
@@ -286,6 +321,34 @@ export class HeightmapPipeline {
     renderer.render(this.strokePathScene, this.strokePathCamera);
     renderer.setRenderTarget(null);
     this.paintActiveIndex.set(layerId, previewIndex);
+  }
+
+  // Clears a layer's paint texture back to blank (no paint at all), then
+  // replays each of the given stroke records in order via the normal
+  // beginStroke/paintStroke/endStroke sequence — reconstructing the exact
+  // same result live painting would have produced. Used both for loading a
+  // saved project and for undo (re-deriving state from a shortened history,
+  // see App.tsx's undo()) — always recomputing from the full desired
+  // history rather than trying to incrementally patch it, so there's one
+  // code path instead of two to keep correct. See ROADMAP.md, Stage 06.
+  replayLayerHistory(renderer: THREE.WebGLRenderer, layerId: string, records: StrokeRecord[]): void {
+    const pair = this.paintTargets.get(layerId);
+    if (!pair) return;
+    pair.forEach((target) => {
+      renderer.setRenderTarget(target);
+      renderer.clear();
+      renderer.setRenderTarget(null);
+    });
+    this.paintActiveIndex.set(layerId, 0);
+
+    for (const record of records) {
+      if (record.points.length === 0) continue;
+      this.beginStroke(layerId, record.points[0]);
+      for (const point of record.points) {
+        this.paintStroke(renderer, layerId, point, record.radius, record.brushValue, record.feather);
+      }
+      this.endStroke();
+    }
   }
 
   private getActivePaintTexture(layerId: string): THREE.Texture {

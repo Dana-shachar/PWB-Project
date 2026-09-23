@@ -7,7 +7,7 @@ import { controls } from './controls';
 import { grid } from './grid';
 import { planet, planetGeometry } from './planet';
 import { Gumball } from './Gumball';
-import { HeightmapPipeline, type NoiseLayer, type UV } from '../map/heightmap';
+import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 
 // Exposed to sibling components (MapView, via App.tsx) that need to paint
 // onto or read the shared heightmap pipeline this component owns — see
@@ -16,7 +16,11 @@ import { HeightmapPipeline, type NoiseLayer, type UV } from '../map/heightmap';
 export interface SceneCanvasHandle {
   beginStroke(layerId: string, uv: UV): void;
   paintStroke(layerId: string, uv: UV, radius: number, brushValue?: number, feather?: number): void;
-  endStroke(): void;
+  endStroke(): StrokeRecord | null;
+  // Rebuilds every layer's paint texture from scratch by replaying the given
+  // stroke history — used both to reconstruct a loaded project and for undo
+  // (re-deriving state from a shortened history). See ROADMAP.md, Stage 06.
+  applyStrokeHistory(strokeHistory: StrokeRecord[]): void;
   getPreviewImageData(): ImageData | null;
 }
 
@@ -78,7 +82,28 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         (planetMesh.material as THREE.ShaderMaterial).uniforms.uHeightMap.value = heightmapTexture;
       },
       endStroke() {
-        heightmapPipelineRef.current?.endStroke();
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!heightmapPipeline) return null;
+        return heightmapPipeline.endStroke();
+      },
+      applyStrokeHistory(strokeHistory) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        const planetMesh = planetMeshRef.current;
+        if (!webglRenderer || !heightmapPipeline || !planetMesh) return;
+        const recordsByLayer = new Map<string, StrokeRecord[]>();
+        for (const record of strokeHistory) {
+          const existing = recordsByLayer.get(record.layerId) ?? [];
+          existing.push(record);
+          recordsByLayer.set(record.layerId, existing);
+        }
+        // Every current layer, not just ones with remaining history — a
+        // layer whose only stroke was just undone still needs clearing.
+        layersRef.current.forEach((layer) => {
+          heightmapPipeline.replayLayerHistory(webglRenderer, layer.id, recordsByLayer.get(layer.id) ?? []);
+        });
+        const heightmapTexture = heightmapPipeline.render(webglRenderer, { layers: layersRef.current });
+        (planetMesh.material as THREE.ShaderMaterial).uniforms.uHeightMap.value = heightmapTexture;
       },
       getPreviewImageData() {
         const webglRenderer = webglRendererRef.current;

@@ -1,6 +1,6 @@
 import { useState, type RefObject } from 'react';
 import { NoisePanel } from './NoisePanel';
-import type { NoiseLayer } from '../map/heightmap';
+import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 
 // One tab per technique — see Dana's 2026-09-14 decision: tabs organized by
@@ -34,6 +34,7 @@ interface RightPanelProps {
   feather: number;
   onFeatherChange: (value: number) => void;
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
+  onStrokeComplete: (record: StrokeRecord) => void;
 }
 
 // Right-side panel — a tab bar (ported from active-geometry's

@@ -2,16 +2,19 @@
 
 The main doc for planning and progress tracking on Procedural World Building — organized by **product stage and feature**, not chronologically, so it reads as current state rather than a log to scan through. (The syllabus's graded Weekly Push reports, which *are* chronological, live in `WEEKLY-PUSHES.md`; technical decision *rationale* and bug detail live in `ISSUES.md`; external-facing structure/conventions reference lives in `README.md`.)
 
-Each feature follows the same template, boxed as a quote block so it's visually clear where one feature ends and the next begins:
-> <span style="color:#2da44e">✅ **Done:**</span> what's actually built and working — each change dated `(YYYY-MM-DD)`.
+Every feature follows the same template — short numbered lists, not prose, so gaps are visible at a glance:
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. what's actually built and working — dated `(YYYY-MM-DD)`.
 >
-> <span style="color:#0969da">📋 **To do:**</span> what's known to still be missing/open, not yet built.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. what's known to still be missing/open — if a feature isn't 100%, this is *why*.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> short pointers only — full technical detail lives in `ISSUES.md`, cross-referenced by date.
+> <span style="color:#cf222e">🐛 **Issues to fix**</span> *(short pointers only — full detail in `ISSUES.md`)*
+> 1. one-line bug name, dated.
 
-Each stage has a progress bar (e.g. 🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ 55%) instead of a status label — a rough visual read of how open vs. done that stage's features are, **not** an exact/measured metric.
+Both the stage and each feature inside it carry their own `NN%` — the stage number is a rough average of its features, not a separate estimate.
 
-Stages are numbered in roughly the order they were/are being built, matching how work actually proceeds through this roadmap (see `CLAUDE.md`'s working rules — earlier stages finish before later ones start). A separate "Potential Features / Ideas" section at the end holds reference/brainstorm material that isn't scheduled as a stage at all.
+Stages are numbered in roughly the order they were/are being built (see `CLAUDE.md`'s working rules — earlier stages finish before later ones start). A separate "Potential Features / Ideas" section at the end holds reference/brainstorm material that isn't scheduled as a stage at all.
 
 ---
 ---
@@ -19,39 +22,62 @@ Stages are numbered in roughly the order they were/are being built, matching how
 ## Stage 01 — Foundation & Scene Setup
 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
 
-#### Project scaffold
-> <span style="color:#2da44e">✅ **Done:**</span> Vite + React + TypeScript + Three.js project scaffolded (2026-09-09), following `active-geometry-project`'s own conventions (see `README.md`'s code-organization section) rather than the class repo's Entity/World OOP pattern — an early Entity/World attempt (`app/src/engine/Entity.ts`) was tried and removed (2026-09-02; see `ISSUES.md` for why).
+#### Project scaffold — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Vite + React + TypeScript + Three.js scaffolded (2026-09-09).
+> 2. Follows `active-geometry-project`'s own conventions, not the class repo's Entity/World OOP pattern.
+> 3. An early Entity/World attempt (`app/src/engine/Entity.ts`) was tried and removed (2026-09-02) — see `ISSUES.md`.
 >
-> <span style="color:#0969da">📋 **To do:**</span> —
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None._
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 
-#### 3D scene, camera, controls, grid
-> <span style="color:#2da44e">✅ **Done:**</span> scene/camera/orbit-controls setup (2026-09-09); `DEFAULT_CAMERA_DISTANCE` bumped from active-geometry's 80 to 200 (2026-09-09 — that value was calibrated for small CAD shapes, not a planet); a shader-based infinite-looking grid plane (`scene/grid.ts`, `shaders/grid.vert.glsl`/`grid.frag.glsl`) replacing `THREE.GridHelper` (2026-09-14), reusing active-geometry's minor/major fwidth-anti-aliased line math and distance fade; a "Grid lines" toggle and "Grid spacing" slider in Scene controls (2026-09-14); grid `fadeDistance` widened 400→3000 (2026-09-16 — was fading out at moderate zoom-out).
+#### 3D scene, camera, controls, grid — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Scene/camera/orbit-controls setup (2026-09-09).
+> 2. `DEFAULT_CAMERA_DISTANCE` tuned to 200 for planet scale, not active-geometry's small-CAD-shape default of 80 (2026-09-09).
+> 3. Shader-based infinite-looking grid plane, replacing `THREE.GridHelper` (2026-09-14).
+> 4. "Grid lines" toggle + "Grid spacing" slider added to Scene controls (2026-09-14).
+> 5. Grid `fadeDistance` widened 400→3000 — was fading out at moderate zoom-out (2026-09-16).
 >
-> <span style="color:#0969da">📋 **To do:**</span> —
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None._
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> a real React StrictMode-related leak duplicated the grid on resolution change (cleanup was tearing down a stale closure reference instead of the ref's current value) — fixed (2026-09-09). See `ISSUES.md`, 2026-09-09.
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ StrictMode-related grid-duplication leak — fixed (2026-09-09).
 
 ---
 
-#### Gumball navigation widget
-> <span style="color:#2da44e">✅ **Done:**</span> ported/debugged the orientation/navigation widget (axis indicator, zoom slider, view presets, reset) (2026-09-09), reusing active-geometry's camera-calibration math; mounts inside `.app-viewport` (`position: absolute` against it) instead of `document.body`/`fixed` against the window (2026-09-14), so it stays confined to the 3D viewport.
+#### Gumball navigation widget — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Orientation/navigation widget ported and debugged (axis indicator, zoom slider, view presets, reset) (2026-09-09).
+> 2. Scoped to `.app-viewport` (`position: absolute`) instead of the whole window (2026-09-14).
 >
-> <span style="color:#0969da">📋 **To do:**</span> —
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None._
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> axis lines didn't respond to direct drags — a `pointer-events` cascade issue — fixed (2026-09-09); the widget drifted onto the new right panel once it existed — fixed by scoping its positioning to the viewport (2026-09-14). See `ISSUES.md`, 2026-09-09 and 2026-09-14.
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ Axis lines didn't respond to direct drags (`pointer-events` cascade) — fixed (2026-09-09).
+> 2. ✅ Widget drifted onto the new right panel once it existed — fixed (2026-09-14).
 
 ---
 
-#### Control panel UI system
-> <span style="color:#2da44e">✅ **Done:**</span> a generic UI component set (`Slider` — draggable + scrubbable/typeable field; `ColorPicker`; `Toggle`; `Select`) in `ui/UIElements.tsx` (2026-09-09), feature-grouped rather than split per-component, matching active-geometry's own convention; left `Panel.tsx` (Scene controls, Planet controls, sectioned) (2026-09-09); right `RightPanel.tsx` tab bar (2026-09-14, ported from active-geometry's `buildStageTabs`/`.ag-stage-tab` convention, reimplemented with React state) — tabs organized by technique/effect (Noise/Erosion/Color), not by the planet's parts (see `ISSUES.md`, 2026-09-14, for the reasoning); `Slider` gained an optional `trackClassName` for the black-white brush-strength gradient track (2026-09-16).
+#### Control panel UI system — 90%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Generic UI component set — `Slider`, `ColorPicker`, `Toggle`, `Select` (2026-09-09).
+> 2. Left `Panel.tsx`, sectioned (Scene controls, Planet controls) (2026-09-09).
+> 3. Right `RightPanel.tsx` tab bar, organized by technique not by planet part (2026-09-14).
+> 4. `Slider` gained a `trackClassName` option for the black-white brush-strength gradient (2026-09-16).
 >
-> <span style="color:#0969da">📋 **To do:**</span> the placeholder tabs (Erosion/Color) don't match the Noise tab's width — cosmetic, deferred (2026-09-14).
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Placeholder tabs (Erosion/Color) don't match the Noise tab's width — cosmetic, deferred.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> the planet initially rendered off-center (canvas was full-bleed behind the panel) — fixed via the flex layout (`app-layout`/`app-viewport` in `design.css`) (2026-09-09).
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ Planet initially rendered off-center (canvas full-bleed behind the panel) — fixed (2026-09-09).
 
 ---
 ---
@@ -59,83 +85,127 @@ Stages are numbered in roughly the order they were/are being built, matching how
 ## Stage 02 — Planet Base
 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 90% *(done, ongoing tuning)*
 
-#### Sphere geometry & radius control
-> <span style="color:#2da44e">✅ **Done:**</span> `planetGeometry()` split out from `planet()` for cheap radius-only rebuilds (2026-09-14); the planet stays centered at the origin as radius changes, not anchored to the grid (2026-09-14); a Radius slider (km, narrative-scale, mapped down via `KM_PER_SCENE_UNIT = 300`, an arbitrary placeholder conversion) — its range was retuned several times against the actual camera/grid setup (1,000–15,000 on 2026-09-09/14 → 500,000 → 150,000 → **1,000–100,000 km** (2026-09-16), the range it's on now) so the planet stays framed/visible: at the 100,000km max, scene radius ≈333 units, comfortably under the grid's 3,000-unit fade distance and the camera's 10,000-unit far clip.
+#### Sphere geometry & radius control — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. `planetGeometry()` split out for cheap radius-only rebuilds (2026-09-14).
+> 2. Planet stays centered at the origin as radius changes (2026-09-14).
+> 3. Radius slider range retuned to **1,000–100,000 km**, against the actual camera/grid setup (2026-09-16).
 >
-> <span style="color:#0969da">📋 **To do:**</span> —
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None._
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> radius changes weren't updating the shader material's `uDisplacementAmplitude`/`uRadius` uniforms (only the geometry itself was rebuilt) — fixed alongside the lighting fix (2026-09-16), see Stage 05.
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ Radius changes weren't updating `uDisplacementAmplitude`/`uRadius` uniforms — fixed (2026-09-16).
 
 ---
 
-#### Base color, ambient light, display mode
-> <span style="color:#2da44e">✅ **Done:**</span> base color `ColorPicker` (native `<input type="color">`); ambient light + light X/Y sliders; display mode `Select` (Shaded/Wireframe) — all 2026-09-09; base color lightened (`#3a7bd5` → `#c9dbea`) and ambient light retuned (0.15 → 0.12) for visible shading contrast on the terrain bumps (2026-09-16).
+#### Base color, ambient light, display mode — 80%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Base color `ColorPicker`, ambient + light X/Y sliders, display mode `Select` (2026-09-09).
+> 2. Base color lightened, ambient light retuned for visible shading contrast (2026-09-16).
 >
-> <span style="color:#0969da">📋 **To do:**</span> color-picker theming — currently native OS/browser chrome, not themed to match the app. Open decision, not yet made: keep native, add a small dependency (e.g. `react-colorful`), or hand-build one.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Color-picker theming — still native OS/browser chrome. Open decision: keep native, add `react-colorful`, or hand-build.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 ---
 
 ## Stage 03 — Terrain: Noise Generation
-🟩🟩🟩🟩🟩⬜⬜⬜⬜⬜ 55%
+🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ 60%
 
-#### Base noise types
-> <span style="color:#2da44e">✅ **Done:**</span> 8 selectable types — Random, Perlin, Simplex, Voronoi (base generators, 3D-position-sampled to avoid sphere pole/seam artifacts), Ridged, Octaves/fBm, Terrace (2026-09-14), and Domain warp (2026-09-15), plus None (flat/no displacement). Perlin3D/Simplex3D verified against the canonical Stefan Gustavson/Ashima Arts source (2026-09-14, see `README.md`'s References section); the fBm formula verified against thebookofshaders.com/13 (2026-09-14).
+#### Base noise types — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. 8 selectable types — Random, Perlin, Simplex, Voronoi, Ridged, Octaves/fBm, Terrace, Domain warp — plus None (2026-09-14/15).
+> 2. Perlin3D/Simplex3D verified against the canonical Stefan Gustavson/Ashima Arts source (2026-09-14).
+> 3. fBm formula verified against thebookofshaders.com/13 (2026-09-14).
 >
-> <span style="color:#0969da">📋 **To do:**</span> —
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None._
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> a wrong constant in a hand-reproduced Perlin noise function, caught by diffing against the canonical source (2026-09-14). See `README.md`'s References section and `ISSUES.md`, 2026-09-14.
-
----
-
-#### Multi-layer stack & blend modes
-> <span style="color:#2da44e">✅ **Done:**</span> the heightmap pipeline became a single shared instance owned by `SceneCanvas` rather than duplicated per-component (2026-09-15, "have the threejs be the manager for the system"); a real Photoshop-style layer stack (bottom of the array = base/applied first, top = applied last — the visual list renders reversed to match Photoshop's own panel convention) — add/delete/drag-to-reorder, up to `MAX_LAYERS = 16`, each with its own noise type/params/opacity/blend mode (Normal/Add/Subtract/Multiply/Max/Min/Screen, verified against Gaea's actual Combine node docs, docs.quadspinner.com) (2026-09-16).
->
-> <span style="color:#0969da">📋 **To do:**</span> layer naming — layers currently display their noise-type label, not a real name; want auto-assigned sequential names ("Layer 01", "Layer 02", ... from an ever-incrementing counter so deleted numbers aren't reused) plus a rename option (proposed: double-click the name to edit inline) (requested 2026-09-22, not yet built).
->
-> <span style="color:#cf222e">🐛 **Bugs:**</span> a newly-added layer visually erases existing painted terrain beneath it (found 2026-09-22) — root cause: an empty layer (no noise, no paint) still outputs a flat "height" value rather than true zero-coverage/transparency, and at `Normal` blend + full opacity that flat value fully replaces the composite beneath it. No data is actually lost (each layer's paint texture is untouched), but the compositing needs real per-layer coverage/alpha, not just opacity. Diagnosed, fix proposed, not yet implemented. See `ISSUES.md`, 2026-09-22.
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ Wrong constant in a hand-reproduced Perlin function, caught by diffing against the canonical source — fixed (2026-09-14).
 
 ---
 
-#### Modifier architecture
-> **Done:** —
+#### Multi-layer stack & blend modes — 90%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. `HeightmapPipeline` became a single shared instance, not duplicated per-component (2026-09-15).
+> 2. Photoshop-style layer stack — add/delete/drag-to-reorder, up to 16 layers (2026-09-16).
+> 3. 7 blend modes verified against Gaea's actual Combine node docs (2026-09-16).
+> 4. Layer coverage/transparency fixed — an empty layer no longer overwrites painted terrain beneath it (2026-09-22).
 >
-> <span style="color:#0969da">📋 **To do:**</span> Ridged/Octaves/Terrace/Domain warp currently exist as separate selectable *noise types* rather than independently-toggleable modifiers layered onto a base type in a fixed order (Domain warp → generator/Octaves → Ridged → Terrace), the way a tool like Gaea structures it. A per-layer "height control" (amplitude, distinct from Opacity) was also requested (2026-09-15/16). Discussed, not implemented.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Layer naming — layers show their noise-type label, not a real name. Want auto-assigned "Layer 01"/"Layer 02" (ever-incrementing counter) plus a rename option (double-click to edit inline). Requested 2026-09-22, not built.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ A newly-added layer visually erased painted terrain beneath it — fixed, 2 attempts (2026-09-22). See `ISSUES.md`.
+
+---
+
+#### Modifier architecture — 0%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. _None._
+>
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Ridged/Octaves/Terrace/Domain warp are separate selectable *noise types* today, not independently-toggleable modifiers layered onto a base type in a fixed order (Domain warp → generator/Octaves → Ridged → Terrace), the way Gaea structures it.
+> 2. A per-layer "height control" (amplitude, distinct from Opacity) was also requested — discussed, not implemented.
+>
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 ---
 
 ## Stage 04 — Terrain: Paint Authoring
-🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ 85%
+🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 90%
 
-#### 2D heightmap canvas
-> <span style="color:#2da44e">✅ **Done:**</span> a flat 2D preview canvas (`map/MapView.tsx`, 1024×512, no WebGL context of its own) reflecting the composited terrain live (2026-09-14); wired to also capture paint input, reading back pixels from the shared `HeightmapPipeline` via `SceneCanvas`'s imperative handle (2026-09-16).
+#### 2D heightmap canvas — 85%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Flat 2D preview canvas, no WebGL context of its own (2026-09-14).
+> 2. Captures paint pointer input, reads back pixels from the shared pipeline (2026-09-16).
 >
-> <span style="color:#0969da">📋 **To do:**</span> the "Expand" button above the canvas still opens a dark overlay on top of the 3D viewport — should instead *replace* the 3D viewport's content while keeping both side panels visible, since a richer expanded-mode brush toolset (strength, size beyond radius, shape) is planned to land there (requested 2026-09-16, not yet done).
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. "Expand" button opens a dark overlay — should instead *replace* the 3D viewport's content, keeping both side panels visible (requested 2026-09-16). A richer expanded-mode brush toolset (strength, size beyond radius, shape) is planned to land there too.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
-
----
-
-#### Brush system
-> <span style="color:#2da44e">✅ **Done:**</span> an absolute "set to this gray" brush, not additive (2026-09-16 — a layer's noise type of `'none'` plus painting *is* the layer's content); a black-white "Brush" strength slider (-1 erase/black .. 1 paint/white) (2026-09-16); a Feather slider (0=hard edge, 1=fully soft — a fixed fraction of the brush radius, true Photoshop-Hardness-style: total brush size never changes with feather) (2026-09-16 — several earlier models tried and reverted first, full history in `ISSUES.md`); brush radius correctly converts px→UV using the fixed texture resolution (`HEIGHTMAP_WIDTH`), not the canvas's CSS display size (2026-09-16); strokes interpolate extra dabs along fast drag segments so they stay visually continuous (2026-09-16).
->
-> <span style="color:#0969da">📋 **To do:**</span> —
->
-> <span style="color:#cf222e">🐛 **Bugs:**</span> stroke-drag opacity buildup (found 2026-09-16, fixed 2026-09-22 — see `ISSUES.md`). **Still open, tabled 2026-09-22:** painted terrain still displaces as visibly jagged/faceted, and feather still isn't very noticeable, even after fixing the compositing math. Likely root cause: the sphere's mesh resolution (64×32 segments) is too coarse to smoothly represent a narrow painted feature — the GPU only displaces actual vertices and linearly interpolates between them per-triangle, so a sharp/narrow height gradient facets no matter how mathematically smooth the underlying paint data is. Dana's call: table this for now, come back to it — possibly erosion's own smoothing will help. See `ISSUES.md`, 2026-09-22.
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 
-#### Paint persistence pipeline
-> <span style="color:#2da44e">✅ **Done:**</span> a persistent per-layer paint texture — a ping-pong pair of `HalfFloatType` render targets, since GPU blending into a float target isn't reliably supported, so each stroke computes the full new state in-shader instead (2026-09-16); Porter-Duff "over" compositing, fixing partial-opacity strokes reading as diluted/dark instead of correct-color-at-reduced-strength (2026-09-16); pole-snapped sampling to avoid a geometry tear at the sphere's poles (2026-09-16).
+#### Brush system — 90%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Absolute "set to this gray" brush, not additive (2026-09-16).
+> 2. Black-white "Brush" strength slider, -1 (erase/black) to 1 (paint/white) (2026-09-16).
+> 3. Feather = % of the (fixed) brush radius, true Photoshop-Hardness-style — landed after 4 tried-and-reverted models, full history in `ISSUES.md` (2026-09-16).
+> 4. Brush radius converts px→UV via the fixed texture resolution, not the canvas's display size (2026-09-16).
+> 5. Whole-stroke polyline rendering — no manual dab-interpolation needed for gap-filling (2026-09-22).
+> 6. Brush wraps correctly across the sphere's UV seam instead of cutting off (2026-09-22).
 >
-> <span style="color:#0969da">📋 **To do:**</span> —
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None._
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> GLSL ES 1.00 (this material's default compile mode) forbids dynamic sampler-array indexing — worked around with 16 separately-named uniforms instead of a real array (2026-09-16). See `ISSUES.md`, 2026-09-16.
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ Stroke-drag opacity buildup (soft edges hardening) — fixed via the polyline rewrite (2026-09-16 → 09-22).
+> 2. 🟡 **Open, tabled:** painted terrain still displaces visibly jagged/faceted, feather still subtle — likely the sphere's mesh resolution (64×32) is too coarse for a narrow painted feature. Dana's call: revisit after erosion. See `ISSUES.md`, 2026-09-22.
+
+---
+
+#### Paint persistence pipeline — 95%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Ping-pong per-layer paint texture, no GPU blending (2026-09-16).
+> 2. Porter-Duff "over" compositing (2026-09-16).
+> 3. Pole-snapped sampling — no geometry tear at the poles (2026-09-16).
+> 4. Full stroke history (points, radius, feather, value) saved/loaded and replayed on load to reconstruct the exact same result (2026-09-22).
+> 5. Undo (Cmd+Z) — pops the most recent stroke, any layer, and rebuilds from what remains (2026-09-22).
+>
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Live-test stroke-log save/load + undo (built, build passes, not yet tested live).
+>
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ GLSL ES 1.00 forbids dynamic sampler-array indexing — worked around with named uniforms (2026-09-16).
 
 ---
 ---
@@ -143,59 +213,98 @@ Stages are numbered in roughly the order they were/are being built, matching how
 ## Stage 05 — Terrain: Displacement & Lighting
 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
 
-#### GPU heightmap → displacement pipeline
-> <span style="color:#2da44e">✅ **Done:**</span> fragment shader → render-target texture (`HeightmapPipeline`), sampled by the planet's vertex shader for displacement (2026-09-14); CPU can read back specific texels on demand (`readRenderTargetPixels()`) for future agent/road placement rather than duplicating the noise algorithm in JS (approach agreed 2026-09-02, see `ISSUES.md`).
+#### GPU heightmap → displacement pipeline — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Fragment shader → render-target texture, sampled by the planet's vertex shader for displacement (2026-09-14).
+> 2. CPU can read back specific texels on demand, for future agent/road placement, instead of duplicating the noise algorithm in JS.
 >
-> <span style="color:#0969da">📋 **To do:**</span> —
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None._
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> a sphere UV-seam artifact from Three.js's duplicated seam vertices sampling non-identical texels — fixed via `texture.wrapS = THREE.RepeatWrapping` (2026-09-14).
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ Sphere UV-seam artifact from duplicated seam vertices — fixed via `RepeatWrapping` (2026-09-14).
 
 ---
 
-#### Surface normal / lighting
-> <span style="color:#2da44e">✅ **Done:**</span> the fragment shader reconstructs the surface normal analytically from the sphere's own UV parametrization (`dPdu`/`dPdv`, exact calculus derivatives — winding verified by hand-computing a concrete point, not guessed) plus the heightmap's own central-difference gradient, sampled 16 texels away rather than the immediate neighbor to avoid amplifying per-texel noise into visible roughness, scaled into world-space units via a `uRadius` uniform (2026-09-16).
+#### Surface normal / lighting — 90%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Analytic sphere tangent basis — smooth, mesh-resolution-independent (2026-09-16).
+> 2. Perturbed by the heightmap's own gradient, sampled 16 texels away to avoid amplifying noise (2026-09-16).
+> 3. `uRadius` scaling fix — tangents were unit-sphere-relative, displacement was world-space-scaled (2026-09-16).
 >
-> <span style="color:#0969da">📋 **To do:**</span> a "flat/faceted" shading style as a deliberate `Display` mode option (alongside Shaded/Wireframe) — while fixing the faceting bug below, the low-poly look itself was liked as a future style *choice*, just not as the default (noted 2026-09-16). Not built.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. A "flat/faceted" shading style as a deliberate `Display` mode option — liked as a future style *choice*, not built.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> an initial screen-space-derivative normal approach faceted the *whole* sphere, mesh-resolution-dependent — replaced with the analytic approach above (2026-09-16); a `'normalMatrix' : undeclared identifier` compile error, since Three.js auto-*sets* that built-in but only auto-*declares* it in the vertex stage — fixed with an explicit `uniform mat3 normalMatrix;` (2026-09-16). See `ISSUES.md`, 2026-09-16.
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. ✅ Screen-space-derivative regression faceted the whole sphere — replaced with the analytic approach (2026-09-16).
+> 2. ✅ `normalMatrix` compile error (auto-set but not auto-declared in the fragment stage) — fixed (2026-09-16).
 
 ---
 ---
 
 ## Stage 06 — Project Persistence
-🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ 65%
+🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
 
-Right now nothing else in the app persists at all — everything else lives only in React state in `App.tsx`, and a refresh loses the whole project. Surfaced as a real problem (2026-09-22) by the Stage 03 layer-compositing bug, which made a newly-added layer *appear* to erase existing painted terrain.
+Right now this is the only thing keeping the app from being a real tool session-to-session. Surfaced as urgent (2026-09-22) by the Stage 03 layer-erasing bug.
 
-**Decided architecture** (2026-09-16, refined 2026-09-22 — see `ISSUES.md` for the full reasoning):
-- **Backend: Firebase (Auth + Firestore),** not browser-only storage — Dana wants the app to recognize her as a user and auto-load saved projects, which `localStorage`/IndexedDB can't do at all (no concept of identity, doesn't follow you across devices/browsers).
-- **Auth: anonymous now, real sign-in later.** Firebase's anonymous auth gives zero-friction auto-recognition immediately (a persistent per-browser identity, no login UI). A later upgrade to real sign-in (Google, and/or a Touch-ID/Face-ID-backed passkey via WebAuthn) uses Firebase's account-*linking* feature — same underlying user ID, so every project already saved carries over with no migration.
-- **Data model: stroke logs, not just a baked raster.** "This is a procedural system so even the painting should be retraceable, that means saving the strokes" (2026-09-22) — so a painted layer's saved source-of-truth is its stroke log (raw pointer path + brush settings per stroke), replayed on load through the same dab-interpolation logic already in `paintStrokeTo()` to reconstruct an identical raster. The rendered paint texture is still cached alongside the log for fast loading, but the log is authoritative — this also sets up a near-free future "undo/history" feature (see Potential Features / Ideas below).
+**Decided architecture** (see `ISSUES.md` for full reasoning): Firebase (Auth + Firestore), not browser-only storage — anonymous auth now, real sign-in later via account-linking; a global chronological stroke history (not per-layer), so painting is retraceable and undo works correctly.
 
-#### Firebase setup & anonymous identity
-> <span style="color:#2da44e">✅ **Done:**</span> Firebase project created (`PWBdashboard` — Firestore in Production mode, Anonymous auth enabled); `firebase` SDK installed; `app/src/state/firebase.ts` (SDK init, exports `auth`/`db` — the public web config is committed as plain source, it isn't a secret) and `app/src/state/useCurrentUser.ts` (signs in anonymously on load, tracks the resulting user), wired into `App.tsx` (all 2026-09-22). Verified: a real anonymous UID logs to console on load, and the user appears in the Firebase console's Authentication → Users list.
+#### Firebase setup & anonymous identity — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Firebase project (`PWBdashboard`) — Firestore + Anonymous auth enabled (2026-09-22).
+> 2. `state/firebase.ts` (SDK init) + `state/useCurrentUser.ts` (anonymous sign-in) wired into `App.tsx` (2026-09-22).
+> 3. Verified: a real anonymous UID logs on load, user appears in the Firebase console (2026-09-22).
 >
-> <span style="color:#0969da">📋 **To do:**</span> —
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None._
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 
-#### Save/load — layer settings
-> <span style="color:#2da44e">✅ **Done:**</span> Firebase CLI installed and authenticated (`229999390+Dana-shachar@users.noreply.github.com`); `.firebaserc`/`firebase.json`/`firestore.rules` added to the repo root and deployed via `firebase deploy --only firestore:rules` — Firestore now enforces that a user can only read/write the `projects/{userId}` document matching their own auth UID (2026-09-22); `state/storage.ts` (`saveLayers`/`loadLayers`, one Firestore document per user under `projects/{uid}`, holding just the layer stack's settings — not paint pixel data, that's the feature below) wired into `App.tsx` — loads the saved stack on sign-in, debounced (1s) save on every layer change, guarded so a save can't fire before the initial load resolves (2026-09-22). Build passes; not yet tested live.
+#### Save/load — layer settings — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Firebase CLI installed and authenticated (2026-09-22).
+> 2. `firestore.rules` deployed — a user can only read/write their own document (2026-09-22).
+> 3. `state/storage.ts` save/load wired into `App.tsx`, debounced 1s (2026-09-22).
+> 4. **Live-tested and confirmed working by Dana** — layer add/opacity changes survive a reload (2026-09-22).
 >
-> <span style="color:#0969da">📋 **To do:**</span> live-test (reload the browser, confirm a change survives, confirm it's per-user not shared). Currently one project per user, not multiple named saves — that's a possible future extension, not planned yet.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Currently one project per user, not multiple named saves — possible future extension, not planned.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 
-#### Save/load — paint stroke logs
-> **Done:** —
+#### Save/load — paint stroke logs — 90%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. `StrokeRecord` per completed stroke (`layerId`, points, radius, feather, brush value), kept as one global chronological `strokeHistory` (2026-09-22).
+> 2. Saved/loaded alongside `layers` in the same Firestore document (2026-09-22).
+> 3. Replayed on load through the exact same `beginStroke`/`paintStroke`/`endStroke` sequence live painting uses — not a separate load-time renderer (2026-09-22).
 >
-> <span style="color:#0969da">📋 **To do:**</span> extend the data model above to also save each painted layer's stroke log (see "Data model" note above) and replay it on load to reconstruct the paint texture. Planned 2026-09-22, not started.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Live-test (paint, reload, confirm the terrain reconstructs identically).
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
+
+---
+
+#### Undo (Cmd+Z) — 95%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. Cmd+Z (Mac) / Ctrl+Z pops the single most recent stroke, regardless of which layer it's on (2026-09-22).
+> 2. Rebuilds every layer's paint texture from what remains, via the same replay mechanism as save/load (2026-09-22).
+> 3. "Undo" button in a new left-panel "Edit" section, disabled when there's nothing to undo (2026-09-22).
+> 4. **Live-tested and confirmed working by Dana** (2026-09-22).
+>
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. No redo yet — deliberately deferred, a natural fast-follow on the same history array.
+> 2. Scoped to paint strokes only, not other edits (opacity/noise-type/layer-add changes) — a general "undo anything" system would be a separate, bigger feature.
+>
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 ---
@@ -203,7 +312,13 @@ Right now nothing else in the app persists at all — everything else lives only
 ## Stage 07 — Erosion Simulation
 ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
 
-Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/visualize its progression rather than a single static end state (syllabus: "Map simulations - Erosion simulation - Biomes"). An empty placeholder "Erosion" tab is already reserved for it in the right panel.
+Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/visualize its progression (syllabus: "Map simulations - Erosion simulation - Biomes"). An empty placeholder "Erosion" tab is already reserved for it in the right panel.
+
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Decide hydraulic vs. thermal vs. both.
+> 2. Decide what "timeline" means — real scrub-able animation, or run-N-iterations.
+> 3. Decide manual trigger vs. automatic.
+> 4. Everything else — nothing built yet.
 
 ---
 ---
@@ -211,7 +326,7 @@ Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/
 ## Stage 08 — Color / Biome Texturing
 ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
 
-Biome-style surface texturing/coloring. An empty placeholder "Color" tab is already reserved for it in the right panel.
+Biome-style surface texturing/coloring. An empty placeholder "Color" tab is already reserved for it in the right panel. Nothing decided or built yet.
 
 ---
 ---
@@ -219,30 +334,41 @@ Biome-style surface texturing/coloring. An empty placeholder "Color" tab is alre
 ## Stage 09 — Design System & UI Polish
 ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
 
-#### Design-system / config tokenization
-> **Done:** —
+#### Design-system / config tokenization — 0%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. _None._
 >
-> <span style="color:#0969da">📋 **To do:**</span> a pass to centralize the scattered `TODO(DS)` placeholder values (arbitrary colors, light direction, ambient level, planet radius/segments, grid size, camera distance, the km-to-scene-unit conversion) into real design-system/config files instead of inline magic numbers. Tracked since 2026-09-09, not urgent. See `ISSUES.md`, 2026-09-09.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Centralize scattered `TODO(DS)` placeholder values (colors, lighting, radius/segments, grid size, camera distance, km-to-scene-unit conversion) into real design-system/config files instead of inline magic numbers. Tracked since 2026-09-09, not urgent.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 
-#### Adjustable control panel
-> **Done:** —
+#### Adjustable control panel — 0%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. _None._
 >
-> <span style="color:#0969da">📋 **To do:**</span> make the control panel resizable/collapsible (e.g. a drag handle like `active-geometry-project`'s) rather than its current fixed `max-width`. Explicitly deferred by Dana (2026-09-09/14), raised again 2026-09-16 — whether this is its own step or bundled with other panel work is an open scope question, not yet answered.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. Make the control panel resizable/collapsible (a drag handle, like `active-geometry-project`'s) instead of its fixed `max-width`. Explicitly deferred by Dana, raised again 2026-09-16.
+> 2. Open scope question: its own step, or bundled with other panel work — not answered.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 
-#### Wireframe overlay accuracy
-> **Done:** —
+#### Wireframe overlay accuracy — 0%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. _None._
 >
-> <span style="color:#0969da">📋 **To do:**</span> the "Wireframe" display mode overlays a `THREE.LineSegments` built from the sphere's plain, undisplaced CPU geometry — it won't track the actual GPU-shader-displaced terrain surface once real height is applied (noted 2026-09-14, not visible as a problem yet only because it's easy to miss). Proper fix: give the overlay its own shader sampling the same heightmap/displacement as the planet's vertex shader. Not urgent.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. The "Wireframe" display mode overlays undisplaced CPU geometry — won't track the actual GPU-displaced terrain once real height is applied. Not urgent, not visible as a problem yet.
+> 2. Fix: give the overlay its own shader, sampling the same heightmap/displacement as the planet's vertex shader.
 >
-> <span style="color:#cf222e">🐛 **Bugs:**</span> —
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
 
 ---
 ---
@@ -256,7 +382,7 @@ Not stages — nothing below is scheduled or committed to being built. Reference
 Design notes and feature ideas from the 2026-09-14 planning session, not yet decided how much of this actually gets built:
 
 - **Chunk/tile terrain viewing** — inspired by World Machine's ability to view/work on a square chunk of terrain rather than the whole thing at once.
-- **History/undo tracking** — noted for later; Stage 06's stroke-log persistence approach sets most of this up already.
+- **Redo** — a natural fast-follow to Stage 06's undo (Cmd+Z), once undo itself is proven out.
 - **Topography-line overlay** — contour lines rendered directly on the terrain surface as a visual guide (standard in this category of tool, e.g. World Machine).
 - **No node-based UI** — explicit decision: the left-panel-list/right-panel-details structure already in place is correct; not building a node graph like World Machine/Gaea/Substance Designer use.
 - **Feature ideas pasted from World Machine's website (2026-09-14)** — kept as reference, not committed to building any/all of it:

@@ -11,10 +11,14 @@
             "id": "469db715b60082af",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "ROADMAP.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "ROADMAP"
             }
           }
         ]
@@ -181,10 +185,14 @@
       "bases:Create new base": false
     }
   },
-  "active": "560983e41be485fa",
+  "active": "469db715b60082af",
   "lastOpenFiles": [
-    "Untitled.md",
+    "ISSUES.md",
     "CLAUDE.md",
+    "README.md",
+    "app/dist/assets/index-m_IBPBxR.js",
+    "ROADMAP.md",
+    "Untitled.md",
     "MDs/Roadmap.md",
     "Roadmap.md",
     "MDs/Decisions-and-Issues.md",
@@ -204,7 +212,6 @@
     "app/dist/assets",
     "app/dist",
     "app/node_modules/@dimforge/rapier3d-compat/pipeline/world.d.ts",
-    "app/node_modules/@dimforge/rapier3d-compat/pipeline/serialization_pipeline.d.ts",
     "app/node_modules/@dimforge/rapier3d-compat/README.md",
     "app/node_modules/@tweenjs/tween.js/README.md",
     "app/node_modules/@types/three/README.md",
@@ -220,10 +227,6 @@
     "app/node_modules/three/README.md",
     "app/node_modules/typescript/SECURITY.md",
     "app/node_modules/typescript/README.md",
-    "app/node_modules/postcss/README.md",
-    "app/node_modules/vite/README.md",
-    "app/node_modules/vite/LICENSE.md",
-    "app/node_modules/react-dom/README.md",
     "app/src/assets/vite.svg",
     "app/src/assets/react.svg",
     "app/src/assets/hero.png",

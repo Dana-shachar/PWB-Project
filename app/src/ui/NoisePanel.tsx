@@ -1,7 +1,7 @@
 import { useRef, useState, type RefObject } from 'react';
 import { Slider, Select } from './UIElements';
 import { MapView } from '../map/MapView';
-import { NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer, type NoiseType, type BlendMode } from '../map/heightmap';
+import { NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer, type NoiseType, type BlendMode, type StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 
 interface NoisePanelProps {
@@ -19,6 +19,7 @@ interface NoisePanelProps {
   feather: number; // 0=hard edge, 1=fully soft — a fraction of brushRadiusPx (Photoshop-style Hardness); never changes brush size
   onFeatherChange: (value: number) => void;
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
+  onStrokeComplete: (record: StrokeRecord) => void;
 }
 
 const EXPANDED_CANVAS_SIZE_PX = 800; // TODO(DS): arbitrary placeholder — richer brush controls for this mode land later, see ROADMAP.md
@@ -44,6 +45,7 @@ export function NoisePanel({
   feather,
   onFeatherChange,
   sceneHandleRef,
+  onStrokeComplete,
 }: NoisePanelProps) {
   const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) ?? layers[0];
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
@@ -118,6 +120,7 @@ export function NoisePanel({
           brushValue={brushValue}
           feather={feather}
           sceneHandleRef={sceneHandleRef}
+          onStrokeComplete={onStrokeComplete}
         />
       </div>
 
@@ -276,6 +279,7 @@ export function NoisePanel({
             brushValue={brushValue}
             feather={feather}
             sceneHandleRef={sceneHandleRef}
+            onStrokeComplete={onStrokeComplete}
             sizePx={EXPANDED_CANVAS_SIZE_PX}
           />
         </div>

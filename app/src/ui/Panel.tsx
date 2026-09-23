@@ -24,6 +24,9 @@ interface PanelProps {
   onBaseColorChange: (value: string) => void;
   displayMode: string; // 'shaded' | 'wireframe'
   onDisplayModeChange: (value: string) => void;
+  // Edit controls
+  canUndo: boolean;
+  onUndo: () => void;
 }
 
 // Left-side control panel, divided into titled sections — ported from
@@ -50,10 +53,23 @@ export function Panel({
   onBaseColorChange,
   displayMode,
   onDisplayModeChange,
+  canUndo,
+  onUndo,
 }: PanelProps) {
   return (
     <div className="panel-outer">
       <div className="panel-content">
+        <div className="panel-section">
+          <div className="panel-section-title">Edit</div>
+          {/* Mirrors the Cmd+Z/Ctrl+Z shortcut (see App.tsx) — undoes the single
+              most recent paint stroke, regardless of which layer it's on. */}
+          <button type="button" className="noise-add-layer-btn" onClick={onUndo} disabled={!canUndo}>
+            Undo
+          </button>
+        </div>
+
+        <div className="panel-section-divider" />
+
         <div className="panel-section">
           <div className="panel-section-title">Scene controls</div>
           <Slider

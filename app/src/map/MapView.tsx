@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
-import { HEIGHTMAP_WIDTH, type NoiseLayer } from './heightmap';
+import { HEIGHTMAP_WIDTH, type NoiseLayer, type StrokeRecord } from './heightmap';
 
 interface MapViewProps {
   layers: NoiseLayer[];
@@ -9,6 +9,7 @@ interface MapViewProps {
   brushValue: number; // -1 (erase/black) .. 1 (paint/white), from the B&W brush slider
   feather: number; // 0=hard edge, 1=fully soft — a fraction of brushRadiusPx (Photoshop-style Hardness); never changes brush size
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
+  onStrokeComplete: (record: StrokeRecord) => void; // logs the finished stroke for save/undo — see ROADMAP.md, Stage 06
   sizePx?: number; // CSS display size — NoisePanel passes a larger value when expanded
 }
 
@@ -24,6 +25,7 @@ export function MapView({
   brushValue,
   feather,
   sceneHandleRef,
+  onStrokeComplete,
   sizePx = 300,
 }: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -75,7 +77,8 @@ export function MapView({
   }
 
   function handlePointerUp() {
-    sceneHandleRef.current?.endStroke();
+    const record = sceneHandleRef.current?.endStroke();
+    if (record) onStrokeComplete(record);
   }
 
   return (
