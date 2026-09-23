@@ -252,7 +252,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ---
 
 ## Stage 06 — Project Persistence
-🟩🟩🟩🟩🟩🟩🟩🟩⬜⬜ 85%
+🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
 
 Right now this is the only thing keeping the app from being a real tool session-to-session. Surfaced as urgent (2026-09-22) by the Stage 03 layer-erasing bug.
 
@@ -272,18 +272,20 @@ Right now this is the only thing keeping the app from being a real tool session-
 
 ---
 
-#### Save/load — layer settings — 60%
+#### Save/load — multi-project — 95%
 > <span style="color:#2da44e">✅ **Done**</span>
 > 1. **CLI set up** — Firebase CLI installed and authenticated (2026-09-22).
-> 2. **Security rules deployed** — `firestore.rules`, a user can only read/write their own document (2026-09-22).
-> 3. **Save/load wired** — `firebase/storage.ts`, debounced 1s, wired into `App.tsx` (2026-09-22).
-> 4. **Live-tested and confirmed working by Dana** — layer add/opacity changes survive a reload (2026-09-22).
+> 2. **Multi-project data model** — a subcollection of named planets (`projects/{uid}/planets/{planetId}`, each `{ name, layers, strokeHistory, updatedAt }`), not one document per user — lets a user save multiple named versions and start new ones (2026-09-22/23).
+> 3. **Security rules deployed** — `firestore.rules`, matching the subcollection model; a user can only read/write their own (2026-09-22).
+> 4. **Save/load wired** — `firebase/storage.ts`, debounced ~3s (see reasoning below), wired via `projectSettings/saveProject.ts` (2026-09-22/23).
+> 5. **Project Settings panel section** — collapsible accordion: an inline-editable project name (click it, type, Enter/blur commits and auto-saves — replaced an earlier prompt-based Rename button), a nested "My Projects" accordion listing saved planets as rows (click to load, "×" to delete, confirmed since it's permanent), a "+ New Project" action inside that list, and a "Save" button for a manual just-in-case save (2026-09-23).
+> 6. **Always named, never an "unnamed" state** — a brand-new user, "+ New Project", and deleting the last remaining planet all auto-generate a name ("New Planet 01", "New Planet 02"...) and save immediately, rather than waiting on a prompt (2026-09-23).
+> 7. **"Edit" section is an accordion too**, with **Undo**, **Redo**, and **Reset** — Reset clears the *currently open* planet's content back to blank without switching which named project is active, confirmed since it's destructive and not part of the undo history (2026-09-22/23).
+> 8. **Auto-save interval — kept as debounce, not a fixed timer**, per discussion: a flat 5-10 minute timer either saves needlessly or risks losing several minutes of work right before a tick; the existing debounce already only fires on real changes (and `strokeHistory` only updates once per *completed* stroke, not per dab) — ~3s covers the actual goal (fewer writes) better than a fixed interval would.
+> 9. **Live-tested and confirmed working by Dana** — the original single-project version: layer add/opacity changes survive a reload (2026-09-22).
 >
-> <span style="color:#0969da">📋 **To do**</span> — **plan agreed 2026-09-22, being implemented now:**
-> 1. **Multi-project data model** — move from one document per user (`projects/{uid}`) to a subcollection of named planets (`projects/{uid}/planets/{planetId}`, each `{ name, layers, strokeHistory, updatedAt }`). Requires a matching `firestore.rules` update.
-> 2. **"Project" panel section** — new collapsible accordion section, above "Edit," in the left panel: a dropdown of saved planets by name with **"+ New Project"** as the last option; a **Rename** button (prompt-based, pre-filled with the current name); a **Save** button (prompts for a name if the current planet is unnamed, otherwise saves immediately under its existing name — covers both "Save As" and a manual "just in case" save with one button).
-> 3. **"Edit" section becomes an accordion too**, gains a **Reset** button — distinct from "New Project": clears the *currently open* planet's content back to blank without switching which named project is active. Gated behind a confirm (destructive, not part of the undo history).
-> 4. **Auto-save interval — kept as debounce, not a fixed timer**, per discussion: a flat 5-10 minute timer either saves needlessly or risks losing several minutes of work right before a tick; the existing ~1s-after-last-change debounce already only fires on real changes (and `strokeHistory` only updates once per *completed* stroke, not per dab) — widening it slightly (~3s) covers the actual goal (fewer writes) better than a fixed interval would.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Live-test the multi-project flow** — new/rename/delete/switch-between-projects, built and passing build checks, not yet live-tested end-to-end.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
@@ -304,17 +306,17 @@ Right now this is the only thing keeping the app from being a real tool session-
 
 ---
 
-#### Undo (Cmd+Z) — 95%
+#### Undo/Redo (Cmd+Z / Cmd+Shift+Z) — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
 > 1. **Shortcut** — Cmd+Z (Mac) / Ctrl+Z pops the single most recent stroke, regardless of which layer it's on (2026-09-22).
 > 2. **Rebuild** — rebuilds every layer's paint texture from what remains, via the same replay mechanism as save/load (2026-09-22).
 > 3. **Edit panel button** — a new left-panel "Edit" section with an "Undo" button, disabled when there's nothing to undo (2026-09-22).
 > 4. **Live-tested and confirmed working by Dana** (2026-09-22).
 > 5. **Fixed: 2D canvas didn't refresh after undo** — the 3D view updated instantly, but the 2D preview stayed stale until clicked, confirmed by Dana. Different cause from the reload bug above — not an ordering issue, `MapView` simply had no connection to `strokeHistory` at all (it only watches `layers`, and undo never touches `layers`). Fixed with a small `paintVersion` counter, bumped in `undo()` and threaded down as a prop `MapView`'s refresh effect also watches (2026-09-22).
+> 6. **Redo** — Cmd+Shift+Z (Mac) / Ctrl+Shift+Z and an Edit-panel "Redo" button, mirrors undo's architecture (a `redoStack`, cleared on any new stroke) (2026-09-23).
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Redo** — no redo yet, deliberately deferred as a natural fast-follow on the same history array.
-> 2. **Scope** — covers paint strokes only, not other edits (opacity/noise-type/layer-add changes). A general "undo anything" system would be a separate, bigger feature.
+> 1. **Scope** — covers paint strokes only, not other edits (opacity/noise-type/layer-add changes). A general "undo anything" system would be a separate, bigger feature.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
@@ -323,21 +325,73 @@ Right now this is the only thing keeping the app from being a real tool session-
 ---
 
 ## Stage 07 — Land Cube / Voxel Terrain
-⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ 75%
 
-A detail view into one fixed-size chunk of terrain, rendered as blocky/voxel geometry (Minecraft-style, not smooth) rather than the heightmap-displaced sphere used elsewhere — syllabus-required, sequenced before Erosion per Dana's call (2026-09-23). Full reasoning/tradeoffs in `ISSUES.md`.
+A detail view into one fixed-size chunk of terrain, shown side by side with the planet, with a render-style choice (blocky voxel or smooth) — syllabus-required, sequenced before Erosion per Dana's call (2026-09-23). Full reasoning/tradeoffs in `ISSUES.md`.
 
-#### Voxel meshing pipeline — 0%
+#### Voxel meshing pipeline — 90%
 > <span style="color:#2da44e">✅ **Done**</span>
-> 1. _None._
+> 1. **Density field** — one fixed test chunk, seeded from the existing composited heightmap via `getPreviewImageData()`; a column is solid below the heightmap's height. No caves/overhangs yet (2026-09-23).
+> 2. **Meshing — cube/culled-face, not Marching Cubes** — one flat quad per voxel face exposed to empty space; buried faces skipped entirely. Produces the blocky look directly; Marching Cubes would produce a smooth/rounded surface instead (2026-09-23).
+> 3. **Compute location — CPU, in a Web Worker** — not GPU compute; keeps the main thread/3D view responsive during (re)generation. GPU compute (`WebGPURenderer`) explicitly deferred — would mean migrating the whole app off `WebGLRenderer` and porting every GLSL shader to TSL, disproportionate unless CPU+Worker measures as insufficient (2026-09-23).
+> 4. **Resolution control** — a "Land Chunk" panel section with a Resolution dropdown (8/16/32/64), regenerating on change (2026-09-23).
+> 5. **Connected to the noise layer stack** — regenerates whenever the layer stack changes, not just when the chunk pane first becomes visible (2026-09-23).
+> 6. **Fixed: chunk sat half-buried under the grid** — the mesh centered all 3 axes including vertical, so half the terrain sat below y=0. Only x/z are centered now; the base sits at grid level (2026-09-23).
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Density field** — one fixed test chunk, seeded from the existing composited heightmap via CPU readback (`readRenderTargetPixels()`); a column is solid below the heightmap's height. No caves/overhangs yet.
-> 2. **Meshing — cube/culled-face, not Marching Cubes** — one flat quad per voxel face exposed to empty space; buried faces skipped entirely. Produces the blocky look directly; Marching Cubes would produce a smooth/rounded surface instead. Greedy meshing (merging same-facing quads) deferred until resolution/perf actually needs it.
-> 3. **Compute location — CPU, in a Web Worker** — not GPU compute; keeps the main thread/3D view responsive during (re)generation without needing true parallelism. GPU compute (`WebGPURenderer`) explicitly deferred — would require migrating the whole app off `WebGLRenderer` and porting every existing GLSL shader to Three.js's node-based TSL, disproportionate unless CPU+Worker measures as insufficient once built.
-> 4. **Resolution control** — a slider (voxel grid dimension per axis, e.g. 16/32/64), regenerating via the same Worker pipeline on change, not continuously.
-> 5. **Chunk entry point** — a fixed test cube first, to prove the pipeline before building any picking/selection UX on the planet itself.
-> 6. **Editing (digging/adding voxels live)** — separate feature, out of scope for this pass; when it lands, only the changed region gets remeshed (dirty-chunk updates), not the whole grid.
+> 1. **Real chunk location picking** — still one fixed arbitrary spot on the heightmap, not yet tied to a location the user picks on the planet. Deferred, Dana's call (2026-09-23).
+> 2. **Editing (digging/adding voxels live)** — separate feature; when it lands, only the changed region gets remeshed (dirty-chunk updates), not the whole grid.
+> 3. **Greedy meshing** — merging same-facing quads, deferred until resolution/perf actually needs it.
+>
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
+
+---
+
+#### Smooth render style — 100%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. **Voxel is a display style, not the chunk's only way to render** — the existing planet Display dropdown (Shaded/Wireframe) gained a third option, "Voxel" (Dana, 2026-09-23: "voxel is a feature that could be applied to both chunk and planet and also toggled off — it's a stylistic choice"). Shaded/Wireframe render the chunk as a smooth, continuously-displaced surface instead of blocky voxels (2026-09-23).
+> 2. **Grounded, not floating** — the smooth patch is extruded down to a solid slab (skirt walls + a bottom cap), not a bare surface, so it sits on the grid like the voxel version instead of floating as a disconnected sheet (2026-09-23).
+> 3. **Shared sampling** — both render styles read the exact same terrain via one `sampleChunkHeight()` helper, not two independently-drifting copies (2026-09-23).
+> 4. **Planet unaffected for now** — selecting "Voxel" has no visible effect on the planet yet; generalizing the blocky look to the planet itself stays a noted future item, not built.
+>
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None for the chunk. Planet-voxel generalization tracked separately, see Potential Features below._
+>
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
+
+---
+
+#### Land-chunk viewport & navigation — 90%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. **Side-by-side layout** — planet and land-chunk panes, resizable via a drag handle between them (2026-09-23).
+> 2. **View-mode control** — a small Planet / Land Chunk / Split button, top-right of the viewport, replacing an earlier plain on/off toggle. Matches the earlier "Expand should replace, not overlay" idea. Defaults to Planet (2026-09-23).
+> 3. **Fixed: panes were unmounting on toggle** — switching view mode used to destroy and rebuild each pane's whole Three.js scene/camera/renderer, resetting the planet's camera position and even its color back to a shader placeholder default. Both panes are now always mounted, toggled via CSS visibility only (2026-09-23).
+> 4. **Shared scene settings** — lighting, grid, and base color all shared with the planet's own Scene/Planet controls, not separate per-viewport settings; lighting intensity is rescaled for the chunk's real PBR material (`MeshStandardMaterial`) rather than reused raw from the planet's own hand-written-shader-calibrated values (2026-09-23).
+> 5. **Fixed: smooth-mesh walls missing on some sides** — 4 separately hand-derived wall windings, one already proven wrong, replaced with a single boundary walk using one formula (outward normal = edge direction rotated -90°) — see `ISSUES.md`. `DoubleSide` also added as a safety net (2026-09-23).
+> 6. **Resolution vs. Size decoupled** — Resolution now only controls voxel/vertex subdivision (detail); a new **Size** control governs the footprint's actual world-space width/depth independently (2026-09-23).
+> 7. **Height retuned for contrast** — ambient/directional ratio adjusted (ambient multiplier x4 → x1.5) so shadowed faces read as darker against lit ones, not washed out by flat ambient fill (2026-09-23).
+>
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Real cast shadows** — a shadow map (terrain casting shadows onto itself) for genuine depth/contrast beyond flat per-face shading, especially for craggy/blocky terrain. Needs `renderer.shadowMap` enabled, the light and mesh marked to cast/receive, and the directional light's shadow-camera frustum tuned to the chunk. Bigger, separate piece of work — noted, not started (Dana, 2026-09-23).
+> 2. **Camera auto-framing** — the chunk's camera distance is fixed regardless of Size; not an issue in practice since the gumball's zoom already compensates manually (Dana, 2026-09-23), not planned unless it becomes one. Same gap exists for the planet's Radius, for the same reason not currently a priority.
+>
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
+
+---
+
+#### Shared gumball — 95%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. **One instance, not one per viewport** — `Gumball` now drives a list of 1-2 camera targets instead of a single fixed one, retargeted via `setTargets()` rather than recreated (2026-09-23).
+> 2. **Click to select, shift+click to add** — click a pane to give it the gumball exclusively; shift+click the other pane to drive both cameras together from the same controls (2026-09-23).
+> 3. **Selection frame** — a subtle outline (matching the existing `.noise-layer-row--selected` convention) on whichever pane(s) are targeted, shown only in Split mode where it's actually needed (2026-09-23).
+> 4. **Fixed: zoom/reset didn't work right for the chunk** — the zoom/reset math used one fixed reference distance calibrated for the planet's scale; for the ~16-unit chunk, the slider's range couldn't get closer than the chunk's own default view. Each target now carries its own `referenceDistance`, so the same slider percentage scales proportionally per camera (2026-09-23).
+> 5. **Positioned correctly** — gumball stays at its original bottom-right corner (sticky across view-mode changes, not duplicated); the view-mode button (a separate control) is what actually moved to top-right (2026-09-23).
+>
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. _None currently._
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
@@ -419,6 +473,7 @@ Design notes and feature ideas from the 2026-09-14 planning session, not yet dec
 
 - **Chunk/tile terrain viewing** — inspired by World Machine's ability to view/work on a square chunk of terrain rather than the whole thing at once. Now tracked concretely as Stage 07's land cube, not just an idea.
 - **Voxel/blocky rendering generalized beyond the land cube** — the same cube/culled-face meshing technique (Stage 07) eventually applicable to all geometry in the project, including the planet itself, not just the one detail-view chunk. Noted for future dev (Dana, 2026-09-23), not in scope now.
+- **Heightmap/noise resolution as a user control** — the shared heightmap texture (`HEIGHTMAP_WIDTH`/`HEIGHT`, 1024×512) is currently one fixed constant for the whole pipeline (noise + paint together), not adjustable, and not per-layer. A real resolution control here is a separate, bigger change than the land chunk's own resolution slider (Stage 07) — it affects the whole shared pipeline, with real memory/performance tradeoffs across the entire app, not just one view. Noted for later (Dana, 2026-09-23), not in scope now.
 - **Redo** — a natural fast-follow to Stage 06's undo (Cmd+Z), once undo itself is proven out.
 - **Topography-line overlay** — contour lines rendered directly on the terrain surface as a visual guide (standard in this category of tool, e.g. World Machine).
 - **No node-based UI** — explicit decision: the left-panel-list/right-panel-details structure already in place is correct; not building a node graph like World Machine/Gaea/Substance Designer use.

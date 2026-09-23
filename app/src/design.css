@@ -85,10 +85,49 @@ body {
 }
 
 .app-viewport {
-  position: relative; /* anchors .gumball-container to this box, not the window */
+  position: relative; /* anchors the shared gumball + view-mode control (scene/sharedGumball.ts, voxel/ViewModeControl.tsx) to the whole combined viewport, not either pane individually — see ISSUES.md, 2026-09-23 */
+  display: flex;
   flex: 1;
   min-width: 0; /* lets this shrink below its content's natural width in a flex row */
   height: 100%;
+}
+
+.planet-viewport,
+.land-chunk-viewport {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
+.land-chunk-viewport {
+  border-left: 1px solid var(--color-divider);
+}
+
+/* Hidden, not unmounted — the view-mode button (voxel/ViewModeControl.tsx)
+   only toggles this, so switching modes never rebuilds either pane's Three.js
+   scene/camera/renderer or loses their state (Dana, 2026-09-23). */
+.viewport-pane--hidden {
+  display: none;
+}
+
+/* Which pane the shared gumball currently targets — outline (not border)
+   so it never affects layout/the canvas's own ResizeObserver sizing.
+   Same convention as .noise-layer-row--selected: a border-color change to
+   the app's accent, not a glow/fill. */
+.viewport-pane--selected {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+/* Drag handle between the planet and land-chunk panes, split mode only. */
+.viewport-divider {
+  flex-shrink: 0;
+  width: 4px;
+  cursor: col-resize;
+  background: var(--color-divider);
+}
+.viewport-divider:hover {
+  background: var(--color-accent);
 }
 
 /* ── Slider (ui/UIElements.tsx) ───────────────────────────── */
@@ -329,16 +368,18 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   opacity: 1;
 }
 
-/* ── Gumball (ui/Gumball.tsx) ──────────────────────────────── */
+/* ── Gumball (scene/Gumball.tsx) ───────────────────────────── */
 /* Ported from active-geometry-project's gumball.js — values are its exact
    inline styles, moved here to keep one CSS source of truth. Positioned
-   top-right (original is bottom-left) since the control panel is on the
-   left in this project. Axis indicator ordered first (closest to the
-   corner) with zoom/view controls below it — a deliberate change from the
-   original's ordering, not a borrowed convention. */
+   bottom-right (original is bottom-left) since the control panel is on the
+   left in this project — unchanged position, just sticky/shared now
+   (Dana, 2026-09-23: "view controls should sit at the top right" was about
+   the view-mode button, not this). Axis indicator ordered first (closest
+   to the corner) with zoom/view controls below it — a deliberate change
+   from the original's ordering, not a borrowed convention. */
 
 .gumball-container {
-  position: absolute; /* relative to .app-viewport, not the window — see App.tsx/SceneCanvas.tsx */
+  position: absolute; /* relative to .app-viewport (the shared mount, scene/sharedGumball.ts), not the window */
   bottom: 16px;
   right: 16px;
   display: flex;
@@ -410,6 +451,42 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   pointer-events: auto; /* opts back in — container is click-through */
 }
 .gumball-view-select:hover {
+  background: var(--color-btn-hover-bg);
+}
+
+/* ── View mode control (voxel/ViewModeControl.tsx) ─────────── */
+/* Small floating pill over the viewport, top-right (Dana, 2026-09-23 —
+   "view controls should sit at the top right side of the viewport"; the
+   gumball keeps its own original bottom-right spot, unrelated) — reuses
+   .right-panel-tab's dimmed-inactive/full-opacity-active convention rather
+   than inventing new chrome, just smaller and floating instead of a
+   full-width tab bar. See ROADMAP.md, Stage 07. */
+
+.view-mode-control {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--color-track);
+}
+
+.view-mode-btn {
+  padding: 6px 10px;
+  cursor: pointer;
+  font: 400 var(--font-size-xs) var(--font-ui);
+  color: var(--color-text);
+  opacity: 0.4;
+  background: var(--color-btn-bg);
+  border: none;
+  white-space: nowrap;
+}
+.view-mode-btn:hover {
+  opacity: 0.7;
+}
+.view-mode-btn--active {
+  opacity: 1;
   background: var(--color-btn-hover-bg);
 }
 

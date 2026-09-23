@@ -14,7 +14,15 @@ const KM_PER_SCENE_UNIT = 300;
 export function usePlanetControls() {
   const [radiusKm, setRadiusKm] = useState(6000);
   const [baseColor, setBaseColor] = useState('#c9dbea'); // TODO(DS): lighter placeholder, per Dana's 2026-09-16 request
-  const [displayMode, setDisplayMode] = useState('shaded'); // 'shaded' | 'wireframe'
+  const [displayMode, setDisplayMode] = useState('shaded'); // 'shaded' | 'wireframe' | 'voxel'
+  // Overall terrain height — shared directly by the planet's own
+  // displacement and the land chunk's voxel/smooth height (Dana, 2026-09-23:
+  // "it's overall height... the chunk is eventually a part of the planet
+  // we're viewing as a flat piece" — the same number, not two separately
+  // scaled ones). Was previously auto-derived as radius*0.15 on the planet
+  // side only; 3 matches that at the default radius so nothing changes
+  // visually until this is touched. See ISSUES.md, 2026-09-23.
+  const [heightScale, setHeightScale] = useState(3);
 
   return {
     radiusKm,
@@ -24,5 +32,7 @@ export function usePlanetControls() {
     setBaseColor,
     displayMode,
     setDisplayMode,
+    heightScale,
+    setHeightScale,
   };
 }

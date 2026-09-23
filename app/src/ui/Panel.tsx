@@ -1,9 +1,13 @@
 import { Slider, ColorPicker, Toggle, Select, Accordion, EditableText } from './UIElements';
 import type { ProjectSummary } from '../firebase/storage';
 
+// 'voxel' only affects the land-chunk view for now — a display style, not a
+// chunk-only feature (Dana, 2026-09-23), but the planet doesn't render
+// blocky yet; selecting it there currently has no visible effect.
 const DISPLAY_MODE_OPTIONS = [
   { value: 'shaded', label: 'Shaded' },
   { value: 'wireframe', label: 'Wireframe' },
+  { value: 'voxel', label: 'Voxel' },
 ];
 
 interface PanelProps {
@@ -23,8 +27,13 @@ interface PanelProps {
   onRadiusKmChange: (value: number) => void;
   baseColor: string;
   onBaseColorChange: (value: string) => void;
-  displayMode: string; // 'shaded' | 'wireframe'
+  displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
   onDisplayModeChange: (value: string) => void;
+  // Overall terrain height — shared directly with the land chunk's own
+  // height, not a Planet-exclusive setting despite living in this section
+  // (Dana, 2026-09-23). See planet/planetControls.ts.
+  heightScale: number;
+  onHeightScaleChange: (value: number) => void;
   // Edit controls
   canUndo: boolean;
   onUndo: () => void;
@@ -40,6 +49,11 @@ interface PanelProps {
   onSaveProject: () => void;
   onRenameProject: (name: string) => void;
   onDeleteProject: (id: string) => void;
+  // Land chunk (Stage 07)
+  chunkResolution: number;
+  onChunkResolutionChange: (value: number) => void;
+  chunkSize: number;
+  onChunkSizeChange: (value: number) => void;
 }
 
 // Left-side control panel, divided into titled sections — ported from
@@ -82,6 +96,12 @@ export function Panel({
   onSaveProject,
   onRenameProject,
   onDeleteProject,
+  chunkResolution,
+  onChunkResolutionChange,
+  chunkSize,
+  onChunkSizeChange,
+  heightScale,
+  onHeightScaleChange,
 }: PanelProps) {
   return (
     <div className="panel-outer">
@@ -218,6 +238,43 @@ export function Panel({
             precision={0}
           />
           <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
+          {/* Shared directly with the land chunk's own height — not derived
+              from Radius anymore (Dana, 2026-09-23: "it's overall height...
+              the chunk is eventually a part of the planet"). */}
+          <Slider
+            label="Height"
+            value={heightScale}
+            onChange={onHeightScaleChange}
+            min={0}
+            max={50}
+            step={0.5}
+          />
+        </div>
+
+        <div className="panel-section-divider" />
+
+        <div className="panel-section">
+          <div className="panel-section-title">Land Chunk</div>
+          {/* Detail only — doesn't affect the footprint's physical size
+              (Dana, 2026-09-23: it used to, incidentally). */}
+          <Slider
+            label="Resolution"
+            value={chunkResolution}
+            onChange={onChunkResolutionChange}
+            min={8}
+            max={64}
+            step={8}
+            precision={0}
+          />
+          <Slider
+            label="Size"
+            value={chunkSize}
+            onChange={onChunkSizeChange}
+            min={4}
+            max={64}
+            step={1}
+            precision={0}
+          />
         </div>
       </div>
     </div>

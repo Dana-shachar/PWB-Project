@@ -2,11 +2,11 @@ import { useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
 import * as THREE from 'three';
 import { scene } from './scene';
 import { renderer } from './renderer';
-import { camera } from './camera';
+import { camera, DEFAULT_CAMERA_DISTANCE } from './camera';
 import { controls } from './controls';
 import { grid } from './grid';
 import { planet, planetGeometry } from '../planet/mesh';
-import { Gumball } from './Gumball';
+import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 
 // Exposed to sibling components (MapView, via App.tsx) that need to paint
@@ -30,6 +30,10 @@ export interface SceneCanvasHandle {
   // read stale, pre-replay data. See ISSUES.md, 2026-09-22.)
   loadProject(layers: NoiseLayer[], strokeHistory: StrokeRecord[]): void;
   getPreviewImageData(): ImageData | null;
+  // For the single shared gumball (scene/sharedGumball.ts) to target this
+  // view's camera — this component no longer owns its own Gumball instance,
+  // see ISSUES.md, 2026-09-23.
+  getGumballTarget(): GumballTarget | null;
 }
 
 // TODO(DS): arbitrary placeholder line color, not borrowed from anywhere.
@@ -49,17 +53,20 @@ interface SceneCanvasProps {
   ambientLight: number;
   lightDirX: number;
   lightDirY: number;
-  displayMode: string; // 'shaded' | 'wireframe'
+  displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
   gridSpacing: number; // minor grid cell size, in world units
   gridVisible: boolean;
   layers: NoiseLayer[];
+  // Shared directly with the land chunk's own height — see
+  // planet/planetControls.ts and ISSUES.md, 2026-09-23.
+  heightScale: number;
 }
 
 // React places this <canvas> on the page; everything Three.js-related lives
 // in local variables/refs inside effects (never React state), per the class's
 // own React <-> Three.js convention: React owns layout, Three.js owns the stage.
 export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(function SceneCanvas(
-  { radius, baseColor, ambientLight, lightDirX, lightDirY, displayMode, gridSpacing, gridVisible, layers },
+  { radius, baseColor, ambientLight, lightDirX, lightDirY, displayMode, gridSpacing, gridVisible, layers, heightScale },
   handleRef,
 ) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -68,6 +75,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const heightmapPipelineRef = useRef<HeightmapPipeline | null>(null);
+  const gumballTargetRef = useRef<GumballTarget | null>(null);
   const layersRef = useRef<NoiseLayer[]>(layers); // lets the imperative handle read the current layers without re-creating itself
   layersRef.current = layers;
 
@@ -140,6 +148,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         if (!webglRenderer || !heightmapPipeline) return null;
         return heightmapPipeline.getCompositeImageData(webglRenderer);
       },
+      getGumballTarget() {
+        return gumballTargetRef.current;
+      },
     }),
     [],
   );
@@ -164,16 +175,14 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     gridMeshRef.current = gridMesh;
     webglRendererRef.current = webglRenderer;
     heightmapPipelineRef.current = new HeightmapPipeline();
+    // Exposed via getGumballTarget() — the single shared gumball
+    // (scene/sharedGumball.ts) drives this camera/controls pair when the
+    // planet pane is selected, rather than this component owning its own
+    // Gumball instance. See ISSUES.md, 2026-09-23.
+    gumballTargetRef.current = { camera: perspectiveCamera, cameraControls: orbitControls, referenceDistance: DEFAULT_CAMERA_DISTANCE };
 
     scene.add(gridMesh);
     scene.add(planetMesh);
-
-    // Gumball has no reactive props of its own (driven entirely by camera/
-    // controls, both local to this effect) — no ref needed, nothing else
-    // ever reassigns it, so there's no leak risk the way grid/planet had.
-    // canvas.parentElement is .app-viewport — confines the widget to the
-    // 3D viewport instead of the whole window, see Gumball.tsx.
-    const gumball = new Gumball(perspectiveCamera, orbitControls, canvas.parentElement!);
 
     function resize() {
       // Non-null assertions: TS can't prove `canvas` is still non-null inside
@@ -197,12 +206,6 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     function animate() {
       orbitControls.update(); // required every frame — damping is enabled, see controls.ts
       webglRenderer.render(scene, perspectiveCamera);
-      // gumball.update() must come AFTER render(): it reads camera.matrixWorld,
-      // which only gets freshly recomputed for a parentless camera (ours isn't
-      // added to the scene graph) during render(). Calling it before render()
-      // (as I originally had it) meant it always read stale matrix data —
-      // matches the original's exact ordering in active-geometry's main.js.
-      gumball.update();
       animationFrameId = requestAnimationFrame(animate);
     }
     animate();
@@ -210,13 +213,13 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     return () => {
       resizeObserver.disconnect();
       cancelAnimationFrame(animationFrameId);
-      gumball.dispose();
       orbitControls.dispose();
       webglRenderer.dispose();
 
       heightmapPipelineRef.current?.dispose();
       heightmapPipelineRef.current = null;
       webglRendererRef.current = null;
+      gumballTargetRef.current = null;
 
       // Remove/dispose whatever the refs *currently* point to, not the
       // `gridMesh`/`planetMesh` this specific effect run created — the grid
@@ -263,9 +266,10 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     planetMesh.geometry.dispose();
     planetMesh.geometry = planetGeometry(radius);
 
-    // Keep these in sync with the new radius too, not just the geometry.
+    // Keep this in sync with the new radius too, not just the geometry —
+    // uDisplacementAmplitude is set in the lighting effect below now, it's
+    // a user-controlled value (heightScale), not derived from radius.
     const material = planetMesh.material as THREE.ShaderMaterial;
-    material.uniforms.uDisplacementAmplitude.value = radius * 0.15;
     material.uniforms.uRadius.value = radius;
 
     wireframeOverlay.geometry.dispose();
@@ -287,7 +291,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     gridMeshRef.current = newGrid;
   }, [gridSpacing, gridVisible]);
 
-  // Lighting + base color: no rebuild needed, just mutate the shader's uniforms.
+  // Lighting + base color + height: no rebuild needed, just mutate the
+  // shader's uniforms. uDisplacementAmplitude is a user-controlled value
+  // (heightScale, shared directly with the land chunk's own height — see
+  // planet/planetControls.ts and ISSUES.md, 2026-09-23), not derived from
+  // radius anymore.
   useEffect(() => {
     const planetMesh = planetMeshRef.current;
     if (!planetMesh) return;
@@ -295,7 +303,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     material.uniforms.uBaseColor.value.set(baseColor);
     material.uniforms.uAmbient.value = ambientLight;
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, 1);
-  }, [baseColor, ambientLight, lightDirX, lightDirY]);
+    material.uniforms.uDisplacementAmplitude.value = heightScale;
+  }, [baseColor, ambientLight, lightDirX, lightDirY, heightScale]);
 
   // Display mode: toggles the wireframe overlay's visibility (it renders
   // alongside the shaded surface, doesn't replace it).

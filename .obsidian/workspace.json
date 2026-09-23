@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "ISSUES.md",
+                "file": "WEEKLY-PUSHES.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "ISSUES"
+              "title": "WEEKLY-PUSHES"
             }
           }
         ]
@@ -187,21 +187,21 @@
   },
   "active": "469db715b60082af",
   "lastOpenFiles": [
-    "app/dist/assets/index-Bvb-8hh_.css",
-    "app/dist/assets/index-CYBTWVC8.js",
-    "app/dist/assets/index-CG2q1INT.css",
-    "app/dist/assets/index-DbD_irva.js",
-    "app/dist/assets/index-B3OV8ZuT.css",
-    "app/dist/assets/index-D5TOBY58.js",
-    "app/dist/assets/index-BHN7Ovcc.js",
-    "app/dist/assets/index-B2Y98rGL.css",
-    "app/dist/assets/index-B8M5NHYA.js",
-    "app/dist/assets/index-Dm2hbzi4.js",
-    "app/src/scene/sceneControls.ts",
-    "ROADMAP.md",
-    "ISSUES.md",
-    "CLAUDE.md",
+    "app/dist/assets/index-CM7fw5il.js",
+    "app/dist/assets/meshWorker-CxLnst7A.js",
+    "app/dist/assets/index-BmIOZbpG.js",
+    "app/dist/index.html",
+    "app/dist/assets/meshWorker-BkxCXVkJ.js",
+    "app/dist/assets/index-C3jgmlf3.css",
+    "app/dist/assets/index-ByaF5o5p.js",
+    "app/dist/assets",
+    "app/dist/assets/index-yWgN1fRE.js",
+    "app/dist/assets/index-CtXwikcQ.js",
     "README.md",
+    "ISSUES.md",
+    "ROADMAP.md",
+    "app/dist/assets/index-BVldAFOM.js",
+    "CLAUDE.md",
     "Untitled.md",
     "MDs/Roadmap.md",
     "Roadmap.md",

@@ -234,7 +234,7 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 ## 🧊 Voxel / Land Cube Terrain
 
 ### 🧭 Land cube meshing technique & compute location
-**Status:** <span style="color:#2da44e">✅ Decided (2026-09-23), not built yet</span>
+**Status:** <span style="color:#2da44e">✅ Decided and built (2026-09-23)</span>
 
 > **Considered:**
 > 1. **Marching Cubes** — smooth, interpolated isosurface; initially assumed to be required for any voxel terrain at all.
@@ -250,6 +250,68 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 > **Scoped to one fixed-size land cube, not the whole planet** — a full volumetric planet isn't tractable at any reasonable resolution (a naive 512³ grid alone is ~134M cells). Sequenced before Erosion in `ROADMAP.md` per Dana's call, since it's syllabus-required and has no dependency either direction.
 >
 > **Noted for future dev, not in scope now:** the same blocky/voxel technique eventually generalizing to all geometry in the project, including the planet itself — not just this one land-cube detail view (Dana, 2026-09-23).
+
+### 🐛 Chunk sat half-buried under the grid
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-23)</span>
+
+> **Cause:** the mesh worker centered all 3 axes (x/y/z) at the local origin, including the vertical one — so roughly half the terrain sat below y=0, where the grid plane lives.
+>
+> **Fix:** only x/z (horizontal) are centered, for on-screen framing. Y is left starting at 0, so the terrain's base sits at grid level and rises upward — matching the planet's own "ground sits on the grid" convention.
+
+### 🧭 Voxel is a display style, not a land-chunk-exclusive feature
+**Status:** <span style="color:#2da44e">✅ Decided and built (2026-09-23)</span>
+
+> **Considered:** keeping the land-chunk pane exclusively voxel-rendered (its original scope) vs. treating "blocky" as one of several rendering styles that could apply to any geometry.
+>
+> **Decided:** voxel is a display style — the same conceptual family as the existing planet Display dropdown (Shaded/Wireframe), now with a third option, "Voxel." Shaded/Wireframe render the land chunk as a smooth, continuously-displaced surface instead; Voxel renders the existing blocky mesh. The planet doesn't respond to "Voxel" yet (generalizing that is a separate future item, see `ROADMAP.md`'s Potential Features), but the control lives where it will matter once that's built, rather than needing to move later.
+
+### 🐛 Smooth render style looked flat and floated above the grid
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-23)</span>
+
+> **Symptom:** the new smooth (non-voxel) chunk render looked like a flat, featureless sheet hovering above the grid, not resting on it.
+>
+> **Cause:** the smooth mesh was a bare displaced surface — just a top layer, no walls or base connecting it down to grid level. Unlike the voxel version (a solid block with visible side walls all the way to y=0), a lone floating surface has nothing to visually judge its actual height variation against, and nothing grounding it to the scene.
+>
+> **Fix:** extruded the smooth patch into a solid slab — skirt walls around the perimeter (top edge down to y=0) plus a flat bottom cap, matching the voxel version's grounded look. Top surface keeps smooth per-vertex normals (central-difference heightmap normal, hand-derived); walls/bottom get flat per-face normals, same technique as the voxel mesh's face table.
+
+### 🐛 Smooth-mesh walls missing on some sides
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-23)</span>
+
+> **Symptom:** one wall rendered as a large flat quad; the other three were effectively absent, leaving the terrain surface's edges looking like they trailed off into nothing on those sides ("if the chunk has height geometry on one side, it should be on all sides").
+>
+> **Cause:** the 4 skirt walls (from the grounding fix above) each had their winding hand-derived independently, one per side — 4 separate opportunities to get the sign wrong, and at least one (north) had already needed a correction mid-derivation earlier the same day. A wrong winding makes a face invisible from most angles (default backface culling), which reads as a "missing" wall.
+>
+> **Fix:** replaced the 4 special-cased walls with one generic technique — walk the chunk's boundary as a single ordered loop of edge points, and for every edge use one fixed formula: the outward normal is the edge's own travel direction rotated -90° in the XZ plane (a general geometric fact for a consistently-wound polygon boundary, verified once, not four times). `DoubleSide` also added to the chunk's material as a safety net regardless — Three.js flips the lighting normal for back-facing polygons automatically under `DoubleSide`, so it stays visually correct even if a winding mistake recurs elsewhere.
+
+### 🐛 Toggling view mode unmounted panes — planet lost its color and camera position
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-23)</span>
+
+> **Symptom:** switching Planet/Land Chunk/Split reset the planet's base color to a shader construction placeholder (`0x3a7bd5`, a medium blue) and reset its camera back to the default position/zoom.
+>
+> **Cause:** the view-mode control conditionally *rendered* each pane (`{condition && <SceneCanvas/>}`), so leaving a pane's mode destroyed its whole `SceneCanvas`/`LandChunkCanvas` instance — Three.js scene, camera, and renderer included. Coming back created a brand-new instance from scratch; the planet's material's own placeholder default (meant to be instantly overridden by its own "apply current color" effect) was what showed, and the camera reset to its construction-time default position.
+>
+> **Fix:** both panes are now always mounted for the life of the app — the view-mode control only toggles CSS `display` (`.viewport-pane--hidden`), never unmounts. Nothing about either pane's Three.js state resets on a mode switch anymore.
+
+### 🧭 Single shared gumball, driving a list of targets
+**Status:** <span style="color:#2da44e">✅ Decided and built (2026-09-23)</span>
+
+> **Considered:**
+> 1. **One `Gumball` instance per viewport** — simplest to build, but two visible widgets on screen at once is wasted space, and there's no way for one action (zoom, reset) to drive both cameras together.
+> 2. **One shared instance, retargetable to a single camera at a time** — solves the duplication, but not "drive both at once."
+> 3. **One shared instance driving a list of 1-2 targets** — `setTargets()` retargets an existing instance rather than recreating it; every action (zoom, reset, view-preset snap) loops over however many targets are currently set.
+>
+> **Decided:** #3. Click a pane to select it exclusively; shift+click the other pane to add it, driving both cameras from the same controls at once — standard "extend the selection" convention (same as multi-select in Finder/Explorer). A subtle outline (matching `.noise-layer-row--selected`'s existing border-color convention) marks the selected pane(s), shown only in Split mode where more than one pane is visible to disambiguate.
+>
+> **Fixed along the way — zoom/reset didn't work right for the chunk:** the zoom-percentage and Reset View math used one fixed `DEFAULT_CAMERA_DISTANCE` (200, calibrated for the planet) for every target. For the ~16-unit chunk (natural distance ~40), the slider's clamped range translated to absolute distances between 50 and 2000 — meaning even at maximum zoom-in, the camera couldn't get closer than 50, farther than the chunk's own default view. Fixed by giving each `GumballTarget` its own `referenceDistance` (each target's own "100%"/reset distance) — the same slider percentage now scales proportionally per camera instead of using one global distance for every target.
+
+### 🐛 Land-chunk lighting was too dark, with no visible directional shading
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-23)</span>
+
+> **Cause:** the chunk view reused the planet's raw `ambientLight`/light-direction numeric values unmodified, but the two views use completely different lighting systems — the planet through a hand-written shader with its own calibrated math (ambient ~0.12 reads fine there), the chunk through Three.js's real physically-based `MeshStandardMaterial`, which needs much higher intensities to read as anything but near-black.
+>
+> **Fix:**
+> 1. **Rescaled intensities** — ambient scaled by a placeholder ×4 multiplier, directional light bumped from 0.8 to 2.5 — direction still follows the shared X/Y sliders, only magnitude is recalibrated for this material.
+> 2. **`directionalLight.target` added to the scene** — standard Three.js practice (a light's target must be part of the scene graph for its direction to be computed reliably); was previously omitted.
 
 ---
 

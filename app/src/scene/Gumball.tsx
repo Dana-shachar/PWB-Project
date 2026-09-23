@@ -1,8 +1,24 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { DEFAULT_CAMERA_DISTANCE, defaultCameraPosition } from './camera';
+import { defaultCameraPosition } from './camera';
 
 type ViewPreset = 'top' | 'front' | 'side' | 'perspective';
+
+// One camera/controls pair the gumball can drive. A single shared instance
+// can target 1 (a specific viewport pane, clicked) or 2 of these at once
+// (shift+click both — see scene/sharedGumball.ts) — every action loops over
+// however many are currently set via setTargets(). `referenceDistance` is
+// this target's own "100% zoom"/reset distance (e.g. the planet's
+// DEFAULT_CAMERA_DISTANCE vs. the land chunk's own much smaller
+// CHUNK_CAMERA_DISTANCE) — without it, zoom/reset used one fixed distance
+// for every target regardless of scale, so the chunk's zoom slider could
+// only ever move it farther away, never closer (Dana, 2026-09-23: "zoom
+// isn't working for the chunk"). See ISSUES.md, 2026-09-23.
+export interface GumballTarget {
+  camera: THREE.PerspectiveCamera;
+  cameraControls: OrbitControls;
+  referenceDistance: number;
+}
 
 interface AxisConfig {
   key: 'x' | 'y' | 'z';
@@ -26,21 +42,30 @@ const AXIS_CONFIGS: AxisConfig[] = [
 //
 // Deliberate differences from the original (see Roadmap.md):
 // - No shared `settings` object — zoomLevel is this class's own field.
-// - Positioned bottom-right, not bottom-left (panel is on the left here).
+// - Positioned top-right (was bottom-right, then bottom-left in the original).
 // - View presets are a <select> dropdown, not 4 separate buttons (too much space).
 // - Has dispose() — the original never needed to tear down its DOM.
+// - Drives a LIST of targets, not one fixed camera (2026-09-23) — one shared
+//   instance across the planet and land-chunk viewports (see
+//   scene/sharedGumball.ts), retargeted via setTargets() rather than one
+//   instance per viewport, so there's only ever one visible widget and
+//   shift+click-both drives both cameras from the same controls. The axis
+//   indicator and zoom-slider display always reflect targets[0] only — you
+//   can't visually show two orientations/distances in one widget, even
+//   while driving both.
 //
-// Usage: const gumball = new Gumball(camera, cameraControls, mountElement);
+// Usage: const gumball = new Gumball(targets, mountElement);
 //        call gumball.update() every frame, gumball.dispose() on cleanup.
 export class Gumball {
-  private camera: THREE.PerspectiveCamera;
-  private cameraControls: OrbitControls;
+  private targets: GumballTarget[];
+  // One in-progress view-preset snap animation per target, parallel array
+  // to `targets` (index-matched) — null where that target isn't mid-snap.
+  private snapTargets: (THREE.Vector3 | null)[] = [];
   private readonly armLength = 28;
   private readonly labelOffset = 38;
   private readonly centerX = 40;
   private readonly centerY = 40;
   private readonly snapSpeed = 0.08;
-  private snapTarget: THREE.Vector3 | null = null;
   private zoomLevel: number;
   private zoomInput: HTMLInputElement | null = null;
   private container: HTMLDivElement;
@@ -50,13 +75,26 @@ export class Gumball {
   // the widget confined to the viewport (position: absolute against it) so
   // it doesn't drift onto whatever sits beside the viewport, e.g. the
   // right-side NoisePanel added 2026-09-14.
-  constructor(camera: THREE.PerspectiveCamera, cameraControls: OrbitControls, mountElement: HTMLElement) {
-    this.camera = camera;
-    this.cameraControls = cameraControls;
-    const initialDistance = camera.position.distanceTo(cameraControls.target);
-    this.zoomLevel = Math.round((DEFAULT_CAMERA_DISTANCE * 100) / initialDistance);
+  constructor(targets: GumballTarget[], mountElement: HTMLElement) {
+    this.targets = targets;
+    this.snapTargets = targets.map(() => null);
+    const primary = targets[0];
+    const initialDistance = primary.camera.position.distanceTo(primary.cameraControls.target);
+    this.zoomLevel = Math.round((primary.referenceDistance * 100) / initialDistance);
     this.container = this.buildPanel();
     mountElement.appendChild(this.container);
+  }
+
+  // Switches which camera(s) this instance drives — the widget itself is
+  // never recreated, just repointed. Any in-progress snap animation is
+  // abandoned and every previous target's controls are re-enabled, so
+  // nothing is left stuck mid-snap or disabled after a retarget.
+  setTargets(targets: GumballTarget[]): void {
+    for (const target of this.targets) {
+      target.cameraControls.enabled = true;
+    }
+    this.targets = targets;
+    this.snapTargets = targets.map(() => null);
   }
 
   private buildPanel(): HTMLDivElement {
@@ -155,68 +193,81 @@ export class Gumball {
   private handleZoomInput = () => {
     if (!this.zoomInput) return;
     this.zoomLevel = parseFloat(this.zoomInput.value);
-    const targetDistance = (DEFAULT_CAMERA_DISTANCE * 100) / this.zoomLevel;
-    const orbitDirection = this.camera.position.clone().sub(this.cameraControls.target).normalize();
-    this.camera.position.copy(this.cameraControls.target).addScaledVector(orbitDirection, targetDistance);
+    for (const { camera, cameraControls, referenceDistance } of this.targets) {
+      const targetDistance = (referenceDistance * 100) / this.zoomLevel;
+      const orbitDirection = camera.position.clone().sub(cameraControls.target).normalize();
+      camera.position.copy(cameraControls.target).addScaledVector(orbitDirection, targetDistance);
+    }
   };
 
   resetScene(): void {
-    this.camera.position.copy(defaultCameraPosition());
-    this.camera.up.set(0, 1, 0);
-    this.cameraControls.target.set(0, 0, 0);
-    this.cameraControls.update();
+    for (const { camera, cameraControls, referenceDistance } of this.targets) {
+      camera.position.copy(defaultCameraPosition(referenceDistance));
+      camera.up.set(0, 1, 0);
+      cameraControls.target.set(0, 0, 0);
+      cameraControls.update();
+    }
   }
 
   snapToView(preset: ViewPreset): void {
-    const orbitDist = this.camera.position.distanceTo(this.cameraControls.target);
-    const diagDist = orbitDist / Math.sqrt(3);
+    this.targets.forEach(({ camera, cameraControls }, index) => {
+      const orbitDist = camera.position.distanceTo(cameraControls.target);
+      const diagDist = orbitDist / Math.sqrt(3);
 
-    // Offset each preset by the current orbit target so the camera always
-    // frames whatever the orbit is centered on, not the world origin.
-    const orbitCenter = this.cameraControls.target;
-    const presetMap: Record<ViewPreset, { position: THREE.Vector3; up: THREE.Vector3 }> = {
-      top: { position: new THREE.Vector3(0, orbitDist, 0).add(orbitCenter), up: new THREE.Vector3(0, 0, -1) },
-      front: { position: new THREE.Vector3(0, 0, orbitDist).add(orbitCenter), up: new THREE.Vector3(0, 1, 0) },
-      side: { position: new THREE.Vector3(orbitDist, 0, 0).add(orbitCenter), up: new THREE.Vector3(0, 1, 0) },
-      perspective: {
-        position: new THREE.Vector3(diagDist, diagDist, diagDist).add(orbitCenter),
-        up: new THREE.Vector3(0, 1, 0),
-      },
-    };
+      // Offset each preset by the current orbit target so the camera always
+      // frames whatever the orbit is centered on, not the world origin.
+      const orbitCenter = cameraControls.target;
+      const presetMap: Record<ViewPreset, { position: THREE.Vector3; up: THREE.Vector3 }> = {
+        top: { position: new THREE.Vector3(0, orbitDist, 0).add(orbitCenter), up: new THREE.Vector3(0, 0, -1) },
+        front: { position: new THREE.Vector3(0, 0, orbitDist).add(orbitCenter), up: new THREE.Vector3(0, 1, 0) },
+        side: { position: new THREE.Vector3(orbitDist, 0, 0).add(orbitCenter), up: new THREE.Vector3(0, 1, 0) },
+        perspective: {
+          position: new THREE.Vector3(diagDist, diagDist, diagDist).add(orbitCenter),
+          up: new THREE.Vector3(0, 1, 0),
+        },
+      };
 
-    const snapTarget = presetMap[preset];
-    this.camera.up.copy(snapTarget.up); // set immediately — avoids gimbal lock during the lerp
-    this.snapTarget = snapTarget.position;
-    this.cameraControls.enabled = false; // block orbit input during snap
+      const snapTarget = presetMap[preset];
+      camera.up.copy(snapTarget.up); // set immediately — avoids gimbal lock during the lerp
+      this.snapTargets[index] = snapTarget.position;
+      cameraControls.enabled = false; // block orbit input during snap
+    });
   }
 
   update(): void {
-    // Recompute zoomLevel from the camera's actual current distance every
-    // frame, so the slider stays in sync whether zoom changed via the
-    // slider, scroll-wheel dolly, or a view-preset snap.
-    const currentDistance = this.camera.position.distanceTo(this.cameraControls.target);
-    this.zoomLevel = Math.max(10, Math.min(400, Math.round((DEFAULT_CAMERA_DISTANCE * 100) / currentDistance)));
+    const primary = this.targets[0];
+
+    // Recompute zoomLevel from the primary target's actual current
+    // distance every frame, so the slider stays in sync whether zoom
+    // changed via the slider, scroll-wheel dolly, or a view-preset snap.
+    // Only the primary target's state is ever displayed — the widget can't
+    // show two distances/orientations at once even while driving both.
+    const currentDistance = primary.camera.position.distanceTo(primary.cameraControls.target);
+    this.zoomLevel = Math.max(10, Math.min(400, Math.round((primary.referenceDistance * 100) / currentDistance)));
 
     if (this.zoomInput && document.activeElement !== this.zoomInput) {
       const zoomStr = String(this.zoomLevel);
       if (this.zoomInput.value !== zoomStr) this.zoomInput.value = zoomStr;
     }
 
-    // Smooth snap animation
-    if (this.snapTarget) {
-      this.camera.position.lerp(this.snapTarget, this.snapSpeed);
-      this.cameraControls.update();
-      if (this.camera.position.distanceTo(this.snapTarget) < 0.001) {
-        this.camera.position.copy(this.snapTarget);
-        this.snapTarget = null;
-        this.cameraControls.enabled = true;
+    // Smooth snap animation — each target lerps independently.
+    this.targets.forEach(({ camera, cameraControls }, index) => {
+      const snapTarget = this.snapTargets[index];
+      if (!snapTarget) return;
+      camera.position.lerp(snapTarget, this.snapSpeed);
+      cameraControls.update();
+      if (camera.position.distanceTo(snapTarget) < 0.001) {
+        camera.position.copy(snapTarget);
+        this.snapTargets[index] = null;
+        cameraControls.enabled = true;
       }
-    }
+    });
 
     // SVG axes update — columns 0/1 of matrixWorld are the camera's
     // world-space right/up vectors; project each world axis onto them to
-    // get 2D screen coordinates (SVG Y is inverted vs. math Y).
-    const worldMatrix = this.camera.matrixWorld.elements;
+    // get 2D screen coordinates (SVG Y is inverted vs. math Y). Primary
+    // target only, same reasoning as the zoom display above.
+    const worldMatrix = primary.camera.matrixWorld.elements;
     const cameraSide = new THREE.Vector3(worldMatrix[0], worldMatrix[1], worldMatrix[2]);
     const cameraUp = new THREE.Vector3(worldMatrix[4], worldMatrix[5], worldMatrix[6]);
 
