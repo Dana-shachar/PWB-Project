@@ -13,12 +13,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "ROADMAP.md",
+                "file": "ISSUES.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "ROADMAP"
+              "title": "ISSUES"
             }
           }
         ]
@@ -187,11 +187,15 @@
   },
   "active": "469db715b60082af",
   "lastOpenFiles": [
+    "app/src/firebase/useCurrentUser.ts",
+    "app/src/firebase/storage.ts",
+    "app/src/firebase/client.ts",
+    "app/src/firebase",
+    "ROADMAP.md",
     "ISSUES.md",
     "CLAUDE.md",
     "README.md",
     "app/dist/assets/index-m_IBPBxR.js",
-    "ROADMAP.md",
     "Untitled.md",
     "MDs/Roadmap.md",
     "Roadmap.md",
@@ -209,9 +213,6 @@
     "app/dist/index.html",
     "app/dist/icons.svg",
     "app/dist/favicon.svg",
-    "app/dist/assets",
-    "app/dist",
-    "app/node_modules/@dimforge/rapier3d-compat/pipeline/world.d.ts",
     "app/node_modules/@dimforge/rapier3d-compat/README.md",
     "app/node_modules/@tweenjs/tween.js/README.md",
     "app/node_modules/@types/three/README.md",

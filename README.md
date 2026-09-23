@@ -35,7 +35,7 @@ Current top-level folders under `app/src/`:
 - **`ui/`** — React-rendered UI: `UIElements.tsx` (`Slider`, `ColorPicker`, `Toggle`, `Select`, grouped together), `Panel.tsx` (left panel), `RightPanel.tsx` (right panel's tab bar), `NoisePanel.tsx` (the Noise tab's content).
 - **`scene/`** — everything Three.js-scene-related: `scene.ts`, `renderer.ts`, `camera.ts`, `controls.ts`, `grid.ts`, `planet.ts`, `SceneCanvas.tsx` (the React wrapper). `Gumball.tsx` lives here too, not in `ui/` — it's a plain imperative-DOM class driven by the render loop, not a React component, so it's grouped with the other Three.js-coupled files it's actually coupled to.
 - **`map/`** — the heightmap render-to-texture pipeline and its flat 2D preview, kept separate from `scene/` since it's conceptually its own subsystem (produces a texture *consumed by* the 3D scene): `heightmap.ts` (`HeightmapPipeline` — the single shared instance for the whole app, owned by `SceneCanvas`'s renderer; also owns the per-layer paint textures), `MapView.tsx` (the 2D preview canvas — captures paint pointer input, forwards strokes to the shared pipeline).
-- **`state/`** — app-level state that isn't scene-rendering: `firebase.ts` (SDK init), `useCurrentUser.ts` (anonymous auth), `storage.ts` (save/load).
+- **`firebase/`** — named after the actual technology, not a vague role, so there's no ambiguity (it's not "backend" — there's no server, this is client-side code talking to Firebase's cloud services directly): `client.ts` (SDK init/the live Firebase client instance), `useCurrentUser.ts` (anonymous auth), `storage.ts` (save/load).
 - **`shaders/`** — GLSL files, created once there's an actual shader to put in it, not scaffolded empty ahead of need.
 
 ### 🎨 Styling: one CSS file

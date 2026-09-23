@@ -2,7 +2,7 @@
 
 Technical decisions, tradeoffs, and bugs for this project — organized by category (not chronologically; `ROADMAP.md` tracks current stage/feature status and points here for detail; `WEEKLY-PUSHES.md` is the chronological log).
 
-Each entry is short numbered lists, not prose:
+Each entry is short numbered lists, not prose, each longer item as **bold short name** — explanation:
 > 🐛 **Bug** or 🧭 **Decision** — one-line title
 > **Status:** <span style="color:#2da44e">✅ Fixed/Decided</span> · <span style="color:#bf8700">🟡 Partial</span> · <span style="color:#cf222e">🔴 Open</span> — with the date(s)
 >
@@ -20,16 +20,16 @@ Each entry is short numbered lists, not prose:
 > **Decided:** mesh-based Three.js instead — GLSL shaders still used, just on real mesh geometry (`ShaderMaterial`), not for raymarching.
 >
 > **Why:**
-> 1. This project needs real mesh objects — agents, instanced vegetation, roads, LOD.
-> 2. Raymarching's advantage (cheap boolean union/subtract without regenerating topology) doesn't apply here.
+> 1. **Real mesh objects needed** — agents, instanced vegetation, roads, LOD all assume real geometry.
+> 2. **Raymarching's advantage doesn't apply** — cheap boolean union/subtract without regenerating topology isn't something this project needs.
 
 ### 🧭 Heightmap pipeline: GPU render-target texture, CPU reads on demand
 **Status:** <span style="color:#2da44e">✅ Decided (2026-09-02), built later</span>
 
 > **Decided:**
-> 1. Fragment shader → off-screen render target.
-> 2. The planet's vertex shader samples it for displacement.
-> 3. CPU reads back specific texels via `readRenderTargetPixels()` only when it actually needs a value (future agent/road placement).
+> 1. **Fragment shader → texture** — computed into an off-screen render target.
+> 2. **Vertex shader samples it** — the planet's vertex shader reads that texture for displacement.
+> 3. **CPU reads on demand** — `readRenderTargetPixels()` only when a value is actually needed (future agent/road placement).
 >
 > **Why:** the shader stays the single source of truth — never duplicated in JS just to keep CPU queries in sync.
 
@@ -39,9 +39,9 @@ Each entry is short numbered lists, not prose:
 > **Issue:** scattered arbitrary placeholder values (colors, lighting, radius, segments, camera distance) with no design rationale, no central place to adjust them.
 >
 > **Plan:**
-> 1. CSS custom properties for visual/styling values.
-> 2. A separate scene-config file for Three.js geometry values.
-> 3. In the meantime, flag every one inline with `// TODO(DS): arbitrary placeholder`.
+> 1. **CSS custom properties** — for visual/styling values.
+> 2. **A scene-config file** — for Three.js geometry values.
+> 3. **In the meantime** — flag every one inline with `// TODO(DS): arbitrary placeholder`.
 
 ---
 
@@ -55,9 +55,9 @@ Each entry is short numbered lists, not prose:
 > **Decided:** by technique.
 >
 > **Why:**
-> 1. Noise/Paint/Erosion/Color all operate on the *same* underlying heightmap+texture data as sequential operations, not independent domains.
-> 2. Mirrors World Machine/Gaea's own node-pipeline organization.
-> 3. "By planet part" only makes sense once a feature has genuinely independent state (e.g. a real population sim) — nothing today is that.
+> 1. **Same underlying data** — Noise/Paint/Erosion/Color all operate on the same heightmap+texture data as sequential operations, not independent domains.
+> 2. **Matches industry convention** — mirrors World Machine/Gaea's own node-pipeline organization.
+> 3. **"By planet part" doesn't fit yet** — only makes sense once a feature has genuinely independent state (e.g. a real population sim) — nothing today is that.
 
 ### 🐛 Gumball rendered on top of the new right panel
 **Status:** <span style="color:#2da44e">✅ Fixed (2026-09-14)</span>
@@ -70,8 +70,8 @@ Each entry is short numbered lists, not prose:
 **Status:** <span style="color:#2da44e">✅ Fixed (2026-09-09)</span>
 
 > **Cause:** two `pointer-events` gaps:
-> 1. The SVG's children weren't individually opted out of hit-testing.
-> 2. The outer container had no override of its own.
+> 1. **SVG children not opted out** — the `line`/`text` elements weren't individually excluded from hit-testing.
+> 2. **Container had no override** — the outer container captured clicks over its whole bounding box.
 >
 > **Fix:** explicit `pointer-events: none` on the `line`/`text` elements and the container, with just the real controls opted back in via `pointer-events: auto`.
 
@@ -87,9 +87,9 @@ Each entry is short numbered lists, not prose:
 > **Cause:** an empty layer's flat mid-gray placeholder read as real opaque content at `Normal`/full opacity, fully replacing everything beneath it.
 >
 > **Fix attempts:**
-> 1. **Wrong:** added a `coverage` gate but kept the old gray-blend formula too — applied the paint mask twice, causing a ridged double-edge at stroke boundaries.
-> 2. **Closer, but new bug:** fixed the double-blend, but then black paint became indistinguishable from "nothing painted" (both read as the composite's starting value, black).
-> 3. **Actual fix:** `layerHeight = paint.x` (no gray blended in) + `coverage = paint.y` applied exactly once; composite starts at 0.5 (gray/neutral) instead of 0.0 (black), matching the convention already used elsewhere (`planet.ts`, `vertex.glsl`).
+> 1. **Wrong** — added a `coverage` gate but kept the old gray-blend formula too, applying the paint mask twice; caused a ridged double-edge at stroke boundaries.
+> 2. **Closer, but new bug** — fixed the double-blend, but then black paint became indistinguishable from "nothing painted" (both read as the composite's starting value, black).
+> 3. **Actual fix** — `layerHeight = paint.x` (no gray blended in) + `coverage = paint.y` applied exactly once; composite starts at 0.5 (gray/neutral) instead of 0.0 (black), matching the convention already used elsewhere (`planet.ts`, `vertex.glsl`).
 
 ### 🧭 GLSL ES 1.00 forbids dynamic sampler-array indexing
 **Status:** <span style="color:#2da44e">✅ Decided/worked around (2026-09-16)</span>
@@ -106,28 +106,28 @@ Each entry is short numbered lists, not prose:
 **Status:** <span style="color:#bf8700">🟡 Partially fixed — smoother, still jagged; tabled (2026-09-16 → 2026-09-22)</span>
 
 > **Symptom:**
-> 1. Dragging a soft/feathered stroke hardened into a solid edge.
-> 2. After fixing that, painted terrain still displaced with jagged/pointed ridges.
+> 1. **Hardened edges** — dragging a soft/feathered stroke hardened into a solid edge.
+> 2. **Still jagged after v1 fix** — painted terrain still displaced with jagged/pointed ridges.
 >
 > **Cause (v1):** each dab composited "over" the previous state — fine across separate strokes, but within one drag this stacked/saturated a soft edge into a hard one.
 >
 > **Fix v1 (2026-09-16):** per-stroke MAX-accumulation buffer instead of sequential "over."
-> - Fixed the hardening.
-> - New problem: MAX-of-circles leaves a crease in the falloff's *slope* wherever two dabs are equidistant — invisible in flat color, visible as ridges once it drives 3D displacement.
+> - **Fixed the hardening.**
+> - **New problem** — MAX-of-circles leaves a crease in the falloff's *slope* wherever two dabs are equidistant, invisible in flat color but visible as ridges once it drives 3D displacement.
 >
 > **Fix v2 (2026-09-22):** replaced MAX-accumulation with a true distance-to-polyline computation (`shaders/strokePath.frag.glsl`) — one smooth "capsule chain" along the whole stroke path, no crease. Net simplification: the separate mask-accumulation buffer/pass is gone.
 >
 > **Still open:**
-> 1. Terrain is still visibly jagged, feather still not very noticeable.
-> 2. Likely cause, unconfirmed: the sphere's mesh resolution (64×32 segments) is too coarse for a narrow painted feature — displacement only happens at actual vertices, linearly interpolated per-triangle.
-> 3. Dana's call: tabled, revisit after erosion (which might help incidentally).
+> 1. **Still jagged** — terrain is still visibly jagged, feather still not very noticeable.
+> 2. **Likely cause, unconfirmed** — the sphere's mesh resolution (64×32 segments) is too coarse for a narrow painted feature; displacement only happens at actual vertices, linearly interpolated per-triangle.
+> 3. **Tabled** — Dana's call, revisit after erosion (which might help incidentally).
 
 ### 🐛 Brush strokes cut off at the sphere's UV seam
 **Status:** <span style="color:#2da44e">✅ Fixed (2026-09-22)</span>
 
 > **Symptom:**
-> 1. A stroke near the seam only painted on one side.
-> 2. Paint misalignment plus an actual crack in the terrain geometry at the seam.
+> 1. **One-sided painting** — a stroke near the seam only painted on one side.
+> 2. **Visible crack** — paint misalignment plus an actual crack in the terrain geometry at the seam.
 >
 > **Cause:** brush falloff used a plain UV-space `distance()`, which doesn't know U=0 and U=1 are the same wrapped longitude.
 >
@@ -139,8 +139,8 @@ Each entry is short numbered lists, not prose:
 > **Symptom:** painting toward black had no visible effect.
 >
 > **Cause:**
-> 1. WebGL clamps fragment output to [0,1] before GPU blending, silently zeroing a negative "erase" delta.
-> 2. Underlying cause: GPU blending into a float render target needs `EXT_float_blend`, not reliably supported cross-browser.
+> 1. **Clamped output** — WebGL clamps fragment output to [0,1] before GPU blending, silently zeroing a negative "erase" delta.
+> 2. **Underlying cause** — GPU blending into a float render target needs `EXT_float_blend`, not reliably supported cross-browser.
 >
 > **Fix:** ping-pong render targets instead of GPU blending — each stroke computes the complete new frame in-shader.
 
@@ -166,10 +166,10 @@ Each entry is short numbered lists, not prose:
 **Status:** <span style="color:#2da44e">✅ Decided — fixed-radius, percentage-based (2026-09-16)</span>
 
 > **Considered** (tried in order, each only revealing its problem once tested):
-> 1. Feather as % of radius — absolute softness scaled with brush size (original complaint).
-> 2. Feather additive (`radius+feather`) — brush ballooned bigger than expected.
-> 3. Feather subtractive px, radius fixed — values above radius all looked identical.
-> 4. Feather as % of radius, radius fixed — same formula as #1, chosen deliberately this time.
+> 1. **% of radius (original)** — absolute softness scaled with brush size (the original complaint).
+> 2. **Additive** (`radius+feather`) — brush ballooned bigger than expected.
+> 3. **Subtractive px, radius fixed** — values above radius all looked identical.
+> 4. **% of radius, radius fixed** — same formula as #1, chosen deliberately this time.
 >
 > **Decided:** #4 — matches true Photoshop Hardness behavior.
 
@@ -177,9 +177,9 @@ Each entry is short numbered lists, not prose:
 **Status:** <span style="color:#2da44e">✅ Decided/built (2026-09-22)</span>
 
 > **Decided:**
-> 1. One global chronological `strokeHistory` (not per-layer arrays) — each entry `{ layerId, points, radius, feather, brushValue }`.
-> 2. Global, not per-layer, so Cmd+Z can undo the single most recent stroke regardless of which layer it's on — matching standard undo behavior everywhere else.
-> 3. Reconstruction always replays the *full* desired history from scratch (clear + replay every stroke in order) rather than incrementally patching state — one code path for both loading a saved project and undoing, not two to keep in sync.
+> 1. **One global history** — `strokeHistory`, not per-layer arrays; each entry `{ layerId, points, radius, feather, brushValue }`.
+> 2. **Global, not per-layer** — so Cmd+Z can undo the single most recent stroke regardless of which layer it's on, matching standard undo behavior everywhere else.
+> 3. **Always full replay** — reconstruction always replays the *full* desired history from scratch (clear + replay every stroke in order) rather than incrementally patching state; one code path for both loading a saved project and undoing, not two to keep in sync.
 >
 > **Why:** a stroke log, not a baked raster, is what makes painting genuinely retraceable/procedural — and undo falls out of the same data almost for free.
 
@@ -191,17 +191,16 @@ Each entry is short numbered lists, not prose:
 **Status:** <span style="color:#2da44e">✅ Fixed (2026-09-16)</span>
 
 > **Attempt 1 (regression):** screen-space-derivative normal (`dFdx`/`dFdy`).
-> - Faceted the *whole* sphere since derivatives are ~constant per triangle.
-> - (Dana liked the look as a future style *option*, not the default.)
+> - **Faceted the whole sphere** — derivatives are ~constant per triangle. (Dana liked the look as a future style *option*, not the default.)
 >
 > **Fix:** analytic sphere tangent basis (`dPdu`/`dPdv`, exact calculus derivatives).
-> 1. Smooth, mesh-resolution-independent.
-> 2. Winding verified by hand-computing a concrete point, not guessed.
-> 3. Perturbed by the heightmap's own gradient (sampled 16 texels away, not the immediate neighbor, to avoid amplifying noise) for fine bump detail.
+> 1. **Smooth** — mesh-resolution-independent.
+> 2. **Winding verified** — by hand-computing a concrete point, not guessed.
+> 3. **Bump detail** — perturbed by the heightmap's own gradient (sampled 16 texels away, not the immediate neighbor, to avoid amplifying noise).
 >
 > **Also fixed:**
-> 1. A units mismatch — tangent vectors were unit-sphere-relative while displacement was world-space-scaled, dwarfing the base term. Added a `uRadius` uniform.
-> 2. A `normalMatrix` compile error — Three.js auto-sets it but only auto-declares it in the vertex stage.
+> 1. **Units mismatch** — tangent vectors were unit-sphere-relative while displacement was world-space-scaled, dwarfing the base term. Added a `uRadius` uniform.
+> 2. **`normalMatrix` compile error** — Three.js auto-sets it but only auto-declares it in the vertex stage.
 
 ---
 

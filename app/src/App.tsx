@@ -3,8 +3,8 @@ import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
 import { createDefaultLayer, type NoiseLayer, type StrokeRecord } from './map/heightmap';
-import { useCurrentUser } from './state/useCurrentUser';
-import { loadProject, saveProject } from './state/storage';
+import { useCurrentUser } from './firebase/useCurrentUser';
+import { loadProject, saveProject } from './firebase/storage';
 
 // TODO(DS): arbitrary placeholder conversion — the UI shows/accepts a
 // narrative-scale planet radius in km (the tool's premise, per Dana), mapped
@@ -17,7 +17,7 @@ const KM_PER_SCENE_UNIT = 300;
 const INITIAL_LAYER_ID = 'layer-1';
 
 function App() {
-  const currentUser = useCurrentUser(); // signs in anonymously on load — see state/useCurrentUser.ts
+  const currentUser = useCurrentUser(); // signs in anonymously on load — see firebase/useCurrentUser.ts
   const hasLoadedRef = useRef(false); // guards against saving the default layer over real saved data before the load below resolves
   const [radiusKm, setRadiusKm] = useState(6000);
   const [baseColor, setBaseColor] = useState('#c9dbea'); // TODO(DS): lighter placeholder, per Dana's 2026-09-16 request
@@ -45,7 +45,7 @@ function App() {
   const pendingReplayRef = useRef<StrokeRecord[] | null>(null);
 
   // Loads the signed-in user's saved project once, replacing the default
-  // starter layer if one exists. See state/storage.ts.
+  // starter layer if one exists. See firebase/storage.ts.
   useEffect(() => {
     if (!currentUser) return;
     loadProject(currentUser.uid).then((project) => {

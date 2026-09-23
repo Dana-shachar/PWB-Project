@@ -1,5 +1,5 @@
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { db } from './client';
 import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
 
 // One Firestore document per user (their project), keyed by their auth UID —
