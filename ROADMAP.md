@@ -322,21 +322,44 @@ Right now this is the only thing keeping the app from being a real tool session-
 ---
 ---
 
-## Stage 07 — Erosion Simulation
+## Stage 07 — Land Cube / Voxel Terrain
+⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+
+A detail view into one fixed-size chunk of terrain, rendered as blocky/voxel geometry (Minecraft-style, not smooth) rather than the heightmap-displaced sphere used elsewhere — syllabus-required, sequenced before Erosion per Dana's call (2026-09-23). Full reasoning/tradeoffs in `ISSUES.md`.
+
+#### Voxel meshing pipeline — 0%
+> <span style="color:#2da44e">✅ **Done**</span>
+> 1. _None._
+>
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Density field** — one fixed test chunk, seeded from the existing composited heightmap via CPU readback (`readRenderTargetPixels()`); a column is solid below the heightmap's height. No caves/overhangs yet.
+> 2. **Meshing — cube/culled-face, not Marching Cubes** — one flat quad per voxel face exposed to empty space; buried faces skipped entirely. Produces the blocky look directly; Marching Cubes would produce a smooth/rounded surface instead. Greedy meshing (merging same-facing quads) deferred until resolution/perf actually needs it.
+> 3. **Compute location — CPU, in a Web Worker** — not GPU compute; keeps the main thread/3D view responsive during (re)generation without needing true parallelism. GPU compute (`WebGPURenderer`) explicitly deferred — would require migrating the whole app off `WebGLRenderer` and porting every existing GLSL shader to Three.js's node-based TSL, disproportionate unless CPU+Worker measures as insufficient once built.
+> 4. **Resolution control** — a slider (voxel grid dimension per axis, e.g. 16/32/64), regenerating via the same Worker pipeline on change, not continuously.
+> 5. **Chunk entry point** — a fixed test cube first, to prove the pipeline before building any picking/selection UX on the planet itself.
+> 6. **Editing (digging/adding voxels live)** — separate feature, out of scope for this pass; when it lands, only the changed region gets remeshed (dirty-chunk updates), not the whole grid.
+>
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. _None._
+
+---
+---
+
+## Stage 08 — Erosion Simulation
 ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
 
 Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/visualize its progression (syllabus: "Map simulations - Erosion simulation - Biomes"). An empty placeholder "Erosion" tab is already reserved for it in the right panel.
 
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Hydraulic vs. thermal** — decide which, or both.
-> 2. **Timeline meaning** — decide real scrub-able animation vs. run-N-iterations.
-> 3. **Trigger** — decide manual vs. automatic.
+> 1. **Hydraulic first, thermal second** — decided (2026-09-23); hydraulic (droplet-based flow/sediment carry) built before thermal (talus-angle slope collapse).
+> 2. **Trigger — manual** — decided (2026-09-23); a Run button, not automatic/live.
+> 3. **Timeline meaning — run-N-iterations** — decided (2026-09-23); not a scrub-able animation.
 > 4. **Everything else** — nothing built yet.
 
 ---
 ---
 
-## Stage 08 — Color / Biome Texturing
+## Stage 09 — Color / Biome Texturing
 ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
 
 Biome-style surface texturing/coloring. An empty placeholder "Color" tab is already reserved for it in the right panel. Nothing decided or built yet.
@@ -344,7 +367,7 @@ Biome-style surface texturing/coloring. An empty placeholder "Color" tab is alre
 ---
 ---
 
-## Stage 09 — Design System & UI Polish
+## Stage 10 — Design System & UI Polish
 ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
 
 #### Design-system / config tokenization — 0%
@@ -394,7 +417,8 @@ Not stages — nothing below is scheduled or committed to being built. Reference
 
 Design notes and feature ideas from the 2026-09-14 planning session, not yet decided how much of this actually gets built:
 
-- **Chunk/tile terrain viewing** — inspired by World Machine's ability to view/work on a square chunk of terrain rather than the whole thing at once.
+- **Chunk/tile terrain viewing** — inspired by World Machine's ability to view/work on a square chunk of terrain rather than the whole thing at once. Now tracked concretely as Stage 07's land cube, not just an idea.
+- **Voxel/blocky rendering generalized beyond the land cube** — the same cube/culled-face meshing technique (Stage 07) eventually applicable to all geometry in the project, including the planet itself, not just the one detail-view chunk. Noted for future dev (Dana, 2026-09-23), not in scope now.
 - **Redo** — a natural fast-follow to Stage 06's undo (Cmd+Z), once undo itself is proven out.
 - **Topography-line overlay** — contour lines rendered directly on the terrain surface as a visual guide (standard in this category of tool, e.g. World Machine).
 - **No node-based UI** — explicit decision: the left-panel-list/right-panel-details structure already in place is correct; not building a node graph like World Machine/Gaea/Substance Designer use.

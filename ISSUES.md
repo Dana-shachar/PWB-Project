@@ -231,6 +231,28 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 
 ---
 
+## 🧊 Voxel / Land Cube Terrain
+
+### 🧭 Land cube meshing technique & compute location
+**Status:** <span style="color:#2da44e">✅ Decided (2026-09-23), not built yet</span>
+
+> **Considered:**
+> 1. **Marching Cubes** — smooth, interpolated isosurface; initially assumed to be required for any voxel terrain at all.
+> 2. **Cube/culled-face meshing** — one flat quad per voxel face exposed to empty space, no interpolation; skips buried faces entirely.
+>
+> **Decided:** cube/culled-face meshing. The actual goal is a Minecraft-style blocky look, and Marching Cubes produces the opposite (smooth/rounded) — it was the wrong tool for this specific goal, not a harder version of the right one. Greedy meshing (merging adjacent same-facing quads into larger rectangles) deferred as a later optimization, only once resolution/perf actually calls for it.
+>
+> **Also decided — where it computes:**
+> 1. **CPU, inside a Web Worker** — not GPU compute. Culled-face meshing is cheap even at high resolution for a heightmap-derived (non-cave) volume — exposed surface area scales with the chunk's area, not its full volume. A Worker keeps the main thread/3D view responsive during (re)generation without needing true parallel hardware.
+> 2. **GPU compute (`WebGPURenderer`) explicitly deferred** — Three.js can't run `WebGLRenderer` and `WebGPURenderer` side by side in one scene, so adopting compute would mean migrating the *entire* app's renderer, not just the voxel subsystem — every existing hand-written GLSL shader (`noise.glsl`, `heightmap.frag.glsl`, `vertex.glsl`, `strokePath.frag.glsl`, the brush pass) would need porting to Three.js's newer node-based shading language (TSL), since `WebGPURenderer` doesn't take raw GLSL `ShaderMaterial` the way the app currently works. Revisit only if CPU+Worker measures as insufficient once actually built, not pre-emptively.
+> 3. **Density seed, v1** — derived from the existing composited heightmap, read back via `readRenderTargetPixels()` — the same "CPU reads on demand" pattern already anticipated in this project's architecture (see Foundation & Architecture, above; originally noted for future agent/road placement, this is that pattern's first real use). A voxel column is solid below the heightmap's height at that point — no caves/overhangs yet.
+>
+> **Scoped to one fixed-size land cube, not the whole planet** — a full volumetric planet isn't tractable at any reasonable resolution (a naive 512³ grid alone is ~134M cells). Sequenced before Erosion in `ROADMAP.md` per Dana's call, since it's syllabus-required and has no dependency either direction.
+>
+> **Noted for future dev, not in scope now:** the same blocky/voxel technique eventually generalizing to all geometry in the project, including the planet itself — not just this one land-cube detail view (Dana, 2026-09-23).
+
+---
+
 ## 2026-09-02 — early notes, pre-dating this structure
 
 ### Grid: plain `THREE.GridHelper` at first (later replaced)

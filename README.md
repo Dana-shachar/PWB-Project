@@ -55,7 +55,7 @@ All `.ts`/`.tsx` files use `.tsx`, even with no JSX currently, so nothing needs 
 > <span style="color:#bf8700">🟡 **Still undecided:**</span> the pure-logic `scene/` files with no JSX at all (`scene.ts`, `renderer.ts`, `camera.ts`, `controls.ts`, `grid.ts`, `planet.ts`) haven't been renamed to `.tsx` to match — open whether they should be for total consistency, or stay `.ts` since they'll structurally never contain JSX.
 
 ### 🏷️ Placeholder values
-Arbitrary values with no design rationale yet (colors, lighting, radius, etc.) are flagged inline with `// TODO(DS): ...` comments — greppable, tracked for an eventual design-system/config-tokenization pass (see `ROADMAP.md`, Stage 09).
+Arbitrary values with no design rationale yet (colors, lighting, radius, etc.) are flagged inline with `// TODO(DS): ...` comments — greppable, tracked for an eventual design-system/config-tokenization pass (see `ROADMAP.md`, Stage 10).
 
 Current implementation state and progress live in `ROADMAP.md`, not here.
 

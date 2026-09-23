@@ -56,6 +56,8 @@ function App() {
         onDisplayModeChange={planetControls.setDisplayMode}
         canUndo={brush.strokeHistory.length > 0}
         onUndo={brush.undo}
+        canRedo={brush.redoStack.length > 0}
+        onRedo={brush.redo}
         onReset={project.handleReset}
         projects={project.projects}
         currentPlanetId={project.currentPlanetId}
@@ -63,7 +65,8 @@ function App() {
         onSelectProject={project.handleSelectProject}
         onNewProject={project.handleNewProject}
         onSaveProject={project.handleSave}
-        onRenameProject={project.handleRename}
+        onRenameProject={project.handleRenameInline}
+        onDeleteProject={project.handleDeleteProject}
       />
       {/* The 3D viewport fills the remaining space between the two panels —
           SceneCanvas's ResizeObserver picks up this box's actual size, so

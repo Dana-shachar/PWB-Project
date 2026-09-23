@@ -463,10 +463,46 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   cursor: default;
 }
 
+/* A small delete glyph that still needs a real click target — unlike
+   .panel-text-btn's zero-padding (Dana, 2026-09-23: the "×" hit area was
+   too small). Same no-chrome look, just padded. */
+.panel-text-btn--delete {
+  padding: 4px 6px;
+}
+
 .panel-section-title-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+/* ── Editable text (ui/UIElements.tsx) ─────────────────────── */
+/* Click-to-edit project name — deliberately NOT bold (Dana, 2026-09-23: it
+   was reading as a section title, same weight as .panel-section-title);
+   regular weight distinguishes it as content, not a category label. Swaps
+   to a field matching .ui-select while editing. */
+
+.project-name-text {
+  font: 400 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.project-name-text:hover {
+  opacity: 0.75;
+}
+
+.project-name-text-input {
+  width: 100%;
+  padding: 6px 4px;
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+  color: var(--color-text);
+  font: 400 var(--font-size-sm) var(--font-ui);
+}
+.project-name-text-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
 }
 
 /* ── Accordion (ui/UIElements.tsx) ─────────────────────────── */
@@ -488,6 +524,19 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 }
 .ui-accordion-header:hover {
   opacity: 0.75;
+}
+
+/* Subordinate to its parent accordion (e.g. "My Projects" inside "Project
+   Settings") — indented with a left border so the parent/child relationship
+   reads at a glance, header text unbolded (Dana, 2026-09-23: shrinking it
+   first read as "tiny," bold read as a section title again) — same size as
+   a top-level accordion, regular weight, indentation carries the nesting. */
+.ui-accordion--nested {
+  padding-left: var(--gap-md);
+  border-left: 1px solid var(--color-divider);
+}
+.ui-accordion--nested > .ui-accordion-header {
+  font-weight: 400;
 }
 
 .ui-accordion-chevron {

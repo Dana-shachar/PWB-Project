@@ -1,4 +1,4 @@
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
+import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './client';
 import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
 
@@ -63,6 +63,10 @@ export async function saveProject(
 
 export async function renameProject(uid: string, projectId: string, name: string): Promise<void> {
   await updateDoc(doc(planetsCollection(uid), projectId), { name });
+}
+
+export async function deleteProject(uid: string, projectId: string): Promise<void> {
+  await deleteDoc(doc(planetsCollection(uid), projectId));
 }
 
 // A fresh id for a new planet — the caller decides when to actually create

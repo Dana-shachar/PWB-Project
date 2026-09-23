@@ -190,19 +190,71 @@ export function Select({ label, value, onChange, options }: SelectProps) {
   );
 }
 
+interface EditableTextProps {
+  value: string;
+  onCommit: (value: string) => void;
+  className?: string;
+}
+
+// Click-to-edit inline text — plain text until clicked, then a text field;
+// Enter/blur commits, Escape cancels. Used for the current project's name
+// (see ui/Panel.tsx) — same interaction wanted later for layer names, per
+// ROADMAP.md, so it's a shared component rather than one-off.
+export function EditableText({ value, onCommit, className }: EditableTextProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const fieldRef = useRef<HTMLInputElement>(null);
+
+  function commit() {
+    setIsEditing(false);
+    const trimmed = fieldRef.current?.value.trim();
+    if (trimmed && trimmed !== value) onCommit(trimmed);
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    if (event.key === 'Enter') fieldRef.current?.blur();
+    if (event.key === 'Escape') {
+      if (fieldRef.current) fieldRef.current.value = value;
+      fieldRef.current?.blur();
+    }
+  }
+
+  if (isEditing) {
+    return (
+      <input
+        ref={fieldRef}
+        type="text"
+        className={className ? `${className}-input` : undefined}
+        defaultValue={value}
+        autoFocus
+        onBlur={commit}
+        onKeyDown={handleKeyDown}
+      />
+    );
+  }
+
+  return (
+    <span className={className} onClick={() => setIsEditing(true)}>
+      {value}
+    </span>
+  );
+}
+
 interface AccordionProps {
   title: string;
   defaultOpen?: boolean;
+  nested?: boolean; // lighter/smaller header + indented content, for an accordion inside another one (e.g. "My Projects" inside "Project Settings")
   children: ReactNode;
 }
 
 // A collapsible section — same visual weight as a plain panel-section, just
 // toggleable, for sections that don't need to stay visible all the time
-// (Dana, 2026-09-22).
-export function Accordion({ title, defaultOpen = true, children }: AccordionProps) {
+// (Dana, 2026-09-22). `nested` styles it as a subordinate of its parent
+// section rather than a peer category (Dana, 2026-09-23 — "Project Settings"
+// and "My Projects" read as equal-weight siblings with no `nested` variant).
+export function Accordion({ title, defaultOpen = true, nested = false, children }: AccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
-    <div className="ui-accordion">
+    <div className={'ui-accordion' + (nested ? ' ui-accordion--nested' : '')}>
       <button type="button" className="ui-accordion-header" onClick={() => setIsOpen(!isOpen)}>
         <span>{title}</span>
         <span className={'ui-accordion-chevron' + (isOpen ? ' ui-accordion-chevron--open' : '')}>▾</span>

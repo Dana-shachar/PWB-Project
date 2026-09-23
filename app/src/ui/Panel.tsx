@@ -1,14 +1,10 @@
-import { Slider, ColorPicker, Toggle, Select, Accordion } from './UIElements';
+import { Slider, ColorPicker, Toggle, Select, Accordion, EditableText } from './UIElements';
 import type { ProjectSummary } from '../firebase/storage';
 
 const DISPLAY_MODE_OPTIONS = [
   { value: 'shaded', label: 'Shaded' },
   { value: 'wireframe', label: 'Wireframe' },
 ];
-
-// Sentinel value for the Project dropdown's "+ New Project" option — never
-// a real Firestore doc id, so it can't collide with one.
-const NEW_PROJECT_OPTION = '__new__';
 
 interface PanelProps {
   // Scene controls
@@ -32,15 +28,18 @@ interface PanelProps {
   // Edit controls
   canUndo: boolean;
   onUndo: () => void;
+  canRedo: boolean;
+  onRedo: () => void;
   onReset: () => void;
   // Project settings
   projects: ProjectSummary[];
-  currentPlanetId: string | null; // null = a fresh, not-yet-saved planet
+  currentPlanetId: string | null; // null briefly, until the initial load/auto-create resolves
   currentPlanetName: string | null;
   onSelectProject: (id: string) => void;
   onNewProject: () => void;
   onSaveProject: () => void;
-  onRenameProject: () => void;
+  onRenameProject: (name: string) => void;
+  onDeleteProject: (id: string) => void;
 }
 
 // Left-side control panel, divided into titled sections — ported from
@@ -72,41 +71,62 @@ export function Panel({
   onDisplayModeChange,
   canUndo,
   onUndo,
+  canRedo,
+  onRedo,
   onReset,
   projects,
   currentPlanetId,
+  currentPlanetName,
   onSelectProject,
   onNewProject,
   onSaveProject,
   onRenameProject,
+  onDeleteProject,
 }: PanelProps) {
-  const projectOptions = [
-    ...projects.map((project) => ({ value: project.id, label: project.name })),
-    { value: NEW_PROJECT_OPTION, label: '+ New Project' },
-  ];
-
-  function handleProjectSelect(value: string) {
-    if (value === NEW_PROJECT_OPTION) {
-      onNewProject();
-    } else {
-      onSelectProject(value);
-    }
-  }
-
   return (
     <div className="panel-outer">
       <div className="panel-content">
         <div className="panel-section">
           <Accordion title="Project Settings">
-            <Select
-              label="Planet"
-              value={currentPlanetId ?? NEW_PROJECT_OPTION}
-              onChange={handleProjectSelect}
-              options={projectOptions}
-            />
-            <button type="button" className="panel-text-btn" onClick={onRenameProject} disabled={currentPlanetId === null}>
-              Rename
-            </button>
+            {/* Click-to-edit — replaces the old prompt-based Rename button,
+                auto-saves under the new name via the existing debounced save. */}
+            <EditableText className="project-name-text" value={currentPlanetName ?? ''} onCommit={onRenameProject} />
+            {/* A nested accordion, not a dropdown — naming and switching live
+                separately now (Dana, 2026-09-22: the two were conflated in
+                one dropdown and it wasn't working well). `nested` styles it
+                as subordinate to "Project Settings" (Dana, 2026-09-23 — the
+                two read as equal-weight siblings without it). Same row style
+                as the Layers list (ui/NoisePanel.tsx), click a row to load it. */}
+            <Accordion title="My Projects" defaultOpen={false} nested>
+              {projects.map((project) => (
+                <div
+                  key={project.id}
+                  className={'noise-layer-row' + (project.id === currentPlanetId ? ' noise-layer-row--selected' : '')}
+                  onClick={() => onSelectProject(project.id)}
+                >
+                  <span className="noise-layer-row-label">{project.name}</span>
+                  {/* Deleting the last remaining planet is allowed, unlike the
+                      Layers list's delete — handleDeleteProject() auto-creates
+                      a fresh blank one, so there's no "zero planets" state to
+                      guard against. */}
+                  <button
+                    type="button"
+                    className="panel-text-btn panel-text-btn--delete"
+                    onClick={(event) => {
+                      event.stopPropagation(); // don't also trigger the row's onSelectProject
+                      onDeleteProject(project.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              {/* An action on the projects list, not a peer of it — belongs
+                  inside "My Projects" (Dana, 2026-09-23). */}
+              <button type="button" className="panel-text-btn" onClick={onNewProject}>
+                + New Project
+              </button>
+            </Accordion>
             <button type="button" className="noise-add-layer-btn" onClick={onSaveProject}>
               Save
             </button>
@@ -117,10 +137,16 @@ export function Panel({
 
         <div className="panel-section">
           <Accordion title="Edit">
-            {/* Mirrors the Cmd+Z/Ctrl+Z shortcut (see App.tsx) — undoes the single
-                most recent paint stroke, regardless of which layer it's on. */}
+            {/* Mirrors the Cmd+Z/Ctrl+Z shortcut (see map/2Dbrush.ts) — undoes
+                the single most recent paint stroke, regardless of which layer
+                it's on. */}
             <button type="button" className="noise-add-layer-btn" onClick={onUndo} disabled={!canUndo}>
               Undo
+            </button>
+            {/* Mirrors Cmd+Shift+Z/Ctrl+Shift+Z — replays the most recently
+                undone stroke. */}
+            <button type="button" className="noise-add-layer-btn" onClick={onRedo} disabled={!canRedo}>
+              Redo
             </button>
             {/* Clears the current planet back to blank without switching which
                 saved planet is open — different from "+ New Project" above. */}
