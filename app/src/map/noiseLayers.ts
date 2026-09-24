@@ -5,23 +5,42 @@ import { createDefaultLayer, type NoiseLayer } from './heightmap';
 // painting or persistence, see map/2Dbrush.ts and project/saveProject.ts
 // for those. See ISSUES.md, 2026-09-22, for why this was split out of
 // App.tsx.
+//
+// Multi-select (Dana, 2026-09-23): click a row selects it exclusively,
+// shift+click adds/removes it — same convention as scene/sharedGumball.ts's
+// pane selection. `selectedLayerIds`' *last* entry is the "primary" one —
+// whichever slider values are shown, and what painting targets (see
+// ui/NoisePanel.tsx, map/MapView.tsx) — while editing any control applies
+// the change to every selected layer at once (updateSelectedLayer, below).
 export function useNoiseLayers(initialLayerId: string) {
   const [layers, setLayers] = useState<NoiseLayer[]>([createDefaultLayer(initialLayerId)]);
-  const [selectedLayerId, setSelectedLayerId] = useState(initialLayerId);
+  const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([initialLayerId]);
+
+  function handleLayerClick(id: string, event: { shiftKey: boolean }) {
+    setSelectedLayerIds((previous) => {
+      if (!event.shiftKey) return [id];
+      if (previous.includes(id)) {
+        const next = previous.filter((selected) => selected !== id);
+        return next.length > 0 ? next : previous; // never empty
+      }
+      return [...previous, id]; // newly added becomes the primary (last) one
+    });
+  }
 
   function addLayer() {
     const id = crypto.randomUUID();
     setLayers([...layers, createDefaultLayer(id)]); // appended at the end — top of the stack
-    setSelectedLayerId(id);
+    setSelectedLayerIds([id]); // a fresh layer is selected exclusively, not added to an existing multi-selection
   }
 
   function deleteLayer(id: string) {
     if (layers.length === 1) return; // always keep at least one layer
     const remaining = layers.filter((layer) => layer.id !== id);
     setLayers(remaining);
-    if (selectedLayerId === id) {
-      setSelectedLayerId(remaining[remaining.length - 1].id);
-    }
+    setSelectedLayerIds((previous) => {
+      const next = previous.filter((selected) => selected !== id);
+      return next.length > 0 ? next : [remaining[remaining.length - 1].id];
+    });
   }
 
   // Moves draggedId to targetId's position in the stack — drag-to-reorder,
@@ -36,18 +55,29 @@ export function useNoiseLayers(initialLayerId: string) {
     setLayers(reordered);
   }
 
+  // Batch edit — applies to every currently-selected layer, not just one,
+  // overwriting whatever each had individually for the fields in `patch`.
   function updateSelectedLayer(patch: Partial<NoiseLayer>) {
-    setLayers(layers.map((layer) => (layer.id === selectedLayerId ? { ...layer, ...patch } : layer)));
+    setLayers(layers.map((layer) => (selectedLayerIds.includes(layer.id) ? { ...layer, ...patch } : layer)));
+  }
+
+  // Photoshop-style hide/unhide (Dana, 2026-09-23) — the row's own eye
+  // toggle, independent of selection: flips exactly the layer clicked,
+  // regardless of which layer(s) are currently selected for editing.
+  function toggleLayerVisible(id: string) {
+    setLayers(layers.map((layer) => (layer.id === id ? { ...layer, visible: !layer.visible } : layer)));
   }
 
   return {
     layers,
     setLayers,
-    selectedLayerId,
-    setSelectedLayerId,
+    selectedLayerIds,
+    setSelectedLayerIds,
+    handleLayerClick,
     addLayer,
     deleteLayer,
     reorderLayer,
     updateSelectedLayer,
+    toggleLayerVisible,
   };
 }

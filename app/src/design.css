@@ -513,10 +513,43 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   border-color: var(--color-accent);
 }
 
+/* A hidden layer — the whole row looks disabled (matches
+   .panel-text-btn:disabled's existing opacity-dip convention), not just the
+   eye icon (Dana, 2026-09-23). Still fully interactive — click the eye to
+   bring it back — so no pointer-events/cursor change, opacity only. */
+.noise-layer-row--hidden {
+  opacity: 0.4;
+}
+
+/* The row actually being dragged (position:fixed, see ui/NoisePanel.tsx) —
+   lifted above everything else, with a shadow so it visibly reads as
+   picked up rather than just relocated (Dana, 2026-09-23: "i want to see
+   the actual layer token move by dragging"). */
+.noise-layer-row--dragging {
+  z-index: 1000;
+  cursor: grabbing;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Groups the delete "×" and the label tightly together on the left, so the
+   row's own space-between (below) only has to place this group vs. the eye
+   toggle — not spread three individual items apart (Dana, 2026-09-23). */
+.noise-layer-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  overflow: hidden;
+  min-width: 0; /* lets the label actually shrink/ellipsize instead of forcing the row wider */
+}
+
 .noise-layer-row-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.noise-layer-row-visibility {
+  font-size: 11px;
 }
 
 /* Plain clickable glyph/text, no button chrome — no background, no border.
@@ -667,4 +700,14 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 }
 .noise-add-layer-btn:hover {
   background: rgba(242, 242, 247, 0.25); /* one step up from --color-input-fill's 0.15 alpha */
+}
+
+/* A row of buttons filling the panel's width evenly, with gaps — e.g. the
+   Edit section's Undo/Redo/Reset (Dana, 2026-09-23), previously stacked. */
+.panel-btn-row {
+  display: flex;
+  gap: var(--gap-sm);
+}
+.panel-btn-row > button {
+  flex: 1;
 }

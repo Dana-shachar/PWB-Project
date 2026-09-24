@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { sampleChunkHeight } from './chunkGrid';
 
 // A smooth, continuously-displaced alternative to the voxel mesh — same
-// sampled region and vertical scale as buildTestChunkDensity(). Extruded
+// sampled region and vertical scale as density.ts's buildChunkHeights().
+// Extruded
 // down to a solid slab (skirt walls + a bottom cap, not just a bare
 // surface) so it sits grounded on the grid like the voxel version does,
 // rather than floating as a thin disconnected sheet (Dana, 2026-09-23:

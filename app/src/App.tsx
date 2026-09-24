@@ -35,7 +35,7 @@ function App() {
     sceneHandleRef,
     layers: noiseLayers.layers,
     setLayers: noiseLayers.setLayers,
-    setSelectedLayerId: noiseLayers.setSelectedLayerId,
+    setSelectedLayerIds: noiseLayers.setSelectedLayerIds,
     strokeHistory: brush.strokeHistory,
     setStrokeHistory: brush.setStrokeHistory,
   });
@@ -61,8 +61,6 @@ function App() {
         onBaseColorChange={planetControls.setBaseColor}
         displayMode={planetControls.displayMode}
         onDisplayModeChange={planetControls.setDisplayMode}
-        heightScale={planetControls.heightScale}
-        onHeightScaleChange={planetControls.setHeightScale}
         canUndo={brush.strokeHistory.length > 0}
         onUndo={brush.undo}
         canRedo={brush.redoStack.length > 0}
@@ -137,10 +135,11 @@ function App() {
       </div>
       <RightPanel
         layers={noiseLayers.layers}
-        selectedLayerId={noiseLayers.selectedLayerId}
-        onSelectLayer={noiseLayers.setSelectedLayerId}
+        selectedLayerIds={noiseLayers.selectedLayerIds}
+        onLayerClick={noiseLayers.handleLayerClick}
         onAddLayer={noiseLayers.addLayer}
         onDeleteLayer={noiseLayers.deleteLayer}
+        onToggleLayerVisible={noiseLayers.toggleLayerVisible}
         onReorderLayer={noiseLayers.reorderLayer}
         onUpdateSelectedLayer={noiseLayers.updateSelectedLayer}
         brushRadiusPx={brush.brushRadiusPx}
@@ -152,6 +151,8 @@ function App() {
         sceneHandleRef={sceneHandleRef}
         onStrokeComplete={brush.handleStrokeComplete}
         paintVersion={brush.paintVersion}
+        heightScale={planetControls.heightScale}
+        onHeightScaleChange={planetControls.setHeightScale}
       />
     </div>
   );

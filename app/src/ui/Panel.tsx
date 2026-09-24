@@ -29,11 +29,6 @@ interface PanelProps {
   onBaseColorChange: (value: string) => void;
   displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
   onDisplayModeChange: (value: string) => void;
-  // Overall terrain height — shared directly with the land chunk's own
-  // height, not a Planet-exclusive setting despite living in this section
-  // (Dana, 2026-09-23). See planet/planetControls.ts.
-  heightScale: number;
-  onHeightScaleChange: (value: number) => void;
   // Edit controls
   canUndo: boolean;
   onUndo: () => void;
@@ -100,8 +95,6 @@ export function Panel({
   onChunkResolutionChange,
   chunkSize,
   onChunkSizeChange,
-  heightScale,
-  onHeightScaleChange,
 }: PanelProps) {
   return (
     <div className="panel-outer">
@@ -157,22 +150,25 @@ export function Panel({
 
         <div className="panel-section">
           <Accordion title="Edit">
-            {/* Mirrors the Cmd+Z/Ctrl+Z shortcut (see map/2Dbrush.ts) — undoes
-                the single most recent paint stroke, regardless of which layer
-                it's on. */}
-            <button type="button" className="noise-add-layer-btn" onClick={onUndo} disabled={!canUndo}>
-              Undo
-            </button>
-            {/* Mirrors Cmd+Shift+Z/Ctrl+Shift+Z — replays the most recently
-                undone stroke. */}
-            <button type="button" className="noise-add-layer-btn" onClick={onRedo} disabled={!canRedo}>
-              Redo
-            </button>
-            {/* Clears the current planet back to blank without switching which
-                saved planet is open — different from "+ New Project" above. */}
-            <button type="button" className="noise-add-layer-btn" onClick={onReset}>
-              Reset
-            </button>
+            <div className="panel-btn-row">
+              {/* Mirrors the Cmd+Z/Ctrl+Z shortcut (see map/2Dbrush.ts) —
+                  undoes the single most recent paint stroke, regardless of
+                  which layer it's on. */}
+              <button type="button" className="noise-add-layer-btn" onClick={onUndo} disabled={!canUndo}>
+                Undo
+              </button>
+              {/* Mirrors Cmd+Shift+Z/Ctrl+Shift+Z — replays the most recently
+                  undone stroke. */}
+              <button type="button" className="noise-add-layer-btn" onClick={onRedo} disabled={!canRedo}>
+                Redo
+              </button>
+              {/* Clears the current planet back to blank without switching
+                  which saved planet is open — different from "+ New Project"
+                  above. */}
+              <button type="button" className="noise-add-layer-btn" onClick={onReset}>
+                Reset
+              </button>
+            </div>
           </Accordion>
         </div>
 
@@ -238,17 +234,6 @@ export function Panel({
             precision={0}
           />
           <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
-          {/* Shared directly with the land chunk's own height — not derived
-              from Radius anymore (Dana, 2026-09-23: "it's overall height...
-              the chunk is eventually a part of the planet"). */}
-          <Slider
-            label="Height"
-            value={heightScale}
-            onChange={onHeightScaleChange}
-            min={0}
-            max={50}
-            step={0.5}
-          />
         </div>
 
         <div className="panel-section-divider" />
@@ -256,13 +241,19 @@ export function Panel({
         <div className="panel-section">
           <div className="panel-section-title">Land Chunk</div>
           {/* Detail only — doesn't affect the footprint's physical size
-              (Dana, 2026-09-23: it used to, incidentally). */}
+              (Dana, 2026-09-23: it used to, incidentally). Max raised
+              64→512→2048 — 512 wasn't a hard ceiling either, just not yet
+              pushed; true UHD (4096) is deliberately held back — the real
+              constraint isn't resolution alone but worst-case triangle
+              count for very noisy terrain, which at 4096 risks actually
+              crashing the tab, not just running slow. See ISSUES.md,
+              2026-09-23. */}
           <Slider
             label="Resolution"
             value={chunkResolution}
             onChange={onChunkResolutionChange}
             min={8}
-            max={64}
+            max={2048}
             step={8}
             precision={0}
           />

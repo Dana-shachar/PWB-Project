@@ -100,6 +100,12 @@ export interface NoiseLayer {
   warpStrength: number;
   opacity: number; // 0-1
   blendMode: BlendMode;
+  // Photoshop-style hide/unhide (Dana, 2026-09-23) — a hidden layer is
+  // genuinely skipped in the shader's compositing loop, not just zeroed via
+  // opacity: at opacity 0 the layer's noise would still be evaluated (and
+  // discarded) every pixel; visible=false skips that work entirely, and
+  // keeps the concept separate from the user's actual opacity setting.
+  visible: boolean;
 }
 
 export function createDefaultLayer(id: string): NoiseLayer {
@@ -115,6 +121,7 @@ export function createDefaultLayer(id: string): NoiseLayer {
     warpStrength: 1.0,
     opacity: 1,
     blendMode: 'normal',
+    visible: true,
   };
 }
 
@@ -403,8 +410,17 @@ export class HeightmapPipeline {
       this.paintActiveIndex.set(layer.id, 0);
     }
 
-    uniforms.uLayerCount.value = layers.length;
-    layers.forEach((layer, i) => {
+    // Hidden layers (Dana, 2026-09-23) are filtered out here, before any
+    // uniform is set — simpler than sending them through and having the
+    // shader skip them: uLayerCount only ever counts visible layers, so a
+    // hidden one's noise is never evaluated at all. Paint data for hidden
+    // layers is untouched above (paint targets sync against the full
+    // `layers` list) — hiding is a display toggle, not a delete.
+    // !== false, not truthy — layers saved before this field existed have
+    // visible === undefined, and should default to visible (Dana, 2026-09-23).
+    const visibleLayers = layers.filter((layer) => layer.visible !== false);
+    uniforms.uLayerCount.value = visibleLayers.length;
+    visibleLayers.forEach((layer, i) => {
       uniforms.uLayerNoiseType.value[i] = NOISE_TYPE_INDEX[layer.noiseType];
       uniforms.uLayerSeed.value[i] = layer.seed;
       uniforms.uLayerFrequency.value[i] = layer.frequency;

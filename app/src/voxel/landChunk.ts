@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import * as THREE from 'three';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 import type { NoiseLayer } from '../map/heightmap';
-import { buildTestChunkDensity } from './density';
+import { buildChunkHeights } from './density';
 import { buildSmoothChunkGeometry } from './smoothMesh';
 import { DEFAULT_CHUNK_RESOLUTION, DEFAULT_CHUNK_SIZE } from './chunkGrid';
 
@@ -75,8 +75,8 @@ export function useLandChunk(
       });
     };
 
-    const density = buildTestChunkDensity(heightmapImageData, resolution, heightScale);
-    worker.postMessage({ density, resolution, size: chunkSize }, [density.buffer]);
+    const heights = buildChunkHeights(heightmapImageData, resolution, heightScale);
+    worker.postMessage({ heights, resolution, size: chunkSize }, [heights.buffer]);
 
     return () => worker.terminate();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sceneHandleRef is a stable ref

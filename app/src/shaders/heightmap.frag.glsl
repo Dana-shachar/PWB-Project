@@ -183,6 +183,10 @@ void main() {
   // vertex.glsl's height-centering); 0.0 made painted black indistinguishable
   // from an empty/no-fill layer. See ISSUES.md, 2026-09-22.
   float composite = 0.5;
+  // Hidden layers (Dana, 2026-09-23) are filtered out entirely before this
+  // material's uniforms are ever set (see map/heightmap.ts's render()) —
+  // uLayerCount only counts visible ones, so a hidden layer's noise is
+  // never evaluated here at all, not just zero-weighted.
   for (int i = 0; i < MAX_LAYERS; i++) {
     if (i >= int(uLayerCount)) break;
     vec3 p = basePosition * uLayerFrequency[i];

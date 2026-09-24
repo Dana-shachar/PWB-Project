@@ -1,17 +1,13 @@
 // Shared by density.ts (builds this) and meshWorker.ts (consumes this) — a
-// flat solid/empty grid for one land-cube chunk. x/z are horizontal, y is
-// vertical (matches Three.js's Y-up convention). Resolution (voxels/
-// vertices per axis) is a user-facing control (ui/Panel.tsx's "Land Chunk"
-// section) — see ISSUES.md, 2026-09-23.
+// height-per-column grid for one land-cube chunk (x/z horizontal), not a
+// full 3D solid/empty volume — see density.ts and ISSUES.md, 2026-09-23,
+// for why. Resolution (columns per axis) is a user-facing control (ui/
+// Panel.tsx's "Land Chunk" section).
 export const DEFAULT_CHUNK_RESOLUTION = 16;
 // World-space width/depth of the chunk's footprint — independent of
 // resolution (Dana, 2026-09-23: resolution was incidentally also changing
 // the chunk's physical size; it should only affect detail).
 export const DEFAULT_CHUNK_SIZE = 16;
-
-export function voxelIndex(x: number, y: number, z: number, resolution: number): number {
-  return x + y * resolution + z * resolution * resolution;
-}
 
 // TODO(DS): a fixed, arbitrary test region on the heightmap — not yet tied
 // to a real location the user picks on the planet. See ROADMAP.md, Stage 07.

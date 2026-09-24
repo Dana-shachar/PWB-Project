@@ -21,7 +21,7 @@ interface UseSaveProjectArgs {
   // editing logic. See ISSUES.md, 2026-09-22.
   layers: NoiseLayer[];
   setLayers: (layers: NoiseLayer[]) => void;
-  setSelectedLayerId: (id: string) => void;
+  setSelectedLayerIds: (ids: string[]) => void;
   strokeHistory: StrokeRecord[];
   setStrokeHistory: (strokeHistory: StrokeRecord[]) => void;
 }
@@ -64,7 +64,7 @@ export function useSaveProject({
   sceneHandleRef,
   layers,
   setLayers,
-  setSelectedLayerId,
+  setSelectedLayerIds,
   strokeHistory,
   setStrokeHistory,
 }: UseSaveProjectArgs) {
@@ -91,7 +91,7 @@ export function useSaveProject({
         if (project && project.layers.length > 0) {
           sceneHandleRef.current?.loadProject(project.layers, project.strokeHistory);
           setLayers(project.layers);
-          setSelectedLayerId(project.layers[project.layers.length - 1].id); // top of the stack, matching the selection convention elsewhere
+          setSelectedLayerIds([project.layers[project.layers.length - 1].id]); // top of the stack, matching the selection convention elsewhere
           setStrokeHistory(project.strokeHistory);
           setCurrentPlanetId(mostRecent.id);
           setCurrentPlanetName(project.name);
@@ -135,7 +135,7 @@ export function useSaveProject({
     const freshLayers = [createDefaultLayer(freshId)];
     sceneHandleRef.current?.loadProject(freshLayers, []);
     setLayers(freshLayers);
-    setSelectedLayerId(freshId);
+    setSelectedLayerIds([freshId]);
     setStrokeHistory([]);
     return freshLayers;
   }
@@ -167,7 +167,7 @@ export function useSaveProject({
     sceneHandleRef.current?.loadProject(project.layers, project.strokeHistory);
     const loadedLayers = project.layers.length > 0 ? project.layers : [createDefaultLayer(crypto.randomUUID())];
     setLayers(loadedLayers);
-    setSelectedLayerId(loadedLayers[loadedLayers.length - 1].id);
+    setSelectedLayerIds([loadedLayers[loadedLayers.length - 1].id]);
     setStrokeHistory(project.strokeHistory);
     setCurrentPlanetId(id);
     setCurrentPlanetName(project.name);

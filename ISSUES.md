@@ -12,6 +12,17 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 
 ## 🏗️ Foundation & Architecture
 
+### 📋 GPU compute (WebGPURenderer) for voxel meshing — tracked, not decided
+**Status:** <span style="color:#cf222e">🔴 Open, tracked, not scheduled (2026-09-23)</span>
+
+> **Issue:** CPU-based voxel meshing (column-based, O(resolution²) — see Voxel / Land Cube Terrain, below) has a real ceiling: worst-case triangle count for very noisy terrain at very high resolution (e.g. true UHD/4096) can reach 100M+ triangles, risking an actual tab crash from the raw buffer size, not just slow performance. GPU compute would generate geometry directly on the GPU, never materializing a giant CPU-side buffer at all.
+>
+> **Why not now:** adopting compute means migrating the *entire app's* renderer off `WebGLRenderer` to `WebGPURenderer` — Three.js can't run both simultaneously in one scene. Every existing hand-written GLSL shader (`noise.glsl`, `heightmap.frag.glsl`, `vertex.glsl`/`fragment.glsl`, `strokePath.frag.glsl`, the grid shaders) would need porting to Three.js's newer TSL node system. Not a small addition on top of voxels — a renderer-wide rewrite affecting every feature in the app.
+>
+> **Decided for now (2026-09-23):** stay on CPU, resolution cap raised to 2048 (true UHD/4096 held back deliberately — see `ROADMAP.md`, Stage 07). This was the exact scenario flagged when CPU vs. GPU was first discussed ("build CPU first, measure, decide GPU only if actually insufficient") — now genuinely measured, logged here as a real tracked decision point, not scheduled or started.
+>
+> **A real middle-ground option, not yet explored (Dana, 2026-09-23):** raymarching/SDF-based terrain rendering — stays entirely on the existing `WebGLRenderer`/GLSL pipeline, no renderer migration at all. "Heightfield raymarching" (step along each pixel's ray, compare against a height function in the fragment shader, no explicit triangle mesh generated) is a well-established technique for exactly this case, and is the technique `active-geometry-project` itself already used. This should have been raised when the land-chunk meshing question was first scoped — the "mesh-based Three.js, not raymarching" decision above was made specifically for the *planet* (needing real mesh for agents/vegetation/roads/LOD), and got carried forward as a blanket constraint onto the land-chunk question without re-examining whether a small individual chunk preview actually has the same requirement. It may not. Proposed direction: raymarch/SDF for fast, flexible terrain *preview* by default; drop into real mesh generation case-by-case, specifically when something actually needs to be real (collision, placed objects/agents, export) — not a wholesale replacement of the mesh approach, a hybrid.
+
 ### 🧭 Mesh-based Three.js, not raymarching
 **Status:** <span style="color:#2da44e">✅ Decided (2026-09-02)</span>
 
@@ -111,6 +122,21 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 > **Issue:** looping over paint textures with a variable index fails to compile under GLSL ES 1.00 (Three.js's default `ShaderMaterial` mode).
 >
 > **Fix:** `MAX_LAYERS` (16) separately-named uniforms + an if/else chain to select by constant index, instead of a real array.
+
+### 🧭 Layer multi-select + per-layer visibility toggle
+**Status:** <span style="color:#2da44e">✅ Decided and built (2026-09-23)</span>
+
+> **Trigger:** with paint strokes now composited live across the whole layer stack, there was no way to tell which layer a stroke was actually landing on — the 2D canvas always showed the full composite.
+>
+> **Multi-select:** shift+click a layer row to add/remove it from selection (plain click selects exclusively, same convention later reused for the shared gumball's pane selection); editing any control while multiple layers are selected applies the change to all of them at once. A slider's displayed value follows the last-clicked ("primary") layer, not an average or the first-selected. Opened the door to per-layer height (amplitude distinct from Opacity) as a natural next step — logged as a to-do under Stage 03's Modifier architecture, not yet built; no clear use case pinned down beyond "big base layer + subtle detail layer scaled independently."
+>
+> **Visibility toggle — considered and rejected 2 shortcuts:**
+> 1. **Force opacity to 0** — rejected, Dana: "it's not the same as 0 opacity though" — a hidden layer's noise would still be computed (wasted GPU work every frame) and it conflates a genuinely separate concept with the existing Opacity slider.
+> 2. **Shader-side `uLayerVisible` uniform + `continue` skip** — built, then reverted. Dana: "it's much easier to just disregard the layer... so just do not compute it if its hidden" — simpler to filter it out entirely before any uniform is set than to still upload it and skip it per-fragment.
+>
+> **Actual fix:** a real `visible: boolean` field on `NoiseLayer`; `HeightmapPipeline.render()` filters to `layers.filter(l => l.visible !== false)` before setting any per-layer uniform (so `uLayerCount` only ever counts visible layers — a hidden layer's noise/paint is never evaluated at all), while paint-target create/dispose still tracks the full (unfiltered) layer list so a hidden layer's paint data isn't lost. Whole-row dimming (not just the eye icon) marks a hidden layer in the list.
+>
+> **Fixed along the way — old saved layers defaulted to hidden:** `visible` doesn't exist on any layer saved before this feature, so plain truthiness (`layer.visible`, `!layer.visible`) read `undefined` as falsy/hidden. Fixed by using explicit `!== false` (the render filter) / `=== false` (the eye icon and row-dimming checks) everywhere instead, so missing data on old projects defaults to visible, per Dana: "the default should be all layers visible."
 
 ---
 
@@ -312,6 +338,24 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 > **Fix:**
 > 1. **Rescaled intensities** — ambient scaled by a placeholder ×4 multiplier, directional light bumped from 0.8 to 2.5 — direction still follows the shared X/Y sliders, only magnitude is recalibrated for this material.
 > 2. **`directionalLight.target` added to the scene** — standard Three.js practice (a light's target must be part of the scene graph for its direction to be computed reliably); was previously omitted.
+
+> Note: intensities were retuned once more after this fix — see "Land-chunk viewport & navigation" in `ROADMAP.md` (ambient multiplier x4 → x1.5, directional 2.5 → 4) so shadowed faces read as darker against lit ones instead of washed out by flat ambient fill (2026-09-23).
+
+### 🧭 Voxel meshing rearchitected: column-based (O(resolution²)), not a 3D solid/empty grid (O(resolution³))
+**Status:** <span style="color:#2da44e">✅ Decided and built (2026-09-23)</span>
+
+> **Trigger:** Dana pushed the Resolution slider's max repeatedly (64→512→2048) before asking directly why it was capped at all ("why just 512? i want uhd at least") — surfacing that the real constraint was architectural, not a slider-range choice.
+>
+> **Cause:** `density.ts` originally built a full `Uint8Array(resolution³)` solid/empty grid, and `meshWorker.ts` culled per-voxel-face against it. Both memory and meshing cost scale with the *cube* of resolution — 512³ is already ~134M cells (~134MB just for the density array); a naive 4096³ isn't representable in a typed array at all. This is cubic growth for a shape that doesn't need it.
+>
+> **Insight:** v1 has no caves/overhangs (documented from the start, see "Land cube meshing technique & compute location" above) — so a column is always exactly "solid from the ground up to some height, empty above," never anything more complex. That means one height value per (x, z) column is a *complete* representation, not an approximation — the same O(resolution²) shape the smooth render style already used via `sampleChunkHeight()`.
+>
+> **Fix:**
+> 1. **`density.ts`** — `buildTestChunkDensity()` → `buildChunkHeights()`, returning `Uint32Array(resolution²)` (one height per column) instead of `Uint8Array(resolution³)`.
+> 2. **`meshWorker.ts`** rewritten around the column grid: one top quad per solid column (always exposed — nothing sits above a column's own top in a no-caves field); walls wherever two neighboring columns differ in height, checked in both the X and Z directions, treating "outside the chunk" as height 0 so the chunk's own perimeter edge is handled by the exact same rule as an internal step between two different-height columns (no separate perimeter-wall special case); one flat bottom cap spanning the whole footprint. Each wall case's winding hand-verified via the right-hand-rule cross product, same method as the smooth-mesh boundary-walk fix above.
+> 3. **`chunkGrid.ts`** — the now-unused 3D `voxelIndex()` helper removed.
+>
+> **Result:** this is what actually unlocked pushing the Resolution slider's max past the old ceiling (64→512→2048, see `ROADMAP.md`). True UHD (4096) still deliberately held back — worst-case triangle count for very noisy terrain at 4096 risks crashing the tab outright from raw buffer size, not just running slow; logged as the trigger for the GPU-compute tracked-not-decided item above.
 
 ---
 

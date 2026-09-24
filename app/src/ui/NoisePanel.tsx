@@ -6,11 +6,16 @@ import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 
 interface NoisePanelProps {
   layers: NoiseLayer[];
-  selectedLayerId: string;
-  onSelectLayer: (id: string) => void;
+  // Click selects one exclusively; shift+click adds/removes it. The *last*
+  // entry is the "primary" one — whose values the sliders below show, and
+  // what painting targets (Dana, 2026-09-23).
+  selectedLayerIds: string[];
+  onLayerClick: (id: string, event: { shiftKey: boolean }) => void;
   onAddLayer: () => void;
   onDeleteLayer: (id: string) => void;
+  onToggleLayerVisible: (id: string) => void;
   onReorderLayer: (draggedId: string, targetId: string) => void;
+  // Applies to every selected layer at once, not just the primary one.
   onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
   brushRadiusPx: number;
   onBrushRadiusPxChange: (value: number) => void;
@@ -21,6 +26,13 @@ interface NoisePanelProps {
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
   onStrokeComplete: (record: StrokeRecord) => void;
   paintVersion: number;
+  // Overall terrain height — global (drives both the planet's own
+  // displacement and the land chunk's height directly, same value), not a
+  // per-layer setting — see planet/planetControls.ts and ISSUES.md,
+  // 2026-09-23 ("i think its a noise related slider"). Lives here, not
+  // attached to any one layer, same as the noise canvas/brush controls above.
+  heightScale: number;
+  onHeightScaleChange: (value: number) => void;
 }
 
 const EXPANDED_CANVAS_SIZE_PX = 800; // TODO(DS): arbitrary placeholder — richer brush controls for this mode land later, see ROADMAP.md
@@ -33,10 +45,11 @@ const EXPANDED_CANVAS_SIZE_PX = 800; // TODO(DS): arbitrary placeholder — rich
 // own panel convention, even though the underlying array stays bottom-first.
 export function NoisePanel({
   layers,
-  selectedLayerId,
-  onSelectLayer,
+  selectedLayerIds,
+  onLayerClick,
   onAddLayer,
   onDeleteLayer,
+  onToggleLayerVisible,
   onReorderLayer,
   onUpdateSelectedLayer,
   brushRadiusPx,
@@ -48,10 +61,22 @@ export function NoisePanel({
   sceneHandleRef,
   onStrokeComplete,
   paintVersion,
+  heightScale,
+  onHeightScaleChange,
 }: NoisePanelProps) {
-  const selectedLayer = layers.find((layer) => layer.id === selectedLayerId) ?? layers[0];
+  const primaryLayerId = selectedLayerIds[selectedLayerIds.length - 1];
+  const selectedLayer = layers.find((layer) => layer.id === primaryLayerId) ?? layers[0];
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const [isExpanded, setIsExpanded] = useState(false);
+  // The row actually being dragged switches to position:fixed and follows
+  // the cursor (Dana, 2026-09-23: "i want to see the actual layer token
+  // move by dragging", not a ghost copy) — position:fixed removes it from
+  // the flex flow on its own, so the rest of the list reflows underneath
+  // exactly as it already did.
+  const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
+  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+  const dragGrabOffsetRef = useRef({ x: 0, y: 0 }); // cursor's position within the row at mousedown, so it doesn't jump to the row's corner
+  const dragRowRectRef = useRef({ width: 0, left: 0 }); // pinned so the row keeps its own width/x once fixed-positioned, only y follows the cursor
 
   // Hand-rolled pointer drag (matches Slider's click-drag-to-scrub pattern,
   // ported from active-geometry's makeScrubber) — a plain click (no
@@ -60,13 +85,23 @@ export function NoisePanel({
     if (event.button !== 0) return;
     const startX = event.clientX;
     const startY = event.clientY;
+    const shiftKey = event.shiftKey; // captured at mousedown — decides click-select vs. shift-extend below
     let hasDragged = false;
+
+    const rowEl = rowRefs.current.get(layerId);
+    if (rowEl) {
+      const rect = rowEl.getBoundingClientRect();
+      dragGrabOffsetRef.current = { x: startX - rect.left, y: startY - rect.top };
+      dragRowRectRef.current = { width: rect.width, left: rect.left };
+    }
 
     function onMove(moveEvent: MouseEvent) {
       if (!hasDragged) {
         if (Math.abs(moveEvent.clientX - startX) < 4 && Math.abs(moveEvent.clientY - startY) < 4) return;
         hasDragged = true;
+        setDraggedLayerId(layerId);
       }
+      setDragPosition({ x: moveEvent.clientX, y: moveEvent.clientY });
       let targetId: string | null = null;
       rowRefs.current.forEach((el, id) => {
         const rect = el.getBoundingClientRect();
@@ -78,7 +113,8 @@ export function NoisePanel({
     function onUp() {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
-      if (!hasDragged) onSelectLayer(layerId);
+      setDraggedLayerId(null);
+      if (!hasDragged) onLayerClick(layerId, { shiftKey });
     }
 
     document.addEventListener('mousemove', onMove);
@@ -117,7 +153,7 @@ export function NoisePanel({
         <Slider label="Feather" value={feather} onChange={onFeatherChange} min={0} max={1} step={0.01} />
         <MapView
           layers={layers}
-          selectedLayerId={selectedLayerId}
+          selectedLayerId={primaryLayerId}
           brushRadiusPx={brushRadiusPx}
           brushValue={brushValue}
           feather={feather}
@@ -125,6 +161,15 @@ export function NoisePanel({
           onStrokeComplete={onStrokeComplete}
           paintVersion={paintVersion}
         />
+      </div>
+
+      <div className="panel-section-divider" />
+
+      <div className="panel-section">
+        <div className="panel-section-title">Terrain</div>
+        {/* Global — shared directly with the planet's own displacement, not
+            attached to any one layer (Dana, 2026-09-23). */}
+        <Slider label="Height" value={heightScale} onChange={onHeightScaleChange} min={0} max={50} step={0.5} />
       </div>
 
       <div className="panel-section-divider" />
@@ -141,20 +186,51 @@ export function NoisePanel({
                 if (el) rowRefs.current.set(layer.id, el);
                 else rowRefs.current.delete(layer.id);
               }}
-              className={'noise-layer-row' + (layer.id === selectedLayerId ? ' noise-layer-row--selected' : '')}
+              className={
+                'noise-layer-row' +
+                (selectedLayerIds.includes(layer.id) ? ' noise-layer-row--selected' : '') +
+                (layer.id === draggedLayerId ? ' noise-layer-row--dragging' : '') +
+                (layer.visible === false ? ' noise-layer-row--hidden' : '')
+              }
+              style={
+                layer.id === draggedLayerId
+                  ? {
+                      position: 'fixed',
+                      left: dragRowRectRef.current.left,
+                      top: dragPosition.y - dragGrabOffsetRef.current.y,
+                      width: dragRowRectRef.current.width,
+                    }
+                  : undefined
+              }
               onMouseDown={(event) => handleRowMouseDown(event, layer.id)}
             >
-              <span className="noise-layer-row-label">
-                {NOISE_TYPE_OPTIONS.find((option) => option.value === layer.noiseType)?.label ?? layer.noiseType}
-              </span>
+              <div className="noise-layer-row-main">
+                <button
+                  type="button"
+                  className="panel-text-btn"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={() => onDeleteLayer(layer.id)}
+                  disabled={layers.length === 1}
+                >
+                  ×
+                </button>
+                <span className="noise-layer-row-label">
+                  {NOISE_TYPE_OPTIONS.find((option) => option.value === layer.noiseType)?.label ?? layer.noiseType}
+                </span>
+              </div>
+              {/* Photoshop-style hide/unhide (Dana, 2026-09-23) — independent
+                  of selection, flips exactly this row. Hidden layers are
+                  skipped entirely in the shader, so this updates the 2D
+                  preview, the 3D planet, and the land chunk instantly, same
+                  as any other layer edit. The whole row (not just this icon)
+                  dims when hidden — see .noise-layer-row--hidden. */}
               <button
                 type="button"
-                className="panel-text-btn"
+                className="panel-text-btn noise-layer-row-visibility"
                 onMouseDown={(event) => event.stopPropagation()}
-                onClick={() => onDeleteLayer(layer.id)}
-                disabled={layers.length === 1}
+                onClick={() => onToggleLayerVisible(layer.id)}
               >
-                ×
+                👁
               </button>
             </div>
           ))}
@@ -277,7 +353,7 @@ export function NoisePanel({
           </div>
           <MapView
             layers={layers}
-            selectedLayerId={selectedLayerId}
+            selectedLayerId={primaryLayerId}
             brushRadiusPx={brushRadiusPx}
             brushValue={brushValue}
             feather={feather}

@@ -21,10 +21,11 @@ const TABS: { key: RightPanelTab; label: string }[] = [
 
 interface RightPanelProps {
   layers: NoiseLayer[];
-  selectedLayerId: string;
-  onSelectLayer: (id: string) => void;
+  selectedLayerIds: string[];
+  onLayerClick: (id: string, event: { shiftKey: boolean }) => void;
   onAddLayer: () => void;
   onDeleteLayer: (id: string) => void;
+  onToggleLayerVisible: (id: string) => void;
   onReorderLayer: (draggedId: string, targetId: string) => void;
   onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
   brushRadiusPx: number;
@@ -36,6 +37,8 @@ interface RightPanelProps {
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
   onStrokeComplete: (record: StrokeRecord) => void;
   paintVersion: number;
+  heightScale: number;
+  onHeightScaleChange: (value: number) => void;
 }
 
 // Right-side panel — a tab bar (ported from active-geometry's
