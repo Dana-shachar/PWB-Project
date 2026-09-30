@@ -359,6 +359,11 @@ export function NoisePanel({
           <div className="panel-section-divider" />
           <div className="panel-section">
             <Accordion title="Modifiers">
+              {/* One group, not two separately-spaced elements — the active
+                  tab's bottom edge and the panel's top edge need to sit
+                  flush with zero gap to read as one connected shape (Dana,
+                  2026-09-30: "connect the tabs head to the body"). */}
+              <div className="modifier-tab-group">
               <div className="modifier-tabs">
                 {MODIFIERS.map((modifier) => {
                   const enabled = selectedLayer[modifier.enabledField] ?? false;
@@ -470,6 +475,7 @@ export function NoisePanel({
                   />
                 </div>
               )}
+              </div>
             </Accordion>
           </div>
         </>

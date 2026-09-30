@@ -695,6 +695,15 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
    modifier is enabled via a filled background, so that information isn't
    lost by moving the checkbox out of the tab row. */
 
+/* The tab row and its panel as one glued-together unit — no gap between
+   them (Dana, 2026-09-30: "connect the tabs head to the body"), so the
+   active tab's bottom edge and the panel's top edge read as one continuous
+   shape instead of two separately-outlined boxes with a visible seam. */
+.modifier-tab-group {
+  display: flex;
+  flex-direction: column;
+}
+
 .modifier-tabs {
   display: flex;
   flex-wrap: nowrap;
@@ -711,7 +720,7 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   cursor: pointer;
   background: var(--color-input-fill);
   border: 0.25px solid var(--color-input-stroke);
-  border-radius: 2px;
+  border-radius: 2px 2px 0 0; /* square bottom corners — the panel below sits flush against it when active */
   font: 300 var(--font-size-sm) var(--font-ui);
   color: var(--color-text);
   text-align: center;
@@ -720,25 +729,36 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   opacity: 0.85;
 }
 .modifier-tab--expanded {
+  position: relative;
+  z-index: 1; /* sits on top of the panel's own top edge, so removing its bottom border reads as a seamless join, not a gap */
   border-color: var(--color-accent);
+  border-bottom: none;
+  background: var(--color-input-fill); /* exact match to .modifier-params below, so the join has no visible color seam */
 }
 .modifier-tab--enabled {
   background: color-mix(in srgb, var(--color-accent) 25%, var(--color-input-fill));
 }
+/* Expanded wins over enabled's tint — the active tab must match
+   .modifier-params's exact background for the seam to actually disappear,
+   regardless of whether it's also enabled. (.a.b beats .a or .b alone on
+   specificity, so this is safe regardless of source order.) */
+.modifier-tab--expanded.modifier-tab--enabled {
+  background: var(--color-input-fill);
+}
 
 /* A contained panel, not a bare slider floating below the tab row — reads
    as "this box belongs to whichever tab is active" (Dana, 2026-09-30: "the
-   panel should wrap around it"). Accent border matches .modifier-tab--
-   expanded's, visually tying the content panel to its active tab. */
+   panel should wrap around it"). Flush against the tab row above (no
+   margin, no top border/radius — the active tab supplies that edge). */
 .modifier-params {
   display: flex;
   flex-direction: column;
   gap: var(--gap-md);
-  margin-top: var(--gap-sm);
   padding: var(--gap-md);
   background: var(--color-input-fill);
   border: 0.25px solid var(--color-accent);
-  border-radius: 2px;
+  border-top: none;
+  border-radius: 0 0 2px 2px;
 }
 .ui-accordion--nested > .ui-accordion-header {
   font-weight: 400;
