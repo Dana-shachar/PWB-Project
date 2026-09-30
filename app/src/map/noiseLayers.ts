@@ -1,5 +1,9 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { createDefaultLayer, type NoiseLayer } from './heightmap';
+
+function formatLayerName(number: number): string {
+  return `Layer ${String(number).padStart(2, '0')}`;
+}
 
 // Owns the layer stack itself and its CRUD operations — no knowledge of
 // painting or persistence, see map/2Dbrush.ts and project/saveProject.ts
@@ -13,7 +17,13 @@ import { createDefaultLayer, type NoiseLayer } from './heightmap';
 // ui/NoisePanel.tsx, map/MapView.tsx) — while editing any control applies
 // the change to every selected layer at once (updateSelectedLayer, below).
 export function useNoiseLayers(initialLayerId: string) {
-  const [layers, setLayers] = useState<NoiseLayer[]>([createDefaultLayer(initialLayerId)]);
+  // Ever-incrementing — never reused after a delete, so deleting "Layer 02"
+  // and adding a new one gives "Layer 03", not another "Layer 02" (Dana,
+  // 2026-09-22's original spec).
+  const nextLayerNumberRef = useRef(1);
+  const [layers, setLayers] = useState<NoiseLayer[]>([
+    createDefaultLayer(initialLayerId, formatLayerName(nextLayerNumberRef.current++)),
+  ]);
   const [selectedLayerIds, setSelectedLayerIds] = useState<string[]>([initialLayerId]);
 
   function handleLayerClick(id: string, event: { shiftKey: boolean }) {
@@ -29,8 +39,16 @@ export function useNoiseLayers(initialLayerId: string) {
 
   function addLayer() {
     const id = crypto.randomUUID();
-    setLayers([...layers, createDefaultLayer(id)]); // appended at the end — top of the stack
+    const name = formatLayerName(nextLayerNumberRef.current++);
+    setLayers([...layers, createDefaultLayer(id, name)]); // appended at the end — top of the stack
     setSelectedLayerIds([id]); // a fresh layer is selected exclusively, not added to an existing multi-selection
+  }
+
+  // Double-click a layer's name to rename it (ui/NoisePanel.tsx) — always
+  // targets the one row clicked, independent of the current selection, same
+  // reasoning as toggleLayerVisible below.
+  function renameLayer(id: string, name: string) {
+    setLayers(layers.map((layer) => (layer.id === id ? { ...layer, name } : layer)));
   }
 
   function deleteLayer(id: string) {
@@ -79,5 +97,6 @@ export function useNoiseLayers(initialLayerId: string) {
     reorderLayer,
     updateSelectedLayer,
     toggleLayerVisible,
+    renameLayer,
   };
 }

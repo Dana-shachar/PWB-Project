@@ -22,30 +22,23 @@ const MAX_STROKE_POINTS = 64;
 // Matches heightmap.frag.glsl's MAX_LAYERS.
 export const MAX_LAYERS = 16;
 
-export type NoiseType =
-  | 'none'
-  | 'random'
-  | 'perlin'
-  | 'simplex'
-  | 'voronoi'
-  | 'ridged'
-  | 'octaves'
-  | 'terrace'
-  | 'domainWarp';
+// Narrowed to real base generators + 'none' (Dana, 2026-09-30: "Modifiers as
+// toggles, not types" — Ridged/Octaves/Terrace/Domain warp used to be
+// separate, mutually-exclusive types, each secretly hardcoded to Perlin
+// underneath. They're independent boolean modifiers now (below), composable
+// on any base generator, matching Gaea's actual structure (fixed order:
+// Domain warp → generator/Octaves → Ridged → Terrace). See ISSUES.md.
+export type NoiseType = 'none' | 'random' | 'perlin' | 'simplex' | 'voronoi';
 
-// Matches heightmap.frag.glsl's evalLayerNoise if/else chain (0-8). Exported
-// so the UI (NoisePanel.tsx) can build its dropdown from the same list
-// instead of a separately-maintained copy.
+// Matches heightmap.frag.glsl's evalBaseGenerator if/else chain (0-3) plus
+// 'none' (4). Exported so the UI (NoisePanel.tsx) can build its dropdown
+// from the same list instead of a separately-maintained copy.
 export const NOISE_TYPE_OPTIONS: { value: NoiseType; label: string }[] = [
   { value: 'none', label: 'None' },
   { value: 'random', label: 'Random' },
   { value: 'perlin', label: 'Perlin' },
   { value: 'simplex', label: 'Simplex' },
   { value: 'voronoi', label: 'Voronoi' },
-  { value: 'ridged', label: 'Ridged' },
-  { value: 'octaves', label: 'Octaves (fBm)' },
-  { value: 'terrace', label: 'Terrace' },
-  { value: 'domainWarp', label: 'Domain warp' },
 ];
 
 const NOISE_TYPE_INDEX: Record<NoiseType, number> = {
@@ -53,11 +46,7 @@ const NOISE_TYPE_INDEX: Record<NoiseType, number> = {
   perlin: 1,
   simplex: 2,
   voronoi: 3,
-  ridged: 4,
-  none: 5,
-  octaves: 6,
-  terrace: 7,
-  domainWarp: 8,
+  none: 4,
 };
 
 // Per Gaea's Combine node conventions (verified against
@@ -90,14 +79,36 @@ const BLEND_MODE_INDEX: Record<BlendMode, number> = {
 // onto the running result using its own blendMode + opacity.
 export interface NoiseLayer {
   id: string;
-  noiseType: NoiseType;
+  // Auto-assigned "Layer 01"/"Layer 02" (an ever-incrementing counter, see
+  // map/noiseLayers.ts — never reused after a delete) plus a rename option
+  // (double-click to edit inline, ui/NoisePanel.tsx). Requested 2026-09-22,
+  // built 2026-09-30 — was previously just the noise-type label shown as
+  // the row's name, with no real identity of its own.
+  name: string;
+  noiseType: NoiseType; // the base generator
   seed: number;
   frequency: number;
+  // Modifiers — independent toggles layered onto the base generator, in
+  // this fixed order (Gaea): Domain warp → generator/Octaves → Ridged →
+  // Terrace. Each toggle gates its own params below, which exist
+  // regardless of whether the toggle is on (so a disabled modifier's
+  // values aren't lost when re-enabled). See ISSUES.md, 2026-09-30.
+  domainWarpEnabled: boolean;
+  warpStrength: number;
+  octavesEnabled: boolean;
   octaves: number;
   persistence: number;
   lacunarity: number;
+  ridgedEnabled: boolean;
+  // 0..1 — blends between the un-ridged and fully-ridged value (`mix(raw,
+  // ridge(raw), ridgeAmount)`), not a plain on/off the way the other 3
+  // modifiers' *Enabled flags are — ridge() itself has no natural
+  // continuous parameter of its own to gate, unlike warp strength/octave
+  // count/terrace steps (Dana, 2026-09-30: "how would you control the
+  // amount of it?").
+  ridgeAmount: number;
+  terraceEnabled: boolean;
   terraceSteps: number;
-  warpStrength: number;
   opacity: number; // 0-1
   // Amplitude, distinct from opacity: scales how much this layer's noise
   // deviates from neutral (flat) before blending, not how much it overrides
@@ -115,22 +126,49 @@ export interface NoiseLayer {
   visible: boolean;
 }
 
-export function createDefaultLayer(id: string): NoiseLayer {
+export function createDefaultLayer(id: string, name: string): NoiseLayer {
   return {
     id,
+    name,
     noiseType: 'none',
     seed: 0,
     frequency: 4,
+    domainWarpEnabled: false,
+    warpStrength: 1.0,
+    octavesEnabled: false,
     octaves: 4,
     persistence: 0.5,
     lacunarity: 2.0,
+    ridgedEnabled: false,
+    ridgeAmount: 1, // fully ridged once enabled, matching the old dedicated 'ridged' type's look
+    terraceEnabled: false,
     terraceSteps: 8,
-    warpStrength: 1.0,
     opacity: 1,
     heightScale: 1,
     blendMode: 'normal',
     visible: true,
   };
+}
+
+// Old saves may have `noiseType` as one of the now-retired modifier values
+// ('ridged'/'octaves'/'terrace'/'domainWarp') — these were always secretly
+// Perlin-based underneath (see ISSUES.md, 2026-09-30). Converts them into
+// the current shape (a real base generator + the matching modifier
+// toggle); layers already in the current shape pass through untouched.
+// Applied wherever saved layers are loaded (projectSettings/saveProject.ts).
+const LEGACY_MODIFIER_TYPE_TO_FIELD: Record<string, 'ridgedEnabled' | 'octavesEnabled' | 'terraceEnabled' | 'domainWarpEnabled'> = {
+  ridged: 'ridgedEnabled',
+  octaves: 'octavesEnabled',
+  terrace: 'terraceEnabled',
+  domainWarp: 'domainWarpEnabled',
+};
+
+export function migrateLegacyLayers(layers: NoiseLayer[]): NoiseLayer[] {
+  return layers.map((layer) => {
+    const legacyField = LEGACY_MODIFIER_TYPE_TO_FIELD[layer.noiseType as string];
+    if (!legacyField) return layer;
+    return { ...layer, noiseType: 'perlin', [legacyField]: true };
+  });
 }
 
 export interface HeightmapParams {
@@ -229,11 +267,20 @@ export class HeightmapPipeline {
         uLayerNoiseType: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerSeed: { value: new Array(MAX_LAYERS).fill(0) },
         uLayerFrequency: { value: new Array(MAX_LAYERS).fill(4) },
+        // Modifiers — independent toggles (0/1, matching this shader's
+        // established float-uniform convention, e.g. uLayerBlendMode) layered
+        // onto the base generator above, not separate noiseType values.
+        // See NoiseLayer's own comment, map/heightmap.ts.
+        uLayerDomainWarpOn: { value: new Array(MAX_LAYERS).fill(0) },
+        uLayerWarpStrength: { value: new Array(MAX_LAYERS).fill(1.0) },
+        uLayerOctavesOn: { value: new Array(MAX_LAYERS).fill(0) },
         uLayerOctaves: { value: new Array(MAX_LAYERS).fill(4) },
         uLayerPersistence: { value: new Array(MAX_LAYERS).fill(0.5) },
         uLayerLacunarity: { value: new Array(MAX_LAYERS).fill(2.0) },
+        uLayerRidgedOn: { value: new Array(MAX_LAYERS).fill(0) },
+        uLayerRidgeAmount: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerTerraceOn: { value: new Array(MAX_LAYERS).fill(0) },
         uLayerTerraceSteps: { value: new Array(MAX_LAYERS).fill(8) },
-        uLayerWarpStrength: { value: new Array(MAX_LAYERS).fill(1.0) },
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerHeightScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
@@ -469,14 +516,26 @@ export class HeightmapPipeline {
     const visibleLayers = layers.filter((layer) => layer.visible !== false);
     uniforms.uLayerCount.value = visibleLayers.length;
     visibleLayers.forEach((layer, i) => {
-      uniforms.uLayerNoiseType.value[i] = NOISE_TYPE_INDEX[layer.noiseType];
+      // ?? perlin — a safety net, not the expected path: noiseType should
+      // already be current-shape by the time render() runs (migrated at
+      // the load boundary, projectSettings/saveProject.ts), but an
+      // unrecognized value would otherwise set the uniform to undefined.
+      uniforms.uLayerNoiseType.value[i] = NOISE_TYPE_INDEX[layer.noiseType] ?? NOISE_TYPE_INDEX.perlin;
       uniforms.uLayerSeed.value[i] = layer.seed;
       uniforms.uLayerFrequency.value[i] = layer.frequency;
+      // ?? false / ?? 1, not the fields directly — layers saved before
+      // modifiers became toggles don't have these fields at all, same
+      // old-data reasoning as heightScale/visible above.
+      uniforms.uLayerDomainWarpOn.value[i] = layer.domainWarpEnabled ? 1 : 0;
+      uniforms.uLayerWarpStrength.value[i] = layer.warpStrength;
+      uniforms.uLayerOctavesOn.value[i] = layer.octavesEnabled ? 1 : 0;
       uniforms.uLayerOctaves.value[i] = layer.octaves;
       uniforms.uLayerPersistence.value[i] = layer.persistence;
       uniforms.uLayerLacunarity.value[i] = layer.lacunarity;
+      uniforms.uLayerRidgedOn.value[i] = layer.ridgedEnabled ? 1 : 0;
+      uniforms.uLayerRidgeAmount.value[i] = layer.ridgeAmount ?? 1;
+      uniforms.uLayerTerraceOn.value[i] = layer.terraceEnabled ? 1 : 0;
       uniforms.uLayerTerraceSteps.value[i] = layer.terraceSteps;
-      uniforms.uLayerWarpStrength.value[i] = layer.warpStrength;
       uniforms.uLayerOpacity.value[i] = layer.opacity;
       // ?? 1, not layer.heightScale directly — layers saved before this
       // field existed have heightScale === undefined, and should default to

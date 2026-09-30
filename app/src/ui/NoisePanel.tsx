@@ -1,5 +1,5 @@
 import { useRef, useState, type RefObject } from 'react';
-import { Slider, Select, Accordion } from './UIElements';
+import { Slider, Select, Toggle, Accordion, EditableText } from './UIElements';
 import { MapView } from '../map/MapView';
 import { NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer, type NoiseType, type BlendMode, type StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
@@ -14,6 +14,7 @@ interface NoisePanelProps {
   onAddLayer: () => void;
   onDeleteLayer: (id: string) => void;
   onToggleLayerVisible: (id: string) => void;
+  onRenameLayer: (id: string, name: string) => void;
   onReorderLayer: (draggedId: string, targetId: string) => void;
   // Applies to every selected layer at once, not just the primary one.
   onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
@@ -55,6 +56,7 @@ export function NoisePanel({
   onAddLayer,
   onDeleteLayer,
   onToggleLayerVisible,
+  onRenameLayer,
   onReorderLayer,
   onUpdateSelectedLayer,
   brushRadiusPx,
@@ -230,8 +232,18 @@ export function NoisePanel({
                 >
                   ×
                 </button>
-                <span className="noise-layer-row-label">
-                  {NOISE_TYPE_OPTIONS.find((option) => option.value === layer.noiseType)?.label ?? layer.noiseType}
+                {/* stopPropagation so double-clicking/typing a name doesn't
+                    also trigger the row's own drag-to-reorder/select
+                    handler (handleRowMouseDown, on the row itself). Falls
+                    back to the noise-type label for layers saved before
+                    `name` existed. */}
+                <span onMouseDown={(event) => event.stopPropagation()}>
+                  <EditableText
+                    className="noise-layer-row-label"
+                    activateOn="doubleClick"
+                    value={layer.name ?? NOISE_TYPE_OPTIONS.find((option) => option.value === layer.noiseType)?.label ?? layer.noiseType}
+                    onCommit={(name) => onRenameLayer(layer.id, name)}
+                  />
                 </span>
               </div>
               {/* Photoshop-style hide/unhide (Dana, 2026-09-23) — independent
@@ -313,14 +325,38 @@ export function NoisePanel({
         />
       </div>
 
-      {(selectedLayer.noiseType === 'octaves' ||
-        selectedLayer.noiseType === 'terrace' ||
-        selectedLayer.noiseType === 'domainWarp') && (
+      {/* Independent, composable toggles layered onto the base generator
+          above, not separate noise types (Dana, 2026-09-30: "Modifiers as
+          toggles, not types"). Fixed order (Gaea): Domain warp → generator/
+          Octaves → Ridged → Terrace — each reveals its own params only
+          when checked. Hidden entirely for 'none' (no generator content to
+          modify). See ISSUES.md. */}
+      {selectedLayer.noiseType !== 'none' && (
         <>
           <div className="panel-section-divider" />
           <div className="panel-section">
             <div className="panel-section-title">Modifiers</div>
-            {selectedLayer.noiseType === 'octaves' && (
+            <Toggle
+              label="Domain warp"
+              value={selectedLayer.domainWarpEnabled ?? false}
+              onChange={(value) => onUpdateSelectedLayer({ domainWarpEnabled: value })}
+            />
+            {selectedLayer.domainWarpEnabled && (
+              <Slider
+                label="Warp strength"
+                value={selectedLayer.warpStrength}
+                onChange={(value) => onUpdateSelectedLayer({ warpStrength: value })}
+                min={0}
+                max={4}
+                step={0.1}
+              />
+            )}
+            <Toggle
+              label="Octaves (fBm)"
+              value={selectedLayer.octavesEnabled ?? false}
+              onChange={(value) => onUpdateSelectedLayer({ octavesEnabled: value })}
+            />
+            {selectedLayer.octavesEnabled && (
               <>
                 <Slider
                   label="Octaves"
@@ -349,7 +385,31 @@ export function NoisePanel({
                 />
               </>
             )}
-            {selectedLayer.noiseType === 'terrace' && (
+            <Toggle
+              label="Ridged"
+              value={selectedLayer.ridgedEnabled ?? false}
+              onChange={(value) => onUpdateSelectedLayer({ ridgedEnabled: value })}
+            />
+            {/* ridge() has no natural continuous parameter of its own to gate
+                (unlike the other 3 modifiers' existing sliders) — this
+                blends un-ridged -> fully-ridged (Dana, 2026-09-30: "how
+                would you control the amount of it?"). */}
+            {selectedLayer.ridgedEnabled && (
+              <Slider
+                label="Ridge amount"
+                value={selectedLayer.ridgeAmount ?? 1}
+                onChange={(value) => onUpdateSelectedLayer({ ridgeAmount: value })}
+                min={0}
+                max={1}
+                step={0.01}
+              />
+            )}
+            <Toggle
+              label="Terrace"
+              value={selectedLayer.terraceEnabled ?? false}
+              onChange={(value) => onUpdateSelectedLayer({ terraceEnabled: value })}
+            />
+            {selectedLayer.terraceEnabled && (
               <Slider
                 label="Terrace steps"
                 value={selectedLayer.terraceSteps}
@@ -360,20 +420,9 @@ export function NoisePanel({
                 precision={0}
               />
             )}
-            {selectedLayer.noiseType === 'domainWarp' && (
-              <Slider
-                label="Warp strength"
-                value={selectedLayer.warpStrength}
-                onChange={(value) => onUpdateSelectedLayer({ warpStrength: value })}
-                min={0}
-                max={4}
-                step={0.1}
-              />
-            )}
           </div>
         </>
       )}
-
     </>
   );
 }

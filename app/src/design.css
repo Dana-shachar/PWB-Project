@@ -568,6 +568,24 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   white-space: nowrap;
 }
 
+/* The editing-state input for a layer's name (EditableText, ui/UIElements.tsx
+   — className + "-input") — same field look as .project-name-text-input,
+   just sized to fit inline within the row's own compact height instead of
+   a full-width block. */
+.noise-layer-row-label-input {
+  width: 100%;
+  padding: 2px 4px;
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+  color: var(--color-text);
+  font: 400 var(--font-size-sm) var(--font-ui);
+}
+.noise-layer-row-label-input:focus {
+  outline: none;
+  border-color: var(--color-accent);
+}
+
 .noise-layer-row-visibility {
   font-size: 11px;
 }

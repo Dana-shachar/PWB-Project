@@ -26,6 +26,7 @@ interface RightPanelProps {
   onAddLayer: () => void;
   onDeleteLayer: (id: string) => void;
   onToggleLayerVisible: (id: string) => void;
+  onRenameLayer: (id: string, name: string) => void;
   onReorderLayer: (draggedId: string, targetId: string) => void;
   onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
   brushRadiusPx: number;

@@ -119,7 +119,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ---
 
 ## Stage 03 — Terrain: Noise Generation
-🟩🟩🟩🟩🟩🟩⬜⬜⬜⬜ 60%
+🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 100%
 
 #### Base noise types — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
@@ -137,7 +137,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 
 ---
 
-#### Multi-layer stack & blend modes — 90%
+#### Multi-layer stack & blend modes — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
 > 1. **Shared pipeline** — `HeightmapPipeline` became a single shared instance, not duplicated per-component (2026-09-15).
 > 2. **Layer stack** — Photoshop-style: add/delete/drag-to-reorder, up to 16 layers (2026-09-16).
@@ -147,21 +147,24 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 > 6. **Visible drag-to-reorder** — dragging a layer row now moves the actual row itself (via `position:fixed`, following the cursor) instead of reordering instantly with no visible feedback; a first "ghost copy" approach was rejected — Dana wanted to see the real token move, not a floating duplicate (2026-09-23).
 > 7. **Per-layer visibility toggle** — a Photoshop-style eye icon per row; a hidden layer is skipped entirely before its uniforms are ever set (`layers.filter(l => l.visible !== false)` in `HeightmapPipeline.render()`), so its noise is never evaluated, not just zero-weighted. Solves not being able to tell which layer is being painted on in the shared 2D/3D preview. Considered and rejected forcing opacity to 0 instead — Dana: "it's not the same as 0 opacity though," a hidden layer's noise would still be computed and it conflates a real distinct concept with the existing Opacity slider. Also considered and rejected a shader-side `uLayerVisible` uniform + `continue` skip — Dana: simpler to just not compute a disregarded layer at all, so the CPU-side filter replaced it (2026-09-23).
 > 8. **Fixed: old saved layers defaulted to hidden** — `visible` didn't exist on layers saved before this feature, so plain truthiness read `undefined` as falsy/hidden. Fixed by checking `!== false` (filter) / `=== false` (eye-icon + row dimming) everywhere instead of plain truthiness, so missing data defaults to visible (2026-09-23).
+> 9. **Layer naming** — auto-assigned "Layer 01"/"Layer 02" (an ever-incrementing counter, never reused after a delete) plus a rename option (double-click to edit inline, reusing `EditableText`). Requested 2026-09-22, built 2026-09-30.
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Layer naming** — layers show their noise-type label, not a real name. Want auto-assigned "Layer 01"/"Layer 02" (ever-incrementing counter) plus a rename option (double-click to edit inline). Requested 2026-09-22, not built.
+> 1. _None._
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
 
 ---
 
-#### Modifier architecture — 30%
+#### Modifier architecture — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
 > 1. **Per-layer Height (amplitude)** — a real `heightScale` field per layer, distinct from Opacity/Blend Mode: Opacity/Blend Mode govern the 2D shape/paint composite only; Height is a separate, purely additive contribution to actual elevation, ignoring Opacity/Blend Mode entirely (Dana, 2026-09-24: "same as an amplitude/strength control... it's a separate param... not related to blend modes or opacity"). See the elevation-channel split under Stage 05, and `ISSUES.md`, 2026-09-24, for the full design (including a rejected first version where Height and Opacity collapsed into the same number on a base layer).
+> 2. **Modifiers as toggles, not types** — `noiseType` narrowed to real base generators (Random/Perlin/Simplex/Voronoi/None); Ridged/Octaves/Terrace/Domain warp became 4 independent, composable boolean toggles layered onto whichever base generator is selected, in Gaea's fixed order (Domain warp → generator/Octaves → Ridged → Terrace) — any combination, on any base, instead of 4 separate mutually-exclusive types each secretly hardcoded to Perlin only. Shader restructured so `fbm3D`/domain-warp dispatch through a shared `evalBaseGenerator()` instead of calling `perlinNoise3D` directly, making them generator-agnostic. Old saved layers (with `noiseType` as one of the retired modifier values) migrate automatically on load — always secretly Perlin-based, so e.g. `'ridged'` becomes `{ noiseType: 'perlin', ridgedEnabled: true }` (2026-09-30). See `ISSUES.md`.
+> 3. **Ridge amount** — Ridged was the one modifier with no natural continuous parameter (a fixed transform, previously all-or-nothing); added a 0–1 slider blending un-ridged → fully-ridged, matching how the other 3 modifiers already scale via their own existing sliders (Dana, 2026-09-30: "how would you control the amount of it?") (2026-09-30).
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Modifiers as toggles, not types** — Ridged/Octaves/Terrace/Domain warp are separate selectable *noise types* today, not independently-toggleable modifiers layered onto a base type in a fixed order (Domain warp → generator/Octaves → Ridged → Terrace), the way Gaea structures it.
+> 1. _None._
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
@@ -498,6 +501,31 @@ Design notes and feature ideas from the 2026-09-14 planning session, not yet dec
   - **Weightmaps** — texture weightmaps/splat-maps: RGBA bitmaps whose channels weight the distribution of each material across the world (what every game-engine terrain shader expects). Combine any selectors/erosion masks; a "Weightmap" device keeps channels normalized and coverage where set.
   - **Built for comparing** — most viewport time goes to judging whether a change helped, so tools are built around that: side-by-side A:B comparison of two states in one view, or a sliding wipe between them, comparing a device's input against its output; display guides stackable over the terrain (a slope overlay for where the ground exceeds what the engine will let a player walk on, contour lines to read elevation topographically, a terrain grid showing where the real data resolution sits); camera slots on keys 1-8 to recheck the same vantage points after every change instead of re-flying the terrain; an orthographic camera that transitions smoothly out of perspective, for judging layout/scale without foreshortening.
   - **Worlds bigger than memory** — for large open worlds, one asset for the whole region stops being workable. Export a set of tiles covering the region instead (Professional Edition+); each tile builds separately, buying extreme detail with world size bounded by disk rather than RAM. Tiles read back too — a "Tiled File Input" device points at the file collection and the whole set comes in, cached at multiple resolutions, so a world far larger than memory can be opened/edited as if it were a single file. A long build that fails resumes from where it stopped rather than restarting, and finished tiles merge as they go rather than waiting on one long final pass.
+
+---
+
+## Procedural System Feedback (2026-09-30)
+
+Not decided how much of this gets built, or when — logged so the direction isn't lost, and so it can inform how upcoming stages (Erosion, Biomes, anything after) get scoped. Nothing already built needs to change because of this; it's additive.
+
+**The feedback:** relayed by Dana from class feedback — "it's good as a software, but the procedural aspect isnt clear enough... there's a subtle difference between a 3d software to make planets and a procedural system." Dana's reading: the order of actions should be clearer/more structured — first terrain, then noise, then erosion, then land elements (water, trees, etc.). Her stated overall concept for the project: "i want to be able to create very different worlds but all with types of natural disasters you can generate."
+
+**The core distinction discussed:** the noise content itself is already procedurally generated (the algorithms produce the pattern) — what currently reads as "tool" rather than "system" is that a human has to manually assemble the pipeline (add a layer, pick its type, tune its parameters) to get any result at all, and today's stages (Noise/Erosion/Color tabs) are presented as parallel/independent rather than genuinely causal (each one gated on and consuming the previous one's real output).
+
+**Directions discussed, not yet built:**
+1. **Make the pipeline genuinely sequential/causal, not parallel tabs** — each stage gated on the previous one actually existing (can't erode nothing, can't classify a biome without elevation), both in the runtime data flow and in the UI itself (e.g. Erosion's tab disabled/empty until Terrain has real content). Connects to this project's existing "work through `ROADMAP.md` in order" rule (`CLAUDE.md`) — worth treating as applying to the pipeline's own architecture too, not just the dev process. Still open: whether "sequential" here means the data pipeline, the dev-build order, or both — Dana confirmed this is the direction but the exact scope wasn't pinned down.
+2. **Seed + theme-driven generation, alongside (not replacing) manual tuning** — a "theme" (desert planet, volcano planet, etc.) is an authored template: eligible noise types, parameter *ranges* (not fixed values), weights, and a biased disaster pool. A seed deterministically samples within those ranges to assemble a full layer stack automatically; the result lands in the existing manual UI for refinement afterward. Not random sliders — one authored theme produces many different but coherent results via different seeds. Explicitly deferred by Dana ("themes can be implemented later") — doesn't block anything else.
+3. **Natural disasters as parameterized instances of a shared simulation engine, not one-off effects** — the direct answer to Dana's "different worlds via natural disasters" goal. A flood is extreme/localized hydraulic erosion; drought/desertification is extreme thermal/wind erosion; a volcanic eruption is radial uplift-and-falloff; an earthquake is a fault-line discontinuity. If Stage 08 (Erosion) is architected as a general, parameterized simulation (intensity, duration, location, direction) rather than one fixed effect, disasters become the same engine run with different parameters — worth deciding *before* Stage 08 is built, since it directly shapes that stage's scope.
+4. **Rule-driven feature placement (water, vegetation) instead of painting** — once biomes exist, scatter by rule ("trees where biome=forest and slope<X"), not by brush. Same "generated, not authored" logic extended one layer further; not yet a tracked stage.
+
+**References gathered (verify against directly before implementing anything, per this project's own reference-verification rule):**
+- Node-graph pipelines where output genuinely flows downstream: [World Machine](https://world-machine.com/) ("changes upstream automatically recompute everything below it live"), [Gaea docs](https://docs.quadspinner.com/Guide/) (already this project's cited source for blend-mode conventions).
+- Hydraulic erosion: [Sebastian Lague's Hydraulic-Erosion repo](https://github.com/SebLague/Hydraulic-Erosion) (MIT license, the most-copied droplet-based reference implementation), [itch.io demo/writeup](https://sebastian.itch.io/hydraulic-erosion).
+- Procedural planets end-to-end (noise layering → biomes → water): Sebastian Lague's [Procedural Planets playlist](https://www.youtube.com/watch?v=QN39W020LqU&list=PLFt_AvWsXl0cONs3T0By4puYy6GM22ko8).
+- Biome/moisture/elevation classification, rivers: [Red Blob Games — Polygonal Map Generation for Games](https://www.redblobgames.com/maps/polygon-map-generation/).
+- Production biome system (noise → parameters → classification): [Minecraft Wiki: Noise generator](https://minecraft.fandom.com/wiki/Noise_generator) (since 1.18: 5 parameters per location — temperature, humidity, continentalness, erosion, weirdness — matched against each biome's ideal values).
+- Seed/theme → varied but coherent worlds: Sean Murray's GDC talk "Building Worlds Using Math(s)" / "Continuous World Generation in No Man's Sky" — on GDC Vault, no single stable direct link found, search there.
+- **Not verified, don't treat as a confirmed source:** "Hans Theobald Beyer's thesis" on hydraulic erosion, mentioned in discussion — search couldn't confirm this specific citation. Lague's repo above is the actually-verified starting point.
 
 ---
 

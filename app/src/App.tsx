@@ -197,6 +197,7 @@ function App() {
         onAddLayer={noiseLayers.addLayer}
         onDeleteLayer={noiseLayers.deleteLayer}
         onToggleLayerVisible={noiseLayers.toggleLayerVisible}
+        onRenameLayer={noiseLayers.renameLayer}
         onReorderLayer={noiseLayers.reorderLayer}
         onUpdateSelectedLayer={noiseLayers.updateSelectedLayer}
         brushRadiusPx={brush.brushRadiusPx}

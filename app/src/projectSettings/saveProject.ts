@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { User } from 'firebase/auth';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
-import { createDefaultLayer, type NoiseLayer, type StrokeRecord } from '../map/heightmap';
+import { createDefaultLayer, migrateLegacyLayers, type NoiseLayer, type StrokeRecord } from '../map/heightmap';
 import {
   deleteProject as deleteProjectFromFirestore,
   listProjects,
@@ -89,9 +89,13 @@ export function useSaveProject({
         setProjects(summaries);
         const project = await loadProject(currentUser.uid, mostRecent.id);
         if (project && project.layers.length > 0) {
-          sceneHandleRef.current?.loadProject(project.layers, project.strokeHistory);
-          setLayers(project.layers);
-          setSelectedLayerIds([project.layers[project.layers.length - 1].id]); // top of the stack, matching the selection convention elsewhere
+          // Old saves may have noiseType as a now-retired modifier value
+          // ('ridged'/'octaves'/'terrace'/'domainWarp') — migrate once,
+          // here, before this data reaches rendering or React state.
+          const migratedLayers = migrateLegacyLayers(project.layers);
+          sceneHandleRef.current?.loadProject(migratedLayers, project.strokeHistory);
+          setLayers(migratedLayers);
+          setSelectedLayerIds([migratedLayers[migratedLayers.length - 1].id]); // top of the stack, matching the selection convention elsewhere
           setStrokeHistory(project.strokeHistory);
           setCurrentPlanetId(mostRecent.id);
           setCurrentPlanetName(project.name);
@@ -132,7 +136,7 @@ export function useSaveProject({
   // the new project's id.
   function clearCanvas() {
     const freshId = crypto.randomUUID();
-    const freshLayers = [createDefaultLayer(freshId)];
+    const freshLayers = [createDefaultLayer(freshId, 'Layer 01')];
     sceneHandleRef.current?.loadProject(freshLayers, []);
     setLayers(freshLayers);
     setSelectedLayerIds([freshId]);
@@ -164,8 +168,9 @@ export function useSaveProject({
     if (!currentUser || id === currentPlanetId) return;
     const project = await loadProject(currentUser.uid, id);
     if (!project) return;
-    sceneHandleRef.current?.loadProject(project.layers, project.strokeHistory);
-    const loadedLayers = project.layers.length > 0 ? project.layers : [createDefaultLayer(crypto.randomUUID())];
+    const loadedLayers =
+      project.layers.length > 0 ? migrateLegacyLayers(project.layers) : [createDefaultLayer(crypto.randomUUID(), 'Layer 01')];
+    sceneHandleRef.current?.loadProject(loadedLayers, project.strokeHistory);
     setLayers(loadedLayers);
     setSelectedLayerIds([loadedLayers[loadedLayers.length - 1].id]);
     setStrokeHistory(project.strokeHistory);

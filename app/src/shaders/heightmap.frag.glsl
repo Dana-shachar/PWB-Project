@@ -7,14 +7,23 @@ varying vec2 vUv;
 const int MAX_LAYERS = 16; // loop upper bound — actual count is uLayerCount, via the break below
 
 uniform float uLayerCount;
-uniform float uLayerNoiseType[MAX_LAYERS]; // 0=random, 1=perlin, 2=simplex, 3=voronoi, 4=ridged, 5=none, 6=octaves, 7=terrace, 8=domain warp
+uniform float uLayerNoiseType[MAX_LAYERS]; // base generator: 0=random, 1=perlin, 2=simplex, 3=voronoi, 4=none
 uniform float uLayerSeed[MAX_LAYERS];
 uniform float uLayerFrequency[MAX_LAYERS];
+// Modifiers — independent toggles (0/1) layered onto the base generator
+// above, not separate noiseType values (Dana, 2026-09-30: "Modifiers as
+// toggles, not types"). Fixed order (Gaea): Domain warp → generator/Octaves
+// → Ridged → Terrace. See map/heightmap.ts's NoiseLayer.
+uniform float uLayerDomainWarpOn[MAX_LAYERS];
+uniform float uLayerWarpStrength[MAX_LAYERS];
+uniform float uLayerOctavesOn[MAX_LAYERS];
 uniform float uLayerOctaves[MAX_LAYERS];
 uniform float uLayerPersistence[MAX_LAYERS];
 uniform float uLayerLacunarity[MAX_LAYERS];
+uniform float uLayerRidgedOn[MAX_LAYERS];
+uniform float uLayerRidgeAmount[MAX_LAYERS]; // 0..1 — ridge() has no natural continuous param of its own, this blends un-ridged -> fully-ridged
+uniform float uLayerTerraceOn[MAX_LAYERS];
 uniform float uLayerTerraceSteps[MAX_LAYERS];
-uniform float uLayerWarpStrength[MAX_LAYERS];
 uniform float uLayerOpacity[MAX_LAYERS];
 uniform float uLayerHeightScale[MAX_LAYERS]; // amplitude, distinct from opacity — see map/heightmap.ts's NoiseLayer.heightScale
 uniform float uLayerBlendMode[MAX_LAYERS]; // 0=normal, 1=add, 2=subtract, 3=multiply, 4=max, 5=min, 6=screen
@@ -62,17 +71,33 @@ vec2 samplePaintTexture(int index, vec2 uv) {
 
 const int MAX_OCTAVES = 8; // loop upper bound — actual count is octaves, via the break below
 
-// fBm (fractal Brownian motion): sums several octaves of Perlin noise at
-// increasing frequency (lacunarity) and decreasing amplitude (persistence).
-// Standard formula — verified against thebookofshaders.com/13, 2026-09-14.
-float fbm3D(vec3 p, float seed, float octaves, float persistence, float lacunarity) {
+// The base generator, selected once per layer — random/perlin/simplex/
+// voronoi only; 'none' is handled separately (see isNoneType in main()
+// below). Modifiers (fbm/domain warp/ridge/terrace) all dispatch through
+// this instead of hardcoding perlinNoise3D, so any of them can layer onto
+// any base generator (Dana, 2026-09-30) — previously fbm3D/domainWarp3D
+// each called perlinNoise3D directly, secretly limiting Octaves/Domain warp
+// to Perlin only. See ISSUES.md.
+float evalBaseGenerator(vec3 p, float seed, float baseType) {
+  if (baseType < 0.5) return randomNoise3D(p, seed);
+  else if (baseType < 1.5) return perlinNoise3D(p, seed);
+  else if (baseType < 2.5) return simplexNoise3D(p, seed);
+  else return voronoiNoise3D(p, seed);
+}
+
+// fBm (fractal Brownian motion): sums several octaves of the base generator
+// at increasing frequency (lacunarity) and decreasing amplitude
+// (persistence). Standard formula — verified against
+// thebookofshaders.com/13, 2026-09-14 — generalized 2026-09-30 to any base
+// generator via evalBaseGenerator, not hardcoded to Perlin.
+float fbm3D(vec3 p, float seed, float baseType, float octaves, float persistence, float lacunarity) {
   float value = 0.0;
   float amplitude = 1.0;
   float maxAmplitude = 0.0;
   vec3 samplePoint = p;
   for (int i = 0; i < MAX_OCTAVES; i++) {
     if (i >= int(octaves)) break;
-    value += amplitude * perlinNoise3D(samplePoint, seed);
+    value += amplitude * evalBaseGenerator(samplePoint, seed, baseType);
     maxAmplitude += amplitude;
     samplePoint *= lacunarity;
     amplitude *= persistence;
@@ -81,23 +106,28 @@ float fbm3D(vec3 p, float seed, float octaves, float persistence, float lacunari
 }
 
 // Domain warp: f(p + h(p)) — displaces the sample coordinate by a noise-
-// built offset vector before the final noise evaluation, for a more organic,
-// less grid-aligned look. Standard technique, verified against
+// built offset vector before whatever comes next in the pipeline (the base
+// generator, or fbm sampling at that displaced position), for a more
+// organic, less grid-aligned look. Standard technique, verified against
 // iquilezles.org/articles/warp, 2026-09-14. The offset's three components
-// are decorrelated by sampling perlinNoise3D at three different fixed
+// are decorrelated by sampling the base generator at three different fixed
 // offsets from p, since there's no vector-valued noise function here.
-vec3 domainWarpOffset(vec3 p, float seed) {
-  float x = perlinNoise3D(p + vec3(5.2, 1.3, 2.8), seed);
-  float y = perlinNoise3D(p + vec3(1.7, 9.2, 4.1), seed);
-  float z = perlinNoise3D(p + vec3(8.3, 2.8, 6.5), seed);
+// Generalized 2026-09-30 to any base generator, same reasoning as fbm3D.
+vec3 domainWarpOffset(vec3 p, float seed, float baseType) {
+  float x = evalBaseGenerator(p + vec3(5.2, 1.3, 2.8), seed, baseType);
+  float y = evalBaseGenerator(p + vec3(1.7, 9.2, 4.1), seed, baseType);
+  float z = evalBaseGenerator(p + vec3(8.3, 2.8, 6.5), seed, baseType);
   return vec3(x, y, z);
 }
 
-// poleFalloff tapers the warp to 0 at the poles (where vertices are packed
-// closest together) so it doesn't pinch the geometry — see ISSUES.md, 2026-09-15.
-float domainWarp3D(vec3 p, float seed, float poleFalloff, float warpStrength) {
-  vec3 warped = p + warpStrength * poleFalloff * domainWarpOffset(p, seed);
-  return perlinNoise3D(warped, seed);
+// Returns the warped *position*, not a noise value directly — unlike the
+// old domainWarp3D, since whatever comes after in the pipeline (fbm or the
+// plain base generator) needs to sample AT this displaced position, not
+// receive a pre-computed scalar. poleFalloff tapers the warp to 0 at the
+// poles (where vertices are packed closest together) so it doesn't pinch
+// the geometry — see ISSUES.md, 2026-09-15.
+vec3 domainWarpedPosition(vec3 p, float seed, float baseType, float poleFalloff, float warpStrength) {
+  return p + warpStrength * poleFalloff * domainWarpOffset(p, seed, baseType);
 }
 
 // Converts an equirectangular UV coordinate to its position on the unit
@@ -116,32 +146,29 @@ vec3 uvToSpherePosition(vec2 uv) {
   return vec3(cosLatitude * cos(longitude), sin(latitude), cosLatitude * sin(longitude));
 }
 
-// Evaluates one layer's raw noise type — same generators/modifiers as
-// before, just taking a layer's own params instead of reading global uniforms.
+// Evaluates one layer's raw noise: base generator (noiseType) plus whatever
+// modifiers are toggled on, composed in Gaea's fixed order — Domain warp
+// (displaces the sample position) → generator/Octaves (fbm if octavesOn,
+// else a single sample) → Ridged (blended by ridgeAmount) → Terrace.
+// Rewritten 2026-09-30 from a flat noiseType switch (where Ridged/Octaves/
+// Terrace/Domain warp were separate, mutually-exclusive, Perlin-only
+// types) into this composable pipeline — see ISSUES.md.
 float evalLayerNoise(
   vec3 p, float seed, float noiseType,
+  bool domainWarpOn, bool octavesOn, bool ridgedOn, bool terraceOn,
   float octaves, float persistence, float lacunarity,
-  float terraceSteps, float warpStrength, float poleFalloff
+  float terraceSteps, float warpStrength, float ridgeAmount, float poleFalloff
 ) {
-  if (noiseType < 0.5) {
-    return randomNoise3D(p, seed);
-  } else if (noiseType < 1.5) {
-    return perlinNoise3D(p, seed);
-  } else if (noiseType < 2.5) {
-    return simplexNoise3D(p, seed);
-  } else if (noiseType < 3.5) {
-    return voronoiNoise3D(p, seed);
-  } else if (noiseType < 4.5) {
-    return ridge(perlinNoise3D(p, seed)); // ridged is a modifier on Perlin, not its own generator
-  } else if (noiseType < 5.5) {
-    return 0.0; // none — flat, no contribution
-  } else if (noiseType < 6.5) {
-    return fbm3D(p, seed, octaves, persistence, lacunarity); // octaves is a modifier on Perlin, not its own generator
-  } else if (noiseType < 7.5) {
-    return terrace(perlinNoise3D(p, seed), terraceSteps); // terrace is a modifier on Perlin, not its own generator
-  } else {
-    return domainWarp3D(p, seed, poleFalloff, warpStrength); // domain warp is a modifier on Perlin, not its own generator
-  }
+  vec3 samplePoint = domainWarpOn ? domainWarpedPosition(p, seed, noiseType, poleFalloff, warpStrength) : p;
+
+  float value = octavesOn
+    ? fbm3D(samplePoint, seed, noiseType, octaves, persistence, lacunarity)
+    : evalBaseGenerator(samplePoint, seed, noiseType);
+
+  if (ridgedOn) value = mix(value, ridge(value), ridgeAmount);
+  if (terraceOn) value = terrace(value, terraceSteps);
+
+  return value;
 }
 
 // Combines a layer's height with the running composite, per Gaea's Combine
@@ -193,11 +220,17 @@ void main() {
   // never evaluated here at all, not just zero-weighted.
   for (int i = 0; i < MAX_LAYERS; i++) {
     if (i >= int(uLayerCount)) break;
+    // noiseType 4 = none — matches map/heightmap.ts's NOISE_TYPE_INDEX.
+    bool isNoneType = uLayerNoiseType[i] > 3.5;
     vec3 p = basePosition * uLayerFrequency[i];
-    float raw = evalLayerNoise(
+    // 'none' has no generator content of its own — skip evaluating it
+    // entirely (raw is unused below for isNoneType anyway), same reasoning
+    // as hidden layers being filtered out before this loop runs at all.
+    float raw = isNoneType ? 0.0 : evalLayerNoise(
       p, uLayerSeed[i], uLayerNoiseType[i],
+      uLayerDomainWarpOn[i] > 0.5, uLayerOctavesOn[i] > 0.5, uLayerRidgedOn[i] > 0.5, uLayerTerraceOn[i] > 0.5,
       uLayerOctaves[i], uLayerPersistence[i], uLayerLacunarity[i],
-      uLayerTerraceSteps[i], uLayerWarpStrength[i], poleFalloff
+      uLayerTerraceSteps[i], uLayerWarpStrength[i], uLayerRidgeAmount[i], poleFalloff
     );
     vec2 paint = samplePaintTexture(i, paintUV); // (value, mask)
     // A 'none' layer has no content of its own — true "no fill" — so its
@@ -207,7 +240,6 @@ void main() {
     // caused a compounded/ridged edge at soft stroke boundaries). A noise
     // layer keeps the old per-pixel paint-overrides-noise blend and always
     // has full coverage. See ISSUES.md, 2026-09-22.
-    bool isNoneType = uLayerNoiseType[i] > 4.5 && uLayerNoiseType[i] < 5.5;
     float layerHeight = isNoneType ? paint.x : mix(raw * 0.5 + 0.5, paint.x, paint.y);
     float coverage = isNoneType ? paint.y : 1.0;
     float blended = applyBlendMode(composite, layerHeight, uLayerBlendMode[i]);

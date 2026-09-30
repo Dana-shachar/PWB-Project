@@ -69,3 +69,15 @@ Third-party reference code/algorithms used directly (not original work) — cred
 - **3D Perlin noise** (`app/src/shaders/noise.glsl`, `perlinNoise3D`, "cnoise") — Stefan Gustavson; permutation/gradient ideas: Ian McEwan of Ashima Arts. MIT license. Source: [github.com/stegu/webgl-noise](https://github.com/stegu/webgl-noise), `src/classicnoise3D.glsl`. Verified 2026-09-14 — an earlier transcription had the wrong constant in `permute()` (`+1.0` instead of `+10.0`), caught by this verification.
 - **3D Simplex noise** (`app/src/shaders/noise.glsl`, `simplexNoise3D`, "snoise") — Stefan Gustavson / Ian McEwan of Ashima Arts. MIT license. Source: [github.com/stegu/webgl-noise](https://github.com/stegu/webgl-noise), `src/noise3D.glsl`. Verified 2026-09-14; reuses `permute4` from the Perlin entry above.
 - **fBm (fractal Brownian motion)** (`app/src/shaders/heightmap.frag.glsl`, `fbm3D`) — the standard octaves/persistence/lacunarity summation loop, verified against [thebookofshaders.com/13](https://thebookofshaders.com/13/), 2026-09-14. Applied to `perlinNoise3D` above.
+
+## 🌍 Inspiration / Further reading
+
+Not code used in this project (unlike the References above) — systems/talks/articles referenced while planning direction, gathered 2026-09-30 in response to feedback that the project reads more like 3D terrain software than a procedural *system*. Full discussion in `ROADMAP.md`'s "Procedural System Feedback" section.
+
+- **[World Machine](https://world-machine.com/)** — node-graph terrain tool; changes upstream automatically recompute everything downstream live. The reference for "genuinely sequential/causal pipeline stages," not parallel independent panels.
+- **[Gaea docs](https://docs.quadspinner.com/Guide/)** (QuadSpinner) — already this project's cited source for its blend-mode/Combine-node conventions.
+- **[Sebastian Lague — Hydraulic-Erosion](https://github.com/SebLague/Hydraulic-Erosion)** (MIT license) — the most-copied reference implementation of droplet-based hydraulic erosion; also see his [itch.io demo/writeup](https://sebastian.itch.io/hydraulic-erosion). Candidate source for Stage 08.
+- **[Sebastian Lague — Procedural Planets](https://www.youtube.com/watch?v=QN39W020LqU&list=PLFt_AvWsXl0cONs3T0By4puYy6GM22ko8)** (YouTube playlist) — noise layering → biomes → water, close to this project's own scope end-to-end.
+- **[Red Blob Games — Polygonal Map Generation for Games](https://www.redblobgames.com/maps/polygon-map-generation/)** — biome/moisture/elevation classification, river placement.
+- **[Minecraft Wiki — Noise generator](https://minecraft.fandom.com/wiki/Noise_generator)** — a real production biome system: 5 parameters per location (temperature, humidity, continentalness, erosion, weirdness) matched against each biome's ideal values, since 1.18.
+- **Sean Murray, GDC — "Building Worlds Using Math(s)" / "Continuous World Generation in No Man's Sky"** — seed/theme-driven generation producing wildly different but coherent worlds. On GDC Vault; no single stable direct link found, search there.

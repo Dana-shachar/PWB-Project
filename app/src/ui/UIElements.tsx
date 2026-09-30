@@ -198,13 +198,19 @@ interface EditableTextProps {
   value: string;
   onCommit: (value: string) => void;
   className?: string;
+  // 'click' (default) for the project name — nothing else there competes
+  // for a plain click. 'doubleClick' for layer names (ui/NoisePanel.tsx) —
+  // a single click on a layer row already means "select it," so editing
+  // needs its own, non-conflicting gesture (Dana, 2026-09-22's original
+  // "double-click to edit inline" spec).
+  activateOn?: 'click' | 'doubleClick';
 }
 
-// Click-to-edit inline text — plain text until clicked, then a text field;
-// Enter/blur commits, Escape cancels. Used for the current project's name
-// (see ui/Panel.tsx) — same interaction wanted later for layer names, per
-// ROADMAP.md, so it's a shared component rather than one-off.
-export function EditableText({ value, onCommit, className }: EditableTextProps) {
+// Click-to-edit inline text — plain text until activated, then a text
+// field; Enter/blur commits, Escape cancels. Used for the current project's
+// name (see ui/Panel.tsx) and layer names (ui/NoisePanel.tsx) — a shared
+// component rather than one-off, per ROADMAP.md.
+export function EditableText({ value, onCommit, className, activateOn = 'click' }: EditableTextProps) {
   const [isEditing, setIsEditing] = useState(false);
   const fieldRef = useRef<HTMLInputElement>(null);
 
@@ -236,8 +242,11 @@ export function EditableText({ value, onCommit, className }: EditableTextProps) 
     );
   }
 
+  const activateProps =
+    activateOn === 'doubleClick' ? { onDoubleClick: () => setIsEditing(true) } : { onClick: () => setIsEditing(true) };
+
   return (
-    <span className={className} onClick={() => setIsEditing(true)}>
+    <span className={className} {...activateProps}>
       {value}
     </span>
   );
