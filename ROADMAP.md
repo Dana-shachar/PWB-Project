@@ -453,7 +453,8 @@ Biome-style surface texturing/coloring. An empty placeholder "Color" tab is alre
 > <span style="color:#2da44e">✅ **Done**</span>
 > 1. **Fixed: panel width changed with content** — both panels used `width: max-content`, so they visibly resized every time an accordion opened/closed or a right-panel tab switched (Dana, 2026-09-30: "it changes width according to what is open... a stable width").
 > 2. **Resizable panel** — a drag handle on each panel's inner edge, ported from `active-geometry-project`'s `.ag-right-panel-handle` pattern (`ui/panelResize.ts`): width only ever changes via an explicit user drag, never auto-adjusted by content — the same fix as #1, but user-adjustable instead of one hardcoded number (Dana, 2026-09-30: "i didnt mean it to have a hard coded width"). Applied to both the left and right panels (2026-09-30).
-> 3. **Per-panel min width** — the left panel's min/starting width lowered to 280px (right panel stays 360–600px) — its controls need less horizontal room than the right panel's noise/layer controls (Dana, 2026-09-30: "the left side menu is a bit too wide... lower it's min value").
+> 3. **Min/starting width lowered to 280px** — first on the left panel only (Dana, 2026-09-30: "the left side menu is a bit too wide... lower it's min value"), then matched on the right panel too ("add the same fix to the right panel - inc 280 min"). Both now share the same 280–600px range.
+> 4. **Fixed: slider/select rows didn't reflow into the narrower width** — `.ui-slider-track`/`.ui-select` had `flex: 1` but no `min-width: 0`, so the browser's intrinsic default width for range/select inputs blocked them from actually shrinking — number fields got pushed past the panel's edge instead ("you just cut the width without adjusting all the components - to fill panel width"). Fixed by adding `min-width: 0` to both.
 >
 > <span style="color:#0969da">📋 **To do**</span>
 > 1. _None._

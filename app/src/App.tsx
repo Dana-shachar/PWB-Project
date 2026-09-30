@@ -62,12 +62,11 @@ function App() {
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const primaryLayerId = noiseLayers.selectedLayerIds[noiseLayers.selectedLayerIds.length - 1];
   // Drag-to-resize (ui/panelResize.ts) — width only ever changes via an
-  // explicit drag, never auto-adjusted by content (Dana, 2026-09-30). Left
-  // panel's controls need less room than the right panel's noise/layer
-  // controls, so its min (and starting width) is lower (Dana, 2026-09-30:
-  // "the left side menu is a bit too wide... lower it's min value").
+  // explicit drag, never auto-adjusted by content (Dana, 2026-09-30). Both
+  // panels share the same lowered 280px min/starting width (Dana,
+  // 2026-09-30: "add the same fix to the right panel - inc 280 min").
   const leftPanel = usePanelResize(280, 'left', 280);
-  const rightPanel = usePanelResize(360, 'right');
+  const rightPanel = usePanelResize(280, 'right', 280);
 
   return (
     <div className="app-layout">
