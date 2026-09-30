@@ -125,17 +125,20 @@ function App() {
                 Collapse
               </button>
             </div>
-            <MapView
-              layers={noiseLayers.layers}
-              selectedLayerId={primaryLayerId}
-              brushRadiusPx={brush.brushRadiusPx}
-              brushValue={brush.brushValue}
-              feather={brush.feather}
-              sceneHandleRef={sceneHandleRef}
-              onStrokeComplete={brush.handleStrokeComplete}
-              paintVersion={brush.paintVersion}
-              sizePx={800}
-            />
+            {/* Caps how wide the canvas grows in this much larger viewport
+                area — MapView itself fills 100% of whatever contains it. */}
+            <div className="map-expanded-canvas-wrap">
+              <MapView
+                layers={noiseLayers.layers}
+                selectedLayerId={primaryLayerId}
+                brushRadiusPx={brush.brushRadiusPx}
+                brushValue={brush.brushValue}
+                feather={brush.feather}
+                sceneHandleRef={sceneHandleRef}
+                onStrokeComplete={brush.handleStrokeComplete}
+                paintVersion={brush.paintVersion}
+              />
+            </div>
           </div>
         ) : (
           <>

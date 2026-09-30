@@ -14,7 +14,7 @@ import strokePathFragmentGlsl from '../shaders/strokePath.frag.glsl?raw'; // bru
 // Exported so brush radius (MapView.tsx) can convert px to a UV fraction
 // relative to the actual texture, not however big the canvas is displayed.
 export const HEIGHTMAP_WIDTH = 1024;
-const HEIGHTMAP_HEIGHT = 512;
+export const HEIGHTMAP_HEIGHT = 512; // exported for MapView.tsx's aspect-ratio sizing
 
 // Matches strokePath.frag.glsl's MAX_STROKE_POINTS.
 const MAX_STROKE_POINTS = 64;

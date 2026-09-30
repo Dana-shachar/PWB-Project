@@ -699,6 +699,14 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   gap: var(--gap-md);
 }
 
+/* Caps the expanded canvas's width in this much larger viewport area —
+   matches the old fixed 800px default, but MapView itself now fills
+   whatever contains it (Dana, 2026-09-30) rather than a hardcoded size. */
+.map-expanded-canvas-wrap {
+  width: 100%;
+  max-width: 800px;
+}
+
 /* The shared gumball (scene/sharedGumball.ts) mounts into .app-viewport
    itself — hide it while the noise canvas has replaced that viewport's
    content, it has no 3D camera to target right now. */

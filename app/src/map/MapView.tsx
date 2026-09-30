@@ -1,6 +1,6 @@
 import { useEffect, useRef, type RefObject } from 'react';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
-import { HEIGHTMAP_WIDTH, type NoiseLayer, type StrokeRecord } from './heightmap';
+import { HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT, type NoiseLayer, type StrokeRecord } from './heightmap';
 
 interface MapViewProps {
   layers: NoiseLayer[];
@@ -11,7 +11,6 @@ interface MapViewProps {
   sceneHandleRef: RefObject<SceneCanvasHandle | null>;
   onStrokeComplete: (record: StrokeRecord) => void; // logs the finished stroke for save/undo — see ROADMAP.md, Stage 06
   paintVersion: number; // bumped by App.tsx when the paint texture changes for a reason `layers` alone wouldn't tell us (currently: undo)
-  sizePx?: number; // CSS display size — NoisePanel passes a larger value when expanded
 }
 
 // The flat 2D preview of the heightmap. No WebGL context of its own — a
@@ -28,7 +27,6 @@ export function MapView({
   sceneHandleRef,
   onStrokeComplete,
   paintVersion,
-  sizePx = 300,
 }: MapViewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -88,9 +86,14 @@ export function MapView({
   return (
     <canvas
       ref={canvasRef}
-      width={1024}
-      height={512}
-      style={{ width: sizePx, height: sizePx, display: 'block', cursor: 'crosshair' }}
+      width={HEIGHTMAP_WIDTH}
+      height={HEIGHTMAP_HEIGHT}
+      // Fills its container's width, height derived from the real 2:1
+      // texture aspect ratio — not a fixed square (Dana, 2026-09-30: "the
+      // 2d canvas gets cut... should fill the width of available panel").
+      // A fixed square both clipped at narrow widths and stretched/
+      // distorted the 2:1 image regardless of width.
+      style={{ width: '100%', height: 'auto', aspectRatio: `${HEIGHTMAP_WIDTH} / ${HEIGHTMAP_HEIGHT}`, display: 'block', cursor: 'crosshair' }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
