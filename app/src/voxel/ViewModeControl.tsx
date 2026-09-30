@@ -2,7 +2,7 @@ import type { ViewMode } from './landChunk';
 
 const OPTIONS: { value: ViewMode; label: string }[] = [
   { value: 'planet', label: 'Planet' },
-  { value: 'landChunk', label: 'Land Chunk' },
+  { value: 'landChunk', label: 'Chunk' },
   { value: 'split', label: 'Split' },
 ];
 

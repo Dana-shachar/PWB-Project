@@ -14,6 +14,7 @@ interface SliderProps {
   sensitivity?: number; // value change per pixel dragged, default 0.1
   snapIncrement?: number; // value snapped to when Cmd/Ctrl is held, default 1
   trackClassName?: string; // extra class on the range track, e.g. for a custom gradient
+  disabled?: boolean; // e.g. a view-specific control while both viewport panes are selected, see ui/Panel.tsx
 }
 
 // Blended slider: a visible draggable range track (from active-geometry's
@@ -32,6 +33,7 @@ export function Slider({
   sensitivity = 0.1,
   snapIncrement = 1,
   trackClassName,
+  disabled = false,
 }: SliderProps) {
   const fieldRef = useRef<HTMLInputElement>(null);
 
@@ -94,7 +96,7 @@ export function Slider({
   }
 
   return (
-    <div className="ui-slider-row">
+    <div className={'ui-slider-row' + (disabled ? ' ui-slider-row--disabled' : '')}>
       <label className="ui-slider-label">
         {label}
         {unit ? ` (${unit})` : ''}
@@ -107,6 +109,7 @@ export function Slider({
         step={step}
         value={value}
         onChange={handleTrackChange}
+        disabled={disabled}
       />
       <input
         ref={fieldRef}
@@ -117,6 +120,7 @@ export function Slider({
         onMouseDown={handleScrubberMouseDown}
         onBlur={handleFieldCommit}
         onKeyDown={handleFieldKeyDown}
+        disabled={disabled}
       />
     </div>
   );

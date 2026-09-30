@@ -8,6 +8,7 @@ import { grid } from './grid';
 import { planet, planetGeometry } from '../planet/mesh';
 import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
+import type { ElevationData } from '../voxel/chunkGrid';
 
 // Exposed to sibling components (MapView, via App.tsx) that need to paint
 // onto or read the shared heightmap pipeline this component owns — see
@@ -30,6 +31,10 @@ export interface SceneCanvasHandle {
   // read stale, pre-replay data. See ISSUES.md, 2026-09-22.)
   loadProject(layers: NoiseLayer[], strokeHistory: StrokeRecord[]): void;
   getPreviewImageData(): ImageData | null;
+  // Real elevation (Height, per layer, additive) — what the land chunk
+  // samples for its own height, distinct from getPreviewImageData()'s
+  // shape/paint composite. See map/heightmap.ts and ISSUES.md, 2026-09-24.
+  getElevationData(): ElevationData | null;
   // For the single shared gumball (scene/sharedGumball.ts) to target this
   // view's camera — this component no longer owns its own Gumball instance,
   // see ISSUES.md, 2026-09-23.
@@ -147,6 +152,12 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const heightmapPipeline = heightmapPipelineRef.current;
         if (!webglRenderer || !heightmapPipeline) return null;
         return heightmapPipeline.getCompositeImageData(webglRenderer);
+      },
+      getElevationData() {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return null;
+        return heightmapPipeline.getElevationData(webglRenderer);
       },
       getGumballTarget() {
         return gumballTargetRef.current;
@@ -292,10 +303,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   }, [gridSpacing, gridVisible]);
 
   // Lighting + base color + height: no rebuild needed, just mutate the
-  // shader's uniforms. uDisplacementAmplitude is a user-controlled value
-  // (heightScale, shared directly with the land chunk's own height — see
-  // planet/planetControls.ts and ISSUES.md, 2026-09-23), not derived from
-  // radius anymore.
+  // shader's uniforms. heightScale (shared directly with the land chunk's
+  // own height — see planet/planetControls.ts and ISSUES.md, 2026-09-23) is
+  // a percentage of radius, not an absolute scene-unit value (Dana,
+  // 2026-09-24) — converted to an actual displacement amount here, same
+  // conversion voxel/landChunk.ts does against chunkSize instead.
   useEffect(() => {
     const planetMesh = planetMeshRef.current;
     if (!planetMesh) return;
@@ -303,8 +315,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     material.uniforms.uBaseColor.value.set(baseColor);
     material.uniforms.uAmbient.value = ambientLight;
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, 1);
-    material.uniforms.uDisplacementAmplitude.value = heightScale;
-  }, [baseColor, ambientLight, lightDirX, lightDirY, heightScale]);
+    material.uniforms.uDisplacementAmplitude.value = (heightScale / 100) * radius;
+  }, [baseColor, ambientLight, lightDirX, lightDirY, heightScale, radius]);
 
   // Display mode: toggles the wireframe overlay's visibility (it renders
   // alongside the shaded surface, doesn't replace it).

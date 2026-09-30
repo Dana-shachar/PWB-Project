@@ -1,4 +1,4 @@
-import { sampleChunkHeight } from './chunkGrid';
+import { sampleChunkElevation, type ElevationData } from './chunkGrid';
 
 // Builds one land cube's height-per-column grid from the existing
 // composited heightmap (reused as-is, not a separate terrain generator —
@@ -15,12 +15,17 @@ import { sampleChunkHeight } from './chunkGrid';
 // already uses. See ISSUES.md, 2026-09-23, and meshWorker.ts for the
 // meshing technique this enables. `heightScale` is independent of
 // `resolution` — see the same note previously here, now generalized.
-export function buildChunkHeights(heightmapImageData: ImageData, resolution: number, heightScale: number): Uint32Array {
+export function buildChunkHeights(elevationData: ElevationData, resolution: number, heightScale: number): Uint32Array {
   const heights = new Uint32Array(resolution * resolution);
   for (let z = 0; z < resolution; z++) {
     for (let x = 0; x < resolution; x++) {
-      const heightNormalized = sampleChunkHeight(heightmapImageData, x, z, resolution);
-      heights[z * resolution + x] = Math.min(resolution, Math.round(heightNormalized * heightScale));
+      // +0.5 recenters elevation (terrain-zero-centered, see chunkGrid.ts)
+      // back onto the old 0..1 convention this function was built around.
+      // Clamped at 0 too now, not just resolution — elevation is
+      // unclamped/can go negative (per-layer Height, additive — see
+      // ISSUES.md, 2026-09-24), which the old always-0..1 texture couldn't.
+      const heightNormalized = sampleChunkElevation(elevationData, x, z, resolution) + 0.5;
+      heights[z * resolution + x] = Math.max(0, Math.min(resolution, Math.round(heightNormalized * heightScale)));
     }
   }
   return heights;

@@ -99,8 +99,14 @@ float voronoiNoise(vec2 p, float seed) {
 }
 
 // ---- Ridged — a transform, not a generator; apply to any noise above ----
+// 2*(1-|x|)-1, not the textbook 1-|x| — the textbook version's output sits
+// mostly near 1 (its max, hit whenever the input noise is near its own most
+// common value, 0), never symmetric around 0 the way every other noise type
+// here is. That broke the Height/elevation system's assumption that a
+// layer's raw output has no built-in bias — see ISSUES.md, 2026-09-24, and
+// heightmap.frag.glsl's elevation accumulation below.
 float ridge(float noiseValue) {
-  return 1.0 - abs(noiseValue);
+  return 2.0 * (1.0 - abs(noiseValue)) - 1.0;
 }
 
 // ---- Terrace — a transform, not a generator; apply to any noise above ----

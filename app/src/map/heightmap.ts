@@ -99,6 +99,13 @@ export interface NoiseLayer {
   terraceSteps: number;
   warpStrength: number;
   opacity: number; // 0-1
+  // Amplitude, distinct from opacity: scales how much this layer's noise
+  // deviates from neutral (flat) before blending, not how much it overrides
+  // what's beneath it — a layer at 0.5 contributes half its usual bumpiness,
+  // at 2 twice as much, independent of coverage/crossfade (Dana, 2026-09-23:
+  // "justified to have per layer height... big base layer + subtle detail
+  // layer scaled independently"). Defaults to 1 (unscaled).
+  heightScale: number;
   blendMode: BlendMode;
   // Photoshop-style hide/unhide (Dana, 2026-09-23) — a hidden layer is
   // genuinely skipped in the shader's compositing loop, not just zeroed via
@@ -120,6 +127,7 @@ export function createDefaultLayer(id: string): NoiseLayer {
     terraceSteps: 8,
     warpStrength: 1.0,
     opacity: 1,
+    heightScale: 1,
     blendMode: 'normal',
     visible: true,
   };
@@ -194,7 +202,15 @@ export class HeightmapPipeline {
   private activeStroke: { layerId: string; baseIndex: number; points: UV[]; radius: number; feather: number; brushValue: number } | null;
 
   constructor() {
-    this.renderTarget = new THREE.WebGLRenderTarget(HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT);
+    // FloatType, not the default byte texture — G now carries real,
+    // unclamped elevation (can exceed 1 or go negative), not a 0..255
+    // color value; R (shape) still only ever holds 0..1, same precision as
+    // before, just stored as a float instead of a byte. FloatType (not
+    // HalfFloatType) specifically because it reads back cleanly into a
+    // Float32Array via readRenderTargetPixels — the standard Three.js
+    // GPGPU-style compute-in-shader/read-on-CPU pattern. See ISSUES.md,
+    // 2026-09-24.
+    this.renderTarget = new THREE.WebGLRenderTarget(HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT, { type: THREE.FloatType });
     // Repeat U so u=1.0 samples the same texel as u=0.0 — avoids a seam
     // crack at the sphere's duplicated-vertex UV wrap.
     this.renderTarget.texture.wrapS = THREE.RepeatWrapping;
@@ -219,6 +235,7 @@ export class HeightmapPipeline {
         uLayerTerraceSteps: { value: new Array(MAX_LAYERS).fill(8) },
         uLayerWarpStrength: { value: new Array(MAX_LAYERS).fill(1.0) },
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerHeightScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
         ...paintTextureUniforms,
       },
@@ -365,20 +382,51 @@ export class HeightmapPipeline {
 
   // Reads the current composite texture back as ImageData, for MapView's
   // plain 2D <canvas> to display via ctx.putImageData() — MapView has no
-  // WebGL context of its own, see ISSUES.md, 2026-09-15.
+  // WebGL context of its own, see ISSUES.md, 2026-09-15. Only the shape
+  // channel (R) — the canvas shows the layer stack's Opacity/Blend Mode
+  // composite exactly as before; Height/elevation (G) never touches this,
+  // per Dana, 2026-09-24 ("i never said height belongs in the 2d").
   getCompositeImageData(renderer: THREE.WebGLRenderer): ImageData {
-    const buffer = new Uint8ClampedArray(HEIGHTMAP_WIDTH * HEIGHTMAP_HEIGHT * 4);
-    renderer.readRenderTargetPixels(this.renderTarget, 0, 0, HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT, buffer);
+    const floatBuffer = new Float32Array(HEIGHTMAP_WIDTH * HEIGHTMAP_HEIGHT * 4);
+    renderer.readRenderTargetPixels(this.renderTarget, 0, 0, HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT, floatBuffer);
     // readRenderTargetPixels returns rows bottom-to-top (GL convention);
-    // ImageData expects top-to-bottom — flip rows.
-    const flipped = new Uint8ClampedArray(buffer.length);
-    const rowBytes = HEIGHTMAP_WIDTH * 4;
+    // ImageData expects top-to-bottom — flip rows. Also converts R (0..1
+    // float, already clamped by the shader) into the 0..255 byte format
+    // Canvas's ImageData requires — G/B/A aren't used for display.
+    const bytes = new Uint8ClampedArray(HEIGHTMAP_WIDTH * HEIGHTMAP_HEIGHT * 4);
+    const rowFloats = HEIGHTMAP_WIDTH * 4;
     for (let row = 0; row < HEIGHTMAP_HEIGHT; row++) {
-      const srcStart = row * rowBytes;
-      const destStart = (HEIGHTMAP_HEIGHT - 1 - row) * rowBytes;
-      flipped.set(buffer.subarray(srcStart, srcStart + rowBytes), destStart);
+      const srcRowStart = row * rowFloats;
+      const destRowStart = (HEIGHTMAP_HEIGHT - 1 - row) * rowFloats;
+      for (let col = 0; col < HEIGHTMAP_WIDTH; col++) {
+        const shape = floatBuffer[srcRowStart + col * 4]; // R
+        const destIndex = destRowStart + col * 4;
+        bytes[destIndex] = bytes[destIndex + 1] = bytes[destIndex + 2] = shape * 255;
+        bytes[destIndex + 3] = 255;
+      }
     }
-    return new ImageData(flipped, HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT);
+    return new ImageData(bytes, HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT);
+  }
+
+  // Reads the elevation channel (G) back as a raw float buffer — real,
+  // unclamped height, not a display color — for the land chunk's CPU-side
+  // sampling (voxel/chunkGrid.ts's sampleChunkElevation()). The planet
+  // reads this same channel directly on the GPU instead (vertex.glsl
+  // samples uHeightMap.g), no CPU round-trip needed there.
+  getElevationData(renderer: THREE.WebGLRenderer): { data: Float32Array; width: number; height: number } {
+    const floatBuffer = new Float32Array(HEIGHTMAP_WIDTH * HEIGHTMAP_HEIGHT * 4);
+    renderer.readRenderTargetPixels(this.renderTarget, 0, 0, HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT, floatBuffer);
+    // Same bottom-to-top → top-to-bottom row flip as getCompositeImageData,
+    // but a single float per pixel (G channel only), not an RGBA byte image.
+    const elevation = new Float32Array(HEIGHTMAP_WIDTH * HEIGHTMAP_HEIGHT);
+    for (let row = 0; row < HEIGHTMAP_HEIGHT; row++) {
+      const srcRowStart = row * HEIGHTMAP_WIDTH * 4;
+      const destRowStart = (HEIGHTMAP_HEIGHT - 1 - row) * HEIGHTMAP_WIDTH;
+      for (let col = 0; col < HEIGHTMAP_WIDTH; col++) {
+        elevation[destRowStart + col] = floatBuffer[srcRowStart + col * 4 + 1]; // G
+      }
+    }
+    return { data: elevation, width: HEIGHTMAP_WIDTH, height: HEIGHTMAP_HEIGHT };
   }
 
   render(renderer: THREE.WebGLRenderer, params: HeightmapParams): THREE.Texture {
@@ -430,6 +478,10 @@ export class HeightmapPipeline {
       uniforms.uLayerTerraceSteps.value[i] = layer.terraceSteps;
       uniforms.uLayerWarpStrength.value[i] = layer.warpStrength;
       uniforms.uLayerOpacity.value[i] = layer.opacity;
+      // ?? 1, not layer.heightScale directly — layers saved before this
+      // field existed have heightScale === undefined, and should default to
+      // unscaled (1), same reasoning as visible's !== false fix above.
+      uniforms.uLayerHeightScale.value[i] = layer.heightScale ?? 1;
       uniforms.uLayerBlendMode.value[i] = BLEND_MODE_INDEX[layer.blendMode];
       uniforms[paintTextureUniformName(i)].value = this.getActivePaintTexture(layer.id);
     });

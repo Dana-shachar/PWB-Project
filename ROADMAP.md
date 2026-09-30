@@ -127,6 +127,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 > 2. **Verified against source** — Perlin3D/Simplex3D checked against the canonical Stefan Gustavson/Ashima Arts source (2026-09-14).
 > 3. **fBm verified** — checked against thebookofshaders.com/13 (2026-09-14).
 > 4. **Fixed: wrong Perlin constant** — a hand-reproduced constant was wrong, caught by diffing against the canonical source (2026-09-14).
+> 5. **Fixed: Ridged wasn't zero-mean** — `ridge(x) = 1 - abs(x)` output mostly near 1 (its max, hit whenever the input noise was near its own most common value, 0), unlike every other noise type here, which are all genuinely symmetric around 0. Invisible before Height/elevation existed (the old pipeline bounded/clamped everything through Opacity); with Height unclamped, it inflated the whole planet/chunk uniformly instead of just amplifying peaks vs. valleys. Fixed by re-centering: `2.0 * (1.0 - abs(x)) - 1.0` (2026-09-24). See `ISSUES.md`.
 >
 > <span style="color:#0969da">📋 **To do**</span>
 > 1. _None._
@@ -155,13 +156,12 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 
 ---
 
-#### Modifier architecture — 0%
+#### Modifier architecture — 30%
 > <span style="color:#2da44e">✅ **Done**</span>
-> 1. _None._
+> 1. **Per-layer Height (amplitude)** — a real `heightScale` field per layer, distinct from Opacity/Blend Mode: Opacity/Blend Mode govern the 2D shape/paint composite only; Height is a separate, purely additive contribution to actual elevation, ignoring Opacity/Blend Mode entirely (Dana, 2026-09-24: "same as an amplitude/strength control... it's a separate param... not related to blend modes or opacity"). See the elevation-channel split under Stage 05, and `ISSUES.md`, 2026-09-24, for the full design (including a rejected first version where Height and Opacity collapsed into the same number on a base layer).
 >
 > <span style="color:#0969da">📋 **To do**</span>
 > 1. **Modifiers as toggles, not types** — Ridged/Octaves/Terrace/Domain warp are separate selectable *noise types* today, not independently-toggleable modifiers layered onto a base type in a fixed order (Domain warp → generator/Octaves → Ridged → Terrace), the way Gaea structures it.
-> 2. **Per-layer height control** — an amplitude control distinct from Opacity, requested but not implemented.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
@@ -172,13 +172,15 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ## Stage 04 — Terrain: Paint Authoring
 🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 90%
 
-#### 2D heightmap canvas — 85%
+#### 2D heightmap canvas — 95%
 > <span style="color:#2da44e">✅ **Done**</span>
 > 1. **Preview canvas** — flat 2D preview, no WebGL context of its own (2026-09-14).
 > 2. **Paint capture** — captures paint pointer input, reads back pixels from the shared pipeline (2026-09-16).
+> 3. **Fixed: Expand opened a dark overlay instead of replacing the viewport** — the "Expand" button used to cover the entire window, both side panels included, with a `position:fixed` dark backdrop. `isExpanded` moved from `NoisePanel` up to `App.tsx` (it affects what renders in `.app-viewport`, not just something local to the right panel) — expanding now swaps the 3D viewport's planet/chunk panes for the full-size canvas in place, both panels stay visible (2026-09-24).
+> 4. **Noise canvas section is now an Accordion** — collapsible, matching Project Settings/Edit, instead of always-open (Dana, 2026-09-30: "it's starting to crowd the menu").
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Expand should replace, not overlay** — the "Expand" button opens a dark overlay; should instead *replace* the 3D viewport's content, keeping both side panels visible (requested 2026-09-16). A richer expanded-mode brush toolset (strength, size beyond radius, shape) is planned to land there too.
+> 1. **Richer expanded-mode brush toolset** — strength, size beyond radius, shape — planned to land in the now-fixed expanded view.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
@@ -229,6 +231,8 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 > 1. **Render-to-texture pipeline** — fragment shader → render-target texture, sampled by the planet's vertex shader for displacement (2026-09-14).
 > 2. **CPU readback ready** — can read back specific texels on demand for future agent/road placement, instead of duplicating the noise algorithm in JS.
 > 3. **Fixed: sphere UV-seam artifact** — duplicated seam vertices sampling non-identical texels, fixed via `RepeatWrapping` (2026-09-14).
+> 4. **Elevation split from the 2D shape/paint composite** — the heightmap texture now carries two genuinely independent channels instead of one doing double duty: R (shape) is exactly the old Opacity/Blend-Mode composite, driving only the 2D canvas/painting; G (elevation) is a separate, purely additive per-layer sum (each layer's own Height × its own noise-and-paint value, ignoring Opacity/Blend Mode) that the planet's displacement and the land chunk's height both read instead of R. Render target switched to `FloatType` so elevation can hold real, unclamped, possibly-negative values instead of a clamped 0..255 color (2026-09-24). See Stage 03's Modifier architecture and `ISSUES.md` for the full reasoning, including 2 rejected simpler designs.
+> 5. **Height is a percentage of context size, not an absolute scene-unit value** — `(Height / 100) × radius` for the planet, `(Height / 100) × chunkSize` for the land chunk (Stage 07), computed where each is used. Fixes the same Height value looking reasonable on the planet (large radius) but dwarfing the chunk (much smaller footprint) — a percentage self-normalizes regardless of the two views' wildly different absolute scale, no unit-conversion bookkeeping needed (Dana, 2026-09-24: "can the height be in %?"). Default recalibrated to 15% to match the old look. See `ISSUES.md`.
 >
 > <span style="color:#0969da">📋 **To do**</span>
 > 1. _None._
@@ -345,7 +349,7 @@ A detail view into one fixed-size chunk of terrain, shown side by side with the 
 > 8. **Resolution ceiling raised** — this rearchitecture is what actually unlocked pushing the slider's max past the old per-voxel-face-culling ceiling; raised 64→512→2048 (Dana: "why just 512? i want uhd at least"). True UHD (4096) deliberately held back — worst-case triangle count for very noisy terrain at 4096 risks crashing the tab outright, not just running slow (2026-09-23).
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Real chunk location picking** — still one fixed arbitrary spot on the heightmap, not yet tied to a location the user picks on the planet. Deferred, Dana's call (2026-09-23).
+> 1. **Real chunk location picking** — still one fixed arbitrary spot on the heightmap, not yet tied to a location the user picks on the planet. Deferred, Dana's call (2026-09-23). Direction floated 2026-09-24: "the land chunk should be a chunk of the planet that's flattened... divide the planet's surface into x chunks and the chunk is one of them" — the actual selection mechanism (how the user picks/navigates which chunk) still needs figuring out, not decided yet.
 > 2. **Editing (digging/adding voxels live)** — separate feature; when it lands, only the changed region gets remeshed (dirty-chunk updates), not the whole grid.
 > 3. **Greedy meshing** — merging same-facing quads, deferred until resolution/perf actually needs it.
 >
@@ -378,6 +382,9 @@ A detail view into one fixed-size chunk of terrain, shown side by side with the 
 > 5. **Fixed: smooth-mesh walls missing on some sides** — 4 separately hand-derived wall windings, one already proven wrong, replaced with a single boundary walk using one formula (outward normal = edge direction rotated -90°) — see `ISSUES.md`. `DoubleSide` also added as a safety net (2026-09-23).
 > 6. **Resolution vs. Size decoupled** — Resolution now only controls voxel/vertex subdivision (detail); a new **Size** control governs the footprint's actual world-space width/depth independently (2026-09-23).
 > 7. **Height retuned for contrast** — ambient/directional ratio adjusted (ambient multiplier x4 → x1.5) so shadowed faces read as darker against lit ones, not washed out by flat ambient fill (2026-09-23).
+> 8. **Radius/Size unified into one contextual slider** — Planet controls' Radius and this section's Size collapsed into a single slider that relabels/rebinds to whichever pane is actually in view or selected (Radius when the planet, Size when the chunk), instead of showing both separately (Dana, 2026-09-23/24: "the slider should actually change depending on the view"). Disables (doesn't hide) when both panes are selected in Split, since it's a view-specific control, not a joint one like lighting/zoom. Resolution stays chunk-only — no planet-side resolution control exists yet to merge it with (2026-09-24).
+> 9. **Section renamed "Land Chunk" → "Chunk"** — matches the actual industry term for a fixed-size, independently-meshed block of terrain (already the internal naming throughout the code — `landChunk.ts`, `ViewMode: 'landChunk'`), not a newly-invented name (2026-09-24).
+> 10. **Height scale fixed relative to the chunk's own footprint** — see Stage 05's percentage-based Height fix; the chunk specifically was where the mismatch was first noticed ("any height changes on the planet seem massive on the land chunk").
 >
 > <span style="color:#0969da">📋 **To do**</span>
 > 1. **Real cast shadows** — a shadow map (terrain casting shadows onto itself) for genuine depth/contrast beyond flat per-face shading, especially for craggy/blocky terrain. Needs `renderer.shadowMap` enabled, the light and mesh marked to cast/receive, and the directional light's shadow-camera frustum tuned to the chunk. Bigger, separate piece of work — noted, not started (Dana, 2026-09-23).
@@ -428,7 +435,7 @@ Biome-style surface texturing/coloring. An empty placeholder "Color" tab is alre
 ---
 
 ## Stage 10 — Design System & UI Polish
-⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ 30%
 
 #### Design-system / config tokenization — 0%
 > <span style="color:#2da44e">✅ **Done**</span>
@@ -442,13 +449,14 @@ Biome-style surface texturing/coloring. An empty placeholder "Color" tab is alre
 
 ---
 
-#### Adjustable control panel — 0%
+#### Adjustable control panel — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
-> 1. _None._
+> 1. **Fixed: panel width changed with content** — both panels used `width: max-content`, so they visibly resized every time an accordion opened/closed or a right-panel tab switched (Dana, 2026-09-30: "it changes width according to what is open... a stable width").
+> 2. **Resizable panel** — a drag handle on each panel's inner edge, ported from `active-geometry-project`'s `.ag-right-panel-handle` pattern (`ui/panelResize.ts`): width only ever changes via an explicit user drag, never auto-adjusted by content — the same fix as #1, but user-adjustable instead of one hardcoded number (Dana, 2026-09-30: "i didnt mean it to have a hard coded width"). Applied to both the left and right panels (2026-09-30).
+> 3. **Per-panel min width** — the left panel's min/starting width lowered to 280px (right panel stays 360–600px) — its controls need less horizontal room than the right panel's noise/layer controls (Dana, 2026-09-30: "the left side menu is a bit too wide... lower it's min value").
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Resizable panel** — a drag handle, like `active-geometry-project`'s, instead of the fixed `max-width`. Explicitly deferred by Dana, raised again 2026-09-16.
-> 2. **Scope question** — its own step, or bundled with other panel work — not answered.
+> 1. _None._
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._

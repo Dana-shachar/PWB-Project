@@ -1,11 +1,13 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { useSceneControls } from './scene/sceneControls';
 import { useSharedGumball } from './scene/sharedGumball';
 import { usePlanetControls } from './planet/planetControls';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
+import { usePanelResize } from './ui/panelResize';
 import { useNoiseLayers } from './map/noiseLayers';
+import { MapView } from './map/MapView';
 import { useBrush } from './map/2Dbrush';
 import { useCurrentUser } from './firebase/currentUser';
 import { useSaveProject } from './projectSettings/saveProject';
@@ -41,6 +43,31 @@ function App() {
   });
   const landChunk = useLandChunk(sceneHandleRef, noiseLayers.layers, planetControls.displayMode, planetControls.heightScale);
   const sharedGumball = useSharedGumball(sceneHandleRef, landChunkHandleRef, landChunk.viewMode);
+  // Drives the shared Radius/Size slider (ui/Panel.tsx) — whichever pane is
+  // singly in view/selected, or null (disabled) when both are selected in
+  // Split, since that slider is view-specific, not a joint control.
+  const activeViewContext =
+    landChunk.viewMode !== 'split'
+      ? landChunk.viewMode
+      : sharedGumball.selectedPanes.length === 1
+        ? sharedGumball.selectedPanes[0]
+        : null;
+  // "Expand" (ui/NoisePanel.tsx) replaces the 3D viewport's content with the
+  // full-size noise canvas instead of opening a dark overlay on top of
+  // everything — both side panels stay visible either way (Dana, 2026-09-24:
+  // "should instead replace the 3D viewport's content, keeping both side
+  // panels visible"). Lives here, not in NoisePanel, since it changes what
+  // this component renders in .app-viewport, not just something local to
+  // the right panel.
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const primaryLayerId = noiseLayers.selectedLayerIds[noiseLayers.selectedLayerIds.length - 1];
+  // Drag-to-resize (ui/panelResize.ts) — width only ever changes via an
+  // explicit drag, never auto-adjusted by content (Dana, 2026-09-30). Left
+  // panel's controls need less room than the right panel's noise/layer
+  // controls, so its min (and starting width) is lower (Dana, 2026-09-30:
+  // "the left side menu is a bit too wide... lower it's min value").
+  const leftPanel = usePanelResize(280, 'left', 280);
+  const rightPanel = usePanelResize(360, 'right');
 
   return (
     <div className="app-layout">
@@ -61,6 +88,7 @@ function App() {
         onBaseColorChange={planetControls.setBaseColor}
         displayMode={planetControls.displayMode}
         onDisplayModeChange={planetControls.setDisplayMode}
+        activeViewContext={activeViewContext}
         canUndo={brush.strokeHistory.length > 0}
         onUndo={brush.undo}
         canRedo={brush.redoStack.length > 0}
@@ -78,7 +106,9 @@ function App() {
         onChunkResolutionChange={landChunk.setResolution}
         chunkSize={landChunk.chunkSize}
         onChunkSizeChange={landChunk.setChunkSize}
+        width={leftPanel.width}
       />
+      <div className="viewport-divider" onMouseDown={leftPanel.startResize} />
       {/* Planet and land-chunk panes are always mounted — the view-mode
           button (top-right) only toggles CSS visibility, never unmounts
           either — so switching modes doesn't rebuild the Three.js scene,
@@ -87,52 +117,77 @@ function App() {
           (scene/sharedGumball.ts) its camera, shift+click to add the other
           pane too. Each canvas's own ResizeObserver picks up its pane's
           actual size. */}
-      <div className="app-viewport" ref={sharedGumball.mountRef}>
-        <div
-          className={
-            'planet-viewport' +
-            (landChunk.viewMode === 'landChunk' ? ' viewport-pane--hidden' : '') +
-            (landChunk.viewMode === 'split' && sharedGumball.selectedPanes.includes('planet') ? ' viewport-pane--selected' : '')
-          }
-          style={landChunk.viewMode === 'split' ? { flexGrow: 0, flexShrink: 0, flexBasis: `${landChunk.splitRatio * 100}%` } : undefined}
-          onClick={(event) => sharedGumball.handlePaneClick('planet', event)}
-        >
-          <SceneCanvas
-            ref={sceneHandleRef}
-            radius={planetControls.radiusScene}
-            baseColor={planetControls.baseColor}
-            ambientLight={sceneControls.ambientLight}
-            lightDirX={sceneControls.lightDirX}
-            lightDirY={sceneControls.lightDirY}
-            displayMode={planetControls.displayMode}
-            gridSpacing={sceneControls.gridSpacing}
-            gridVisible={sceneControls.gridVisible}
-            layers={noiseLayers.layers}
-            heightScale={planetControls.heightScale}
-          />
-        </div>
-        {landChunk.viewMode === 'split' && <div className="viewport-divider" onMouseDown={landChunk.startResize} />}
-        <div
-          className={
-            'land-chunk-viewport' +
-            (landChunk.viewMode === 'planet' ? ' viewport-pane--hidden' : '') +
-            (landChunk.viewMode === 'split' && sharedGumball.selectedPanes.includes('landChunk') ? ' viewport-pane--selected' : '')
-          }
-          onClick={(event) => sharedGumball.handlePaneClick('landChunk', event)}
-        >
-          <LandChunkCanvas
-            ref={landChunkHandleRef}
-            geometry={landChunk.geometry}
-            ambientLight={sceneControls.ambientLight}
-            lightDirX={sceneControls.lightDirX}
-            lightDirY={sceneControls.lightDirY}
-            gridSpacing={sceneControls.gridSpacing}
-            gridVisible={sceneControls.gridVisible}
-            baseColor={planetControls.baseColor}
-          />
-        </div>
-        <ViewModeControl viewMode={landChunk.viewMode} onChange={landChunk.setViewMode} />
+      <div className={'app-viewport' + (isMapExpanded ? ' app-viewport--map-expanded' : '')} ref={sharedGumball.mountRef}>
+        {isMapExpanded ? (
+          <div className="map-expanded-viewport">
+            <div className="noise-canvas-overlay-header">
+              <span>Noise canvas</span>
+              <button type="button" className="panel-text-btn" onClick={() => setIsMapExpanded(false)}>
+                Collapse
+              </button>
+            </div>
+            <MapView
+              layers={noiseLayers.layers}
+              selectedLayerId={primaryLayerId}
+              brushRadiusPx={brush.brushRadiusPx}
+              brushValue={brush.brushValue}
+              feather={brush.feather}
+              sceneHandleRef={sceneHandleRef}
+              onStrokeComplete={brush.handleStrokeComplete}
+              paintVersion={brush.paintVersion}
+              sizePx={800}
+            />
+          </div>
+        ) : (
+          <>
+            <div
+              className={
+                'planet-viewport' +
+                (landChunk.viewMode === 'landChunk' ? ' viewport-pane--hidden' : '') +
+                (landChunk.viewMode === 'split' && sharedGumball.selectedPanes.includes('planet') ? ' viewport-pane--selected' : '')
+              }
+              style={landChunk.viewMode === 'split' ? { flexGrow: 0, flexShrink: 0, flexBasis: `${landChunk.splitRatio * 100}%` } : undefined}
+              onClick={(event) => sharedGumball.handlePaneClick('planet', event)}
+            >
+              <SceneCanvas
+                ref={sceneHandleRef}
+                radius={planetControls.radiusScene}
+                baseColor={planetControls.baseColor}
+                ambientLight={sceneControls.ambientLight}
+                lightDirX={sceneControls.lightDirX}
+                lightDirY={sceneControls.lightDirY}
+                displayMode={planetControls.displayMode}
+                gridSpacing={sceneControls.gridSpacing}
+                gridVisible={sceneControls.gridVisible}
+                layers={noiseLayers.layers}
+                heightScale={planetControls.heightScale}
+              />
+            </div>
+            {landChunk.viewMode === 'split' && <div className="viewport-divider" onMouseDown={landChunk.startResize} />}
+            <div
+              className={
+                'land-chunk-viewport' +
+                (landChunk.viewMode === 'planet' ? ' viewport-pane--hidden' : '') +
+                (landChunk.viewMode === 'split' && sharedGumball.selectedPanes.includes('landChunk') ? ' viewport-pane--selected' : '')
+              }
+              onClick={(event) => sharedGumball.handlePaneClick('landChunk', event)}
+            >
+              <LandChunkCanvas
+                ref={landChunkHandleRef}
+                geometry={landChunk.geometry}
+                ambientLight={sceneControls.ambientLight}
+                lightDirX={sceneControls.lightDirX}
+                lightDirY={sceneControls.lightDirY}
+                gridSpacing={sceneControls.gridSpacing}
+                gridVisible={sceneControls.gridVisible}
+                baseColor={planetControls.baseColor}
+              />
+            </div>
+            <ViewModeControl viewMode={landChunk.viewMode} onChange={landChunk.setViewMode} />
+          </>
+        )}
       </div>
+      <div className="viewport-divider" onMouseDown={rightPanel.startResize} />
       <RightPanel
         layers={noiseLayers.layers}
         selectedLayerIds={noiseLayers.selectedLayerIds}
@@ -153,6 +208,9 @@ function App() {
         paintVersion={brush.paintVersion}
         heightScale={planetControls.heightScale}
         onHeightScaleChange={planetControls.setHeightScale}
+        isMapExpanded={isMapExpanded}
+        onMapExpandedChange={setIsMapExpanded}
+        width={rightPanel.width}
       />
     </div>
   );

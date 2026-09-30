@@ -100,6 +100,26 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 >
 > **Fix:** explicit `pointer-events: none` on the `line`/`text` elements and the container, with just the real controls opted back in via `pointer-events: auto`.
 
+### 🐛 "Expand" opened a dark overlay over everything instead of replacing the viewport
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-24)</span>
+
+> **Cause:** the expanded noise canvas was a `position: fixed; inset: 0` element with a dark backdrop, rendered from inside `NoisePanel` — it covered the entire window, both side panels included, not just the 3D viewport. This had been logged as a to-do since 2026-09-16 ("Expand should replace, not overlay... keeping both side panels visible") but never fixed.
+>
+> **Fix:** `isExpanded` moved out of `NoisePanel` and up to `App.tsx` — it now controls what `App.tsx` renders inside `.app-viewport` (swapping the planet/chunk panes for the full-size `MapView`) rather than something local to the right panel. Both side panels stay mounted and visible throughout, since they're siblings of `.app-viewport`, not inside it. The shared gumball (which mounts into `.app-viewport` itself) is hidden via CSS while expanded, since it has no 3D camera to target then.
+
+### 🐛 Panel width changed with content (accordion open/close, tab switch)
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-30)</span>
+
+> **Cause:** `.panel-outer` used `width: max-content` — the panel auto-sized to whatever was currently visible, so it visibly resized every time an accordion opened/closed or a right-panel tab switched (including toggling to the still-empty Erosion/Color placeholders, which are narrower than Noise's content).
+>
+> **First fix (incomplete):** pinned `.panel-outer` to a single fixed `width: var(--panel-max-width)` (360px). Worked, but wasn't what Dana meant — "i didnt mean it to have a hard coded width."
+>
+> **Actual fix — ported active-geometry-project's resize-handle pattern:** that project's right panel (`.ag-right-outer`/`.ag-right-panel-handle`, `js/uiDesign.js`) isn't a fixed number either — a draggable handle on the panel's edge sets its width via a CSS custom property, clamped between a min and max, and the width only ever changes on an explicit user drag. Ported as `ui/panelResize.ts`'s `usePanelResize(initialWidth, anchorSide, minWidth?, maxWidth?)` hook, applied to both panels via a `viewport-divider`-styled handle in `App.tsx` (reusing the same divider convention already built for the planet/chunk split, rather than porting active-geometry's absolutely-positioned handle CSS). `anchorSide` accounts for the two panels resizing from opposite edges (left panel's left edge is fixed, handle drags its right edge; right panel's right edge is fixed, handle drags its left edge).
+>
+> **Follow-up — per-panel minimum:** the left panel's controls need less horizontal room than the right panel's, so its min (and starting width) was lowered to 280px independently of the right panel's 360–600px range (Dana, 2026-09-30: "the left side menu is a bit too wide... lower it's min value") — `minWidth`/`maxWidth` made per-hook-instance parameters, not shared module constants, to support this.
+>
+> **Follow-up bug — components didn't reflow into the narrower width:** at 280px, several slider rows' number fields were visibly clipped past the panel's right edge ("you just cut the width without adjusting all the components - to fill panel width"). Cause: `.ui-slider-track` (the `<input type="range">`) and `.ui-select` both had `flex: 1` but no `min-width: 0` — browsers give range/select inputs an intrinsic default width that `flex: 1` alone can't shrink below, so the row would rather overflow the panel than shrink the track/select past that point. Fixed by adding `min-width: 0` to both, the standard fix for this specific flexbox behavior (a flex item's default `min-width: auto` is based on its content's intrinsic size, not 0, unless overridden).
+
 ---
 
 ## 🧱 Layer Compositing & Noise
@@ -137,6 +157,26 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 > **Actual fix:** a real `visible: boolean` field on `NoiseLayer`; `HeightmapPipeline.render()` filters to `layers.filter(l => l.visible !== false)` before setting any per-layer uniform (so `uLayerCount` only ever counts visible layers — a hidden layer's noise/paint is never evaluated at all), while paint-target create/dispose still tracks the full (unfiltered) layer list so a hidden layer's paint data isn't lost. Whole-row dimming (not just the eye icon) marks a hidden layer in the list.
 >
 > **Fixed along the way — old saved layers defaulted to hidden:** `visible` doesn't exist on any layer saved before this feature, so plain truthiness (`layer.visible`, `!layer.visible`) read `undefined` as falsy/hidden. Fixed by using explicit `!== false` (the render filter) / `=== false` (the eye icon and row-dimming checks) everywhere instead, so missing data on old projects defaults to visible, per Dana: "the default should be all layers visible."
+
+### 🧭 Per-layer Height: a genuinely separate channel from Opacity/Blend Mode, not baked into the same composite
+**Status:** <span style="color:#2da44e">✅ Decided and built (2026-09-24)</span>
+
+> **Trigger:** Dana's original request for per-layer Height (logged above) was built as a first pass by scaling each layer's own noise deviation by `heightScale` *before* the existing Opacity/Blend-Mode crossfade math — i.e. folded directly into the same `layerHeight` value already used for the 2D shape composite. On testing, Height and Opacity turned out to be indistinguishable on a lone base layer: "i noticed you basically mapped the height to the 2d canvas opacity. i thought these were 2 different things. otherwise i could just use layer opacity to control height."
+>
+> **Root cause of the collapse:** for a base layer under Normal blend mode, the shader's crossfade is `composite = mix(neutral, layerHeight, opacity)`. Substituting `layerHeight = neutral + raw*heightScale` and simplifying: `composite = neutral + raw*(opacity*heightScale)` — Opacity and Height only ever appear *multiplied together*, so no combination of the two sliders produces anything a single slider couldn't. This isn't a bug specific to the code, it's a mathematical property of a linear crossfade onto a flat starting value — the two knobs only diverge once there's a second layer and/or a non-Normal blend mode (where the blend result actually depends on what's underneath).
+>
+> **What Dana actually wanted (confirmed against real 3D/terrain software convention):** "same as an amplitude/strength control... height... is not related to blend modes or opacity... it's a separate param" — real elevation, measured from the terrain's zero, that stays a stable baseline regardless of Height's value; only the *amplitude of variation* should scale. Also: "it should sample from everything in a specific layer" — both procedural noise and paint, not raw noise alone.
+>
+> **Fix — split into two genuinely independent channels of the same texture, not one value doing double duty:**
+> 1. **R (shape)** — exactly the pre-existing Opacity/Blend-Mode composite, entirely unaffected by Height. Drives the 2D canvas/painting only ("i never said height belongs in the 2d").
+> 2. **G (elevation)** — a separate, purely additive accumulator, `elevation += heightScale[i] * (layerHeight[i] - 0.5) * coverage[i]`, summed across every visible layer with **no** Opacity or Blend Mode involved at all. Reuses the *same* `layerHeight` already computed for the shape channel (so it legitimately reflects noise-and-paint together, per "sample from everything in a specific layer"), just re-centered on 0 (real terrain-zero) instead of the shape channel's 0.5 "neutral gray," and never clamped to 0..1 the way the shape channel is (real elevation can exceed 1 or go negative).
+> 3. **Consequence, explicitly accepted:** since elevation ignores Opacity entirely, a layer at Opacity 0 (but still `visible`) still fully affects elevation — a direct, intentional result of "not related to opacity," not an oversight.
+>
+> **Technical implications of the split:**
+> 1. `HeightmapPipeline`'s render target switched from the default byte texture to `THREE.FloatType`, so elevation can hold real, unclamped, possibly-negative values — chosen over `HalfFloatType` specifically because `FloatType` reads back cleanly into a `Float32Array` via `readRenderTargetPixels` (the standard Three.js GPGPU compute-in-shader/read-on-CPU pattern), avoiding ambiguity around half-float byte layouts.
+> 2. Two separate CPU readback paths now exist: `getCompositeImageData()` (R only, converted into a `Uint8ClampedArray`-backed `ImageData` for the 2D `<canvas>`, which requires that exact format) and a new `getElevationData()` (G only, a raw `Float32Array`, no byte conversion — used by the land chunk's `sampleChunkElevation()`, replacing the old `sampleChunkHeight()`).
+> 3. The planet's `vertex.glsl` switched from sampling `.r` to `.g`, and dropped its own `-0.5` recentering (elevation is already zero-centered, unlike the shape channel).
+> 4. `density.ts`/`smoothMesh.ts` add `+0.5` back when converting elevation into their existing 0..1-normalized-height convention (so a single default layer at default settings reproduces the exact old look), plus a floor clamp at 0 — elevation can now go negative, which the old always-0..1 texture never could, and the smooth mesh's grounding/skirt-wall logic assumes a top surface that never dips below the y=0 base.
 
 ---
 
@@ -356,6 +396,28 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 > 3. **`chunkGrid.ts`** — the now-unused 3D `voxelIndex()` helper removed.
 >
 > **Result:** this is what actually unlocked pushing the Resolution slider's max past the old ceiling (64→512→2048, see `ROADMAP.md`). True UHD (4096) still deliberately held back — worst-case triangle count for very noisy terrain at 4096 risks crashing the tab outright from raw buffer size, not just running slow; logged as the trigger for the GPU-compute tracked-not-decided item above.
+
+### 🐛 Ridged noise wasn't zero-mean — inflated the whole planet/chunk uniformly, not just its peaks
+**Status:** <span style="color:#2da44e">✅ Fixed (2026-09-24)</span>
+
+> **Symptom:** with the new elevation/Height system (above), a Ridged layer at a moderate Height turned the planet into an almost-solid spiky blob — the whole silhouette bulged outward, not just its mountains against otherwise-flat terrain. Reproduced and screenshotted; the effect scaled directly with Height and was specific to Ridged — other noise types didn't do this.
+>
+> **Diagnosis:** `ridge(x) = 1 - abs(x)`. Perlin noise (`x`, `ridge`'s input) clusters mostly near 0 — and `ridge(0) = 1`, its *maximum*. So `ridge()`'s output sits close to 1 almost everywhere, only dipping toward 0 at the rare spots where the underlying Perlin noise happens to hit an extreme value. Every other noise/modifier here (Random, Perlin, Simplex, Voronoi, Octaves/fbm, Domain warp) is genuinely zero-mean by construction; Ridged alone carried a strong built-in positive bias. That's invisible under the old pipeline (Opacity/Blend-Mode bounded and compressed everything through a 0..1 crossfade), but once Height applies that same raw value as an *unclamped, additive* elevation contribution, the bias scales directly with Height instead of staying hidden.
+>
+> **Confirmed not a bug in the new elevation math itself:** Voronoi and Terrace (the other two candidates checked for the same kind of bias — Voronoi's distance-based output isn't perfectly symmetric either, Terrace's `floor()` rounds down slightly) both tested clean per-layer ("voronoi seems fine. terrace is fine perlayer"). Random/Perlin/Simplex/Octaves/Domain warp are all zero-mean by construction (gradient/hash noise, or — for fbm/domain-warp — a sum/reposition of zero-mean terms, which stays zero-mean).
+>
+> **Fix:** re-centered `ridge()` itself, not a downstream special case — `2.0 * (1.0 - abs(x)) - 1.0` instead of `1.0 - abs(x)`, so its output genuinely spans -1..1 with a true zero mean like every other type. One shared function, reused everywhere Ridged is evaluated, rather than patching the elevation formula to special-case one noise type. Also changes Ridged's existing 2D-canvas/Opacity-driven look slightly (it can now dip below its old baseline, not just rise above it) — an accepted, correct side effect of fixing the root cause, not a separate regression.
+
+### 🧭 Terrain Height as a percentage of context size, not an absolute scene-unit value
+**Status:** <span style="color:#2da44e">✅ Decided and built (2026-09-24)</span>
+
+> **Trigger:** even after the Ridged fix above, Height still looked "massive" on the land chunk relative to how the same value looked on the planet ("any height changes on the planet seem massive on the land chunk"). Also investigated separately: whether increasing the *global* Terrain Height was inflating the whole planet the same way Ridged had — ruled out mathematically (a global multiplier applied after summing zero-mean per-layer contributions can't introduce a new bias) and via a live diagnostic (Dana checked Wireframe display at high Height and confirmed the mesh dips inward roughly as often as it pushes outward — genuinely symmetric, not a bug).
+>
+> **Root cause of the chunk-specific mismatch:** the planet's Radius already converts km → scene units via a `KM_PER_SCENE_UNIT = 300` factor (`radiusScene = radiusKm / 300`); the chunk's Size never had an equivalent conversion, used directly as raw scene units. Height itself was a flat, absolute scene-unit multiplier shared between both — reasonable against the planet's already-compressed ~20-unit radius, disproportionately large against the chunk's much smaller, uncompressed footprint (e.g. 16 units).
+>
+> **Considered and rejected:** applying the same `/300` km-conversion to the chunk's Size, matching Radius, for consistency. Worked out the actual math first — since Height would still be an absolute scene-unit number, shrinking Size by ~300x while leaving Height unchanged makes the *same* value proportionally *more* dominant against the now-tinier chunk, not less (the opposite of the goal). The fully-consistent version of that fix would require converting Height through the same km factor everywhere, including the planet, which would nearly flatten the planet's terrain at its current default values and need every Height default/range recalibrated — a much bigger, riskier change than the actual ask.
+>
+> **Actual fix — Dana's suggestion:** make Height a percentage of whichever context it's applied to, not an absolute number: `(Height / 100) × radius` for the planet, `(Height / 100) × chunkSize` for the chunk, computed right where each is used (`SceneCanvas.tsx`, `voxel/landChunk.ts`). A percentage self-normalizes automatically — "15%" produces proportionally similar terrain whether the context is a 20-unit planet or a 4-unit chunk, with no unit-conversion bookkeeping needed at all, and no change required to Radius/Size's own units. Per-layer Height (above) is untouched by this — it stays a relative multiplier *between layers* within the same elevation sum, not tied to any physical size itself. Default recalibrated 3 → 15 (%) to reproduce the old default look exactly.
 
 ---
 

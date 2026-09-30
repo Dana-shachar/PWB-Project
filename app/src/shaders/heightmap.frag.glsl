@@ -16,6 +16,7 @@ uniform float uLayerLacunarity[MAX_LAYERS];
 uniform float uLayerTerraceSteps[MAX_LAYERS];
 uniform float uLayerWarpStrength[MAX_LAYERS];
 uniform float uLayerOpacity[MAX_LAYERS];
+uniform float uLayerHeightScale[MAX_LAYERS]; // amplitude, distinct from opacity — see map/heightmap.ts's NoiseLayer.heightScale
 uniform float uLayerBlendMode[MAX_LAYERS]; // 0=normal, 1=add, 2=subtract, 3=multiply, 4=max, 5=min, 6=screen
 // GLSL ES 1.00 (this material's default) requires constant indices for
 // sampler arrays, so each layer gets its own named uniform instead of a
@@ -183,6 +184,9 @@ void main() {
   // vertex.glsl's height-centering); 0.0 made painted black indistinguishable
   // from an empty/no-fill layer. See ISSUES.md, 2026-09-22.
   float composite = 0.5;
+  // Terrain's zero — not 0.5 like the shape composite above, a real "no
+  // displacement" baseline (Dana, 2026-09-24). See the elevation line below.
+  float elevation = 0.0;
   // Hidden layers (Dana, 2026-09-23) are filtered out entirely before this
   // material's uniforms are ever set (see map/heightmap.ts's render()) —
   // uLayerCount only counts visible ones, so a hidden layer's noise is
@@ -208,7 +212,24 @@ void main() {
     float coverage = isNoneType ? paint.y : 1.0;
     float blended = applyBlendMode(composite, layerHeight, uLayerBlendMode[i]);
     composite = mix(composite, blended, uLayerOpacity[i] * coverage);
+
+    // Elevation (Height) is a genuinely separate quantity from the shape
+    // composite above — not related to Opacity or Blend Mode at all (Dana,
+    // 2026-09-24: "same as an amplitude/strength control... it's a separate
+    // param"), same as a height/strength layer in Blender/World
+    // Machine/Gaea. Reuses this layer's own layerHeight (noise AND paint,
+    // whatever's actually present at this pixel — "sample from everything
+    // in a specific layer") re-centered on 0 (terrain's zero, not the shape
+    // channel's 0.5 neutral gray) and scaled by this layer's own Height,
+    // then summed additively across every layer — no blend mode, no
+    // opacity. `coverage` (not opacity) still applies so an unpainted area
+    // of a paint-only layer contributes exactly 0, not a phantom dip.
+    elevation += uLayerHeightScale[i] * (layerHeight - 0.5) * coverage;
   }
 
-  gl_FragColor = vec4(vec3(clamp(composite, 0.0, 1.0)), 1.0);
+  // R = shape (clamped 0..1, unchanged — drives the 2D canvas/painting).
+  // G = elevation (unclamped, can exceed 1 or go negative — real height,
+  // read by the planet's displacement and the land chunk instead of R).
+  // See map/heightmap.ts, ISSUES.md, 2026-09-24.
+  gl_FragColor = vec4(clamp(composite, 0.0, 1.0), elevation, 0.0, 1.0);
 }

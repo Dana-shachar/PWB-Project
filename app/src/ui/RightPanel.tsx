@@ -39,17 +39,22 @@ interface RightPanelProps {
   paintVersion: number;
   heightScale: number;
   onHeightScaleChange: (value: number) => void;
+  isMapExpanded: boolean;
+  onMapExpandedChange: (value: boolean) => void;
+  // User-resizable, not content-driven — see ui/panelResize.ts and App.tsx's
+  // resize handle.
+  width: number;
 }
 
 // Right-side panel — a tab bar (ported from active-geometry's
 // buildStageTabs/.ag-stage-tab convention) above the panel content, so more
 // technique tabs (Erosion, Color, ...) can be added later without
 // restructuring.
-export function RightPanel(props: RightPanelProps) {
+export function RightPanel({ width, ...props }: RightPanelProps) {
   const [activeTab, setActiveTab] = useState<RightPanelTab>('noise');
 
   return (
-    <div className="panel-outer">
+    <div className="panel-outer" style={{ width }}>
       <div className="right-panel-tabs">
         {TABS.map((tab) => (
           <button

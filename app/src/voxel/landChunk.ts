@@ -22,7 +22,9 @@ export function useLandChunk(
   // Shared directly with the planet's own terrain height, not this hook's
   // own state — see planet/planetControls.ts and ISSUES.md, 2026-09-23
   // ("the chunk is eventually a part of the planet we're viewing as a flat
-  // piece" — one real height value, not two independently-scaled ones).
+  // piece" — one real height value, not two independently-scaled ones). A
+  // percentage of context size (Dana, 2026-09-24), converted against
+  // chunkSize below — same idea SceneCanvas.tsx applies against radius.
   heightScale: number,
 ) {
   const [viewMode, setViewMode] = useState<ViewMode>('planet'); // Dana, 2026-09-23 — planet is the default, not split
@@ -47,19 +49,29 @@ export function useLandChunk(
   // layers-effect re-renders the composited heightmap texture first — it's
   // a child of whatever calls this hook, so its effect fires before this
   // one in the same commit (see ISSUES.md, 2026-09-22) — by the time this
-  // runs, getPreviewImageData() already reflects the latest layers.
+  // runs, getElevationData() already reflects the latest layers.
   // Painting isn't wired in yet (only the noise stack) — that's
   // strokeHistory/paintVersion, a separate signal.
   useEffect(() => {
     if (viewMode === 'planet') return;
-    const heightmapImageData = sceneHandleRef.current?.getPreviewImageData();
-    if (!heightmapImageData) return;
+    // Real elevation (Height, per layer), not getPreviewImageData()'s
+    // shape/paint composite — see map/heightmap.ts and ISSUES.md, 2026-09-24.
+    const elevationData = sceneHandleRef.current?.getElevationData();
+    if (!elevationData) return;
+
+    // heightScale is a percentage of context size, not an absolute
+    // scene-unit value (Dana, 2026-09-24) — chunkSize is this context's
+    // size, same conversion SceneCanvas.tsx applies against radius for the
+    // planet. Without this, the same Height value that looks reasonable
+    // against the planet's much larger radius dwarfed the chunk's own much
+    // smaller footprint. See ISSUES.md.
+    const effectiveHeightScale = (heightScale / 100) * chunkSize;
 
     if (renderStyle !== 'voxel') {
       // Smooth patch — cheap enough to build directly, no Worker needed.
       setGeometry((previous) => {
         previous?.dispose();
-        return buildSmoothChunkGeometry(heightmapImageData, resolution, heightScale, chunkSize);
+        return buildSmoothChunkGeometry(elevationData, resolution, effectiveHeightScale, chunkSize);
       });
       return;
     }
@@ -75,7 +87,7 @@ export function useLandChunk(
       });
     };
 
-    const heights = buildChunkHeights(heightmapImageData, resolution, heightScale);
+    const heights = buildChunkHeights(elevationData, resolution, effectiveHeightScale);
     worker.postMessage({ heights, resolution, size: chunkSize }, [heights.buffer]);
 
     return () => worker.terminate();

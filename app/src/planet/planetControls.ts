@@ -19,10 +19,15 @@ export function usePlanetControls() {
   // displacement and the land chunk's voxel/smooth height (Dana, 2026-09-23:
   // "it's overall height... the chunk is eventually a part of the planet
   // we're viewing as a flat piece" — the same number, not two separately
-  // scaled ones). Was previously auto-derived as radius*0.15 on the planet
-  // side only; 3 matches that at the default radius so nothing changes
-  // visually until this is touched. See ISSUES.md, 2026-09-23.
-  const [heightScale, setHeightScale] = useState(3);
+  // scaled ones). A percentage of whichever context it's applied to
+  // (radius for the planet, footprint size for the chunk — see
+  // SceneCanvas.tsx/voxel/landChunk.ts), not an absolute scene-unit value —
+  // that's what keeps the same number proportionally correct on both,
+  // despite the planet and a chunk being wildly different absolute sizes
+  // (Dana, 2026-09-24: "can the height be in %?"). 15 matches the old
+  // radius*0.15 auto-derivation at any radius now, not just the default
+  // one. See ISSUES.md, 2026-09-24.
+  const [heightScale, setHeightScale] = useState(15);
 
   return {
     radiusKm,

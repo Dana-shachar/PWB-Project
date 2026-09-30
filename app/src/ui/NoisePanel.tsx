@@ -1,5 +1,5 @@
 import { useRef, useState, type RefObject } from 'react';
-import { Slider, Select } from './UIElements';
+import { Slider, Select, Accordion } from './UIElements';
 import { MapView } from '../map/MapView';
 import { NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer, type NoiseType, type BlendMode, type StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
@@ -33,9 +33,14 @@ interface NoisePanelProps {
   // attached to any one layer, same as the noise canvas/brush controls above.
   heightScale: number;
   onHeightScaleChange: (value: number) => void;
+  // Lifted up to App.tsx, not local state here — expanding now *replaces*
+  // the 3D viewport's content with the full-size canvas (both side panels
+  // stay visible) instead of a dark overlay on top of everything, so
+  // App.tsx needs to know about it too, not just this panel. See
+  // ISSUES.md, 2026-09-24.
+  isMapExpanded: boolean;
+  onMapExpandedChange: (value: boolean) => void;
 }
-
-const EXPANDED_CANVAS_SIZE_PX = 800; // TODO(DS): arbitrary placeholder — richer brush controls for this mode land later, see ROADMAP.md
 
 // Content for the right panel's "Noise" tab (see RightPanel.tsx for the tab
 // bar itself). Photoshop-style layer stack (Dana, 2026-09-15): bottom of
@@ -63,11 +68,12 @@ export function NoisePanel({
   paintVersion,
   heightScale,
   onHeightScaleChange,
+  isMapExpanded,
+  onMapExpandedChange,
 }: NoisePanelProps) {
   const primaryLayerId = selectedLayerIds[selectedLayerIds.length - 1];
   const selectedLayer = layers.find((layer) => layer.id === primaryLayerId) ?? layers[0];
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const [isExpanded, setIsExpanded] = useState(false);
   // The row actually being dragged switches to position:fixed and follows
   // the cursor (Dana, 2026-09-23: "i want to see the actual layer token
   // move by dragging", not a ghost copy) — position:fixed removes it from
@@ -124,43 +130,48 @@ export function NoisePanel({
   return (
     <>
       <div className="panel-section">
-        <div className="panel-section-title-row">
-          <div className="panel-section-title">Noise canvas</div>
-          <button type="button" className="panel-text-btn" onClick={() => setIsExpanded(true)}>
-            Expand
+        <Accordion title="Noise canvas">
+          <button type="button" className="panel-text-btn" onClick={() => onMapExpandedChange(true)} disabled={isMapExpanded}>
+            {isMapExpanded ? 'Expanded in viewport' : 'Expand'}
           </button>
-        </div>
-        {/* TODO(DS): radius only for now — strength/size/shape come later, per Dana's 2026-09-15 simplification. */}
-        <Slider
-          label="Brush radius"
-          unit="px"
-          value={brushRadiusPx}
-          onChange={onBrushRadiusPxChange}
-          min={1}
-          max={300}
-          step={1}
-          precision={0}
-        />
-        <Slider
-          label="Brush"
-          trackClassName="ui-slider-track--bw"
-          value={brushValue}
-          onChange={onBrushValueChange}
-          min={-1}
-          max={1}
-          step={0.01}
-        />
-        <Slider label="Feather" value={feather} onChange={onFeatherChange} min={0} max={1} step={0.01} />
-        <MapView
-          layers={layers}
-          selectedLayerId={primaryLayerId}
-          brushRadiusPx={brushRadiusPx}
-          brushValue={brushValue}
-          feather={feather}
-          sceneHandleRef={sceneHandleRef}
-          onStrokeComplete={onStrokeComplete}
-          paintVersion={paintVersion}
-        />
+          {/* TODO(DS): radius only for now — strength/size/shape come later, per Dana's 2026-09-15 simplification. */}
+          <Slider
+            label="Brush radius"
+            unit="px"
+            value={brushRadiusPx}
+            onChange={onBrushRadiusPxChange}
+            min={1}
+            max={300}
+            step={1}
+            precision={0}
+          />
+          <Slider
+            label="Brush"
+            trackClassName="ui-slider-track--bw"
+            value={brushValue}
+            onChange={onBrushValueChange}
+            min={-1}
+            max={1}
+            step={0.01}
+          />
+          <Slider label="Feather" value={feather} onChange={onFeatherChange} min={0} max={1} step={0.01} />
+          {/* Hidden, not just visually covered, while expanded — the same
+              canvas is now shown full-size in the viewport instead (see
+              App.tsx), so two mounted MapViews would both be capturing
+              paint input for no reason. */}
+          {!isMapExpanded && (
+            <MapView
+              layers={layers}
+              selectedLayerId={primaryLayerId}
+              brushRadiusPx={brushRadiusPx}
+              brushValue={brushValue}
+              feather={feather}
+              sceneHandleRef={sceneHandleRef}
+              onStrokeComplete={onStrokeComplete}
+              paintVersion={paintVersion}
+            />
+          )}
+        </Accordion>
       </div>
 
       <div className="panel-section-divider" />
@@ -168,8 +179,13 @@ export function NoisePanel({
       <div className="panel-section">
         <div className="panel-section-title">Terrain</div>
         {/* Global — shared directly with the planet's own displacement, not
-            attached to any one layer (Dana, 2026-09-23). */}
-        <Slider label="Height" value={heightScale} onChange={onHeightScaleChange} min={0} max={50} step={0.5} />
+            attached to any one layer (Dana, 2026-09-23). A percentage of
+            context size (radius for the planet, footprint for the chunk),
+            not an absolute scene-unit value — keeps the same number
+            proportionally correct on both despite their wildly different
+            absolute sizes (Dana, 2026-09-24: "can the height be in %?").
+            See SceneCanvas.tsx, voxel/landChunk.ts, ISSUES.md. */}
+        <Slider label="Height" unit="%" value={heightScale} onChange={onHeightScaleChange} min={0} max={100} step={0.5} precision={1} />
       </div>
 
       <div className="panel-section-divider" />
@@ -274,6 +290,21 @@ export function NoisePanel({
           max={1}
           step={0.01}
         />
+        {/* Amplitude/strength, same concept as a height layer in Blender/
+            World Machine/Gaea — real elevation from the terrain's zero,
+            additive across layers, genuinely unrelated to Opacity/Blend
+            Mode (which only govern the 2D shape/paint composite). Gets
+            scaled again by the global Terrain "Height" slider above, so
+            this is a relative multiplier between layers/features, not a
+            physical unit itself (Dana, 2026-09-24). See ISSUES.md. */}
+        <Slider
+          label="Height"
+          value={selectedLayer.heightScale ?? 1}
+          onChange={(value) => onUpdateSelectedLayer({ heightScale: value })}
+          min={0}
+          max={10}
+          step={0.1}
+        />
         <Select
           label="Blend mode"
           value={selectedLayer.blendMode}
@@ -343,27 +374,6 @@ export function NoisePanel({
         </>
       )}
 
-      {isExpanded && (
-        <div className="noise-canvas-overlay">
-          <div className="noise-canvas-overlay-header">
-            <span>Noise canvas</span>
-            <button type="button" className="panel-text-btn" onClick={() => setIsExpanded(false)}>
-              Collapse
-            </button>
-          </div>
-          <MapView
-            layers={layers}
-            selectedLayerId={primaryLayerId}
-            brushRadiusPx={brushRadiusPx}
-            brushValue={brushValue}
-            feather={feather}
-            sceneHandleRef={sceneHandleRef}
-            onStrokeComplete={onStrokeComplete}
-            paintVersion={paintVersion}
-            sizePx={EXPANDED_CANVAS_SIZE_PX}
-          />
-        </div>
-      )}
     </>
   );
 }

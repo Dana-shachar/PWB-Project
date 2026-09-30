@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sampleChunkHeight } from './chunkGrid';
+import { sampleChunkElevation, type ElevationData } from './chunkGrid';
 
 // A smooth, continuously-displaced alternative to the voxel mesh — same
 // sampled region and vertical scale as density.ts's buildChunkHeights().
@@ -16,7 +16,7 @@ import { sampleChunkHeight } from './chunkGrid';
 // footprint's world-space width/depth, also independent of `resolution` —
 // resolution only controls how finely that fixed-size footprint is
 // subdivided (Dana, 2026-09-23: "the res should affect detail level, not size").
-export function buildSmoothChunkGeometry(heightmapImageData: ImageData, resolution: number, heightScale: number, size: number): THREE.BufferGeometry {
+export function buildSmoothChunkGeometry(elevationData: ElevationData, resolution: number, heightScale: number, size: number): THREE.BufferGeometry {
   const verticesPerAxis = resolution + 1; // N+1 vertices make N quads per axis
   const cellSize = size / resolution; // world units per voxel column
   const horizontalOffset = resolution / 2;
@@ -28,7 +28,12 @@ export function buildSmoothChunkGeometry(heightmapImageData: ImageData, resoluti
   const heights = new Float32Array(verticesPerAxis * verticesPerAxis);
   for (let z = 0; z < verticesPerAxis; z++) {
     for (let x = 0; x < verticesPerAxis; x++) {
-      heights[heightIndex(x, z)] = sampleChunkHeight(heightmapImageData, x, z, resolution) * heightScale; // same vertical scale as the voxel version
+      // +0.5 recenters elevation onto the old 0..1 convention this function
+      // was built around; clamped at 0 (not just scaled) since the skirt-
+      // wall grounding below assumes the top surface never dips below the
+      // y=0 base — elevation can now go negative (see density.ts's same fix).
+      const heightNormalized = Math.max(0, sampleChunkElevation(elevationData, x, z, resolution) + 0.5);
+      heights[heightIndex(x, z)] = heightNormalized * heightScale; // same vertical scale as the voxel version
     }
   }
   function heightAt(x: number, z: number): number {

@@ -29,6 +29,12 @@ interface PanelProps {
   onBaseColorChange: (value: string) => void;
   displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
   onDisplayModeChange: (value: string) => void;
+  // Which pane the shared Radius/Size slider currently drives — 'planet' or
+  // 'landChunk' when exactly one is in view/selected, null when both panes
+  // are selected in Split (a view-specific control, not a joint one like
+  // lighting/zoom — Dana, 2026-09-23/24: "only joint controls should be
+  // enabled... not individual view specific ones"). See App.tsx.
+  activeViewContext: 'planet' | 'landChunk' | null;
   // Edit controls
   canUndo: boolean;
   onUndo: () => void;
@@ -49,6 +55,10 @@ interface PanelProps {
   onChunkResolutionChange: (value: number) => void;
   chunkSize: number;
   onChunkSizeChange: (value: number) => void;
+  // User-resizable, not content-driven — see ui/panelResize.ts and App.tsx's
+  // resize handle. Applied as an inline style, not CSS, since it's a
+  // per-instance drag state, not a fixed design-token value.
+  width: number;
 }
 
 // Left-side control panel, divided into titled sections — ported from
@@ -78,6 +88,7 @@ export function Panel({
   onBaseColorChange,
   displayMode,
   onDisplayModeChange,
+  activeViewContext,
   canUndo,
   onUndo,
   canRedo,
@@ -95,9 +106,10 @@ export function Panel({
   onChunkResolutionChange,
   chunkSize,
   onChunkSizeChange,
+  width,
 }: PanelProps) {
   return (
-    <div className="panel-outer">
+    <div className="panel-outer" style={{ width }}>
       <div className="panel-content">
         <div className="panel-section">
           <Accordion title="Project Settings">
@@ -223,15 +235,24 @@ export function Panel({
             onChange={onDisplayModeChange}
             options={DISPLAY_MODE_OPTIONS}
           />
+          {/* One shared slider, not two — Radius (planet) and Size (chunk)
+              are the same kind of control (the view's physical scale), so
+              it relabels/rebinds to whichever pane is actually in view or
+              selected instead of showing both at once (Dana, 2026-09-23/24:
+              "the slider should actually change depending on the view").
+              Disabled, not hidden, when both panes are selected in Split —
+              it's a view-specific control, not a joint one. Falls back to
+              the Radius binding while disabled so it doesn't blank out. */}
           <Slider
-            label="Radius"
+            label={activeViewContext === 'landChunk' ? 'Size' : 'Radius'}
             unit="km"
-            value={radiusKm}
-            onChange={onRadiusKmChange}
-            min={1000}
-            max={100000}
-            step={100}
+            value={activeViewContext === 'landChunk' ? chunkSize : radiusKm}
+            onChange={activeViewContext === 'landChunk' ? onChunkSizeChange : onRadiusKmChange}
+            min={activeViewContext === 'landChunk' ? 4 : 1000}
+            max={activeViewContext === 'landChunk' ? 64 : 100000}
+            step={activeViewContext === 'landChunk' ? 1 : 100}
             precision={0}
+            disabled={activeViewContext === null}
           />
           <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
         </div>
@@ -239,15 +260,18 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          <div className="panel-section-title">Land Chunk</div>
-          {/* Detail only — doesn't affect the footprint's physical size
+          <div className="panel-section-title">Chunk</div>
+          {/* Detail only — doesn't affect the footprint's physical size,
+              which now lives in the shared Radius/Size slider above
               (Dana, 2026-09-23: it used to, incidentally). Max raised
               64→512→2048 — 512 wasn't a hard ceiling either, just not yet
               pushed; true UHD (4096) is deliberately held back — the real
               constraint isn't resolution alone but worst-case triangle
               count for very noisy terrain, which at 4096 risks actually
               crashing the tab, not just running slow. See ISSUES.md,
-              2026-09-23. */}
+              2026-09-23. No planet-side resolution control exists yet, so
+              this stays chunk-only for now rather than forcing a merge
+              with nothing on the other side. */}
           <Slider
             label="Resolution"
             value={chunkResolution}
@@ -255,15 +279,6 @@ export function Panel({
             min={8}
             max={2048}
             step={8}
-            precision={0}
-          />
-          <Slider
-            label="Size"
-            value={chunkSize}
-            onChange={onChunkSizeChange}
-            min={4}
-            max={64}
-            step={1}
             precision={0}
           />
         </div>

@@ -138,6 +138,13 @@ body {
   gap: var(--gap-sm);
 }
 
+/* View-specific control (e.g. Radius/Size) while both viewport panes are
+   selected — only joint controls like lighting/zoom stay active then. */
+.ui-slider-row--disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 .ui-slider-label {
   font: 300 var(--font-size-sm) var(--font-ui);
   color: var(--color-text);
@@ -149,6 +156,12 @@ input[type='range'].ui-slider-track {
   -webkit-appearance: none;
   appearance: none;
   flex: 1;
+  /* Without this, the range input's own intrinsic default width (a browser
+     UA-stylesheet minimum, not anything set here) overrides flex:1's
+     shrinking — the row would rather overflow the panel than shrink the
+     track below that, pushing the number field past the panel's edge at
+     narrower widths (Dana, 2026-09-30, left panel at 280px). */
+  min-width: 0;
   height: 2px;
   background: var(--color-track);
   border-radius: 1px;
@@ -276,6 +289,7 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 
 .ui-select {
   flex: 1;
+  min-width: 0; /* same fix as .ui-slider-track — a <select>'s intrinsic content width otherwise overrides flex:1's shrinking */
   padding: 6px 4px;
   cursor: pointer;
   background: var(--color-input-fill);
@@ -297,8 +311,14 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
      .app-viewport (flex:1) was expanding to the full window width
      underneath it regardless, leaving the camera centered on the whole
      window again instead of the visible viewport. */
-  width: max-content;
-  max-width: var(--panel-max-width);
+  /* Not max-content — a max-content panel resized itself every time an
+     accordion opened/closed or a right-panel tab (including the still-empty
+     Erosion/Color placeholders) showed different content, which read as the
+     whole layout shifting. Width only ever changes via an explicit drag on
+     the resize handle now (App.tsx, ui/panelResize.ts — ported from
+     active-geometry-project's .ag-right-panel-handle), set as an inline
+     style that overrides this default (Dana, 2026-09-30). */
+  width: var(--panel-max-width);
   height: 100%;
   background: var(--color-panel-bg);
   border-radius: var(--panel-radius); /* matches active-geometry's flat 4px all around, not split */
@@ -663,17 +683,27 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   margin-top: var(--gap-md);
 }
 
-/* Not ported — no fullscreen/overlay convention exists in active-geometry. */
-.noise-canvas-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
+/* Expanded noise canvas — replaces .app-viewport's normal planet/chunk
+   content in place (App.tsx), not a dark overlay on top of everything
+   (Dana, 2026-09-24: "should instead replace the 3D viewport's content,
+   keeping both side panels visible" — the earlier fixed/inset overlay this
+   replaced covered the whole window, panels included). */
+.map-expanded-viewport {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: var(--gap-md);
-  background: rgba(0, 0, 0, 0.85);
+}
+
+/* The shared gumball (scene/sharedGumball.ts) mounts into .app-viewport
+   itself — hide it while the noise canvas has replaced that viewport's
+   content, it has no 3D camera to target right now. */
+.app-viewport--map-expanded .gumball-container {
+  display: none;
 }
 
 .noise-canvas-overlay-header {

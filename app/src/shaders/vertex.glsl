@@ -7,11 +7,12 @@ void main() {
   vUv = uv;
 
   // Sphere UVs are equirectangular by default in Three.js, so sampling
-  // directly with `uv` lines up correctly with no extra mapping.
-  float height = texture2D(uHeightMap, uv).r; // 0..1, see heightmap.frag.glsl
-  // TODO(DS): arbitrary placeholder amplitude default — recenter around
-  // 0.5 so mid-gray means "no displacement", not "displaced by half".
-  vec3 displaced = position + normal * (height - 0.5) * uDisplacementAmplitude;
+  // directly with `uv` lines up correctly with no extra mapping. G, not R —
+  // real elevation (each layer's own Height, additive, already centered on
+  // 0), not the R shape/paint composite (0..1, centered on 0.5) the 2D
+  // canvas shows. See heightmap.frag.glsl and ISSUES.md, 2026-09-24.
+  float elevation = texture2D(uHeightMap, uv).g;
+  vec3 displaced = position + normal * elevation * uDisplacementAmplitude;
 
   gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
 }
