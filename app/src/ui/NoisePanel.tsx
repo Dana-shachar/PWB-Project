@@ -1,8 +1,17 @@
 import { useRef, useState, type RefObject } from 'react';
-import { Slider, Select, Toggle, Accordion, EditableText } from './UIElements';
+import { Slider, Select, Accordion, EditableText } from './UIElements';
 import { MapView } from '../map/MapView';
 import { NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer, type NoiseType, type BlendMode, type StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
+
+// One contained tab per modifier (ui/NoisePanel.tsx's Modifiers section) —
+// Gaea's fixed order: Domain warp → generator/Octaves → Ridged → Terrace.
+const MODIFIERS = [
+  { key: 'domainWarp', label: 'Domain warp', enabledField: 'domainWarpEnabled' },
+  { key: 'octaves', label: 'Octaves (fBm)', enabledField: 'octavesEnabled' },
+  { key: 'ridged', label: 'Ridged', enabledField: 'ridgedEnabled' },
+  { key: 'terrace', label: 'Terrace', enabledField: 'terraceEnabled' },
+] as const;
 
 interface NoisePanelProps {
   layers: NoiseLayer[];
@@ -81,6 +90,9 @@ export function NoisePanel({
   // move by dragging", not a ghost copy) — position:fixed removes it from
   // the flex flow on its own, so the rest of the list reflows underneath
   // exactly as it already did.
+  // Which modifier's params are currently shown — exclusive across the 4,
+  // independent of each one's own enabled state (Dana, 2026-09-30).
+  const [expandedModifier, setExpandedModifier] = useState<(typeof MODIFIERS)[number]['key'] | null>(null);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const dragGrabOffsetRef = useRef({ x: 0, y: 0 }); // cursor's position within the row at mousedown, so it doesn't jump to the row's corner
@@ -179,21 +191,22 @@ export function NoisePanel({
       <div className="panel-section-divider" />
 
       <div className="panel-section">
-        <div className="panel-section-title">Terrain</div>
-        {/* Global — shared directly with the planet's own displacement, not
-            attached to any one layer (Dana, 2026-09-23). A percentage of
-            context size (radius for the planet, footprint for the chunk),
-            not an absolute scene-unit value — keeps the same number
-            proportionally correct on both despite their wildly different
-            absolute sizes (Dana, 2026-09-24: "can the height be in %?").
-            See SceneCanvas.tsx, voxel/landChunk.ts, ISSUES.md. */}
-        <Slider label="Height" unit="%" value={heightScale} onChange={onHeightScaleChange} min={0} max={100} step={0.5} precision={1} />
+        <Accordion title="Terrain">
+          {/* Global — shared directly with the planet's own displacement, not
+              attached to any one layer (Dana, 2026-09-23). A percentage of
+              context size (radius for the planet, footprint for the chunk),
+              not an absolute scene-unit value — keeps the same number
+              proportionally correct on both despite their wildly different
+              absolute sizes (Dana, 2026-09-24: "can the height be in %?").
+              See SceneCanvas.tsx, voxel/landChunk.ts, ISSUES.md. */}
+          <Slider label="Height" unit="%" value={heightScale} onChange={onHeightScaleChange} min={0} max={100} step={0.5} precision={1} />
+        </Accordion>
       </div>
 
       <div className="panel-section-divider" />
 
       <div className="panel-section">
-        <div className="panel-section-title">Layers</div>
+        <Accordion title="Layers">
         {layers
           .slice()
           .reverse()
@@ -265,12 +278,13 @@ export function NoisePanel({
         <button type="button" className="noise-add-layer-btn" onClick={onAddLayer}>
           + Add layer
         </button>
+        </Accordion>
       </div>
 
       <div className="panel-section-divider" />
 
       <div className="panel-section">
-        <div className="panel-section-title">Noise</div>
+        <Accordion title="Noise">
         <Select
           label="Noise type"
           value={selectedLayer.noiseType}
@@ -323,103 +337,128 @@ export function NoisePanel({
           onChange={(value) => onUpdateSelectedLayer({ blendMode: value as BlendMode })}
           options={BLEND_MODE_OPTIONS}
         />
+        </Accordion>
       </div>
 
       {/* Independent, composable toggles layered onto the base generator
           above, not separate noise types (Dana, 2026-09-30: "Modifiers as
-          toggles, not types"). Fixed order (Gaea): Domain warp → generator/
-          Octaves → Ridged → Terrace — each reveals its own params only
-          when checked. Hidden entirely for 'none' (no generator content to
+          toggles, not types"). One section, not one accordion per modifier
+          (Dana, 2026-09-30) — each modifier is a contained tab: the
+          checkbox enables/disables it (independent, any combination can be
+          on at once), the label switches which ONE modifier's params are
+          currently shown below (exclusive — "so you dont see them all at
+          once"). Checking a box also expands it, since you'll usually want
+          to tune what you just turned on; clicking an already-enabled tab's
+          label just switches which one is visible, without touching
+          enabled state. Hidden entirely for 'none' (no generator content to
           modify). See ISSUES.md. */}
       {selectedLayer.noiseType !== 'none' && (
         <>
           <div className="panel-section-divider" />
           <div className="panel-section">
-            <div className="panel-section-title">Modifiers</div>
-            <Toggle
-              label="Domain warp"
-              value={selectedLayer.domainWarpEnabled ?? false}
-              onChange={(value) => onUpdateSelectedLayer({ domainWarpEnabled: value })}
-            />
-            {selectedLayer.domainWarpEnabled && (
-              <Slider
-                label="Warp strength"
-                value={selectedLayer.warpStrength}
-                onChange={(value) => onUpdateSelectedLayer({ warpStrength: value })}
-                min={0}
-                max={4}
-                step={0.1}
-              />
-            )}
-            <Toggle
-              label="Octaves (fBm)"
-              value={selectedLayer.octavesEnabled ?? false}
-              onChange={(value) => onUpdateSelectedLayer({ octavesEnabled: value })}
-            />
-            {selectedLayer.octavesEnabled && (
-              <>
-                <Slider
-                  label="Octaves"
-                  value={selectedLayer.octaves}
-                  onChange={(value) => onUpdateSelectedLayer({ octaves: value })}
-                  min={1}
-                  max={8}
-                  step={1}
-                  precision={0}
-                />
-                <Slider
-                  label="Persistence"
-                  value={selectedLayer.persistence}
-                  onChange={(value) => onUpdateSelectedLayer({ persistence: value })}
-                  min={0}
-                  max={1}
-                  step={0.05}
-                />
-                <Slider
-                  label="Lacunarity"
-                  value={selectedLayer.lacunarity}
-                  onChange={(value) => onUpdateSelectedLayer({ lacunarity: value })}
-                  min={1}
-                  max={4}
-                  step={0.1}
-                />
-              </>
-            )}
-            <Toggle
-              label="Ridged"
-              value={selectedLayer.ridgedEnabled ?? false}
-              onChange={(value) => onUpdateSelectedLayer({ ridgedEnabled: value })}
-            />
-            {/* ridge() has no natural continuous parameter of its own to gate
-                (unlike the other 3 modifiers' existing sliders) — this
-                blends un-ridged -> fully-ridged (Dana, 2026-09-30: "how
-                would you control the amount of it?"). */}
-            {selectedLayer.ridgedEnabled && (
-              <Slider
-                label="Ridge amount"
-                value={selectedLayer.ridgeAmount ?? 1}
-                onChange={(value) => onUpdateSelectedLayer({ ridgeAmount: value })}
-                min={0}
-                max={1}
-                step={0.01}
-              />
-            )}
-            <Toggle
-              label="Terrace"
-              value={selectedLayer.terraceEnabled ?? false}
-              onChange={(value) => onUpdateSelectedLayer({ terraceEnabled: value })}
-            />
-            {selectedLayer.terraceEnabled && (
-              <Slider
-                label="Terrace steps"
-                value={selectedLayer.terraceSteps}
-                onChange={(value) => onUpdateSelectedLayer({ terraceSteps: value })}
-                min={2}
-                max={20}
-                step={1}
-                precision={0}
-              />
-            )}
+            <Accordion title="Modifiers">
+              <div className="modifier-tabs">
+                {MODIFIERS.map((modifier) => {
+                  const enabled = selectedLayer[modifier.enabledField] ?? false;
+                  return (
+                    <div
+                      key={modifier.key}
+                      className={'modifier-tab' + (expandedModifier === modifier.key ? ' modifier-tab--expanded' : '')}
+                    >
+                      <input
+                        type="checkbox"
+                        className="modifier-tab-checkbox"
+                        checked={enabled}
+                        onChange={(event) => {
+                          const nextEnabled = event.target.checked;
+                          onUpdateSelectedLayer({ [modifier.enabledField]: nextEnabled });
+                          if (nextEnabled) setExpandedModifier(modifier.key);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="modifier-tab-label"
+                        onClick={() => setExpandedModifier(expandedModifier === modifier.key ? null : modifier.key)}
+                      >
+                        {modifier.label}
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {expandedModifier === 'domainWarp' && (
+                <div className="modifier-params">
+                  <Slider
+                    label="Warp strength"
+                    value={selectedLayer.warpStrength}
+                    onChange={(value) => onUpdateSelectedLayer({ warpStrength: value })}
+                    min={0}
+                    max={4}
+                    step={0.1}
+                  />
+                </div>
+              )}
+              {expandedModifier === 'octaves' && (
+                <div className="modifier-params">
+                  <Slider
+                    label="Octaves"
+                    value={selectedLayer.octaves}
+                    onChange={(value) => onUpdateSelectedLayer({ octaves: value })}
+                    min={1}
+                    max={8}
+                    step={1}
+                    precision={0}
+                  />
+                  <Slider
+                    label="Persistence"
+                    value={selectedLayer.persistence}
+                    onChange={(value) => onUpdateSelectedLayer({ persistence: value })}
+                    min={0}
+                    max={1}
+                    step={0.05}
+                  />
+                  <Slider
+                    label="Lacunarity"
+                    value={selectedLayer.lacunarity}
+                    onChange={(value) => onUpdateSelectedLayer({ lacunarity: value })}
+                    min={1}
+                    max={4}
+                    step={0.1}
+                  />
+                </div>
+              )}
+              {expandedModifier === 'ridged' && (
+                <div className="modifier-params">
+                  {/* ridge() has no natural continuous parameter of its own
+                      to gate (unlike the other 3 modifiers' existing
+                      sliders) — this blends un-ridged -> fully-ridged
+                      (Dana, 2026-09-30: "how would you control the amount
+                      of it?"). */}
+                  <Slider
+                    label="Ridge amount"
+                    value={selectedLayer.ridgeAmount ?? 1}
+                    onChange={(value) => onUpdateSelectedLayer({ ridgeAmount: value })}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                  />
+                </div>
+              )}
+              {expandedModifier === 'terrace' && (
+                <div className="modifier-params">
+                  <Slider
+                    label="Terrace steps"
+                    value={selectedLayer.terraceSteps}
+                    onChange={(value) => onUpdateSelectedLayer({ terraceSteps: value })}
+                    min={2}
+                    max={20}
+                    step={1}
+                    precision={0}
+                  />
+                </div>
+              )}
+            </Accordion>
           </div>
         </>
       )}

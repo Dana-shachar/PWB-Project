@@ -683,6 +683,55 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   padding-left: var(--gap-md);
   border-left: 1px solid var(--color-divider);
 }
+
+/* ── Modifier tabs (ui/NoisePanel.tsx's Modifiers section) ─── */
+/* Each modifier is a contained tab: the checkbox enables/disables it
+   (independent, any combination on at once); clicking the label switches
+   which ONE modifier's params show below (exclusive) — two distinct
+   controls for two distinct, independent states (Dana, 2026-09-30). */
+
+.modifier-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap-sm);
+}
+
+.modifier-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+}
+.modifier-tab--expanded {
+  border-color: var(--color-accent);
+}
+
+.modifier-tab-checkbox {
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.modifier-tab-label {
+  padding: 0;
+  cursor: pointer;
+  background: none;
+  border: none;
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+}
+.modifier-tab-label:hover {
+  opacity: 0.75;
+}
+
+.modifier-params {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+  margin-top: var(--gap-sm);
+}
 .ui-accordion--nested > .ui-accordion-header {
   font-weight: 400;
 }
