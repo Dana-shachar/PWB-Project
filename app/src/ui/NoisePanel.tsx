@@ -1,5 +1,5 @@
 import { useRef, useState, type RefObject } from 'react';
-import { Slider, Select, Accordion, EditableText } from './UIElements';
+import { Slider, Select, Toggle, Accordion, EditableText } from './UIElements';
 import { MapView } from '../map/MapView';
 import { NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer, type NoiseType, type BlendMode, type StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
@@ -343,15 +343,17 @@ export function NoisePanel({
       {/* Independent, composable toggles layered onto the base generator
           above, not separate noise types (Dana, 2026-09-30: "Modifiers as
           toggles, not types"). One section, not one accordion per modifier
-          (Dana, 2026-09-30) — each modifier is a contained tab: the
-          checkbox enables/disables it (independent, any combination can be
-          on at once), the label switches which ONE modifier's params are
-          currently shown below (exclusive — "so you dont see them all at
-          once"). Checking a box also expands it, since you'll usually want
-          to tune what you just turned on; clicking an already-enabled tab's
-          label just switches which one is visible, without touching
-          enabled state. Hidden entirely for 'none' (no generator content to
-          modify). See ISSUES.md. */}
+          — 4 tabs, all in one row (Dana, 2026-09-30: "when i say tabs i
+          mean all in the same row"). Tabs are plain labels, selecting which
+          ONE modifier's params are shown below (exclusive — "so you dont
+          see them all at once"); the enable checkbox lives inside the
+          expanded panel itself, not on the tab (Dana, 2026-09-30: "get rid
+          of the check box in the tab and move it inside of each modifier as
+          'enable'") — any combination of modifiers can still be enabled at
+          once, independent of which one is currently being viewed. A tab
+          still shows whether its modifier is enabled (accent-filled), just
+          not via a checkbox control. Hidden entirely for 'none' (no
+          generator content to modify). See ISSUES.md. */}
       {selectedLayer.noiseType !== 'none' && (
         <>
           <div className="panel-section-divider" />
@@ -361,34 +363,29 @@ export function NoisePanel({
                 {MODIFIERS.map((modifier) => {
                   const enabled = selectedLayer[modifier.enabledField] ?? false;
                   return (
-                    <div
+                    <button
                       key={modifier.key}
-                      className={'modifier-tab' + (expandedModifier === modifier.key ? ' modifier-tab--expanded' : '')}
+                      type="button"
+                      className={
+                        'modifier-tab' +
+                        (expandedModifier === modifier.key ? ' modifier-tab--expanded' : '') +
+                        (enabled ? ' modifier-tab--enabled' : '')
+                      }
+                      onClick={() => setExpandedModifier(expandedModifier === modifier.key ? null : modifier.key)}
                     >
-                      <input
-                        type="checkbox"
-                        className="modifier-tab-checkbox"
-                        checked={enabled}
-                        onChange={(event) => {
-                          const nextEnabled = event.target.checked;
-                          onUpdateSelectedLayer({ [modifier.enabledField]: nextEnabled });
-                          if (nextEnabled) setExpandedModifier(modifier.key);
-                        }}
-                      />
-                      <button
-                        type="button"
-                        className="modifier-tab-label"
-                        onClick={() => setExpandedModifier(expandedModifier === modifier.key ? null : modifier.key)}
-                      >
-                        {modifier.label}
-                      </button>
-                    </div>
+                      {modifier.label}
+                    </button>
                   );
                 })}
               </div>
 
               {expandedModifier === 'domainWarp' && (
                 <div className="modifier-params">
+                  <Toggle
+                    label="Enable"
+                    value={selectedLayer.domainWarpEnabled ?? false}
+                    onChange={(value) => onUpdateSelectedLayer({ domainWarpEnabled: value })}
+                  />
                   <Slider
                     label="Warp strength"
                     value={selectedLayer.warpStrength}
@@ -401,6 +398,11 @@ export function NoisePanel({
               )}
               {expandedModifier === 'octaves' && (
                 <div className="modifier-params">
+                  <Toggle
+                    label="Enable"
+                    value={selectedLayer.octavesEnabled ?? false}
+                    onChange={(value) => onUpdateSelectedLayer({ octavesEnabled: value })}
+                  />
                   <Slider
                     label="Octaves"
                     value={selectedLayer.octaves}
@@ -430,6 +432,11 @@ export function NoisePanel({
               )}
               {expandedModifier === 'ridged' && (
                 <div className="modifier-params">
+                  <Toggle
+                    label="Enable"
+                    value={selectedLayer.ridgedEnabled ?? false}
+                    onChange={(value) => onUpdateSelectedLayer({ ridgedEnabled: value })}
+                  />
                   {/* ridge() has no natural continuous parameter of its own
                       to gate (unlike the other 3 modifiers' existing
                       sliders) — this blends un-ridged -> fully-ridged
@@ -447,6 +454,11 @@ export function NoisePanel({
               )}
               {expandedModifier === 'terrace' && (
                 <div className="modifier-params">
+                  <Toggle
+                    label="Enable"
+                    value={selectedLayer.terraceEnabled ?? false}
+                    onChange={(value) => onUpdateSelectedLayer({ terraceEnabled: value })}
+                  />
                   <Slider
                     label="Terrace steps"
                     value={selectedLayer.terraceSteps}

@@ -685,52 +685,60 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 }
 
 /* ── Modifier tabs (ui/NoisePanel.tsx's Modifiers section) ─── */
-/* Each modifier is a contained tab: the checkbox enables/disables it
-   (independent, any combination on at once); clicking the label switches
-   which ONE modifier's params show below (exclusive) — two distinct
-   controls for two distinct, independent states (Dana, 2026-09-30). */
+/* All 4 in one row (Dana, 2026-09-30: "when i say tabs i mean all in the
+   same row") — plain labels, no checkbox on the tab itself; clicking one
+   selects which ONE modifier's params show below (exclusive). The actual
+   enable/disable checkbox lives inside the expanded panel instead (Dana,
+   2026-09-30: "get rid of the check box in the tab and move it inside of
+   each modifier as 'enable'") — independent of which tab is selected, any
+   combination can still be enabled at once. A tab still shows whether its
+   modifier is enabled via a filled background, so that information isn't
+   lost by moving the checkbox out of the tab row. */
 
 .modifier-tabs {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: var(--gap-sm);
 }
 
 .modifier-tab {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  flex: 1;
+  min-width: 0; /* lets the label actually shrink/ellipsize instead of forcing the row wider — see .noise-layer-row-main's same reasoning */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 4px 8px;
+  cursor: pointer;
   background: var(--color-input-fill);
   border: 0.25px solid var(--color-input-stroke);
   border-radius: 2px;
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  text-align: center;
+}
+.modifier-tab:hover {
+  opacity: 0.85;
 }
 .modifier-tab--expanded {
   border-color: var(--color-accent);
 }
-
-.modifier-tab-checkbox {
-  accent-color: var(--color-accent);
-  cursor: pointer;
+.modifier-tab--enabled {
+  background: color-mix(in srgb, var(--color-accent) 25%, var(--color-input-fill));
 }
 
-.modifier-tab-label {
-  padding: 0;
-  cursor: pointer;
-  background: none;
-  border: none;
-  font: 300 var(--font-size-sm) var(--font-ui);
-  color: var(--color-text);
-}
-.modifier-tab-label:hover {
-  opacity: 0.75;
-}
-
+/* A contained panel, not a bare slider floating below the tab row — reads
+   as "this box belongs to whichever tab is active" (Dana, 2026-09-30: "the
+   panel should wrap around it"). Accent border matches .modifier-tab--
+   expanded's, visually tying the content panel to its active tab. */
 .modifier-params {
   display: flex;
   flex-direction: column;
   gap: var(--gap-md);
   margin-top: var(--gap-sm);
+  padding: var(--gap-md);
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-accent);
+  border-radius: 2px;
 }
 .ui-accordion--nested > .ui-accordion-header {
   font-weight: 400;
