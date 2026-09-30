@@ -707,7 +707,13 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 .modifier-tabs {
   display: flex;
   flex-wrap: nowrap;
-  gap: var(--gap-sm);
+  /* No gap — tabs sit edge-to-edge as one segmented strip, not separate
+     floating chips (Dana, 2026-09-30: "the gaps between them"). The
+     group's own left/right border (not each tab's) is what frames the
+     whole strip, so there's no vertical stroke between individual tabs
+     (Dana, 2026-09-30: "get rid of the stroke in between the buttons"). */
+  border-left: 0.25px solid var(--color-input-stroke);
+  border-right: 0.25px solid var(--color-input-stroke);
 }
 
 .modifier-tab {
@@ -720,13 +726,31 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   cursor: pointer;
   background: var(--color-input-fill);
   border: 0.25px solid var(--color-input-stroke);
-  border-radius: 2px 2px 0 0; /* square bottom corners — the panel below sits flush against it when active */
+  border-left: none;
+  border-right: none; /* no side borders — .modifier-tabs' own border frames the group instead, see above */
   font: 300 var(--font-size-sm) var(--font-ui);
   color: var(--color-text);
   text-align: center;
 }
+.modifier-tab:first-child {
+  border-top-left-radius: 2px;
+}
+.modifier-tab:last-child {
+  border-top-right-radius: 2px;
+}
 .modifier-tab:hover {
   opacity: 0.85;
+}
+.modifier-tab:focus {
+  /* The browser's default focus outline (usually blue) doesn't belong to
+     this design system — same fix already used everywhere else a focusable
+     control needs one (.ui-select, .ui-slider-field): suppress it, use the
+     accent border as the focus indicator instead (Dana, 2026-09-30: "the
+     stroke around each tab button is very strange"). */
+  outline: none;
+  border-color: var(--color-accent);
+  position: relative;
+  z-index: 1;
 }
 .modifier-tab--expanded {
   position: relative;
