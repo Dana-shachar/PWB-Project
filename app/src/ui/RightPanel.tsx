@@ -1,25 +1,16 @@
-import { useState, type RefObject } from 'react';
+import type { RefObject } from 'react';
 import { NoisePanel } from './NoisePanel';
+import { StagePlaceholder } from './panels/StagePlaceholder';
+import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 
-// One tab per technique — see Dana's 2026-09-14 decision: tabs organized by
-// technique/effect, not by the planet's parts, since these operations all
-// compose onto one shared heightmap+texture rather than being independent
-// domains. Erosion/Color are empty placeholders (ROADMAP.md items 8-9) —
-// real content lands in each when that feature actually gets built. Paint
-// isn't its own tab (2026-09-15 decision) — it's a brush tool that targets
-// whichever layer is selected in the Noise tab, since it generates
-// displacement the same way procedural noise does.
-type RightPanelTab = 'noise' | 'erosion' | 'color';
-
-const TABS: { key: RightPanelTab; label: string }[] = [
-  { key: 'noise', label: 'Noise' },
-  { key: 'erosion', label: 'Erosion' },
-  { key: 'color', label: 'Color' },
-];
-
 interface RightPanelProps {
+  // Which stage's detail to show — selected via the left panel's pipeline
+  // menu (ui/Panel.tsx), not this panel's own tab bar anymore (removed
+  // 2026-10-07 — keeping both would mean two sources of truth for the same
+  // selection; see ROADMAP.md's Procedural System Feedback section).
+  activeStage: PipelineStage;
   layers: NoiseLayer[];
   selectedLayerIds: string[];
   onLayerClick: (id: string, event: { shiftKey: boolean }) => void;
@@ -47,28 +38,21 @@ interface RightPanelProps {
   width: number;
 }
 
-// Right-side panel — a tab bar (ported from active-geometry's
-// buildStageTabs/.ag-stage-tab convention) above the panel content, so more
-// technique tabs (Erosion, Color, ...) can be added later without
-// restructuring.
-export function RightPanel({ width, ...props }: RightPanelProps) {
-  const [activeTab, setActiveTab] = useState<RightPanelTab>('noise');
-
+// Right-side panel — no tab bar of its own anymore; which stage's detail
+// shows here is driven entirely by the left panel's pipeline menu
+// (ui/Panel.tsx's `activeStage`/`onStageChange`). Terrain gets the existing
+// full `NoisePanel`; every other stage is still an empty placeholder until
+// that stage's own feature gets built.
+export function RightPanel({ width, activeStage, ...props }: RightPanelProps) {
   return (
     <div className="panel-outer" style={{ width }}>
-      <div className="right-panel-tabs">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            type="button"
-            className={'right-panel-tab' + (activeTab === tab.key ? ' right-panel-tab--active' : '')}
-            onClick={() => setActiveTab(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
+      <div className="panel-content">
+        {activeStage === 'terrain' ? (
+          <NoisePanel {...props} />
+        ) : (
+          <StagePlaceholder label={PIPELINE_STAGES.find((stage) => stage.key === activeStage)!.label} />
+        )}
       </div>
-      <div className="panel-content">{activeTab === 'noise' && <NoisePanel {...props} />}</div>
     </div>
   );
 }

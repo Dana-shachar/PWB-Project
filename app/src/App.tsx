@@ -6,6 +6,7 @@ import { usePlanetControls } from './planet/planetControls';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
 import { usePanelResize } from './ui/panelResize';
+import { PIPELINE_STAGES, type PipelineStage } from './ui/pipelineStages';
 import { useNoiseLayers } from './map/noiseLayers';
 import { MapView } from './map/MapView';
 import { useBrush } from './map/2Dbrush';
@@ -67,6 +68,20 @@ function App() {
   // 2026-09-30: "add the same fix to the right panel - inc 280 min").
   const leftPanel = usePanelResize(280, 'left', 280);
   const rightPanel = usePanelResize(280, 'right', 280);
+  // The left panel's pipeline-stage menu — the structural response to
+  // "reads as 3D software, not a procedural system" feedback (see
+  // ROADMAP.md's Procedural System Feedback section). activeStage drives
+  // which stage's detail RightPanel shows; stageEnabled is independent —
+  // any combination can be on at once (feeds the future Timeline/gating,
+  // not built yet). Terrain starts enabled since it's the only stage with
+  // real content today.
+  const [activeStage, setActiveStage] = useState<PipelineStage>('terrain');
+  const [stageEnabled, setStageEnabled] = useState<Record<PipelineStage, boolean>>(() =>
+    Object.fromEntries(PIPELINE_STAGES.map((stage) => [stage.key, stage.key === 'terrain'])) as Record<PipelineStage, boolean>,
+  );
+  function handleToggleStageEnabled(stage: PipelineStage, value: boolean) {
+    setStageEnabled((previous) => ({ ...previous, [stage]: value }));
+  }
 
   return (
     <div className="app-layout">
@@ -105,6 +120,10 @@ function App() {
         onChunkResolutionChange={landChunk.setResolution}
         chunkSize={landChunk.chunkSize}
         onChunkSizeChange={landChunk.setChunkSize}
+        activeStage={activeStage}
+        onStageChange={setActiveStage}
+        stageEnabled={stageEnabled}
+        onToggleStageEnabled={handleToggleStageEnabled}
         width={leftPanel.width}
       />
       <div className="viewport-divider" onMouseDown={leftPanel.startResize} />
@@ -191,6 +210,7 @@ function App() {
       </div>
       <div className="viewport-divider" onMouseDown={rightPanel.startResize} />
       <RightPanel
+        activeStage={activeStage}
         layers={noiseLayers.layers}
         selectedLayerIds={noiseLayers.selectedLayerIds}
         onLayerClick={noiseLayers.handleLayerClick}

@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import { Slider, ColorPicker, Toggle, Select, Accordion, EditableText } from './UIElements';
+import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
 
 // 'voxel' only affects the land-chunk view for now — a display style, not a
@@ -55,10 +57,66 @@ interface PanelProps {
   onChunkResolutionChange: (value: number) => void;
   chunkSize: number;
   onChunkSizeChange: (value: number) => void;
+  // Pipeline-stage menu — the structural response to "reads as 3D software,
+  // not a procedural system" feedback (Dana, 2026-09-30/2026-10-07; see
+  // ROADMAP.md's Procedural System Feedback section). activeStage/
+  // onStageChange select which one stage's detail RightPanel shows
+  // (exclusive); stageEnabled/onToggleStageEnabled are independent — any
+  // combination can be on at once, feeding the future Timeline control.
+  activeStage: PipelineStage;
+  onStageChange: (stage: PipelineStage) => void;
+  stageEnabled: Record<PipelineStage, boolean>;
+  onToggleStageEnabled: (stage: PipelineStage, value: boolean) => void;
   // User-resizable, not content-driven — see ui/panelResize.ts and App.tsx's
   // resize handle. Applied as an inline style, not CSS, since it's a
   // per-instance drag state, not a fixed design-token value.
   width: number;
+}
+
+// One pipeline-stage row — two independent controls, same decoupled
+// select-vs-expand split already built for the Modifier tabs
+// (ui/NoisePanel.tsx): clicking the label selects this stage (exclusive —
+// drives what RightPanel shows); the chevron independently expands a small
+// quick-settings area inline, starting with just an Enabled toggle (feeds
+// gating/the future Timeline, not tied to selection at all).
+function PipelineStageRow({
+  label,
+  active,
+  expanded,
+  enabled,
+  onSelect,
+  onToggleExpand,
+  onToggleEnabled,
+}: {
+  label: string;
+  active: boolean;
+  expanded: boolean;
+  enabled: boolean;
+  onSelect: () => void;
+  onToggleExpand: () => void;
+  onToggleEnabled: (value: boolean) => void;
+}) {
+  return (
+    <div className="pipeline-stage-row">
+      <div className={'pipeline-stage-header' + (active ? ' pipeline-stage-header--active' : '')}>
+        <button type="button" className="pipeline-stage-label" onClick={onSelect}>
+          {label}
+        </button>
+        <button
+          type="button"
+          className={'pipeline-stage-chevron' + (expanded ? ' pipeline-stage-chevron--open' : '')}
+          onClick={onToggleExpand}
+        >
+          ▾
+        </button>
+      </div>
+      {expanded && (
+        <div className="pipeline-stage-quick-settings">
+          <Toggle label="Enabled" value={enabled} onChange={onToggleEnabled} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 // Left-side control panel, divided into titled sections — ported from
@@ -106,8 +164,27 @@ export function Panel({
   onChunkResolutionChange,
   chunkSize,
   onChunkSizeChange,
+  activeStage,
+  onStageChange,
+  stageEnabled,
+  onToggleStageEnabled,
   width,
 }: PanelProps) {
+  // Which stage rows have their own quick-settings expanded — independent
+  // per row (unlike the Modifier tabs' single-open exclusivity), matching
+  // how the rest of this panel's Accordions already behave (Project
+  // Settings and Edit can both be open at once).
+  const [expandedStages, setExpandedStages] = useState<Set<PipelineStage>>(new Set());
+
+  function toggleExpanded(stage: PipelineStage) {
+    setExpandedStages((previous) => {
+      const next = new Set(previous);
+      if (next.has(stage)) next.delete(stage);
+      else next.add(stage);
+      return next;
+    });
+  }
+
   return (
     <div className="panel-outer" style={{ width }}>
       <div className="panel-content">
@@ -281,6 +358,24 @@ export function Panel({
             step={8}
             precision={0}
           />
+        </div>
+
+        <div className="panel-section-divider" />
+
+        <div className="panel-section">
+          <div className="panel-section-title">Pipeline</div>
+          {PIPELINE_STAGES.map((stage) => (
+            <PipelineStageRow
+              key={stage.key}
+              label={stage.label}
+              active={activeStage === stage.key}
+              expanded={expandedStages.has(stage.key)}
+              enabled={stageEnabled[stage.key]}
+              onSelect={() => onStageChange(stage.key)}
+              onToggleExpand={() => toggleExpanded(stage.key)}
+              onToggleEnabled={(value) => onToggleStageEnabled(stage.key, value)}
+            />
+          ))}
         </div>
       </div>
     </div>
