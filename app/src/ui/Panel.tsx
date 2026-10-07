@@ -100,6 +100,11 @@ function PipelineStageRow({
     <div className="pipeline-stage-row">
       <div className={'pipeline-stage-header' + (active ? ' pipeline-stage-header--active' : '')}>
         <button type="button" className="pipeline-stage-label" onClick={onSelect}>
+          {/* A plain dot, not a filled box — the "enabled" signal moved
+              here once the header itself stopped having its own
+              background/border (Dana, 2026-10-07: accordions should read
+              as plain full-width strips, not look like dropdown menus). */}
+          {enabled && <span className="pipeline-stage-enabled-dot">●</span>}
           {label}
         </button>
         <button
@@ -264,106 +269,105 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          <div className="panel-section-title">Scene controls</div>
-          <Slider
-            label="Ambient light"
-            value={ambientLight}
-            onChange={onAmbientLightChange}
-            min={0}
-            max={0.5}
-            step={0.01}
-          />
-          <Slider
-            label="X pos light"
-            value={lightDirX}
-            onChange={onLightDirXChange}
-            min={-10}
-            max={10}
-            step={0.1}
-          />
-          <Slider
-            label="Y pos light"
-            value={lightDirY}
-            onChange={onLightDirYChange}
-            min={-10}
-            max={10}
-            step={0.1}
-          />
-          {/* TODO(DS): grid spacing range not borrowed from active-geometry — it has no shader-plane grid */}
-          <Slider
-            label="Grid spacing"
-            value={gridSpacing}
-            onChange={onGridSpacingChange}
-            min={1}
-            max={50}
-            step={1}
-            precision={0}
-          />
-          <Toggle label="Grid lines" value={gridVisible} onChange={onGridVisibleChange} />
+          <Accordion title="Scene">
+            <Slider
+              label="Ambient light"
+              value={ambientLight}
+              onChange={onAmbientLightChange}
+              min={0}
+              max={0.5}
+              step={0.01}
+            />
+            <Slider
+              label="X pos light"
+              value={lightDirX}
+              onChange={onLightDirXChange}
+              min={-10}
+              max={10}
+              step={0.1}
+            />
+            <Slider
+              label="Y pos light"
+              value={lightDirY}
+              onChange={onLightDirYChange}
+              min={-10}
+              max={10}
+              step={0.1}
+            />
+            {/* TODO(DS): grid spacing range not borrowed from active-geometry — it has no shader-plane grid */}
+            <Slider
+              label="Grid spacing"
+              value={gridSpacing}
+              onChange={onGridSpacingChange}
+              min={1}
+              max={50}
+              step={1}
+              precision={0}
+            />
+            <Toggle label="Grid lines" value={gridVisible} onChange={onGridVisibleChange} />
+          </Accordion>
         </div>
 
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          <div className="panel-section-title">Planet controls</div>
-          <Select
-            label="Display"
-            value={displayMode}
-            onChange={onDisplayModeChange}
-            options={DISPLAY_MODE_OPTIONS}
-          />
-          {/* One shared slider, not two — Radius (planet) and Size (chunk)
-              are the same kind of control (the view's physical scale), so
-              it relabels/rebinds to whichever pane is actually in view or
-              selected instead of showing both at once (Dana, 2026-09-23/24:
-              "the slider should actually change depending on the view").
-              Disabled, not hidden, when both panes are selected in Split —
-              it's a view-specific control, not a joint one. Falls back to
-              the Radius binding while disabled so it doesn't blank out. */}
-          <Slider
-            label={activeViewContext === 'landChunk' ? 'Size' : 'Radius'}
-            unit="km"
-            value={activeViewContext === 'landChunk' ? chunkSize : radiusKm}
-            onChange={activeViewContext === 'landChunk' ? onChunkSizeChange : onRadiusKmChange}
-            min={activeViewContext === 'landChunk' ? 4 : 1000}
-            max={activeViewContext === 'landChunk' ? 64 : 100000}
-            step={activeViewContext === 'landChunk' ? 1 : 100}
-            precision={0}
-            disabled={activeViewContext === null}
-          />
-          <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
+          {/* Chunk folded in here, not its own section (Dana, 2026-10-07:
+              "planet - size, resolution (sphere/ land chunk), color") — one
+              Planet accordion, not a separate always-open "Chunk" section. */}
+          <Accordion title="Planet">
+            <Select
+              label="Display"
+              value={displayMode}
+              onChange={onDisplayModeChange}
+              options={DISPLAY_MODE_OPTIONS}
+            />
+            {/* One shared slider, not two — Radius (planet) and Size (chunk)
+                are the same kind of control (the view's physical scale), so
+                it relabels/rebinds to whichever pane is actually in view or
+                selected instead of showing both at once (Dana, 2026-09-23/24:
+                "the slider should actually change depending on the view").
+                Disabled, not hidden, when both panes are selected in Split —
+                it's a view-specific control, not a joint one. Falls back to
+                the Radius binding while disabled so it doesn't blank out. */}
+            <Slider
+              label={activeViewContext === 'landChunk' ? 'Size' : 'Radius'}
+              unit="km"
+              value={activeViewContext === 'landChunk' ? chunkSize : radiusKm}
+              onChange={activeViewContext === 'landChunk' ? onChunkSizeChange : onRadiusKmChange}
+              min={activeViewContext === 'landChunk' ? 4 : 1000}
+              max={activeViewContext === 'landChunk' ? 64 : 100000}
+              step={activeViewContext === 'landChunk' ? 1 : 100}
+              precision={0}
+              disabled={activeViewContext === null}
+            />
+            {/* Detail only — doesn't affect the footprint's physical size,
+                which lives in the Radius/Size slider above (Dana,
+                2026-09-23: it used to, incidentally). Max raised
+                64→512→2048 — 512 wasn't a hard ceiling either, just not yet
+                pushed; true UHD (4096) is deliberately held back — the real
+                constraint isn't resolution alone but worst-case triangle
+                count for very noisy terrain, which at 4096 risks actually
+                crashing the tab, not just running slow. See ISSUES.md,
+                2026-09-23. No planet-side (sphere) resolution control
+                exists yet, so this still only drives the land chunk's own
+                resolution — labeled plainly rather than implying it
+                already covers both. */}
+            <Slider
+              label="Resolution"
+              value={chunkResolution}
+              onChange={onChunkResolutionChange}
+              min={8}
+              max={2048}
+              step={8}
+              precision={0}
+            />
+            <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
+          </Accordion>
         </div>
 
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          <div className="panel-section-title">Chunk</div>
-          {/* Detail only — doesn't affect the footprint's physical size,
-              which now lives in the shared Radius/Size slider above
-              (Dana, 2026-09-23: it used to, incidentally). Max raised
-              64→512→2048 — 512 wasn't a hard ceiling either, just not yet
-              pushed; true UHD (4096) is deliberately held back — the real
-              constraint isn't resolution alone but worst-case triangle
-              count for very noisy terrain, which at 4096 risks actually
-              crashing the tab, not just running slow. See ISSUES.md,
-              2026-09-23. No planet-side resolution control exists yet, so
-              this stays chunk-only for now rather than forcing a merge
-              with nothing on the other side. */}
-          <Slider
-            label="Resolution"
-            value={chunkResolution}
-            onChange={onChunkResolutionChange}
-            min={8}
-            max={2048}
-            step={8}
-            precision={0}
-          />
-        </div>
-
-        <div className="panel-section-divider" />
-
-        <div className="panel-section">
-          <div className="panel-section-title">Pipeline</div>
           {PIPELINE_STAGES.map((stage) => (
             <PipelineStageRow
               key={stage.key}

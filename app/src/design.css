@@ -809,10 +809,19 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
    the chevron independently expands a small quick-settings area, same
    decoupled select-vs-expand split as the Modifier tabs. */
 
+/* Plain full-width strips, matching .ui-accordion-header exactly — no
+   box/border/background (Dana, 2026-10-07: "the accordions should be
+   strips of the entire menu width. they shouldnt look like dropdown
+   menus"). Rows separated by the same divider used between every other
+   top-level section, not a per-row box. */
 .pipeline-stage-row {
+  border-bottom: 1px solid var(--color-divider);
+  padding-bottom: var(--gap-sm);
   margin-bottom: var(--gap-sm);
 }
 .pipeline-stage-row:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
   margin-bottom: 0;
 }
 
@@ -820,15 +829,7 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 8px;
-  background: var(--color-input-fill);
-  border: 0.25px solid var(--color-input-stroke);
-  border-radius: 2px;
-}
-/* Same convention as .noise-layer-row--selected: a border-color change to
-   the app's accent, not a glow/fill. */
-.pipeline-stage-header--active {
-  border-color: var(--color-accent);
+  width: 100%;
 }
 
 .pipeline-stage-label {
@@ -838,11 +839,23 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   cursor: pointer;
   background: none;
   border: none;
-  font: 400 var(--font-size-sm) var(--font-ui);
+  font: 700 var(--font-size-sm) var(--font-ui); /* bold — same weight as .ui-accordion-header */
   color: var(--color-text);
 }
 .pipeline-stage-label:hover {
   opacity: 0.75;
+}
+/* Active (selected, drives RightPanel) reads via text color, not a border
+   box — there's no box to color anymore. */
+.pipeline-stage-header--active .pipeline-stage-label {
+  color: var(--color-accent);
+}
+
+.pipeline-stage-enabled-dot {
+  color: var(--color-accent);
+  margin-right: 4px;
+  font-size: 8px;
+  vertical-align: middle;
 }
 
 .pipeline-stage-chevron {
@@ -853,12 +866,17 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   color: var(--color-text);
   transition: transform 0.15s ease;
 }
+.pipeline-stage-chevron:focus {
+  /* Same fix as the Modifier tabs — the browser's default focus outline
+     doesn't belong to this design system. */
+  outline: none;
+}
 .pipeline-stage-chevron--open {
   transform: rotate(180deg);
 }
 
 .pipeline-stage-quick-settings {
-  padding: var(--gap-sm) 8px 0;
+  padding-top: var(--gap-sm);
 }
 
 .stage-placeholder-text {
