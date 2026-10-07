@@ -4,6 +4,86 @@ Graded Weekly Push report per the syllabus — what was attempted/completed, how
 
 ---
 
+## 📅 2026-10-07
+
+### 🛠️ What was done
+- Worked through class feedback ("it's good as a software, but the procedural aspect isn't clear enough" — a 3D terrain tool vs. a procedural *system*) in depth rather than reacting with a quick fix: researched real procedural-terrain tools/literature (World Machine, Gaea, academic multi-biome pipelines) to ground every naming/ordering decision in actual convention instead of inventing one.
+- Decided a concrete pipeline: Terrain → Erosion → Climate → Biome → Color Texturing → Population → Events — splitting the former single "Color / Biome Texturing" placeholder stage into two (Color becomes its own shader-driven stage, reading height/climate/biome as inputs, not a biome byproduct), and adding Population and Events (natural disasters) as new tracked stages.
+- Decided Erosion gets built as one general, reusable simulation engine (intensity/duration/location/direction) specifically so Events/disasters reuse it at different parameter values later, instead of needing separate hand-built effects per disaster type.
+- Decided the land chunk gets converted off its standalone `MeshStandardMaterial` onto the planet's own hand-written shader, so the two views share one lighting system instead of two that need separate calibration — and so shadow mapping (already an open to-do) gets implemented once, by hand, shared by both, instead of only for the chunk via Three.js's automatic system.
+- Planned the UI fix for the original feedback: the left panel becomes a pipeline-stage menu (one real accordion per stage, each independently expandable for a few quick settings, clicking its label driving which stage's full detail shows on the right) instead of the right panel's own separate tab bar — an established "master-detail" pattern, not an invented one.
+- Logged a Timeline concept (plays whichever stages are currently enabled, needs a wide unit range from hours to millions of years) and a procedural theme-generation approach (continuous axes mapped to parameter ranges by one generic formula, so "desert"/"volcano" become labeled regions of one system, not hand-authored presets) for later.
+- Updated `ROADMAP.md`, `README.md`, and this file to reflect all of the above, labeled explicitly as the response to the procedural-system feedback rather than buried in unlabeled edits.
+
+### 🤖 AI-assisted process
+- Searched and cited real sources for every naming/ordering/pattern decision (Climate's name and position, the master-detail pattern, the Unity Inspector precedent) instead of asserting a personal preference, per direct instruction to always check convention first.
+- Corrected scope twice on direct pushback: initially proposed the easier "just add Three.js shadows to the chunk" path and was told not to take the easy way when the real fix (unifying the chunk and planet's shading) would need doing eventually anyway; initially proposed moving Radius/Display/Color into the Terrain detail panel and was corrected that they're general display settings, not terrain-specific.
+- Flagged an unverified claim explicitly (couldn't confirm a specific academic citation floated mid-discussion) rather than presenting it as sourced when it wasn't.
+
+### 📊 Worked / didn't / next
+- <span style="color:#2da44e">✅ **Worked:**</span> searching for real conventions before deciding on stage names/ordering/UI pattern — it directly overturned one of two first instincts (stage ordering) and confirmed the other (Climate's name), instead of just asserting a guess either way.
+- <span style="color:#bf8700">⚠️ **Didn't work initially:**</span> defaulted to the lower-effort technical path for shadows and for where general settings should live, in both cases corrected directly rather than caught by testing.
+- <span style="color:#0969da">⏭️ **Next:**</span> implement the left-panel pipeline-menu restructure (plan finalized, not yet built); the chunk/planet shader-unification + shared shadow-map work; begin Stage 08 (Erosion) as a general engine.
+
+## 📅 2026-09-30
+
+### 🛠️ What was done
+- Split terrain Height from the existing Opacity/Blend-Mode shape composite into a genuinely separate, purely additive elevation channel (shape and elevation as two independent channels of the same texture) — after discovering the first pass made Height mathematically indistinguishable from Opacity on a base layer. Fixed a real bug where Ridged noise wasn't zero-mean, inflating the whole planet/chunk uniformly once Height went unclamped. Made Height a percentage of context size (radius for the planet, footprint for the chunk) instead of an absolute number, so the same value reads proportionally on both views.
+- Unified Radius/Size into one contextual slider that relabels/rebinds depending on which pane is active; renamed "Land Chunk" to "Chunk" (the actual industry term for this).
+- Made both side panels user-resizable (ported `active-geometry-project`'s drag-handle pattern) instead of a fixed/auto-sizing width; fixed slider/select rows not shrinking into narrower panel widths; fixed the 2D noise canvas being a fixed-size square (now fills its container at the correct aspect ratio) and wrapped the Noise canvas section in a collapsible Accordion; fixed "Expand" to replace the viewport in place instead of a dark overlay.
+- Added layer naming (auto "Layer 01"/"Layer 02", ever-incrementing, double-click to rename inline) and restructured noise modifiers from mutually-exclusive types into independent, composable toggles (Domain warp/Octaves/Ridged/Terrace) layered onto any base generator, matching Gaea's actual structure — previously these were secretly hardcoded to Perlin only. Added a Ridge-amount slider, since Ridged was the one modifier with no natural continuous "how much" control, unlike the other three.
+- Redesigned the Modifiers UI three times based on live feedback: from plain checkboxes to a contained-tab system (one row, all tabs in one line), moved the enable checkbox off the tab into its own expanded panel, connected the active tab visually to its panel with no seam, and removed a stray divider stroke between tabs.
+- Received direct class feedback: "it's good as a software, but the procedural aspect isn't clear enough" — a 3D terrain tool vs. a procedural *system*. Began a structured response rather than a quick UI tweak (continued the following week).
+
+### 🤖 AI-assisted process
+- Caught and corrected for implementing before an explicit go-ahead on the Height/Opacity fix — same standing workflow violation pattern, logged to memory again.
+- Verified the actual root cause of the Height/Opacity collapse mathematically (a linear crossfade onto a flat base multiplies the two sliders together) before proposing a fix, rather than patching the symptom.
+- Diagnosed the Ridged-noise bug from a screenshot by checking each noise type's mean individually, not guessing which one was at fault.
+- Misdiagnosed a separate UI complaint once (assumed a stray blue border was a browser focus-ring artifact) and was corrected directly — asked a precise clarifying question afterward instead of guessing again.
+- Loaded a dedicated frontend-design skill specifically for the modifier-tab redesign rather than winging the interaction pattern.
+
+### 📊 Worked / didn't / next
+- <span style="color:#2da44e">✅ **Worked:**</span> working out the elevation-vs-opacity math explicitly before rebuilding it — the first instinct (scale height before the existing blend) looked reasonable until tested live, and the actual formula showed exactly why it collapsed. Asking directly what a confusing screenshot artifact actually was, instead of re-guessing after getting the first diagnosis wrong.
+- <span style="color:#bf8700">⚠️ **Didn't work initially:**</span> the Height/Opacity split needed a second full rebuild once live testing showed they were indistinguishable; the panel-width fix also needed a second pass (a single fixed width wasn't actually what was wanted, a user-draggable one was); the Modifiers UI took 3 live-feedback iterations to land.
+- <span style="color:#0969da">⏭️ **Next:**</span> work through the procedural-system feedback properly — what actually needs to restructure, not just a cosmetic pass.
+
+## 📅 2026-09-24
+
+### 🛠️ What was done
+- Rearchitected voxel meshing from a 3D solid/empty density grid (O(resolution³)) to a column-based height grid (O(resolution²)) — the real ceiling that was blocking the Resolution slider; raised its max from 64 to 2048 as a direct result.
+- Unified perimeter and internal height-step wall cases into one boundary rule (outside-the-grid treated as height 0); fixed smooth-mesh walls missing on some sides via a single boundary-walk formula, replacing 4 independently hand-derived cases.
+- Added noise-layer multi-select (shift+click, batch-edit applies to all selected), a real visible drag-to-reorder (the actual row follows the cursor instead of reordering instantly with no feedback), and a Photoshop-style per-layer visibility toggle that genuinely skips a hidden layer's computation rather than just zeroing its opacity.
+- Laid the Edit section's Undo/Redo/Reset out in an even-width row.
+
+### 🤖 AI-assisted process
+- Verified the column-based meshing rewrite's winding (top faces, walls, bottom cap) by hand via the right-hand-rule cross product rather than guessing, same method already used for the smooth mesh.
+- Added defensive `!== false` checks (not plain truthiness) for the new per-layer `visible` field, so layers saved before the field existed default to visible instead of hidden.
+
+### 📊 Worked / didn't / next
+- <span style="color:#2da44e">✅ **Worked:**</span> tracing the Resolution slider's real ceiling to the O(resolution³) density grid, not just raising the slider's max again, which is what had been tried first.
+- <span style="color:#bf8700">⚠️ **Didn't work initially:**</span> none this session — a clean rearchitecture once the real bottleneck was identified.
+- <span style="color:#0969da">⏭️ **Next:**</span> per-layer Height, contextual Resolution unification, shadow map for the land chunk.
+
+## 📅 2026-09-23
+
+### 🛠️ What was done
+- Added Redo (Cmd+Shift+Z), mirroring Undo's existing architecture.
+- Reworked project naming/deletion UX: naming separated from switching (inline-editable name via `EditableText`), a nested "My Projects" accordion with delete, "+ New Project" auto-names and saves immediately instead of prompting — no more unnamed/in-between project state.
+- Planned Stage 07 (Land Cube / Voxel Terrain) ahead of Erosion in `ROADMAP.md`/`ISSUES.md`, then built it: a side-by-side planet+chunk detail view with a resizable split and a Planet/Land Chunk/Split mode button.
+- Two render styles for the chunk, both reading the same sampled heightmap region: cube/culled-face voxel meshing (in a Web Worker, so the main thread/3D view stays responsive) and a smooth continuously-displaced surface extruded down to a grounded slab.
+- Chunk-specific Resolution and Size controls, decoupled from each other (resolution = detail only, size = physical footprint); one shared Height control driving both the planet's own terrain displacement and the chunk's height directly — the same value, not two independently scaled ones.
+- A single shared Gumball instance instead of one per viewport: click a pane to target it, shift+click to drive both cameras together; each target carries its own reference distance so zoom/reset scale correctly per camera.
+- Fixed: both viewport panes now stay mounted permanently, toggled via CSS only — previously switching view mode rebuilt each pane's whole Three.js scene, resetting the camera position and the planet's color every time.
+
+### 🤖 AI-assisted process
+- Corrected twice for implementing before an explicit go-ahead (a render-mode wiring, and a gumball-sharing design) — same standing workflow violation pattern, logged to memory each time.
+- Hand-verified the smooth mesh's wall winding via the right-hand-rule cross product rather than copying from an external source, since it's a directly-derivable geometric fact, not a citable reference algorithm.
+
+### 📊 Worked / didn't / next
+- <span style="color:#2da44e">✅ **Worked:**</span> designing the shared Gumball around a list of camera targets (not a single fixed one) from the start, once it was clear two separate gumball instances was the wrong direction.
+- <span style="color:#bf8700">⚠️ **Didn't work initially:**</span> the gumball's zoom/reset math used one fixed reference distance calibrated for the planet's scale, which didn't work for the much-smaller chunk — needed a second pass giving each target its own reference distance.
+- <span style="color:#0969da">⏭️ **Next:**</span> rearchitect the voxel meshing's real resolution ceiling; layer multi-select/visibility.
+
 ## 📅 2026-09-22
 
 ### 🛠️ What was done

@@ -56,7 +56,7 @@ All `.ts`/`.tsx` files use `.tsx`, even with no JSX currently, so nothing needs 
 > <span style="color:#bf8700">🟡 **Still undecided:**</span> the pure-logic `scene/` files with no JSX at all (`scene.ts`, `renderer.ts`, `camera.ts`, `controls.ts`, `grid.ts`, `planet.ts`) haven't been renamed to `.tsx` to match — open whether they should be for total consistency, or stay `.ts` since they'll structurally never contain JSX.
 
 ### 🏷️ Placeholder values
-Arbitrary values with no design rationale yet (colors, lighting, radius, etc.) are flagged inline with `// TODO(DS): ...` comments — greppable, tracked for an eventual design-system/config-tokenization pass (see `ROADMAP.md`, Stage 10).
+Arbitrary values with no design rationale yet (colors, lighting, radius, etc.) are flagged inline with `// TODO(DS): ...` comments — greppable, tracked for an eventual design-system/config-tokenization pass (see `ROADMAP.md`, Stage 14).
 
 Current implementation state and progress live in `ROADMAP.md`, not here.
 
@@ -72,12 +72,15 @@ Third-party reference code/algorithms used directly (not original work) — cred
 
 ## 🌍 Inspiration / Further reading
 
-Not code used in this project (unlike the References above) — systems/talks/articles referenced while planning direction, gathered 2026-09-30 in response to feedback that the project reads more like 3D terrain software than a procedural *system*. Full discussion in `ROADMAP.md`'s "Procedural System Feedback" section.
+**🧭 Gathered specifically in response to class feedback that the project reads more like 3D terrain software than a procedural *system*** (2026-09-30 → 2026-10-07) — not code used in this project (unlike the References above), systems/talks/articles/conventions referenced while planning the resulting restructure (new Climate/Biome/Color/Population/Events stages, the left-panel pipeline menu, Erosion-as-reusable-engine). Full discussion and the decisions made from it in `ROADMAP.md`'s "🧭 Procedural System Feedback — and the Resulting Restructure" section.
 
-- **[World Machine](https://world-machine.com/)** — node-graph terrain tool; changes upstream automatically recompute everything downstream live. The reference for "genuinely sequential/causal pipeline stages," not parallel independent panels.
-- **[Gaea docs](https://docs.quadspinner.com/Guide/)** (QuadSpinner) — already this project's cited source for its blend-mode/Combine-node conventions.
-- **[Sebastian Lague — Hydraulic-Erosion](https://github.com/SebLague/Hydraulic-Erosion)** (MIT license) — the most-copied reference implementation of droplet-based hydraulic erosion; also see his [itch.io demo/writeup](https://sebastian.itch.io/hydraulic-erosion). Candidate source for Stage 08.
+- **[World Machine](https://world-machine.com/)** — node-graph terrain tool; changes upstream automatically recompute everything downstream live. The reference for "genuinely sequential/causal pipeline stages," not parallel independent panels. Its own documentation is also the source for naming the new Climate stage, below.
+- **[Gaea docs](https://docs.quadspinner.com/Guide/)** (QuadSpinner) — already this project's cited source for its blend-mode/Combine-node conventions. See also its [graph/node-category docs](https://docs.quadspinner.com/Guide/Graph/Graph.html).
+- **[World Machine — climate/Wetness Selector documentation](https://help.world-machine.com/?p=92)** — confirms "Climate" (not Atmosphere/Weather) as the established name for the rainfall/humidity/wetness pipeline stage, sequenced after erosion, before biome.
+- **[AutoBiomes (paper)](https://cgvr.cs.uni-bremen.de/papers/cgi20/AutoBiomes.pdf)** and **[a multi-biome procedural landscape pipeline](https://cgvr.cs.uni-bremen.de/theses/finishedtheses/multibiom/)** — both name and sequence a "Climate" phase after terrain/erosion and before biome classification, confirming the stage order adopted here (Terrain → Erosion → Climate → Biome).
+- **[Sebastian Lague — Hydraulic-Erosion](https://github.com/SebLague/Hydraulic-Erosion)** (MIT license) — the most-copied reference implementation of droplet-based hydraulic erosion; also see his [itch.io demo/writeup](https://sebastian.itch.io/hydraulic-erosion). Candidate source for Stage 08, which is now also the basis for Stage 13 (Events/Natural Disasters) — see ROADMAP.
 - **[Sebastian Lague — Procedural Planets](https://www.youtube.com/watch?v=QN39W020LqU&list=PLFt_AvWsXl0cONs3T0By4puYy6GM22ko8)** (YouTube playlist) — noise layering → biomes → water, close to this project's own scope end-to-end.
 - **[Red Blob Games — Polygonal Map Generation for Games](https://www.redblobgames.com/maps/polygon-map-generation/)** — biome/moisture/elevation classification, river placement.
 - **[Minecraft Wiki — Noise generator](https://minecraft.fandom.com/wiki/Noise_generator)** — a real production biome system: 5 parameters per location (temperature, humidity, continentalness, erosion, weirdness) matched against each biome's ideal values, since 1.18.
 - **Sean Murray, GDC — "Building Worlds Using Math(s)" / "Continuous World Generation in No Man's Sky"** — seed/theme-driven generation producing wildly different but coherent worlds. On GDC Vault; no single stable direct link found, search there.
+- **Master-detail UX pattern** (confirmed as an established, named pattern for complex navigation — accordions are a recognized master-pane variant within it) — the basis for the new left-panel pipeline-stage menu; see ROADMAP for the specific Unity Inspector precedent used for its per-item quick-settings.

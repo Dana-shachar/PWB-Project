@@ -79,7 +79,15 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 > 6. **Noise tab's remaining flat sections converted to Accordions** — Terrain/Layers/Noise now collapsible, matching Project Settings/Edit/Noise canvas (Dana, 2026-09-30: "i'd turn all the sections into accordions").
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Placeholder tab width** — Erosion/Color tabs don't match the Noise tab's width. Cosmetic, deferred.
+> 1. **Left panel becomes the pipeline-stage menu — 🧭 the structural solve for the procedural-system feedback** (planned 2026-10-07, not yet built — see "Procedural System Feedback" at the end of this file for the full reasoning/research this is based on). Class feedback was that the project reads as 3D terrain software, not a procedural *system*; this is the concrete UI change meant to fix that read. Summary of the plan:
+>    - Left panel splits into two groups: **general settings** (Project Settings, Edit, Scene controls, Planet controls — Radius/Display/Base color, Chunk Resolution, and a new Timeline control), pinned at the top exactly as today; and a **pipeline-stage list** below it — one real `Accordion` row per stage (Terrain, Erosion, Climate, Biome, Population, Events — Color Texturing's placement as its own row vs. folded into Biome is still open).
+>    - Each stage row has two independent actions, reusing the same decoupled select-vs-expand pattern already built for the Modifiers tabs (`ui/NoisePanel.tsx`): clicking the **label** sets it as the active stage (exclusive — drives what the right panel shows); clicking its own **chevron** independently expands a small quick-settings area inline, starting with at minimum an **Enabled** toggle per stage (feeds both future gating and the new Timeline control — see below).
+>    - `RightPanel.tsx` loses its own internal tab-bar state entirely (not just repurposed — keeping both would mean two sources of truth for the same selection) and instead renders whichever stage's panel matches the left panel's `activeStage`, owned in `App.tsx`. The existing per-technique panels (`NoisePanel` for Terrain, the Erosion/Color placeholders) keep their content as-is, just triggered differently.
+>    - This is the established "master-detail" UX pattern (a recognized convention for complex navigation, not an invented approach) — accordions are a recognized variant of the master pane in that pattern; the closest concrete precedent for "list item is both a selector *and* carries a few of its own settings" is Unity's Inspector, where each component is a foldout with inline settings while heavier editing happens elsewhere.
+>    - **New Timeline control** (general/pinned, not inside any one stage): a global time scrubber spanning hours to millions of years (needs a unit dropdown, not a single linear slider, given that range), which plays/animates whatever stages currently have their **Enabled** flag on — anything undefined/disabled stays static. Logged now; the actual time-simulation logic isn't built until Erosion/Climate/Biome have real content to animate.
+>    - **Gating** (disabling a stage until its input exists, e.g. Biome until Terrain has real content) is deferred, not built this pass.
+>    - **Files:** `App.tsx` gains `activeStage: 'terrain' | 'erosion' | 'climate' | 'biome' | 'population' | 'events'` (default `'terrain'`) and `stageEnabled: Record<Stage, boolean>` (all `false` except `terrain`), passed to `Panel`/`RightPanel`. `ui/Panel.tsx` gets the new stage-row list below its unchanged general section. `ui/RightPanel.tsx` drops `activeTab` state and its tab-bar JSX, takes `activeStage` as a prop. New thin placeholder components: `ui/panels/ClimatePanel.tsx`, `BiomePanel.tsx`, `PopulationPanel.tsx`, `EventsPanel.tsx` (matching the existing Erosion placeholder's style); `NoisePanel` is reused as-is for Terrain. `design.css` gets new stage-row classes, reusing the existing accordion-header/`--selected` styling rather than inventing new ones.
+> 2. **Placeholder tab width** — Erosion/Color tabs don't match the Noise tab's width. Moot once the right panel's own tab bar is removed per the plan above.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
 > 1. _None._
@@ -393,7 +401,7 @@ A detail view into one fixed-size chunk of terrain, shown side by side with the 
 > 10. **Height scale fixed relative to the chunk's own footprint** — see Stage 05's percentage-based Height fix; the chunk specifically was where the mismatch was first noticed ("any height changes on the planet seem massive on the land chunk").
 >
 > <span style="color:#0969da">📋 **To do**</span>
-> 1. **Real cast shadows** — a shadow map (terrain casting shadows onto itself) for genuine depth/contrast beyond flat per-face shading, especially for craggy/blocky terrain. Needs `renderer.shadowMap` enabled, the light and mesh marked to cast/receive, and the directional light's shadow-camera frustum tuned to the chunk. Bigger, separate piece of work — noted, not started (Dana, 2026-09-23).
+> 1. **Real cast shadows — 🧭 sequencing changed by the procedural-system restructure (2026-10-07)** — originally scoped as "enable Three.js's built-in shadow system for the chunk alone" (`renderer.shadowMap`, cast/receive flags, a tuned shadow-camera frustum). Dana, 2026-10-07, on the chunk using a different material/lighting system than the planet in the first place: "it needs to be like the planet in its settings... it doesn't make sense for it to be different... avoid choosing the easy way when it just needs to be changed later." Revised plan: first convert the chunk off `MeshStandardMaterial` onto the planet's own hand-written shader approach (unifying the two lighting systems), *then* hand-implement shadow mapping once in GLSL, shared by both the planet and the chunk — not Three.js's automatic system for one and nothing for the other. See "Procedural System Feedback," below, for the full reasoning. Bigger, separate piece of work — noted, not started.
 > 2. **Camera auto-framing** — the chunk's camera distance is fixed regardless of Size; not an issue in practice since the gumball's zoom already compensates manually (Dana, 2026-09-23), not planned unless it becomes one. Same gap exists for the planet's Radius, for the same reason not currently a priority.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
@@ -426,21 +434,69 @@ Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/
 > <span style="color:#0969da">📋 **To do**</span>
 > 1. **Hydraulic first, thermal second** — decided (2026-09-23); hydraulic (droplet-based flow/sediment carry) built before thermal (talus-angle slope collapse).
 > 2. **Trigger — manual** — decided (2026-09-23); a Run button, not automatic/live.
-> 3. **Timeline meaning — run-N-iterations** — decided (2026-09-23); not a scrub-able animation.
-> 4. **Everything else** — nothing built yet.
+> 3. **Timeline meaning — run-N-iterations** — decided (2026-09-23); not a scrub-able animation. Revisit once the general Timeline control (see "Procedural System Feedback," below) exists — it may supersede this with real scrubbable simulation time instead.
+> 4. **Architect as a general, reusable simulation engine, not one fixed effect** — 🧭 **part of the procedural-system restructure** (2026-10-07, see "Procedural System Feedback" below): parameterized by intensity, duration, location, and direction (water/wind), so Stage 13 (Events / Natural Disasters) reuses this same engine at different parameter values instead of needing separate hand-built disaster effects.
+> 5. **Everything else** — nothing built yet.
 
 ---
 ---
 
-## Stage 09 — Color / Biome Texturing
+## Stage 09 — Climate
 ⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
 
-Biome-style surface texturing/coloring. An empty placeholder "Color" tab is already reserved for it in the right panel. Nothing decided or built yet.
+🧭 **New stage, added 2026-10-07 as part of the procedural-system restructure** (see "Procedural System Feedback" below — this stage exists specifically because the class feedback was that the project reads as 3D terrain software, not a procedural *system*). Temperature/humidity/precipitation/wind simulation across the terrain — the real input Biome classification needs to mean anything (matches established convention in the field, not invented for this project — see "Procedural System Feedback" for the research and sourcing). Sequenced after Erosion, before Biome: Erosion needs some climate input (e.g. precipitation) to run, and Climate's own output is finalized after Erosion reshapes the terrain (rain-shadow effects etc. depend on the eroded shape). Nothing decided or built yet; no UI tab reserved.
+
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Everything** — nothing decided or built yet.
 
 ---
 ---
 
-## Stage 10 — Design System & UI Polish
+## Stage 10 — Biome
+⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+
+🧭 **Split out of the former "Color / Biome Texturing" stage, 2026-10-07, as part of the procedural-system restructure** (see "Procedural System Feedback" below). Biome classification from elevation + slope + Climate's output (temperature/humidity) — assigns each point on the terrain a biome type, the way Minecraft's multi-noise biome source or the Whittaker-diagram approach do (see "Procedural System Feedback" for sourcing). Color Texturing (Stage 11) is now a separate stage, not a byproduct of this one — Dana, 2026-10-07: terrain color "needs to be more complex and affected by height, temp, weather, biome etc., so it's a shader," i.e. its own rendering stage reading this one's output, not something Biome produces directly.
+
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Everything** — nothing decided or built yet.
+
+---
+---
+
+## Stage 11 — Color Texturing
+⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+
+🧭 **Split out of the former "Color / Biome Texturing" stage, 2026-10-07, as part of the procedural-system restructure** (see "Procedural System Feedback" below). Real-time terrain color as a shader, not a flat/painted value — reads height, temperature/weather (Stage 09), and biome (Stage 10) as inputs (Dana, 2026-10-07: "color... needs to be more complex and affected by height, temp, weather, biome etc. so it's a shader"). The planet's current flat `baseColor` is a placeholder for this, staying as a general/display setting until this stage actually exists (see "Procedural System Feedback"'s general-vs-detail-settings note). An empty placeholder "Color" tab is already reserved for it in the right panel. Nothing decided or built yet — including whether this gets its own entry in the new left-panel pipeline menu, or renders as part of Biome's detail view (open question, see "Procedural System Feedback").
+
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Everything** — nothing decided or built yet.
+
+---
+---
+
+## Stage 12 — Population
+⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+
+🧭 **New stage, added 2026-10-07 as part of the procedural-system restructure** (see "Procedural System Feedback" below). Rule-driven placement of discrete features (trees, rocks, water bodies, eventually settlements) from the terrain's own derived data — e.g. "scatter trees where biome=forest and slope is below some threshold," typically via Poisson-disc sampling for natural, non-overlapping spacing — not hand-painted by the user. Depends on Biome (Stage 10) existing first. Nothing decided or built yet.
+
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Everything** — nothing decided or built yet.
+
+---
+---
+
+## Stage 13 — Events / Natural Disasters
+⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+
+🧭 **New stage, added 2026-10-07 as part of the procedural-system restructure** (see "Procedural System Feedback" below) — the direct answer to Dana's stated overall project concept: "i want to be able to create very different worlds but all with types of natural disasters you can generate." Each disaster is a parameterized instance of Erosion's own general simulation engine (Stage 08), not a separately hand-built effect: a flood is extreme/localized hydraulic erosion; drought/desertification is extreme thermal/wind erosion; a volcanic eruption is radial uplift-and-falloff; an earthquake is a fault-line discontinuity. Depends on Stage 08 actually being built as a general engine first. Nothing decided or built yet.
+
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Everything** — nothing decided or built yet; blocked on Stage 08's engine existing.
+
+---
+---
+
+## Stage 14 — Design System & UI Polish
 🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ 30%
 
 #### Design-system / config tokenization — 0%
@@ -506,26 +562,41 @@ Design notes and feature ideas from the 2026-09-14 planning session, not yet dec
 
 ---
 
-## Procedural System Feedback (2026-09-30)
+## 🧭 Procedural System Feedback — and the Resulting Restructure (2026-09-30 → 2026-10-07)
 
-Not decided how much of this gets built, or when — logged so the direction isn't lost, and so it can inform how upcoming stages (Erosion, Biomes, anything after) get scoped. Nothing already built needs to change because of this; it's additive.
+**Every stage/feature elsewhere in this file marked 🧭 traces back to this section** — this is the source document for a whole round of restructuring work, so the connection between "feedback received" and "what changed because of it" stays traceable, not buried across many separate edits.
 
-**The feedback:** relayed by Dana from class feedback — "it's good as a software, but the procedural aspect isnt clear enough... there's a subtle difference between a 3d software to make planets and a procedural system." Dana's reading: the order of actions should be clearer/more structured — first terrain, then noise, then erosion, then land elements (water, trees, etc.). Her stated overall concept for the project: "i want to be able to create very different worlds but all with types of natural disasters you can generate."
+**The feedback (2026-09-30):** relayed by Dana from class feedback — "it's good as a software, but the procedural aspect isnt clear enough... there's a subtle difference between a 3d software to make planets and a procedural system." Dana's reading: the order of actions should be clearer/more structured — first terrain, then noise, then erosion, then land elements (water, trees, etc.). Her stated overall concept for the project: "i want to be able to create very different worlds but all with types of natural disasters you can generate."
 
 **The core distinction discussed:** the noise content itself is already procedurally generated (the algorithms produce the pattern) — what currently reads as "tool" rather than "system" is that a human has to manually assemble the pipeline (add a layer, pick its type, tune its parameters) to get any result at all, and today's stages (Noise/Erosion/Color tabs) are presented as parallel/independent rather than genuinely causal (each one gated on and consuming the previous one's real output).
 
-**Directions discussed, not yet built:**
-1. **Make the pipeline genuinely sequential/causal, not parallel tabs** — each stage gated on the previous one actually existing (can't erode nothing, can't classify a biome without elevation), both in the runtime data flow and in the UI itself (e.g. Erosion's tab disabled/empty until Terrain has real content). Connects to this project's existing "work through `ROADMAP.md` in order" rule (`CLAUDE.md`) — worth treating as applying to the pipeline's own architecture too, not just the dev process. Still open: whether "sequential" here means the data pipeline, the dev-build order, or both — Dana confirmed this is the direction but the exact scope wasn't pinned down.
-2. **Seed + theme-driven generation, alongside (not replacing) manual tuning** — a "theme" (desert planet, volcano planet, etc.) is an authored template: eligible noise types, parameter *ranges* (not fixed values), weights, and a biased disaster pool. A seed deterministically samples within those ranges to assemble a full layer stack automatically; the result lands in the existing manual UI for refinement afterward. Not random sliders — one authored theme produces many different but coherent results via different seeds. Explicitly deferred by Dana ("themes can be implemented later") — doesn't block anything else.
-3. **Natural disasters as parameterized instances of a shared simulation engine, not one-off effects** — the direct answer to Dana's "different worlds via natural disasters" goal. A flood is extreme/localized hydraulic erosion; drought/desertification is extreme thermal/wind erosion; a volcanic eruption is radial uplift-and-falloff; an earthquake is a fault-line discontinuity. If Stage 08 (Erosion) is architected as a general, parameterized simulation (intensity, duration, location, direction) rather than one fixed effect, disasters become the same engine run with different parameters — worth deciding *before* Stage 08 is built, since it directly shapes that stage's scope.
-4. **Rule-driven feature placement (water, vegetation) instead of painting** — once biomes exist, scatter by rule ("trees where biome=forest and slope<X"), not by brush. Same "generated, not authored" logic extended one layer further; not yet a tracked stage.
+### ✅ Decided (2026-10-07)
+
+1. **The pipeline, and the stage list** — Terrain → Erosion → Climate → Biome → Color Texturing → Population → Events, matching the dominant convention found in real procedural-terrain tools/literature (sourced below), not invented for this project. Climate and Biome were previously one combined "Color / Biome Texturing" stage; split 2026-10-07 once Color turned out to need its own shader (see #5) rather than being a byproduct of biome assignment. Population and Events are new stages, not previously tracked. See Stages 08–13, above.
+2. **Left panel becomes the pipeline-stage menu, right panel shows the selected stage's detail** — the concrete structural fix for "reads as 3D software, not a system." Full plan logged under Stage 01's "Control panel UI system," above (general settings pinned at top; one real `Accordion` row per stage below, each with an independent select-vs-expand split reusing the Modifier-tabs pattern; `RightPanel.tsx`'s own tab-bar state removed, driven by the left menu instead). This is the established "master-detail" UX pattern — a recognized convention for complex navigation, not an invented approach; accordions are a recognized master-pane variant within it. The closest concrete precedent for "list item both selects *and* carries a few of its own settings": Unity's Inspector, where each component is a foldout with inline settings while heavier editing happens elsewhere.
+3. **A general Timeline control** (pinned/general, not inside any one stage) — plays/animates whichever stages currently have their own **Enabled** flag on (ties directly into #2's per-stage quick-settings); anything undefined/disabled stays static. Needs a unit selector spanning hours to millions of years (too wide a range for one linear slider — a unit dropdown + log-scale slider underneath). Logged now; real time-simulation logic isn't built until Erosion/Climate/Biome have real content to animate.
+4. **Erosion (Stage 08) built as a general, reusable simulation engine** — parameterized by intensity/duration/location/direction, specifically so Events/Natural Disasters (Stage 13) reuses the same engine at different parameter values rather than needing separate hand-built disaster effects (a flood = extreme/localized hydraulic erosion; drought = extreme thermal/wind erosion; a volcanic eruption = radial uplift-and-falloff; an earthquake = a fault-line discontinuity). Decided *before* Stage 08 is built, since it shapes that stage's scope from the start.
+5. **Terrain color becomes a real shader, not a flat/painted value** — Dana, 2026-10-07: color "needs to be more complex and affected by height, temp, weather, biome etc., so it's a shader." This is what split Color Texturing out as its own stage (11) rather than a Biome byproduct — it reads height + Climate's output + Biome's output as shader inputs. The planet's current flat `baseColor` stays a general/display placeholder until this stage exists (see #6).
+6. **General vs. detail-panel settings** — Radius, Display mode, Base color, and Chunk Resolution stay in the left panel's general/pinned section, not moved into any one stage's right-panel detail — they affect overall display/world-identity, not one generation stage's output specifically (Dana, 2026-10-07: "they apply to general display").
+7. **Land chunk converted off `MeshStandardMaterial` onto the planet's own hand-written shader approach** — the chunk currently uses Three.js's built-in PBR material while the planet uses fully custom GLSL; Dana, 2026-10-07: "it needs to be like the planet in its settings... it doesn't make sense for it to be different." Once both share one shader family, shadow mapping (Stage 07's open to-do) gets implemented by hand in GLSL **once**, shared by both, instead of relying on Three.js's automatic shadow system for the chunk alone and leaving the planet without shadows entirely. Not yet built — logged as the correct sequencing (unify first, then add shared shadows) so the chunk's existing shadow work isn't thrown away once this lands.
+8. **Theme/archetype generation — procedural, not hand-authored per theme** (refines the "seed + theme" direction below): don't hand-build "desert"/"volcano"/"ocean" as separate config objects. Define a handful of continuous axes instead (wetness, tectonic activity, temperature, erosion age, ...) and write one generic mapping, once, from a point in that space to actual noise-layer/erosion parameter ranges. A "theme" then isn't authored at all — it's a random (or user-picked) point in that space; recognizable archetypes emerge as labeled regions of it after the fact (a name + a specific axis range + a cosmetic preview hint), not separate systems. The same axes drive Erosion's default parameters too (#4), not just Terrain's.
+
+### 📋 Still open / not yet decided
+
+1. **Whether Color Texturing (Stage 11) gets its own left-menu row, or renders inside Biome's detail** — not settled.
+2. **Exact axis set and mapping formulas for #8 above** — which continuous axes, and the actual formulas mapping a point to parameter ranges — not designed yet.
+3. **Seed + theme-driven generation's build timing** — explicitly deferred by Dana ("themes can be implemented later") — doesn't block anything else.
+4. **Rule-driven feature placement (water, vegetation) instead of painting** — once Biome exists, scatter by rule ("trees where biome=forest and slope<X"), not by brush — logged under Stage 12 (Population), not designed in detail yet.
+5. **Gating** (disabling a stage until its input exists) — deferred, not built.
 
 **References gathered (verify against directly before implementing anything, per this project's own reference-verification rule):**
-- Node-graph pipelines where output genuinely flows downstream: [World Machine](https://world-machine.com/) ("changes upstream automatically recompute everything below it live"), [Gaea docs](https://docs.quadspinner.com/Guide/) (already this project's cited source for blend-mode conventions).
+- Node-graph pipelines where output genuinely flows downstream: [World Machine](https://world-machine.com/) ("changes upstream automatically recompute everything below it live"), [Gaea docs](https://docs.quadspinner.com/Guide/) (already this project's cited source for blend-mode conventions), [Gaea graph/node-category docs](https://docs.quadspinner.com/Guide/Graph/Graph.html).
+- Climate as a pipeline stage, named and sequenced before Biome: [World Machine's climate/wetness-selector documentation](https://help.world-machine.com/?p=92) (explicitly "climate modeling" — rainfall/humidity/wetness device category); [AutoBiomes paper](https://cgvr.cs.uni-bremen.de/papers/cgi20/AutoBiomes.pdf) and the [multi-biome procedural landscape pipeline](https://cgvr.cs.uni-bremen.de/theses/finishedtheses/multibiom/) (both name this phase "Climate," sequenced after terrain/erosion, before biome).
 - Hydraulic erosion: [Sebastian Lague's Hydraulic-Erosion repo](https://github.com/SebLague/Hydraulic-Erosion) (MIT license, the most-copied droplet-based reference implementation), [itch.io demo/writeup](https://sebastian.itch.io/hydraulic-erosion).
 - Procedural planets end-to-end (noise layering → biomes → water): Sebastian Lague's [Procedural Planets playlist](https://www.youtube.com/watch?v=QN39W020LqU&list=PLFt_AvWsXl0cONs3T0By4puYy6GM22ko8).
 - Biome/moisture/elevation classification, rivers: [Red Blob Games — Polygonal Map Generation for Games](https://www.redblobgames.com/maps/polygon-map-generation/).
 - Production biome system (noise → parameters → classification): [Minecraft Wiki: Noise generator](https://minecraft.fandom.com/wiki/Noise_generator) (since 1.18: 5 parameters per location — temperature, humidity, continentalness, erosion, weirdness — matched against each biome's ideal values).
+- Master-detail UX pattern (the left/right menu split): confirmed as an established, named pattern for complex navigation, with accordions a recognized master-pane variant — see the plan under Stage 01, above, for the specific Unity Inspector precedent used.
 - Seed/theme → varied but coherent worlds: Sean Murray's GDC talk "Building Worlds Using Math(s)" / "Continuous World Generation in No Man's Sky" — on GDC Vault, no single stable direct link found, search there.
 - **Not verified, don't treat as a confirmed source:** "Hans Theobald Beyer's thesis" on hydraulic erosion, mentioned in discussion — search couldn't confirm this specific citation. Lague's repo above is the actually-verified starting point.
 
