@@ -7,6 +7,7 @@ uniform float uRadius;
 uniform mat3 normalMatrix; // Three.js built-in, auto-set but not auto-declared in fragment stage
 
 varying vec2 vUv;
+varying vec3 vSphereDirection;
 
 void main() {
   // Analytic sphere tangent basis, matching heightmap.frag.glsl's
@@ -14,8 +15,15 @@ void main() {
   // screen-space-derivative normal, which facets per-triangle). Then
   // perturbed by the heightmap's own central-difference gradient for fine
   // per-texel bump detail. See ISSUES.md, 2026-09-16.
-  float longitude = (vUv.x - 0.5) * 2.0 * 3.14159265;
-  float latitude = (vUv.y - 0.5) * 3.14159265;
+  //
+  // Derived from the interpolated 3D direction, NOT from vUv: wrapping a
+  // rectangular map onto a sphere always leaves UV discontinuous at the
+  // seam and poles, which flipped the normal there and rendered as a black
+  // slit. Only cos/sin of longitude are ever used below, and those are
+  // periodic, so atan's own wrap point is harmless here. See ISSUES.md.
+  vec3 sphereDirection = normalize(vSphereDirection);
+  float longitude = atan(sphereDirection.z, sphereDirection.x);
+  float latitude = asin(clamp(sphereDirection.y, -1.0, 1.0));
   float cosLat = cos(latitude);
   vec3 localNormal = vec3(cosLat * cos(longitude), sin(latitude), cosLat * sin(longitude));
   // Scaled by uRadius so this is in the same real-world units as the

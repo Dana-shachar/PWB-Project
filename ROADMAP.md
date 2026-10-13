@@ -124,6 +124,22 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 > 1. _None._
 
 ---
+
+#### Adaptive resolution — chunked-LOD cube-sphere — 0%
+🧭 **Decided 2026-10-07, sequenced ahead of Stage 08 at Dana's call** ("it affects the rest of the pipeline") — triggered by Dana asking for the planet's Resolution control to be contextual like Radius/Size already is, which surfaced that no real planet-mesh-resolution control exists at all (hardcoded 64×32 `SphereGeometry` segments). A flat slider was considered and rejected — unlike the land chunk's old O(resolution³) bug, a sphere's triangle count is already minimal for its segment count; the real problem is resolution spent uniformly across the whole surface, including the far side you're not looking at. Full reasoning, alternatives considered (raymarching/SDF), and sourcing in `ISSUES.md`.
+> <span style="color:#0969da">📋 **To do**</span>
+> 1. **Cube-sphere base geometry** — replace `THREE.SphereGeometry` with a hand-built 6-face `BufferGeometry` (each face a flat grid, normalized onto the sphere), no LOD yet — verify it renders identically to today's sphere first (same displacement, lighting, wireframe, radius-rebuild behavior). Both `fragment.glsl` and `vertex.glsl` need zero shader-code changes — each vertex's equirectangular UV is computed on the CPU at geometry-build time and handed to Three.js as a plain `uv` attribute, same as `SphereGeometry` already provides.
+> 2. **Quadtree data structure** — per-face subdivision tree, camera-distance split/merge rule, leaf tracking. No rendering yet.
+> 3. **Per-leaf mesh generation + skirts** — reuses phase 1's face-warping math on sub-rects; skirts (extra geometry extending inward along each patch's boundary) prevent visible cracks between neighboring patches at different depths, reusing the exact skirt technique already built/verified for the land chunk's smooth mesh.
+> 4. **Dynamic patch add/remove** as the camera moves, generated in a Worker (reusing the existing voxel-chunk Worker pattern).
+> 5. **Resolution slider rewired to max quadtree depth**, not raw vertex count — each leaf patch keeps a fixed vertex grid (e.g. 32×32); turning the slider up raises how many times a face can split before stopping, i.e. how close the camera can get before detail stops increasing. Effective resolution (detail per visible area) already increases with zoom via splitting alone — the slider caps how far that goes, it isn't what makes zoom-detail work in the first place.
+> 6. **Full verification pass** across the zoom range — cracks/seams/performance, including the seam/pole UV handling noted in `ISSUES.md`.
+>
+> <span style="color:#cf222e">🐛 **Issues to fix**</span>
+> 1. **Terrain tears into streaks at both poles** — 🟡 mostly fixed 2026-10-13, tested by Dana. The hairline and the tearing are gone; soft blur and some rough ridging remain at both poles, which is the rectangular map's own distortion rather than a mesh fault, and is covered by the detail-ceiling item. The map wraps at longitude 180°, and that wrap line crosses both pole faces; triangles sitting on it read from both ends of the map at once. Each pole face is now generated as two halves split along that line, so no triangle spans it. Contained to `planet/mesh.ts`. A first attempt rebuilt the noise pipeline on a wrong diagnosis and was reverted — full account in `ISSUES.md`, "Planet mesh and adaptive resolution".
+> 2. **Fixed: black slit across the surface** — ✅ 2026-10-13. Lighting rebuilt its surface direction from the map's coordinates, which jump at the seam and poles; it now works from each point's 3D position instead. See `ISSUES.md`.
+
+---
 ---
 
 ## Stage 03 — Terrain: Noise Generation
@@ -196,7 +212,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 > 1. **Richer expanded-mode brush toolset** — strength, size beyond radius, shape — planned to land in the now-fixed expanded view.
 >
 > <span style="color:#cf222e">🐛 **Issues to fix**</span>
-> 1. _None._
+> 1. **Expand shows a black preview** — 🔴 open, reported 2026-10-13. The noise canvas's "Expand" view renders black instead of the heightmap preview. Not yet diagnosed, and not yet established whether it predates the cube-sphere work (Stage 02) or was introduced alongside it — the 2D canvas reads the heightmap pipeline, not the planet mesh, so a connection isn't obvious either way.
 
 ---
 

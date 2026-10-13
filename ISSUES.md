@@ -122,6 +122,153 @@ Each entry is short numbered lists, not prose, each longer item as **bold short 
 
 ---
 
+## 🪐 Planet mesh and adaptive resolution
+
+*Why the planet moved from a lat/long sphere to a cube sphere, what broke when it did, and the fix.*
+
+> [!NOTE]
+> This section follows the documentation conventions from the procedural-creative-coding-tool project. The rest of this file predates them and gets retrofitted as its own step.
+
+### The problem in plain terms
+
+*The planet had one level of detail, spread evenly over the whole globe.*
+
+Detail was fixed everywhere at once, so zooming in on one spot could never show more than the whole planet already carried. Raising it for that one spot meant paying the same cost across the entire far side, which nobody is looking at.
+
+The goal is detail that follows the camera: fine where you are, coarse everywhere else.
+
+### 🧭 Decided: quadtree patches on a cube sphere
+
+**Date:** 2026-10-07 · **Status:** 🟡 phase 1 built, awaiting sign-off
+
+**Rejected: raise the resolution slider** · `does not solve it`
+- a sphere's triangle count is already minimal for its segment count, so there is no hidden waste to reclaim, unlike the land chunk's old cubic voxel grid (see Voxel / Land Cube Terrain, below)
+- resolution is spent evenly over the whole surface, so a bigger number multiplies the waste instead of removing it
+- *Dana, 2026-10-07: "think outside of the box. this shouldn't be an issue."*
+
+**Rejected: raymarching and SDFs** · `conflicts with planned work`
+- resolution free by construction, with no mesh or LOD bookkeeping
+- an SDF surface has no discrete pieces to click, which breaks the planned "pick a spot on the planet to open as a land chunk" feature
+- *reverses the 2026-09-02 mesh-over-raymarching decision in Foundation & Architecture, above*
+
+**Chosen: a cube inflated into a sphere, each face a quadtree** · `decided`
+- six flat grids pushed out onto the sphere; a face near the camera splits into four smaller ones, repeatedly, and only the undivided ones are drawn
+- a lat/long grid cannot do this, because its lines all converge at two fixed points no matter how it is divided
+- *Ulrich's chunked LOD, plus the cube sphere variant used in production planet engines. See `REFERENCES.md`*
+
+**Why a cube and not the sphere's own grid** · `decided`
+- every cube face is a roughly even patch of the sphere, so one splitting rule works everywhere
+- a lat/long grid stretches without limit toward the poles, so the splitting rule would need a different answer at every latitude
+- *Dana asked for this to be confirmed against real sources rather than reasoned out. See `REFERENCES.md`*
+
+### 🔴 Open: terrain tears into streaks at both poles
+
+**Found:** 2026-10-13 · **Where:** `app/src/shaders/vertex.glsl`, `app/src/map/heightmap.ts`
+
+**What happens**
+- thin stretched streaks of geometry at both poles, visible once terrain height is turned up
+- an earlier, separate symptom was a black slit on the surface, now fixed
+
+**Expected**
+- terrain reads the same at the poles as anywhere else, with no stretching or tearing
+
+**How it was diagnosed**
+1. colored each of the six cube faces flat, which showed no gaps and no inside-out faces, ruling out a broken mesh
+2. drew the texture coordinates as color, which showed hard jumps at the seam and a wedge radiating from each pole
+3. changed the lighting math to work from each point's 3D position instead of its texture coordinate, which removed the black slit and left only the streaks
+
+**Root cause**
+- the map wraps at longitude 180°, and that wrap line crosses three of the six cube faces: down the middle of one side face, and across each pole face from its center out to one edge
+- a triangle sitting on that line reads from both ends of the map at once, so the whole width of the map gets smeared across it. On screen that is a bright and dark hairline, and once it drives displacement it tears the mesh into streaks
+- the side face was handled when the cube sphere was built. The two pole faces were missed, because longitude sweeps a full circle across them and the same trick does not work there
+
+**Fix**
+- each pole face is generated as two halves, split along the wrap line, so the vertices sitting on it exist twice, once per side, and no triangle spans the jump
+- the same approach `THREE.SphereGeometry` uses at its own seam, which is why the old sphere never showed this
+- contained to `app/src/planet/mesh.ts`. Nothing in the heightmap pipeline, the shaders or the 2D canvas changed
+
+**Notes**
+- the black slit and the streaks had different causes, so fixing one did not fix the other
+- a soft blur remains at each pole. That is the rectangular map's own distortion, not this bug, and it is covered by the detail-ceiling work below
+
+### ⚠️ Wrong diagnosis, and what it cost
+
+**Status:** <span style="color:#cf222e">reverted 2026-10-13</span>
+
+*Kept deliberately. The reasoning was wrong in a way worth not repeating.*
+
+**The claim** · `wrong`
+- that reading height back out of the rectangular map is lossy at the poles, and that this is what tore the terrain
+- it is the reverse: an equirectangular map *over*-samples near the poles, spending more pixels per unit of real surface there than anywhere else. There is no detail being lost to recover
+
+**What was built on it** · `reverted`
+- the layer stack was split into a shared module so the planet could evaluate terrain from 3D position instead of reading the map
+- that meant the planet's vertex shader sampling up to 16 paint textures, which exhausted the GPU's texture slots (`Trying to use 16 texture units while this GPU supports only 16`), so no height reached the planet at all and it rendered perfectly smooth
+- all of it reverted. The real bug was a texture coordinate seam on two faces, fixed in `mesh.ts` alone
+
+**How it went unnoticed for so long** · `process`
+- the texture limit was a warning in the dev server log the whole time, and was not read
+- "the shader compiled" was treated as proof the approach worked, when the failure was at bind time, not compile time
+- several rounds of reasoning were spent on what *should* happen instead of looking at the rendered data. The thing that actually found it was drawing the height value on screen and looking at it
+- *Dana, 2026-10-13: "research and work according to known architectures. always research new additions you're unsure of how to add." Now in `CLAUDE.md`*
+
+### 📌 Still open: terrain detail is capped by the map
+
+**Status:** ⚪ not started · **Raised:** 2026-10-13
+
+*Separate from the bug above, and the real blocker on zooming in.*
+
+**The limit** · `open`
+- terrain is stored in one 1024x512 map, so zooming past what that holds reveals nothing new however fine the mesh gets
+- the land chunk reads back from the same map, so its Resolution slider enlarges existing data past that point rather than adding detail
+- this is the actual obstacle to the original goal, which was simply to zoom in and see more
+
+**The documented answer** · `researched, not yet decided`
+- evaluate terrain from a function of 3D position rather than storing it, which is what resolution-independent planet renderers do
+- per-patch heightmaps rendered on the GPU as patches subdivide, rather than one map for the whole planet
+- *Sources in `REFERENCES.md`. The research holds; it was simply applied to the wrong problem above*
+
+### Results
+
+*Tested by Dana, 2026-10-13.*
+
+**Fixed: the hairline and the tearing** · ✅
+- the bright and dark hairline is gone, confirmed in the height-field view at both poles
+- terrain no longer tears into streaks when height is turned up
+
+**Still rough at the poles** · <span style="color:#cf222e">🔴 open</span>
+- a soft blur and some rough ridging remain at both poles, so this is improved rather than fully solved
+- the mesh seam itself is fixed, so what is left is the rectangular map's own distortion: every longitude converges to one point at each pole, so the stored data bunches up there and reads back smeared. Visible directly in the 2D preview, whose top and bottom edges are smeared the same way
+- not fixable while the map is where detail lives. Covered by the detail ceiling item above, which removes the dependency rather than patching around it
+
+---
+
+### 🧭 Superseded: the original cube sphere plan
+**Status:** <span style="color:#2da44e">✅ Decided (2026-10-07), superseded in part 2026-10-13</span>
+
+> [!NOTE]
+> Kept for the record. The texture coordinate handling described below was replaced by the position based fix above. The cube sphere decision itself still stands.
+
+> **Trigger:** making the planet's Resolution control contextual (like Radius/Size, Stage 07) surfaced that no real resolution control exists for the planet mesh at all — `planet/mesh.ts` hardcodes `THREE.SphereGeometry(radius, 64, 32)`. Dana asked for it to go much higher "to zoom in."
+>
+> **Considered and rejected — flat slider, bigger range:** unlike the land chunk's old O(resolution³) voxel bug (a real architectural ceiling, fixed 2026-09-23, see Voxel/Land Cube Terrain above), a `SphereGeometry`'s triangle count is already O(resolution²)-minimal for its segment count — there's no hidden inefficiency to remove here. The actual problem: resolution is spent *uniformly* across the whole sphere, including the entire far side the camera isn't looking at. Raising a single number can't fix that; it only makes the waste worse. Dana: "think outside of the box. this shouldn't be an issue."
+>
+> **Considered — Option B, raymarching/SDF heightfield rendering** (Dana's own earlier-logged idea, see Foundation & Architecture above, re-raised here): resolution-free by construction, no mesh/LOD bookkeeping needed. Not chosen — would reintroduce the exact inconsistency the mesh-vs-raymarching decision (2026-09-02, above) already settled against for anything needing real mesh objects, and specifically conflicts with the land-chunk's existing mesh-raycast-based "real chunk location picking" to-do (Stage 07) — an SDF surface has no discrete pieces to raycast-pick the way a literal mesh patch does.
+>
+> **Decided — Option A, chunked-LOD quadtree on a cube-sphere:** verified against the original technique (Thatcher Ulrich, Gamasutra 2000 / SIGGRAPH 2002 course notes, "Rendering massive terrains using chunked level of detail control") and the cube-sphere variant used in Sebastian Lague-inspired planet implementations (already a cited project reference, see Procedural System Feedback references in `ROADMAP.md`). Planet becomes a cube (6 faces), each face a quadtree; nodes near the camera split into 4 children (threshold scales with node size); only leaf nodes render, each a small fixed-size grid regardless of depth. Dana, 2026-10-07: "i'm thinking this is better given everything," explicitly over Option B — also noted as the better fit for the already-planned "pick a spot on the planet to view as a land chunk" feature (Stage 07's open to-do), since each visible leaf is a literal mesh patch with known bounds, a normal raycast target — an SDF surface isn't.
+>
+> **Key technical finding — both existing shaders need zero code changes:** `fragment.glsl`'s analytic-normal computation is driven entirely by `vUv`-derived longitude/latitude, not mesh topology. `vertex.glsl` reads `uv` directly for heightmap displacement, relying on `SphereGeometry`'s built-in equirectangular UV — but that same UV can be computed on the CPU per cube-sphere vertex (from its own normalized 3D position, the same formula the shaders already use, just inverted) and handed to Three.js as a plain `uv` `BufferAttribute`, exactly like `SphereGeometry` already provides. So the real Phase 1 work is narrowly scoped to `planet/mesh.ts`'s geometry construction, not the shaders.
+>
+> **Open technical risk — equirectangular UV seam + poles:** `SphereGeometry` avoids seam artifacts by construction (its grid lines up with lines of longitude, so no triangle straddles the ±180° wrap; duplicated seam vertices hold u=0/u=1 on either side). A cube's 6 faces don't line up that way — one face straddles the seam, and the two pole-facing faces span all longitudes. Fix: let that one seam-straddling face's U values extend slightly outside 0–1 and rely on the heightmap texture's existing `RepeatWrapping` (already set, see Stage 05) to sample correctly — no vertex duplication needed for that face. The two pole faces are trickier (longitude varies across the *whole* face, not just one line) — decided fix (Dana, 2026-10-07, "combine the two methods"): keep the pole patches' 3D geometry built the plain cube-projected way (so edges still line up with neighboring faces), but compute their texture UVs using the same "duplicate vertices along a wrap line, let U exceed 0–1" trick as the main seam, applied a few times radially around the pole instead of once. This reuses proven technique rather than inventing new pole math, but hasn't been built or visually verified yet — flagged as a real, testable risk, not glossed over.
+>
+> **Resolution semantics, clarified for Dana 2026-10-07:** there's no single "resolution" number in this system. Each leaf patch always has the same fixed vertex grid (e.g. 32×32) — that number doesn't change with zoom, same as a brush size doesn't change with stroke length. *Effective* resolution (detail per unit of visible area) does increase with zoom, because patches split into smaller, more numerous pieces at the same per-patch vertex count as the camera gets closer. The adjustable "Resolution" slider (Phase 5, see `ROADMAP.md`) is the max quadtree depth — a ceiling on how far that zoom-driven splitting goes, not the mechanism that makes it work.
+>
+> **Skirts:** extra geometry extending inward (toward planet center) along each patch's boundary, invisible from normal viewing angles, hiding the thin crack that appears where a detailed patch meets a coarser neighbor. Standard, long-used technique (same lineage as Ulrich's original paper), not experimental — and the exact technique already built/verified for the land chunk's smooth mesh (Stage 07) gets reused here. Dana flagged concern about how it'll look in practice; agreed to verify visually once built rather than over-engineer the depth value blind.
+>
+> **6-phase build plan:** logged under Stage 02's new "Adaptive resolution — chunked-LOD cube-sphere" feature in `ROADMAP.md`, not duplicated here.
+
+---
+
 ## 🧱 Layer Compositing & Noise
 
 ### 🐛 New layer visually erased existing painted terrain
