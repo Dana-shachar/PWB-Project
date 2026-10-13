@@ -6,10 +6,15 @@ Cornell Tech, DESIGN 6197/4197, a procedural planet-building tool: paint and gen
 
 This will eventually grow into the fuller README the course's final deliverable requires (conceptual premise, procedural systems/algorithms used, AI-assisted process, run instructions, credits), for now, at build stage, it covers what actually exists.
 
+![The planet on the cube sphere, with the pipeline-stage menu down the left panel.](Screenshots/2026-10-13-cube-sphere-terrain.png)
+*Current state, 2026-10-13.*
+
 **The other docs, and when to open them:**
 > 🗺️ **`ROADMAP.md`**, current build status, organized by stage/feature. Start here to see what's done and what's next.
 >
-> 🧭 **`ISSUES.md`**, the *why* behind technical decisions, and bug root-causes/fixes.
+> 📐 **`SPEC.md`**, what the system is: architecture and the decisions that define it.
+>
+> 🐛 **`ISSUES.md`**, what is broken, what was broken and why.
 >
 > 📅 **`WEEKLY-PUSHES.md`**, the syllabus's graded weekly report, chronological.
 >

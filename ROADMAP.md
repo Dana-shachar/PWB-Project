@@ -5,7 +5,7 @@
 *Where the project stands and what gets built next, by stage and feature.*
 
 > [!NOTE]
-> Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Why a decision went the way it did, and bug detail, are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
+> Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 Stages run in build order, and earlier ones finish before later ones start. Features are numbered under their stage, so 07.3 is the third feature of Stage 07. Each carries a bar; a stage's number averages its features. Every feature has the same three fields: **✅ Done**, **📋 To do**, **🐛 Issues to fix**.
 

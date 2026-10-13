@@ -8,7 +8,8 @@ Graded Weekly Push report per the syllabus, what was attempted/completed, how AI
 
 ## 📅 2026-10-13
 
-🖼️ IMAGE NEEDED: a current screenshot of the app in Split view, planet on the left with terrain and octaves on, land chunk on the right, showing the two side by side. Save as `images/2026-10-13-split-view.png` and link it here.
+![The planet on the cube sphere, Voronoi terrain with octaves, and the pipeline-stage menu down the left panel.](Screenshots/2026-10-13-cube-sphere-terrain.png)
+*The planet on the cube sphere, Voronoi terrain with octaves, and the pipeline-stage menu down the left panel.*
 
 ### 🛠️ What was done
 - Replaced the planet's lat/long sphere with a cube sphere: six flat grids pushed out onto the sphere. A lat/long grid converges at two fixed points and cannot be subdivided locally, so it cannot support detail that follows the camera.
@@ -54,6 +55,9 @@ Graded Weekly Push report per the syllabus, what was attempted/completed, how AI
 - ⏭️ **Next:** implement the left-panel pipeline-menu restructure (plan finalized, not yet built); the chunk/planet shader-unification + shared shadow-map work; begin Stage 08 (Erosion) as a general engine.
 
 ## 📅 2026-09-30
+
+![Modifiers as composable toggles, and the resizable panels.](Screenshots/2026-09-30-modifiers-and-panels.png)
+*Modifiers as composable toggles, and the resizable panels.*
 
 ### 🛠️ What was done
 - Split terrain Height from the existing Opacity/Blend-Mode shape composite into a genuinely separate, purely additive elevation channel (shape and elevation as two independent channels of the same texture), after discovering the first pass made Height mathematically indistinguishable from Opacity on a base layer. Fixed a real bug where Ridged noise wasn't zero-mean, inflating the whole planet/chunk uniformly once Height went unclamped. Made Height a percentage of context size (radius for the planet, footprint for the chunk) instead of an absolute number, so the same value reads proportionally on both views.
@@ -114,6 +118,9 @@ Graded Weekly Push report per the syllabus, what was attempted/completed, how AI
 
 ## 📅 2026-09-22
 
+![The layer stack with per-layer visibility, and project persistence.](Screenshots/2026-09-22-layers-and-persistence.png)
+*The layer stack with per-layer visibility, and project persistence.*
+
 ### 🛠️ What was done
 - Set up real project persistence: a Firebase project (Auth + Firestore), anonymous sign-in (auto-recognizes the user, no login screen), Firestore security rules (a user can only read/write their own document) written to `firestore.rules` and deployed via the Firebase CLI, and a `state/storage.ts` module wired into `App.tsx`, the layer stack now saves/loads per user.
 - Fixed a real layer-compositing bug: adding a new layer visually erased existing painted terrain beneath it (no data was actually lost, purely a compositing bug). Took two attempts to get the fix mathematically right.
@@ -132,6 +139,12 @@ Graded Weekly Push report per the syllabus, what was attempted/completed, how AI
 - ⏭️ **Next:** erosion simulation (next syllabus topic, hydraulic vs. thermal and timeline-scrubbing are open questions); revisit the still-jagged painted-terrain issue (tabled, likely a mesh-resolution limitation), possibly after erosion.
 
 ## 📅 2026-09-16
+
+![Noise generation on the sphere, earlier the same week.](Screenshots/2026-09-14-noise-and-sphere.png)
+*Noise generation on the sphere, earlier the same week.*
+
+![Painting onto the heightmap, driving real displacement.](Screenshots/2026-09-16-painting-and-displacement.png)
+*Painting onto the heightmap, driving real displacement.*
 
 ### 🛠️ What was done
 - Built a real multi-layer noise system: a Photoshop-style layer stack (add/delete/drag-to-reorder, up to 16 layers), each with its own noise type, parameters, opacity, and blend mode.
