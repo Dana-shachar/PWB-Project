@@ -1,8 +1,36 @@
 # Weekly Pushes
 
+`Last updated: 2026-10-13`
+
 Graded Weekly Push report per the syllabus — what was attempted/completed, how AI-assisted tools were used, what worked/didn't/next. Chronological, newest entry on top (unlike `ROADMAP.md`, which is organized by stage/feature, not by week).
 
 ---
+
+## 📅 2026-10-13
+
+🖼️ IMAGE NEEDED: a current screenshot of the app in Split view, planet on the left with terrain and octaves on, land chunk on the right, showing the two side by side. Save as `images/2026-10-13-split-view.png` and link it here.
+
+### 🛠️ What was done
+- Replaced the planet's lat/long sphere with a cube sphere: six flat grids pushed out onto the sphere. A lat/long grid converges at two fixed points and cannot be subdivided locally, so it cannot support detail that follows the camera.
+- Fixed two seam bugs the switch exposed. A black slit, where the lighting rebuilt its surface direction from map coordinates that jump at the wrap line, now taken from each point's 3D position instead. And terrain tearing at both poles, where the map's wrap line crosses both pole faces so triangles sat astride it and read from both ends of the map at once; each pole face is now generated as two halves split along that line, the same approach `SphereGeometry` uses at its own seam.
+- Introduced the patch as the single unit of terrain: one piece of the planet's surface, defined by a cube face, a rectangle on it and a depth, with a heightmap baked for it alone. Everything showing terrain consumes patches.
+- Rebuilt the land chunk as a patch drawn flat rather than a separate pipeline sampling a window of the shared map. Its Resolution control now reaches real detail instead of enlarging a small piece of a 1024x512 map, and double-clicking the planet picks which piece the chunk shows, replacing a hardcoded spot.
+- Separated resolution from footprint after getting it wrong first: resolution is how finely a patch's ground is measured, depth is which ground it covers. A first attempt drove depth from the Resolution slider, so raising it zoomed in and the terrain flattened.
+- Moved the chunk off `MeshStandardMaterial` onto the same hand-written lighting model as the planet, so the Scene controls mean the same thing in both views and the intensity-rescaling multipliers are gone. Closes the first half of Stage 07's cast-shadow item.
+- Adopted the documentation conventions from the procedural-creative-coding-tool project, added `REFERENCES.md`, and recorded the research behind every architectural choice along with one wrong diagnosis that was reverted.
+
+### 🤖 AI-assisted process
+- A wrong diagnosis cost most of a session. The claim was that reading height out of the rectangular map is lossy at the poles; it is the reverse, since an equirectangular map over-samples there. A whole pipeline rebuild was built on that and reverted. The real cause was a texture coordinate seam on two faces, fixed in one file.
+- What eventually found it was drawing the data on screen rather than reasoning about it: colouring the six faces flat ruled out a broken mesh, then drawing the height value as greyscale showed exactly where it jumped.
+- Two failures worth recording. A GPU texture-limit warning sat in the dev server log unread for the whole time it was breaking things. And "the shader compiled" was treated as proof an approach worked, when the failure was at bind time rather than compile time.
+- New standing rules written into `CLAUDE.md` at Dana's instruction: research established methods before writing a plan rather than after one fails, and fix infrastructure-level defects properly rather than logging them.
+
+### 📊 Worked / didn't / next
+- <span style="color:#2da44e">✅ **Worked:**</span> building a diagnostic view instead of reasoning further. Each one ruled out a whole class of cause in a single screenshot, after several rounds of argument had failed to.
+- <span style="color:#2da44e">✅ **Worked:**</span> checking conventions before committing to an architecture. Cesium's tile model and Outerra's per-patch heightmaps directly shaped the patch unit, and the picking method is the documented inverse of the cube-to-sphere projection rather than something derived here.
+- <span style="color:#cf222e">❌ **Didn't work:**</span> reasoning from first principles about what should be happening. It produced a confident wrong diagnosis, a reverted rebuild, and several fixes aimed at the wrong layer.
+- <span style="color:#cf222e">❌ **Didn't work:**</span> proposing small fixes that were known to need replacing later. Called out directly and corrected toward building the durable unit once.
+- <span style="color:#0969da">⏭️ **Next:**</span> Stage 08, erosion, as a general reusable engine, plus the Timeline control. Research so far points to grid-based erosion rather than the droplet approach logged in September, since droplets need scattered writes that WebGL handles badly while the grid model is designed for the GPU.
 
 ## 📅 2026-10-07
 

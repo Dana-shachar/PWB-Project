@@ -1,5 +1,7 @@
 # Decisions & Issues
 
+`Last updated: 2026-10-13`
+
 Technical decisions, tradeoffs, and bugs for this project — organized by category (not chronologically; `ROADMAP.md` tracks current stage/feature status and points here for detail; `WEEKLY-PUSHES.md` is the chronological log).
 
 Each entry is short numbered lists, not prose, each longer item as **bold short name** — explanation:

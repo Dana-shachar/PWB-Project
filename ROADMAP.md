@@ -1,26 +1,38 @@
 # Roadmap / Project Log
 
-The main doc for planning and progress tracking on Procedural World Building — organized by **product stage and feature**, not chronologically, so it reads as current state rather than a log to scan through. (The syllabus's graded Weekly Push reports, which *are* chronological, live in `WEEKLY-PUSHES.md`; technical decision *rationale* and bug detail live in `ISSUES.md`; external-facing structure/conventions reference lives in `README.md`.)
+`Last updated: 2026-10-13`
 
-Every feature follows the same template — short numbered lists, not prose, each longer item as **bold short name** — explanation:
-> <span style="color:#2da44e">✅ **Done**</span>
-> 1. **Short name** — what's actually built and working, dated `(YYYY-MM-DD)`. A fixed issue belongs here too (as "**Fixed: ...**"), never in Issues to fix below.
->
-> <span style="color:#0969da">📋 **To do**</span>
-> 1. **Short name** — what's known to still be missing/open. If a feature isn't 100%, this is *why*.
->
-> <span style="color:#cf222e">🐛 **Issues to fix**</span> *(only currently-open problems — full detail in `ISSUES.md`)*
-> 1. **Short name** — one line, dated.
+*Where the project stands and what gets built next, by stage and feature rather than by date.*
 
-Both the stage and each feature inside it carry their own `NN%` — the stage number is a rough average of its features, not a separate estimate.
+> [!NOTE]
+> Current state only. The graded weekly reports, which are chronological, are in `WEEKLY-PUSHES.md`. Why a decision went the way it did, and bug detail, are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. How the repo is organized is in `README.md`.
 
-Stages are numbered in roughly the order they were/are being built (see `CLAUDE.md`'s working rules — earlier stages finish before later ones start). A separate "Potential Features / Ideas" section at the end holds reference/brainstorm material that isn't scheduled as a stage at all.
+### How to read this file
+
+Stages run roughly in build order, and earlier ones finish before later ones start. A separate Potential Features section at the end holds ideas that are not scheduled as stages at all.
+
+Each stage and each feature carries its own bar. A stage's number is a rough average of its features rather than a separate estimate.
+
+Every feature uses the same three fields:
+
+**✅ Done** · what is built and working, dated. A fixed bug belongs here as "Fixed: ...", not under Issues.
+
+**📋 To do** · what is still missing. If a feature is not at 100%, this says why.
+
+**🐛 Issues to fix** · only currently open problems, one line each with a date. Full detail lives in `ISSUES.md`.
+
+### Signs
+
+Each means one thing only: ✅ done · 🟡 in progress · ⚪ not started · ⏸️ deferred · ❓ open, Dana's to decide · 💡 unconfirmed suggestion · ⚠️ risk · 🔴 open bug · 📌 small todo · 📚 borrowed from research · 🧭 a decision and its reasoning · 🖼️ image needed.
+
+> [!IMPORTANT]
+> Sections written before 2026-10-13 predate the current documentation conventions (`CLAUDE.md`, Documentation conventions) and have not all been rewritten. Bars, headers and signs are converted throughout; the older prose still runs long and uses em-dashes. Edited sections are brought up to the conventions as they are touched.
 
 ---
 ---
 
 ## Stage 01 — Foundation & Scene Setup
-🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
+▓▓▓▓▓▓▓▓▓▓ 100%
 
 #### Project scaffold — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
@@ -95,7 +107,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ---
 
 ## Stage 02 — Planet Base
-🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 90% *(done, ongoing tuning)*
+▓▓▓▓▓▓▓▓▓░ 90% *(done, ongoing tuning)*
 
 #### Sphere geometry & radius control — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
@@ -143,7 +155,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ---
 
 ## Stage 03 — Terrain: Noise Generation
-🟩🟩🟩🟩🟩🟩🟩🟩🟩🟩 100%
+▓▓▓▓▓▓▓▓▓▓ 100%
 
 #### Base noise types — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
@@ -198,7 +210,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ---
 
 ## Stage 04 — Terrain: Paint Authoring
-🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 90%
+▓▓▓▓▓▓▓▓▓░ 90%
 
 #### 2D heightmap canvas — 95%
 > <span style="color:#2da44e">✅ **Done**</span>
@@ -253,7 +265,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ---
 
 ## Stage 05 — Terrain: Displacement & Lighting
-🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
+▓▓▓▓▓▓▓▓▓▓ 95%
 
 #### GPU heightmap → displacement pipeline — 100%
 > <span style="color:#2da44e">✅ **Done**</span>
@@ -289,7 +301,7 @@ Stages are numbered in roughly the order they were/are being built (see `CLAUDE.
 ---
 
 ## Stage 06 — Project Persistence
-🟩🟩🟩🟩🟩🟩🟩🟩🟩⬜ 95%
+▓▓▓▓▓▓▓▓▓▓ 95%
 
 Right now this is the only thing keeping the app from being a real tool session-to-session. Surfaced as urgent (2026-09-22) by the Stage 03 layer-erasing bug.
 
@@ -362,7 +374,7 @@ Right now this is the only thing keeping the app from being a real tool session-
 ---
 
 ## Stage 07 — Land Cube / Voxel Terrain
-🟩🟩🟩🟩🟩🟩🟩⬜⬜⬜ 75%
+▓▓▓▓▓▓▓▓░░ 75%
 
 A detail view into one fixed-size chunk of terrain, shown side by side with the planet, with a render-style choice (blocky voxel or smooth) — syllabus-required, sequenced before Erosion per Dana's call (2026-09-23). Full reasoning/tradeoffs in `ISSUES.md`.
 
@@ -442,7 +454,7 @@ A detail view into one fixed-size chunk of terrain, shown side by side with the 
 ---
 
 ## Stage 08 — Erosion Simulation
-⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+░░░░░░░░░░ 0%
 
 Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/visualize its progression (syllabus: "Map simulations - Erosion simulation - Biomes"). An empty placeholder "Erosion" tab is already reserved for it in the right panel.
 
@@ -457,7 +469,7 @@ Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/
 ---
 
 ## Stage 09 — Climate
-⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+░░░░░░░░░░ 0%
 
 🧭 **New stage, added 2026-10-07 as part of the procedural-system restructure** (see "Procedural System Feedback" below — this stage exists specifically because the class feedback was that the project reads as 3D terrain software, not a procedural *system*). Temperature/humidity/precipitation/wind simulation across the terrain — the real input Biome classification needs to mean anything (matches established convention in the field, not invented for this project — see "Procedural System Feedback" for the research and sourcing). Sequenced after Erosion, before Biome: Erosion needs some climate input (e.g. precipitation) to run, and Climate's own output is finalized after Erosion reshapes the terrain (rain-shadow effects etc. depend on the eroded shape). Nothing decided or built yet; no UI tab reserved.
 
@@ -468,7 +480,7 @@ Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/
 ---
 
 ## Stage 10 — Biome
-⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+░░░░░░░░░░ 0%
 
 🧭 **Split out of the former "Color / Biome Texturing" stage, 2026-10-07, as part of the procedural-system restructure** (see "Procedural System Feedback" below). Biome classification from elevation + slope + Climate's output (temperature/humidity) — assigns each point on the terrain a biome type, the way Minecraft's multi-noise biome source or the Whittaker-diagram approach do (see "Procedural System Feedback" for sourcing). Color Texturing (Stage 11) is now a separate stage, not a byproduct of this one — Dana, 2026-10-07: terrain color "needs to be more complex and affected by height, temp, weather, biome etc., so it's a shader," i.e. its own rendering stage reading this one's output, not something Biome produces directly.
 
@@ -479,7 +491,7 @@ Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/
 ---
 
 ## Stage 11 — Color Texturing
-⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+░░░░░░░░░░ 0%
 
 🧭 **Split out of the former "Color / Biome Texturing" stage, 2026-10-07, as part of the procedural-system restructure** (see "Procedural System Feedback" below). Real-time terrain color as a shader, not a flat/painted value — reads height, temperature/weather (Stage 09), and biome (Stage 10) as inputs (Dana, 2026-10-07: "color... needs to be more complex and affected by height, temp, weather, biome etc. so it's a shader"). The planet's current flat `baseColor` is a placeholder for this, staying as a general/display setting until this stage actually exists. Unlike Stages 09/10/12/13, this one is **not** one of the left-panel pipeline menu's clickable stage rows — it surfaces as a general-settings control instead, alongside Scene controls/Planet controls (Dana, 2026-10-07: "it's a general menu like the lighting and planet controls"). The existing empty placeholder "Color" tab in the right panel goes away along with the rest of `RightPanel.tsx`'s own tab bar (see Stage 01) — this stage's eventual controls land in the general section, not a right-panel detail view. Nothing decided or built yet.
 
@@ -490,7 +502,7 @@ Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/
 ---
 
 ## Stage 12 — Population
-⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+░░░░░░░░░░ 0%
 
 🧭 **New stage, added 2026-10-07 as part of the procedural-system restructure** (see "Procedural System Feedback" below). Rule-driven placement of discrete features (trees, rocks, water bodies, eventually settlements) from the terrain's own derived data — e.g. "scatter trees where biome=forest and slope is below some threshold," typically via Poisson-disc sampling for natural, non-overlapping spacing — not hand-painted by the user. Depends on Biome (Stage 10) existing first. Nothing decided or built yet.
 
@@ -501,7 +513,7 @@ Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/
 ---
 
 ## Stage 13 — Events / Natural Disasters
-⬜⬜⬜⬜⬜⬜⬜⬜⬜⬜ 0%
+░░░░░░░░░░ 0%
 
 🧭 **New stage, added 2026-10-07 as part of the procedural-system restructure** (see "Procedural System Feedback" below) — the direct answer to Dana's stated overall project concept: "i want to be able to create very different worlds but all with types of natural disasters you can generate." Each disaster is a parameterized instance of Erosion's own general simulation engine (Stage 08), not a separately hand-built effect: a flood is extreme/localized hydraulic erosion; drought/desertification is extreme thermal/wind erosion; a volcanic eruption is radial uplift-and-falloff; an earthquake is a fault-line discontinuity. Depends on Stage 08 actually being built as a general engine first. Nothing decided or built yet.
 
@@ -512,7 +524,7 @@ Hydraulic/thermal erosion applied to the terrain over time, with a way to scrub/
 ---
 
 ## Stage 14 — Design System & UI Polish
-🟩🟩🟩⬜⬜⬜⬜⬜⬜⬜ 30%
+▓▓▓░░░░░░░ 30%
 
 #### Design-system / config tokenization — 0%
 > <span style="color:#2da44e">✅ **Done**</span>

@@ -1,5 +1,7 @@
 # Procedural World Building
 
+`Last updated: 2026-10-13`
+
 Cornell Tech, DESIGN 6197/4197 — a procedural planet-building tool: paint and generate terrain on a sphere, built with Three.js + GLSL. This README is written for anyone with zero context on the project — what it is, and where everything lives. Kept up to date as the project changes, not a dated log.
 
 This will eventually grow into the fuller README the course's final deliverable requires (conceptual premise, procedural systems/algorithms used, AI-assisted process, run instructions, credits) — for now, at build stage, it covers what actually exists.
