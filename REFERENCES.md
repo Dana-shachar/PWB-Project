@@ -9,26 +9,75 @@
 >
 > A source is listed only once it has actually been read and used. Something mentioned in discussion but never verified is marked ⚠️ and says so.
 
-> [!IMPORTANT]
-> This file was added on 2026-10-13, so it currently holds the planet-mesh work only. References already cited inside `ROADMAP.md` and `README.md` (Gaea, World Machine, Sebastian Lague, Red Blob Games, Minecraft's noise generator, Stefan Gustavson's noise implementations, The Book of Shaders) get migrated here during the documentation retrofit, so they live in one place.
-
 ---
 
 ## 🧠 Conceptual
 
-*Nothing migrated here yet. See the note above.*
+*Ideas and framing. Gathered mostly in response to the class feedback that the project read as 3D terrain software rather than a procedural system.*
+
+**Node-graph pipelines where output flows downstream** · World Machine, Gaea · `framing`
+- Changes upstream recompute everything below them live, which is what makes a pipeline causal rather than a set of parallel panels.
+- The reference for the stage structure adopted here, and already this project's source for blend-mode conventions.
+- *[World Machine](https://world-machine.com/) · [Gaea docs](https://docs.quadspinner.com/Guide/)*
+
+**Climate as a named stage before Biome** · `naming and ordering`
+- Confirms "Climate" rather than Atmosphere or Weather as the established name, sequenced after erosion and before biome classification.
+- Settled both the stage's name and its position rather than either being invented.
+- *[World Machine's wetness documentation](https://help.world-machine.com/?p=92) · [AutoBiomes](https://cgvr.cs.uni-bremen.de/papers/cgi20/AutoBiomes.pdf) · [a multi-biome pipeline](https://cgvr.cs.uni-bremen.de/theses/finishedtheses/multibiom/)*
+
+**Biome classification from elevation, moisture and temperature** · `method`
+- How a production system turns continuous values into discrete biomes. Minecraft matches five parameters per location against each biome's ideal values.
+- The model for Stage 10.
+- *[Red Blob Games, polygonal map generation](https://www.redblobgames.com/maps/polygon-map-generation/) · [Minecraft's noise generator](https://minecraft.fandom.com/wiki/Noise_generator)*
+
+**Procedural planets end to end** · Sebastian Lague · `framing`
+- Noise layering through biomes to water, close to this project's own scope.
+- *[Procedural Planets playlist](https://www.youtube.com/watch?v=QN39W020LqU&list=PLFt_AvWsXl0cONs3T0By4puYy6GM22ko8)*
+
+**Seed-driven worlds that stay coherent** · Sean Murray · `framing`
+- One system producing wildly different but coherent worlds, which is the basis for generating themes from continuous axes rather than authoring them.
+- ⚠️ On GDC Vault; no stable direct link found.
+- *"Building Worlds Using Math(s)" and "Continuous World Generation in No Man's Sky"*
+
+**Master-detail navigation** · `UX pattern`
+- An established named pattern for complex navigation, with accordions a recognized variant of the master pane. The basis for the left panel being the pipeline.
 
 ---
 
 ## 🎨 Visual
 
-*Nothing migrated here yet. See the note above.*
+*Nothing yet.*
 
 ---
 
 ## ⚙️ Computational
 
 *Methods and implementations the tool actually uses.*
+
+### Noise, used directly in the code
+
+**3D Perlin noise** · Stefan Gustavson, with Ian McEwan of Ashima Arts · `code used` · MIT
+- The classic gradient noise implementation, in `shaders/noise.glsl` as `perlinNoise3D`.
+- Verified against the canonical source rather than reproduced from memory, which caught a wrong constant in `permute()` that would have been invisible otherwise.
+- *[stegu/webgl-noise](https://github.com/stegu/webgl-noise), `src/classicnoise3D.glsl`. Verified 2026-09-14*
+
+**3D Simplex noise** · Stefan Gustavson, with Ian McEwan of Ashima Arts · `code used` · MIT
+- In `shaders/noise.glsl` as `simplexNoise3D`, sharing the permutation helper with the Perlin entry above.
+- *[stegu/webgl-noise](https://github.com/stegu/webgl-noise), `src/noise3D.glsl`. Verified 2026-09-14*
+
+**Fractal Brownian motion** · `method used`
+- The standard octaves, persistence and lacunarity summation, applied over whichever base generator a layer selects.
+- *[The Book of Shaders, chapter 13](https://thebookofshaders.com/13/). Verified 2026-09-14*
+
+**Hydraulic erosion, droplet-based** · Sebastian Lague · `considered` · MIT
+- The most-copied reference implementation, and the basis of the September decision for Stage 08.
+- ⚠️ Now in question: it is a CPU implementation, and research since points to grid-based erosion for a GPU pipeline. See `[S25]` in `SPEC.md`.
+- *[SebLague/Hydraulic-Erosion](https://github.com/SebLague/Hydraulic-Erosion)*
+
+**Hydraulic erosion, grid-based** · Mei, Decaudin and Hu · `proposed`
+- A shallow-water model whose flow velocity drives erosion, deposition and sediment transport, designed to run entirely on the GPU.
+- Proposed for Stage 08 in place of the droplet approach, because droplets need scattered writes that WebGL handles badly.
+- *[Interactive Terrain Modeling Using Hydraulic Erosion](https://diglib.eg.org/items/60afda0c-a666-4df8-90dd-9b80afc554c2/full) · [Eulerian erosion writeup](https://sapereaude1490.itch.io/eulerian-erosion)*
 
 ### Planet surface detail
 
