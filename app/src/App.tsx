@@ -169,6 +169,10 @@ function App() {
               }
               style={landChunk.viewMode === 'split' ? { flexGrow: 0, flexShrink: 0, flexBasis: `${landChunk.splitRatio * 100}%` } : undefined}
               onClick={(event) => sharedGumball.handlePaneClick('planet', event)}
+              /* Double-click picks which piece of the planet the chunk
+                 shows. Double rather than single so it doesn't collide with
+                 the existing click-to-select-pane. See voxel/landChunk.ts. */
+              onDoubleClick={(event) => landChunk.pickLocation(event.clientX, event.clientY)}
             >
               <SceneCanvas
                 ref={sceneHandleRef}

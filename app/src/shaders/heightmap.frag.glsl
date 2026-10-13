@@ -134,6 +134,40 @@ vec3 domainWarpedPosition(vec3 p, float seed, float baseType, float poleFalloff,
 // sphere. Sampling noise at this 3D point (rather than at the flat UV
 // directly) is what avoids pole-pinching and seam artifacts once this
 // texture displaces a sphere — see noise.glsl's perlinNoise3D comment.
+// Region bake (see map/heightmap.ts's renderRegion). Off by default, in
+// which case this pass covers the whole globe exactly as it always has.
+// A region is one cube face plus a rectangle on it, the same way a
+// subdividing patch is described, so this generalizes without rework.
+// See ISSUES.md, "Planet mesh and adaptive resolution".
+uniform float uRegionMode; // 0 = whole globe, 1 = the region below
+uniform float uRegionFace; // 0..5, matching CUBE_FACES in planet/mesh.ts
+uniform vec2 uRegionMin;   // face-local coordinates, each in [-1, 1]
+uniform vec2 uRegionMax;
+
+// Mirrors cubeFacePoint() in planet/mesh.ts. Kept deliberately identical:
+// the region a patch bakes has to be the same surface the mesh builds, or
+// the terrain would not line up with the geometry showing it.
+vec3 cubeFacePoint(float face, float u, float v) {
+  if (face < 0.5) return vec3(1.0, v, -u);   // +X
+  if (face < 1.5) return vec3(-1.0, v, u);   // -X
+  if (face < 2.5) return vec3(u, 1.0, -v);   // +Y
+  if (face < 3.5) return vec3(u, -1.0, v);   // -Y
+  if (face < 4.5) return vec3(u, v, 1.0);    // +Z
+  return vec3(-u, v, -1.0);                  // -Z
+}
+
+// Where on the equirectangular paint textures a given sphere position sits.
+// Paint stays in the rectangular map, so a region still reads it through
+// this; fine away from the poles, where every longitude converges to one
+// point. See ISSUES.md.
+vec2 spherePositionToPaintUv(vec3 spherePosition) {
+  float longitude = atan(spherePosition.z, spherePosition.x);
+  float latitude = asin(clamp(spherePosition.y, -1.0, 1.0));
+  vec2 uv = vec2(longitude / (2.0 * 3.14159265) + 0.5, latitude / 3.14159265 + 0.5);
+  if (uv.y < 0.0001 || uv.y > 0.9999) uv.x = 0.5;
+  return uv;
+}
+
 vec3 uvToSpherePosition(vec2 uv) {
   // Snap poles to an exact (0, ±1, 0) — floating-point PI/2 leaves a tiny
   // per-vertex residual otherwise, amplified into a visible pinch by domain
@@ -194,15 +228,26 @@ float applyBlendMode(float composite, float layerHeight, float blendMode) {
 }
 
 void main() {
-  vec3 basePosition = uvToSpherePosition(vUv);
-  float latitude = (vUv.y - 0.5) * 3.14159265;
-  float poleFalloff = cos(latitude); // 1 at equator, 0 at poles
-
-  // Pole rows converge to one 3D point but keep varying U — force U to a
-  // fixed value there so every pole vertex samples the same paint texel,
-  // same reasoning as uvToSpherePosition's pole snap. See ISSUES.md, 2026-09-16.
-  vec2 paintUV = vUv;
-  if (vUv.y < 0.0001 || vUv.y > 0.9999) paintUV.x = 0.5;
+  // Only these two lines differ between a whole-globe bake and a region
+  // bake: which surface point this pixel stands for, and where to read
+  // paint for it. Everything below is identical either way.
+  vec3 basePosition;
+  vec2 paintUV;
+  if (uRegionMode > 0.5) {
+    vec2 faceCoord = mix(uRegionMin, uRegionMax, vUv);
+    basePosition = normalize(cubeFacePoint(uRegionFace, faceCoord.x, faceCoord.y));
+    paintUV = spherePositionToPaintUv(basePosition);
+  } else {
+    basePosition = uvToSpherePosition(vUv);
+    // Pole rows converge to one 3D point but keep varying U — force U to a
+    // fixed value there so every pole vertex samples the same paint texel,
+    // same reasoning as uvToSpherePosition's pole snap. See ISSUES.md, 2026-09-16.
+    paintUV = vUv;
+    if (vUv.y < 0.0001 || vUv.y > 0.9999) paintUV.x = 0.5;
+  }
+  // 1 at the equator, 0 at the poles. From the position rather than from
+  // the pass coordinate, so it is correct for a region bake too.
+  float poleFalloff = length(basePosition.xz);
 
   // Layers composite bottom-to-top (index 0 = bottom/base, last = top),
   // matching Photoshop's stacking convention — see ISSUES.md, 2026-09-15.

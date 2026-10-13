@@ -1,32 +1,8 @@
 import * as THREE from 'three';
 import vertexShader from '../shaders/vertex.glsl?raw';
 import fragmentShader from '../shaders/fragment.glsl?raw';
+import { CUBE_FACES, cubeFacePoint, type CubeFace } from './cubeFace';
 
-type CubeFace = '+X' | '-X' | '+Y' | '-Y' | '+Z' | '-Z';
-const CUBE_FACES: CubeFace[] = ['+X', '-X', '+Y', '-Y', '+Z', '-Z'];
-
-// Face-local (u, v) in [-1, 1] -> a point on the cube, before normalizing
-// onto the sphere. A parameterization chosen for this mesh alone (there's no
-// external cubemap-sampling standard to match, since this feeds real
-// geometry, not a samplerCube) — picked so every face's (dP/du) x (dP/dv)
-// already points outward, hand-verified via cross product, so one winding
-// rule (see cubeSphereGeometry below) works unchanged for all 6 faces.
-function cubeFacePoint(face: CubeFace, u: number, v: number): THREE.Vector3 {
-  switch (face) {
-    case '+X':
-      return new THREE.Vector3(1, v, -u);
-    case '-X':
-      return new THREE.Vector3(-1, v, u);
-    case '+Y':
-      return new THREE.Vector3(u, 1, -v);
-    case '-Y':
-      return new THREE.Vector3(u, -1, v);
-    case '+Z':
-      return new THREE.Vector3(u, v, 1);
-    case '-Z':
-      return new THREE.Vector3(-u, v, -1);
-  }
-}
 
 // The map wraps at longitude ±180°, and that wrap line crosses three of the
 // six faces: straight down the middle of -X, and across each pole face from

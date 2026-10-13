@@ -1,5 +1,7 @@
 import { useEffect, useImperativeHandle, useRef, forwardRef } from 'react';
 import * as THREE from 'three';
+import chunkVertexGlsl from '../shaders/chunk.vert.glsl?raw';
+import chunkFragmentGlsl from '../shaders/chunk.frag.glsl?raw';
 import { renderer } from '../scene/renderer';
 import { camera, defaultCameraPosition } from '../scene/camera';
 import { controls } from '../scene/controls';
@@ -48,9 +50,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
-  const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
-  const ambientLightRef = useRef<THREE.AmbientLight | null>(null);
-  const directionalLightRef = useRef<THREE.DirectionalLight | null>(null);
+  const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const gumballTargetRef = useRef<GumballTarget | null>(null);
 
@@ -77,16 +77,6 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    const ambient = new THREE.AmbientLight(0xffffff);
-    scene.add(ambient);
-    ambientLightRef.current = ambient;
-    // TODO(DS): 4 is an arbitrary placeholder intensity for a PBR
-    // MeshStandardMaterial "sun" — not tied to the shared ambientLight
-    // slider, see the lighting effect below for why.
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 4);
-    scene.add(directionalLight);
-    scene.add(directionalLight.target); // standard Three.js practice — direction is position relative to target's world matrix
-    directionalLightRef.current = directionalLight;
     const gridMesh = grid(gridSpacing);
     gridMesh.visible = gridVisible;
     scene.add(gridMesh);
@@ -117,35 +107,27 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       orbitControls.dispose();
       webglRenderer.dispose();
       sceneRef.current = null;
-      ambientLightRef.current = null;
-      directionalLightRef.current = null;
       gridMeshRef.current = null;
       materialRef.current = null;
       gumballTargetRef.current = null;
     };
   }, []);
 
-  // Lighting — direction is shared as-is with the planet's Scene controls,
-  // but intensity is rescaled: the planet renders through its own
-  // hand-written shader with its own lighting math (calibrated so
-  // ambientLight sits around 0.12), while this view uses Three.js's real
-  // physically-based MeshStandardMaterial, which needs a much brighter
-  // ambient value to read as anything but near-black. TODO(DS): x1.5 is an
-  // arbitrary placeholder multiplier, not derived from anything — lowered
-  // from x4 (Dana, 2026-09-23: too much ambient relative to the directional
-  // light was flattening contrast between lit/shadowed faces).
+  // Lighting — the Scene controls now mean exactly what they mean on the
+  // planet, because both go through the same model (shaders/chunk.frag.glsl
+  // and shaders/fragment.glsl). The old rescaling multipliers are gone with
+  // the standard material that needed them.
   useEffect(() => {
-    const ambient = ambientLightRef.current;
-    const directionalLight = directionalLightRef.current;
-    if (!ambient || !directionalLight) return;
-    ambient.intensity = ambientLight * 1.5;
-    directionalLight.position.set(lightDirX, lightDirY, 1);
+    const material = materialRef.current;
+    if (!material) return;
+    material.uniforms.uAmbient.value = ambientLight;
+    material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, 1);
   }, [ambientLight, lightDirX, lightDirY]);
 
   // Base color — shared with the planet's own ColorPicker, not a separate
   // hardcoded placeholder.
   useEffect(() => {
-    materialRef.current?.color.set(baseColor);
+    materialRef.current?.uniforms.uBaseColor.value.set(baseColor);
   }, [baseColor]);
 
   // Grid spacing/visibility — mirrors SceneCanvas's own grid effect (rebuild
@@ -176,7 +158,16 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     // DoubleSide as a safety net against any wall-winding mistakes — Three.js
     // flips the lighting normal for back-facing polygons automatically, so
     // this stays visually correct either way, not just a visibility patch.
-    const material = new THREE.MeshStandardMaterial({ color: baseColor, side: THREE.DoubleSide });
+    const material = new THREE.ShaderMaterial({
+      vertexShader: chunkVertexGlsl,
+      fragmentShader: chunkFragmentGlsl,
+      side: THREE.DoubleSide,
+      uniforms: {
+        uBaseColor: { value: new THREE.Color(baseColor) },
+        uLightDirection: { value: new THREE.Vector3(lightDirX, lightDirY, 1) },
+        uAmbient: { value: ambientLight },
+      },
+    });
     materialRef.current = material;
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);

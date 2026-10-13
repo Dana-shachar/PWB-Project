@@ -9,6 +9,7 @@ import { planet, planetGeometry } from '../planet/mesh';
 import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 import type { ElevationData } from '../voxel/chunkGrid';
+import { clampPatchSamples, faceIndex, patchContaining, type TerrainPatch } from '../planet/patch';
 
 // Exposed to sibling components (MapView, via App.tsx) that need to paint
 // onto or read the shared heightmap pipeline this component owns — see
@@ -35,6 +36,15 @@ export interface SceneCanvasHandle {
   // samples for its own height, distinct from getPreviewImageData()'s
   // shape/paint composite. See map/heightmap.ts and ISSUES.md, 2026-09-24.
   getElevationData(): ElevationData | null;
+  // Bakes one terrain patch and reads its heights back. A patch is the unit
+  // everything showing terrain consumes, so the chunk is literally a piece
+  // of the planet rather than a separate sampling of a shared map. Always
+  // `samples` is how finely the patch is measured; the patch itself is which
+  // ground is measured. Independent on purpose. See planet/patch.ts.
+  getPatchElevationData(patch: TerrainPatch, samples: number): ElevationData | null;
+  // Which patch sits under a point on screen, for picking the chunk's
+  // location by clicking the planet. Null if the click missed the planet.
+  pickPatchAt(clientX: number, clientY: number, depth: number): TerrainPatch | null;
   // For the single shared gumball (scene/sharedGumball.ts) to target this
   // view's camera — this component no longer owns its own Gumball instance,
   // see ISSUES.md, 2026-09-23.
@@ -158,6 +168,41 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const heightmapPipeline = heightmapPipelineRef.current;
         if (!webglRenderer || !heightmapPipeline) return null;
         return heightmapPipeline.getElevationData(webglRenderer);
+      },
+      getPatchElevationData(patch, samples) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return null;
+        const target = heightmapPipeline.renderRegion(webglRenderer, {
+          layers: layersRef.current,
+          face: faceIndex(patch.face),
+          min: patch.min,
+          max: patch.max,
+          resolution: clampPatchSamples(samples),
+        });
+        return heightmapPipeline.getRegionElevationData(webglRenderer, target);
+      },
+      pickPatchAt(clientX, clientY, depth) {
+        const canvas = canvasRef.current;
+        const planetMesh = planetMeshRef.current;
+        const target = gumballTargetRef.current;
+        if (!canvas || !planetMesh || !target) return null;
+        // Standard Three.js picking: screen point to normalized device
+        // coordinates, raycast, take the first hit on the planet.
+        const bounds = canvas.getBoundingClientRect();
+        const pointer = new THREE.Vector2(
+          ((clientX - bounds.left) / bounds.width) * 2 - 1,
+          -((clientY - bounds.top) / bounds.height) * 2 + 1,
+        );
+        const raycaster = new THREE.Raycaster();
+        raycaster.setFromCamera(pointer, target.camera);
+        const hit = raycaster.intersectObject(planetMesh, false)[0];
+        if (!hit) return null;
+        // The hit is in world space and the planet sits at the origin, so the
+        // point doubles as the direction from the planet's center. Height
+        // displacement happens on the GPU and isn't in this mesh, so the hit
+        // is against the undisplaced sphere — fine for choosing an area.
+        return patchContaining(hit.point.clone(), depth);
       },
       getGumballTarget() {
         return gumballTargetRef.current;

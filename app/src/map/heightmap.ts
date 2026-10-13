@@ -175,6 +175,28 @@ export interface HeightmapParams {
   layers: NoiseLayer[];
 }
 
+// One area of the planet to bake on its own: a cube face plus a rectangle on
+// it, in that face's own coordinates (each axis in [-1, 1]). Deliberately
+// the same way a subdividing patch is described, so per-patch terrain can
+// reuse this untouched. `face` indexes CUBE_FACES in planet/mesh.ts, and
+// `resolution` is the baked texture's size per axis.
+export interface RegionParams {
+  layers: NoiseLayer[];
+  face: number;
+  min: THREE.Vector2;
+  max: THREE.Vector2;
+  resolution: number;
+}
+
+// Raw single-channel elevation, real unclamped height rather than a display
+// color — the shape both getElevationData() and getRegionElevationData()
+// return, and what voxel/chunkGrid.ts samples.
+export interface ElevationReadback {
+  data: Float32Array;
+  width: number;
+  height: number;
+}
+
 // A UV coordinate, e.g. where a paint stroke lands.
 export interface UV {
   x: number;
@@ -228,6 +250,8 @@ export class HeightmapPipeline {
   private material: THREE.ShaderMaterial;
   // Ping-pong pair per layer, not GPU blending — see paintStroke() below.
   private paintTargets = new Map<string, [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]>();
+  // Reused across region bakes while the requested size is unchanged.
+  private regionTarget: THREE.WebGLRenderTarget | null = null;
   private paintActiveIndex = new Map<string, number>();
   private paintPlaceholder: THREE.DataTexture;
   // The stroke currently being drawn, if any — its whole point path is kept
@@ -284,6 +308,12 @@ export class HeightmapPipeline {
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerHeightScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
+        // Region bake — off unless renderRegion() turns it on. See
+        // heightmap.frag.glsl and renderRegion() below.
+        uRegionMode: { value: 0 },
+        uRegionFace: { value: 0 },
+        uRegionMin: { value: new THREE.Vector2(-1, -1) },
+        uRegionMax: { value: new THREE.Vector2(1, 1) },
         ...paintTextureUniforms,
       },
     });
@@ -479,8 +509,89 @@ export class HeightmapPipeline {
   render(renderer: THREE.WebGLRenderer, params: HeightmapParams): THREE.Texture {
     const { layers } = params;
     const uniforms = this.material.uniforms;
+    this.syncPaintTargets(renderer, layers);
 
-    // Sync paint targets to the current layer list — create missing, dispose orphaned.
+    // Hidden layers (Dana, 2026-09-23) are filtered out here, before any
+    // uniform is set — simpler than sending them through and having the
+    // shader skip them: uLayerCount only ever counts visible layers, so a
+    // hidden one's noise is never evaluated at all. Paint data for hidden
+    // layers is untouched above (paint targets sync against the full
+    // `layers` list) — hiding is a display toggle, not a delete.
+    // !== false, not truthy — layers saved before this field existed have
+    // visible === undefined, and should default to visible (Dana, 2026-09-23).
+    this.syncLayerUniforms(layers);
+    uniforms.uRegionMode.value = 0;
+    renderer.setRenderTarget(this.renderTarget);
+    renderer.render(this.scene, this.camera);
+    renderer.setRenderTarget(null);
+    return this.renderTarget.texture;
+  }
+
+  // Bakes one area of the planet at its own resolution, instead of the whole
+  // globe at the shared map's fixed size. A region is a cube face plus a
+  // rectangle on it — the same way a subdividing patch is described, so this
+  // carries over to per-patch terrain without rework.
+  //
+  // This is what lifts the detail ceiling: the shared map is 1024x512 for
+  // the entire planet, so anything reading it back cannot resolve more than
+  // that however fine its own grid is. See ISSUES.md, "Planet mesh and
+  // adaptive resolution".
+  renderRegion(renderer: THREE.WebGLRenderer, params: RegionParams): THREE.WebGLRenderTarget {
+    const { layers, face, min, max, resolution } = params;
+    this.syncPaintTargets(renderer, layers);
+    this.syncLayerUniforms(layers);
+
+    const uniforms = this.material.uniforms;
+    uniforms.uRegionMode.value = 1;
+    uniforms.uRegionFace.value = face;
+    (uniforms.uRegionMin.value as THREE.Vector2).set(min.x, min.y);
+    (uniforms.uRegionMax.value as THREE.Vector2).set(max.x, max.y);
+
+    const target = this.acquireRegionTarget(resolution);
+    renderer.setRenderTarget(target);
+    renderer.render(this.scene, this.camera);
+    renderer.setRenderTarget(null);
+    // Left off so the next whole-globe render() isn't silently still in
+    // region mode if it forgets to reset it.
+    uniforms.uRegionMode.value = 0;
+    return target;
+  }
+
+  // Reused while the size matches, so panning or re-meshing doesn't
+  // allocate a new target every time.
+  private acquireRegionTarget(resolution: number): THREE.WebGLRenderTarget {
+    if (this.regionTarget && this.regionTarget.width === resolution && this.regionTarget.height === resolution) {
+      return this.regionTarget;
+    }
+    this.regionTarget?.dispose();
+    // FloatType to match the shared map: elevation is real height, which can
+    // exceed 1 or go negative. See ISSUES.md, 2026-09-24.
+    this.regionTarget = new THREE.WebGLRenderTarget(resolution, resolution, { type: THREE.FloatType });
+    return this.regionTarget;
+  }
+
+  // Elevation only (the G channel), as a raw Float32Array — same shape and
+  // meaning as getElevationData(), but for a region bake.
+  getRegionElevationData(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget): ElevationReadback {
+    const size = target.width;
+    const rgba = new Float32Array(size * size * 4);
+    renderer.readRenderTargetPixels(target, 0, 0, size, size, rgba);
+    // Same bottom-to-top → top-to-bottom row flip getElevationData does, so
+    // both readbacks hand callers the same orientation.
+    const elevation = new Float32Array(size * size);
+    for (let row = 0; row < size; row++) {
+      const srcRowStart = row * size * 4;
+      const destRowStart = (size - 1 - row) * size;
+      for (let col = 0; col < size; col++) {
+        elevation[destRowStart + col] = rgba[srcRowStart + col * 4 + 1]; // G
+      }
+    }
+    return { data: elevation, width: size, height: size };
+  }
+
+  // Creates a paint target for every current layer and disposes orphans.
+  // Shared by the whole-globe and region paths.
+  private syncPaintTargets(renderer: THREE.WebGLRenderer, layers: NoiseLayer[]): void {
     const currentIds = new Set(layers.map((layer) => layer.id));
     for (const [id, pair] of this.paintTargets) {
       if (!currentIds.has(id)) {
@@ -504,15 +615,11 @@ export class HeightmapPipeline {
       this.paintTargets.set(layer.id, [makeTarget(), makeTarget()]);
       this.paintActiveIndex.set(layer.id, 0);
     }
+  }
 
-    // Hidden layers (Dana, 2026-09-23) are filtered out here, before any
-    // uniform is set — simpler than sending them through and having the
-    // shader skip them: uLayerCount only ever counts visible layers, so a
-    // hidden one's noise is never evaluated at all. Paint data for hidden
-    // layers is untouched above (paint targets sync against the full
-    // `layers` list) — hiding is a display toggle, not a delete.
-    // !== false, not truthy — layers saved before this field existed have
-    // visible === undefined, and should default to visible (Dana, 2026-09-23).
+  // Shared by the whole-globe and region paths so the two can't drift apart.
+  private syncLayerUniforms(layers: NoiseLayer[]): void {
+    const uniforms = this.material.uniforms;
     const visibleLayers = layers.filter((layer) => layer.visible !== false);
     uniforms.uLayerCount.value = visibleLayers.length;
     visibleLayers.forEach((layer, i) => {
@@ -544,10 +651,12 @@ export class HeightmapPipeline {
       uniforms.uLayerBlendMode.value[i] = BLEND_MODE_INDEX[layer.blendMode];
       uniforms[paintTextureUniformName(i)].value = this.getActivePaintTexture(layer.id);
     });
-    renderer.setRenderTarget(this.renderTarget);
-    renderer.render(this.scene, this.camera);
-    renderer.setRenderTarget(null);
-    return this.renderTarget.texture;
+    // Layers past the visible count keep whatever texture they last held,
+    // which would be a disposed target after a delete. Point them at the
+    // placeholder so an unused sampler never references freed memory.
+    for (let i = visibleLayers.length; i < MAX_LAYERS; i++) {
+      uniforms[paintTextureUniformName(i)].value = this.paintPlaceholder;
+    }
   }
 
   dispose(): void {

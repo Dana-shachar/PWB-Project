@@ -69,6 +69,21 @@
 - the reasoning for removing the land chunk's dependence on the 1024x512 global map
 - *[Procedural terrain generation with noise functions](https://cesium.com/blog/2017/11/17/procedural-terrain-generation-with-noise-functions)*
 
+**Tiles as the unit of a globe's surface** · Cesium · `method used`
+- the whole globe is built from terrain tiles, with a plain sphere treated as a special case of terrain rather than something tiles sit on top of, and each tile's heightmap is a fixed small size (65x65) so detail comes from descending the tree
+- the basis for making a patch the single unit of terrain here, with the land chunk being one patch drawn flat rather than its own pipeline
+- *[Cesium rendering pipeline](https://community.cesium.com/t/rendering-pipeline-of-cesium/459) · [heightmap-1.0 tile format](https://github.com/CesiumGS/cesium/wiki/heightmap-1.0)*
+
+**Finding which tile a point on the planet falls in** · `method used`
+- take the direction from the planet's center, find which axis dominates to get the cube face, then divide the other two components by it to get the position on that face, and walk the tree to the depth wanted
+- how double-clicking the planet picks the chunk's location. It is the algebraic inverse of the cube-to-sphere projection, so picking and geometry cannot disagree
+- *[Unity discussion: planetary terrain tile coordinates](https://discussions.unity.com/t/planetary-terrains-tiles-coordinates/688800)*
+
+**Uneven patch sizes from plain normalization** · ⚠️ `known limitation`
+- projecting a cube onto a sphere by normalizing makes patches near a face's center cover more ground than those at its corners, so detail is not perfectly even across a face
+- accepted for now; a distortion-correcting projection is the fix if it becomes visible
+- *Same Unity discussion as above*
+
 ### Considered, not used
 
 **Storing height as a cubemap** · `considered 2026-10-13`

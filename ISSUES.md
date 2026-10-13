@@ -212,16 +212,46 @@ The goal is detail that follows the camera: fine where you are, coarse everywher
 - several rounds of reasoning were spent on what *should* happen instead of looking at the rendered data. The thing that actually found it was drawing the height value on screen and looking at it
 - *Dana, 2026-10-13: "research and work according to known architectures. always research new additions you're unsure of how to add." Now in `CLAUDE.md`*
 
-### 📌 Still open: terrain detail is capped by the map
+### 🧭 Patches are the unit of terrain
+
+**Status:** <span style="color:#2da44e">✅ Built and tested 2026-10-13</span> · **Covers:** the land chunk. The planet still reads the shared map
+
+*One piece of the planet's surface with its own heightmap. Everything showing terrain consumes these.*
+
+**The rule** · `decided`
+- a patch is a cube face, a rectangle on it, and a depth, with a heightmap baked for it alone
+- the planet is patches drawn curved; the land chunk is a patch drawn flat. There is no separate chunk pipeline, so "the chunk is a piece of the planet, zoomed in" is true by construction rather than by two systems being kept in step
+- *Dana's framing from the start, 2026-09-24: "the land chunk should be a chunk of the planet that's flattened... divide the planet's surface into x chunks and the chunk is one of them"*
+
+**Why this shape and not a bigger map** · 📚 `established practice`
+- globe renderers make the whole surface out of tiles and get detail by descending, not by growing textures. Cesium treats a plain sphere as a special case of terrain, and its heightmap tiles are a fixed 65x65
+- growing one texture instead is what stalled the chunk: cost rises with the square and every sample is copied back from the GPU
+- *Sources in `REFERENCES.md`*
+
+**Resolution and footprint are separate** · `decided`
+- resolution is how finely a patch's ground is measured; depth is which ground it covers. Independent, and conflating them was wrong
+- the first attempt drove depth from the Resolution slider, so raising it zoomed in and the terrain flattened, because a smaller area holds less relief
+- *Dana, 2026-10-13: "res and zoom shouldnt be the same thing. i can zoom in on something and it could still be low res"*
+
+**Picking** · `built`
+- double-clicking the planet chooses which patch the chunk shows: raycast the planet, take the direction from its center, find which axis dominates to get the face, divide the other two by it to get the position on that face
+- the documented method, and the exact inverse of the cube-to-sphere projection, so the two cannot disagree
+- *Sources in `REFERENCES.md`*
+
+**Known limitation** · ⚠️ `accepted`
+- plain cube-to-sphere normalization makes patches near a face's center cover more ground than those at its corners, so detail is not perfectly even across a face
+- a distortion-correcting projection fixes it. Not blocking, recorded rather than discovered later
+
+### 📌 Still open: the planet's own detail is capped by the map
 
 **Status:** ⚪ not started · **Raised:** 2026-10-13
 
 *Separate from the bug above, and the real blocker on zooming in.*
 
 **The limit** · `open`
-- terrain is stored in one 1024x512 map, so zooming past what that holds reveals nothing new however fine the mesh gets
-- the land chunk reads back from the same map, so its Resolution slider enlarges existing data past that point rather than adding detail
-- this is the actual obstacle to the original goal, which was simply to zoom in and see more
+- the planet's own geometry still displaces from the one 1024x512 map, so zooming into it reveals nothing past what that holds
+- the soft blur at each pole is the same cause: every longitude converges to one point there, so the stored data bunches up
+- the land chunk no longer has this problem, since it reads its own patch. The planet gets the same treatment by rendering as patches
 
 **The documented answer** · `researched, not yet decided`
 - evaluate terrain from a function of 3D position rather than storing it, which is what resolution-independent planet renderers do

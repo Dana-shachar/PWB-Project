@@ -4,7 +4,8 @@ import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 import type { NoiseLayer } from '../map/heightmap';
 import { buildChunkHeights } from './density';
 import { buildSmoothChunkGeometry } from './smoothMesh';
-import { DEFAULT_CHUNK_RESOLUTION, DEFAULT_CHUNK_SIZE } from './chunkGrid';
+import { DEFAULT_CHUNK_RESOLUTION, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_DEPTH, CHUNK_FACE, CHUNK_TARGET } from './chunkGrid';
+import { clampPatchSamples, patchAtDepth, type TerrainPatch } from '../planet/patch';
 
 export type ViewMode = 'planet' | 'landChunk' | 'split';
 
@@ -41,6 +42,12 @@ export function useLandChunk(
   // World-space width/depth of the footprint — independent of resolution
   // (Dana, 2026-09-23: "the res should affect detail level, not size").
   const [chunkSize, setChunkSize] = useState(DEFAULT_CHUNK_SIZE);
+  // Which piece of the planet the chunk shows, and how far in. Separate from
+  // resolution above, which is how finely that piece is measured: zooming in
+  // and measuring finely are different things (Dana, 2026-10-13: "res and
+  // zoom shouldnt be the same thing"). Set by clicking the planet.
+  const [patch, setPatch] = useState<TerrainPatch>(() => patchAtDepth(CHUNK_FACE, CHUNK_TARGET, DEFAULT_CHUNK_DEPTH));
+  const [chunkDepth, setChunkDepth] = useState(DEFAULT_CHUNK_DEPTH);
 
   // Regenerates whenever the noise layer stack or render style changes
   // (Dana, 2026-09-23 — "connect the chunk to the noise controls"; voxel is
@@ -56,8 +63,20 @@ export function useLandChunk(
     if (viewMode === 'planet') return;
     // Real elevation (Height, per layer), not getPreviewImageData()'s
     // shape/paint composite — see map/heightmap.ts and ISSUES.md, 2026-09-24.
-    const elevationData = sceneHandleRef.current?.getElevationData();
+    //
+    // The chunk is one terrain patch (planet/patch.ts) drawn flat: the same
+    // unit the planet is made of, not a window sampled out of a shared map.
+    //
+    // Detail comes from the patch covering less ground while its heightmap
+    // keeps the same number of samples, so each step up genuinely doubles
+    // what you can see, with no ceiling and no growth in cost. The old
+    // behavior grew one texture instead, which both ran out of detail and
+    // stalled, since every sample had to be copied back from the GPU.
+    const samples = clampPatchSamples(resolution + 1);
+    const elevationData = sceneHandleRef.current?.getPatchElevationData(patch, samples);
     if (!elevationData) return;
+    // The mesh never needs to be finer than the data behind it.
+    const meshResolution = Math.min(resolution, samples - 1);
 
     // heightScale is a percentage of context size, not an absolute
     // scene-unit value (Dana, 2026-09-24) — chunkSize is this context's
@@ -71,7 +90,7 @@ export function useLandChunk(
       // Smooth patch — cheap enough to build directly, no Worker needed.
       setGeometry((previous) => {
         previous?.dispose();
-        return buildSmoothChunkGeometry(elevationData, resolution, effectiveHeightScale, chunkSize);
+        return buildSmoothChunkGeometry(elevationData, meshResolution, effectiveHeightScale, chunkSize);
       });
       return;
     }
@@ -87,12 +106,12 @@ export function useLandChunk(
       });
     };
 
-    const heights = buildChunkHeights(elevationData, resolution, effectiveHeightScale);
-    worker.postMessage({ heights, resolution, size: chunkSize }, [heights.buffer]);
+    const heights = buildChunkHeights(elevationData, meshResolution, effectiveHeightScale);
+    worker.postMessage({ heights, resolution: meshResolution, size: chunkSize }, [heights.buffer]);
 
     return () => worker.terminate();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sceneHandleRef is a stable ref
-  }, [viewMode, layers, renderStyle, resolution, heightScale, chunkSize]);
+  }, [viewMode, layers, renderStyle, resolution, heightScale, chunkSize, patch]);
 
   // Drag-to-resize the planet/land-chunk split — mirrors the Slider
   // scrubber's plain mousemove/mouseup pattern (ui/UIElements.tsx), against
@@ -118,5 +137,30 @@ export function useLandChunk(
     document.addEventListener('mouseup', onUp);
   }
 
-  return { viewMode, setViewMode, geometry, splitRatio, startResize, resolution, setResolution, chunkSize, setChunkSize };
+  // Clicking the planet sets which piece the chunk shows, at the current
+  // depth. Replaces the hardcoded spot — see ROADMAP.md, Stage 07.
+  function pickLocation(clientX: number, clientY: number) {
+    const picked = sceneHandleRef.current?.pickPatchAt(clientX, clientY, chunkDepth);
+    if (picked) setPatch(picked);
+  }
+
+  function changeDepth(depth: number) {
+    setChunkDepth(depth);
+    setPatch((current) => patchAtDepth(current.face, current.min.clone().add(current.max).multiplyScalar(0.5), depth));
+  }
+
+  return {
+    viewMode,
+    setViewMode,
+    geometry,
+    splitRatio,
+    startResize,
+    resolution,
+    setResolution,
+    chunkSize,
+    setChunkSize,
+    chunkDepth,
+    setChunkDepth: changeDepth,
+    pickLocation,
+  };
 }
