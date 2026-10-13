@@ -42,8 +42,16 @@ export function buildSmoothChunkGeometry(elevationData: ElevationData, resolutio
   function topPoint(x: number, z: number): THREE.Vector3 {
     return new THREE.Vector3((x - horizontalOffset) * cellSize, heightAt(x, z), (z - horizontalOffset) * cellSize);
   }
+  // The base sits below zero rather than at it. Terrain height clamps at
+  // zero above, so with a base at zero too, every flat-bottomed area put the
+  // top surface and the base cap at exactly the same depth. The GPU then has
+  // no way to tell which is in front and the surface speckles, which showed
+  // up as flickering dark patches across the low ground (Dana, 2026-10-13).
+  // A slab with real thickness keeps the two apart.
+  // TODO(DS): arbitrary placeholder thickness, as a fraction of the footprint.
+  const baseDepth = -size * 0.05;
   function bottomPoint(x: number, z: number): THREE.Vector3 {
-    return new THREE.Vector3((x - horizontalOffset) * cellSize, 0, (z - horizontalOffset) * cellSize);
+    return new THREE.Vector3((x - horizontalOffset) * cellSize, baseDepth, (z - horizontalOffset) * cellSize);
   }
   // Standard central-difference heightmap normal — smaller height where a
   // neighbor is higher tilts the normal away from it. Hand-derived, not
