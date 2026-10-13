@@ -7,6 +7,8 @@
 > [!NOTE]
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
+**Overall** ▓▓▓▓▓▓░░░░ 61%
+
 Stages run in build order, and earlier ones finish before later ones start. Features are numbered under their stage, so 07.3 is the third feature of Stage 07. Each carries a bar; a stage's number averages its features. Every feature has the same three fields: **✅ Done**, **📋 To do**, **🐛 Issues to fix**.
 
 Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started · ⏸️ deferred · ❓ Dana's to decide · 💡 unconfirmed · ⚠️ risk · 🔴 open bug · 📌 small todo · 📚 from research · 🧭 a decision · 🖼️ image needed.
@@ -15,6 +17,8 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 
 ## Stage 01 · Foundation & Scene Setup
 ▓▓▓▓▓▓▓▓▓▓ 100%
+
+*The scaffold, the 3D scene, and the control panel everything else hangs off.*
 
 #### 01.1 · Project scaffold · 100%
 > **✅ Done**
@@ -47,6 +51,8 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 ## Stage 02 · Planet Base
 ▓▓▓▓▓▓▓▓▓░ 90%
 
+*The planet itself: its geometry, its scale, and how its surface is divided.*
+
 #### 02.1 · Sphere geometry & radius control · 100%
 > **✅ Done**
 > - Geometry rebuilds on radius change alone, stays centered at the origin, range 1,000 to 100,000 km (2026-09-14 to 09-16).
@@ -77,6 +83,8 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 ## Stage 03 · Terrain: Noise Generation
 ▓▓▓▓▓▓▓▓▓▓ 100%
 
+*Generating terrain: noise types, the layer stack, and composable modifiers.*
+
 #### 03.1 · Base noise types · 100%
 > **✅ Done**
 > - Random, Perlin, Simplex and Voronoi, plus None. All verified against canonical sources rather than reproduced from memory, which caught a wrong constant (2026-09-14).
@@ -97,6 +105,8 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 
 ## Stage 04 · Terrain: Paint Authoring
 ▓▓▓▓▓▓▓▓▓░ 90%
+
+*Authoring terrain by hand: the 2D canvas, the brush, and how strokes persist.*
 
 #### 04.1 · 2D heightmap canvas · 95%
 > **✅ Done**
@@ -128,6 +138,8 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 ## Stage 05 · Terrain: Displacement & Lighting
 ▓▓▓▓▓▓▓▓▓▓ 95%
 
+*Turning the heightmap into visible relief, and lighting it.*
+
 #### 05.1 · GPU heightmap → displacement pipeline · 100%
 > **✅ Done**
 > - Noise renders to a texture that the planet's vertex shader samples for displacement, with CPU readback available on demand (2026-09-14).
@@ -145,6 +157,8 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 
 ## Stage 06 · Project Persistence
 ▓▓▓▓▓▓▓▓▓▓ 95%
+
+*Keeping a project between sessions, and undoing within one.*
 
 🧭 Firebase (Auth and Firestore) rather than browser-only storage, anonymous now with real sign-in later. Painting is saved as a chronological stroke log rather than a baked image, which is what makes it retraceable and makes undo fall out almost free. Full reasoning in `ISSUES.md`.
 
@@ -178,6 +192,8 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 
 ## Stage 07 · Land Chunk
 ▓▓▓▓▓▓▓▓░░ 80%
+
+*A detail view into one piece of the planet, flattened, beside the globe.*
 
 A detail view into one piece of the planet, shown beside the globe, with a blocky or smooth render style. Syllabus-required, sequenced before Erosion at Dana's call.
 
@@ -226,6 +242,8 @@ A detail view into one piece of the planet, shown beside the globe, with a block
 ## Stage 08 · Erosion Simulation
 ░░░░░░░░░░ 0%
 
+*Wearing the terrain down over time, as the first real simulation in the pipeline.*
+
 Hydraulic and thermal erosion over time, with a way to scrub its progression. Syllabus-required.
 
 > **📋 To do**
@@ -240,6 +258,8 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 ## Stage 09 · Climate
 ░░░░░░░░░░ 0%
 
+*Temperature, humidity and wind, which Biome needs before it can mean anything.*
+
 🧭 Temperature, humidity, precipitation and wind across the terrain. The input Biome needs to mean anything, and a named stage in real tools and literature rather than invented here. Sequenced after Erosion, because rain-shadow effects depend on the eroded shape.
 
 > **📋 To do**
@@ -249,6 +269,8 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 
 ## Stage 10 · Biome
 ░░░░░░░░░░ 0%
+
+*Classifying each point of the terrain into a biome from its own conditions.*
 
 🧭 Biome classification from elevation, slope and climate, the way Minecraft's multi-noise source or a Whittaker diagram does. Split from the old combined Color/Biome stage once colour turned out to need its own shader.
 
@@ -260,6 +282,8 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 ## Stage 11 · Color Texturing
 ░░░░░░░░░░ 0%
 
+*Terrain colour as a shader reading height, climate and biome.*
+
 🧭 Terrain colour as a shader reading height, climate and biome, not a flat painted value. Surfaces as a general setting rather than a pipeline row, alongside lighting and planet controls. The planet's flat base colour is the placeholder for it.
 
 > **📋 To do**
@@ -269,6 +293,8 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 
 ## Stage 12 · Population
 ░░░░░░░░░░ 0%
+
+*Placing trees, rocks and settlements by rule rather than by hand.*
 
 🧭 Rule-driven placement of trees, rocks, water and eventually settlements from the terrain's own data, typically by Poisson-disc sampling for natural spacing. Not hand-painted. Depends on Biome.
 
@@ -280,6 +306,8 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 ## Stage 13 · Events / Natural Disasters
 ░░░░░░░░░░ 0%
 
+*Floods, droughts, eruptions and earthquakes, each a run of the erosion engine.*
+
 🧭 The direct answer to the project's concept: very different worlds, each with natural disasters you can generate. Each disaster is a parameterized run of Erosion's engine rather than its own effect. A flood is extreme localized hydraulic erosion; drought is wind and thermal; an eruption is radial uplift; an earthquake is a fault discontinuity. Blocked on Stage 08's engine.
 
 > **📋 To do**
@@ -289,6 +317,8 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 
 ## Stage 14 · Design System & UI Polish
 ▓▓▓░░░░░░░ 30%
+
+*Tokenizing the scattered placeholder values, and the interface polish pass.*
 
 #### 14.1 · Design-system / config tokenization · 0%
 > **📋 To do**

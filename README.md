@@ -26,14 +26,21 @@ This will eventually grow into the fuller README the course's final deliverable 
 
 ## 📦 Repo structure
 
-- **`app/`**, the actual Vite + React + TypeScript + Three.js project. (Course requires TypeScript; new student projects use Vite, not the older Create React App demo in the class repo.)
-- **`.obsidian/`**, this repo root doubles as Dana's Obsidian vault; any `.md` file placed anywhere in the repo is automatically part of it, no extra sync step.
-- **`firebase.json` / `.firebaserc` / `firestore.rules`**, Firebase project config and security rules (project persistence, see `ROADMAP.md`, Stage 06) at the repo root, deployed via the Firebase CLI.
-- **`ROADMAP.md` / `WEEKLY-PUSHES.md` / `ISSUES.md` / `CLAUDE.md` / `README.md`**, see the doc map above.
+*Everything lives at the root, since this repo doubles as an Obsidian vault.*
+
+| path | holds |
+|---|---|
+| `app/` | the Vite, React, TypeScript and Three.js project |
+| `Screenshots/` | shots linked from the docs, named by date |
+| `.obsidian/` | vault config. Any `.md` anywhere in the repo is part of it, with no sync step |
+| `firebase.json`, `.firebaserc`, `firestore.rules` | Firebase config and security rules, deployed via its CLI |
+| the `.md` files | see the doc map above |
 
 ---
 
 ## 🧩 Code organization conventions
+
+*How the app is split up, and the rules in force.*
 
 The app follows patterns from Dana's own `active-geometry-project`, not the class repo's Entity/World OOP pattern (tried and abandoned early, see `ISSUES.md`).
 
@@ -72,6 +79,8 @@ Current implementation state and progress live in `ROADMAP.md`, not here.
 ---
 
 ## 📚 References
+
+*Sources this project builds on.*
 
 Third-party reference code/algorithms used directly (not original work), credited here, and verified against the actual canonical source before use, not reproduced from memory (see `CLAUDE.md`'s working rules).
 

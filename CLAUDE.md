@@ -4,6 +4,8 @@ Project-specific working rules for Procedural World Building (Cornell Tech, DESI
 
 ## Working rules
 
+*How Dana and Claude work together on this repo.*
+
 - **Role division.** The work division between Dana and Claude on this project: Dana is the project manager / UX designer, and makes all the decisions. Claude is the dev team. Claude does not take liberties, Claude advises, explains tradeoffs, and proposes options; Dana decides. This applies to every kind of choice on this project: architecture, libraries, file structure, naming, everything, not just big decisions.
 
 - **Confirm every step before it's done, following `ROADMAP.md`'s steps in order.** This project is being built step by step, according to the plan in `ROADMAP.md`, not by drifting into whatever adjacent work seems natural in the moment. Concretely, this means (Dana, 2026-09-15, after Claude worked ahead on noise modifiers instead of finishing the still-incomplete 2D-mapping step that precedes them in the roadmap's own ordering):
@@ -115,6 +117,8 @@ Progress bars are ten cells: `▓▓▓░░░░░░░ 30%`
 `README.md`, `ROADMAP.md`, `ISSUES.md` and `WEEKLY-PUSHES.md` were written before these conventions and do not follow them yet. Dana's call, 2026-10-13: retrofit them as their own step, after the current planet-mesh work is finished. New and edited sections follow the conventions now, so the two formats coexist until then.
 
 ## Where project-specific content lives
+
+*Which file holds what.*
 
 This file holds general working rules only, how Dana and Claude work together, not the project's actual content or current state. For that:
 

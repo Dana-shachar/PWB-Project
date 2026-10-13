@@ -39,6 +39,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 ## 🪐 Planet mesh
 
+*The sphere itself, its seams, and the poles.*
+
 ### [B26] Soft blur and rough ridging at both poles · `minor`
 **🔴 Open** · **Found:** 2026-10-13 · **Where:** the heightmap's own format
 
@@ -80,6 +82,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ---
 
 ## 🎨 Painting & brush
+
+*Authoring by hand, and what the strokes produce.*
 
 ### [B27] Expand shows a black preview · `wrong but workable`
 **🔴 Open** · **Found:** 2026-10-13 · **Where:** the noise canvas's Expand view
@@ -149,6 +153,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 ## 🧱 Layers & noise
 
+*Generating terrain and composing it.*
+
 ### [B18] Ridged noise inflated the whole planet rather than its peaks · `wrong but workable`
 **✅ Fixed:** 2026-09-24 · **Found:** 2026-09-24
 
@@ -174,6 +180,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ---
 
 ## 🧊 Land chunk
+
+*The flattened detail view and its two render styles.*
 
 ### [B23] The chunk's surface speckled with flickering dark patches · `wrong but workable`
 **✅ Fixed:** 2026-10-13 · **Found:** 2026-10-13 · **Where:** `voxel/smoothMesh.ts`
@@ -209,6 +217,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 ## 💡 Lighting
 
+*How surfaces are shaded.*
+
 ### [B06] Terrain bumps didn't show in lighting · `wrong but workable`
 **✅ Fixed:** 2026-09-16 · **Found:** 2026-09-16
 
@@ -222,6 +232,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ---
 
 ## 🖥️ UI & panels
+
+*The controls and the viewport around them.*
 
 ### [B22] Panel width changed with content · `wrong but workable`
 **✅ Fixed:** 2026-09-30 · **Found:** 2026-09-30
@@ -248,6 +260,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ---
 
 ## 🏗️ Architecture
+
+*Structural problems, and limits tracked but not scheduled.*
 
 ### [B11] App.tsx became a five-feature monolith · `wrong but workable`
 **✅ Fixed:** 2026-09-22 · **Found:** 2026-09-22

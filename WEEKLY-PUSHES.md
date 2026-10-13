@@ -6,7 +6,9 @@
 
 ---
 
-## 2026-10-13
+## Week 06 · 2026-10-13
+
+*Rebuilt the planet on a cube sphere, and made the chunk a real piece of it.*
 
 ![The planet on the cube sphere, with the pipeline-stage menu down the left panel.](Screenshots/2026-10-13-cube-sphere-terrain.png)
 
@@ -32,7 +34,9 @@
 
 ---
 
-## 2026-10-07
+## Week 05 · 2026-10-07
+
+*Answered the procedural-system feedback with a pipeline, not a UI tweak.*
 
 ### 🛠️ Done
 - Responded to class feedback that the project reads as 3D terrain software rather than a procedural system, by researching real tools rather than reacting with a UI tweak.
@@ -53,7 +57,9 @@
 
 ---
 
-## 2026-09-30
+## Week 04 · 2026-09-30
+
+*Separated height from opacity, and made the modifiers composable.*
 
 ![Modifiers as composable toggles, and the resizable panels.](Screenshots/2026-09-30-modifiers-and-panels.png)
 
@@ -77,7 +83,9 @@
 
 ---
 
-## 2026-09-24
+## Week 03 · 2026-09-24
+
+*Found the real resolution ceiling and rearchitected around it.*
 
 ### 🛠️ Done
 - Rearchitected voxel meshing from a 3D grid to a column-based one, which was the real ceiling blocking the Resolution slider, and raised its maximum from 64 to 2048 as a result.
@@ -94,7 +102,9 @@
 
 ---
 
-## 2026-09-23
+## Week 03 · 2026-09-23
+
+*Built the land chunk and the side-by-side view.*
 
 ### 🛠️ Done
 - Added Redo, and reworked project naming so a project is never in an unnamed state.
@@ -114,7 +124,9 @@
 
 ---
 
-## 2026-09-22
+## Week 02 · 2026-09-22
+
+*Real persistence, and two compositing bugs that needed the maths.*
 
 ![The layer stack with per-layer visibility, and project persistence.](Screenshots/2026-09-22-layers-and-persistence.png)
 
@@ -137,7 +149,9 @@
 
 ---
 
-## 2026-09-16
+## Week 01 · 2026-09-16
+
+*The layer stack, the brush, and lighting that finally showed relief.*
 
 ![Noise generation on the sphere, earlier the same week.](Screenshots/2026-09-14-noise-and-sphere.png)
 
@@ -161,7 +175,9 @@
 
 ---
 
-## 2026-09-09
+## Week 00 · 2026-09-09
+
+*Scaffolded the project and the base scene.*
 
 ### 🛠️ Done
 - Scaffolded the project with Vite, React, TypeScript and Three.js.
