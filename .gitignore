@@ -1,1 +1,4 @@
 .DS_Store
+
+# Local working rules, not part of the project
+CLAUDE.md
