@@ -247,11 +247,12 @@ A detail view into one piece of the planet, shown beside the globe, with a block
 Hydraulic and thermal erosion over time, with a way to scrub its progression. Syllabus-required.
 
 > **📋 To do**
-> - **🧭 Built as a general engine**, parameterized by intensity, duration, location and direction, so Stage 13 reuses it rather than needing separate hand-built disaster effects. Decided before building, since it shapes the scope.
-> - **❓ Grid-based rather than droplet-based.** Research says droplets need scattered writes that WebGL handles badly, while grid models are designed for the GPU. This reverses the September decision and needs sign-off. See `REFERENCES.md`.
+> - **Built as a general engine** `[S??]`, parameterized by intensity, duration, location and direction, so Stage 13 reuses it rather than needing separate hand-built disaster effects.
+> - **Grid-based** `[S25]`, following Mei, Decaudin and Hu, since droplets need scattered writes that WebGL handles badly.
 > - **Hydraulic first, thermal second.** Decided 2026-09-23.
 > - **Manual trigger**, a Run button rather than live.
 > - **Real controls** over water, sediment and the rest. Not a black box.
+> - **Timeline** `[S26]` `[S27]`: a bottom strip whose unit follows its zoom, scrubbing recorded frames rather than reversing the simulation. Plays whichever stages are enabled.
 
 ---
 

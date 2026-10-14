@@ -10,8 +10,8 @@
 > The test for what belongs here: if removing it would change *what* gets built, it is spec. If it only changes *when*, it is roadmap.
 
 ```
-✅ Decided    22
-❓ Open         1
+✅ Decided    25
+❓ Open         0
 ```
 
 <details>
@@ -226,13 +226,27 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 ---
 
-## ❓ Open
+## 🌊 Erosion and time
 
-*Decided direction, detail not settled. Dana's to resolve.*
+*Decided ahead of Stage 08, since each shapes that stage's scope from the start.*
 
-### [S25] Erosion: grid-based or droplet-based · `open`
-**Raised:** 2026-10-13
+### [S25] Erosion is grid-based, not droplet-based · `decided`
+**Decided:** 2026-10-13 · **Supersedes** the September droplet decision
 
-- The September decision was droplet-based, following Sebastian Lague. Research since says grid-based, following Mei, Decaudin and Hu, because droplets need scattered writes that WebGL handles badly while grid models are designed for the GPU.
-- Reverses a logged decision, so it needs sign-off before Stage 08 starts.
-- *Sources in `REFERENCES.md`*
+- Water and sediment live per cell on a grid and move between neighbours, following Mei, Decaudin and Hu, rather than particles running downhill.
+- Droplets need scattered writes that WebGL handles badly, so they would have to run on the CPU with the heightmap copied back every step. Grid models are designed for the GPU, which is where the rest of this project already runs.
+- *Dana, 2026-10-13: "obvs adjust to fit the current stack." Sources in `REFERENCES.md`*
+
+### [S26] The timeline's unit follows its zoom · `decided`
+**Decided:** 2026-10-13
+
+- Zooming the timeline changes the unit automatically, from days through to millions of years, with a manual override.
+- At coarser units the time resolution drops accordingly, so a million-year view does not need to resolve days.
+- *Dana, 2026-10-13: "depends on the zoom level in the time line. or what the user sets up."*
+
+### [S27] Scrubbing plays back recorded frames · `decided`
+**Decided:** 2026-10-13
+
+- Nothing runs in reverse. Frames are recorded as the simulation runs and played back, so scrubbing backwards is replay rather than inverse simulation.
+- Not every frame: one heightmap is around 2MB, so recording is periodic with a rolling window, re-running the few steps between to land exactly.
+- *Dana's framing, drawing on how After Effects loads video in chunks rather than all at once.*
