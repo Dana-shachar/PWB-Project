@@ -1,8 +1,34 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-10-13`
+`Last updated: 2026-10-19`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first.*
+
+---
+
+## Week 07 · 2026-10-19
+
+*Unified the planet and chunk under one renderer, and chased the chunk's color and shadow bugs down to their real causes.*
+
+### 🛠️ Done
+- One shared `WebGLRenderer`/canvas for both viewports (planet and chunk), replacing two independent ones, the base that lets a baked patch texture hand off straight to the GPU with no CPU readback.
+- Both the planet and the chunk now render as terrain patches (a quadtree, each with its own baked heightmap) instead of one mesh sampling a shared map. Planet side is built but gated behind a flag, pending one known render/freeze regression.
+- Land chunk: the material is built once and reused instead of rebuilt on every Resolution change (fixed a flash-to-flat flicker while dragging), resolution changes are debounced, and the texture ceiling was raised to the real WebGL2 floor (2048).
+- Land chunk shading: the top surface and the cut walls/bottom cap now get two separate, non-bleeding elevation sources for color, lighting, and shadow, via a new per-triangle flag, fixing a hard seam that only showed up at certain light angles.
+- Widened the normal-reconstruction gradient step, removing harsh, faceted-looking lighting on dense terrain.
+- The elevation color ramp now reads the planet's own global range rather than computing one per patch, a whole-dataset color stretch, the standard GIS convention for this.
+- Hydraulic erosion simulation (grid-based, GPU), with checkpointing and a scrub timeline.
+- Real SVG icons replacing emoji button glyphs.
+
+### 🤖 AI process
+- Traced a wall-coloring "bleed" to its exact mechanism twice over: first an interpolating vertex attribute used as a material switch, then the same mistake found again in a second code block (normals, shadows) missed the first time.
+- Corrected twice: once for treating a real, undecided design tradeoff as already settled, once for floating a dev-tooling explanation (stale hot-reload) ahead of the actual code-level bug.
+- Checked a claim about dev-tooling behavior (Vite's hot reload, React's Fast Refresh) against real documentation before relying on it, then dropped it once a concrete, provable code cause was found instead.
+
+### 📊 Worked / didn't / next
+- ✅ Tracing a visual bug to the exact line and explaining the mechanism, instead of proposing a fix from a plausible-sounding theory.
+- ❌ Two earlier wall-color fixes each solved the stated complaint but reintroduced a seam somewhere else. The durable fix needed a true non-interpolated flag, not a branch on an attribute already doing another job.
+- ⏭️ Re-enable the planet's own per-patch rendering (fix its black-render regression), build the gradient color-ramp picker, then research soft shadows for the land chunk.
 
 ---
 
