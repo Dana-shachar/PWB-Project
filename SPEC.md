@@ -164,6 +164,23 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - It previously used Three.js's standard material with hand-tuned intensity multipliers, which at shared lighting values blew the top surface out to flat white.
 - Sequencing: unify first, then implement shadow mapping once for both, rather than Three.js's automatic system for one view and nothing for the other.
 
+### [S28] 📚 One renderer for the planet and the chunk · `decided`
+**Decided and built:** 2026-10-17 · **Drove:** [B32]
+
+- A `WebGLRenderTarget`'s texture belongs to whichever renderer/context created it and cannot be bound in a different one. The planet and the land chunk each owning a separate renderer, on a separate canvas, is what made handing a patch's baked texture across read as a flat, black, undisplaced chunk.
+- One shared renderer on one shared canvas instead, each pane drawn into its own rectangle every frame (`setViewport`/`setScissor`), the documented technique for multiple simultaneous views. Each pane's own layout box is now also its viewport rect and its camera controls' DOM target, neither owns a `<canvas>` of its own anymore.
+- This is also the real fix for the chunk's own resolution ceiling ([S20]'s same reasoning, one level up): with one shared context, a patch's GPU texture can be handed to the chunk directly again, no CPU readback, no cap tied to readback cost.
+- *Sources in `REFERENCES.md`*
+
+### [S29] 📚 One shared elevation range, not one per patch · `decided`
+**Decided and built:** 2026-10-18 · **Drove:** [B32]
+
+- The land chunk's color ramp used to compute its own low/high fresh from each patch (first the literal min/max, then a percent-clipped version of it), which means the same real elevation could read as a different color depending on which patch is on screen, and recomputes something the planet already has.
+- The planet already computes its own global elevation range once whenever its heightmap changes, and already keeps it live for every planet patch. The chunk now reads that same value instead of computing a local one, voxel mode's own CPU elevation data stays needed for its mesh, just not for the ramp anymore.
+- Matches the GIS convention of a stretch computed once per dataset and applied everywhere (QGIS's `WholeRaster` option), not recomputed per tile (`CurrentCanvas`), and restores this project's own earlier decision that the ramp "should encompass all terrain levels that exist in the planet," which the chunk's own per-patch work had drifted away from.
+- Expected consequence, not a bug: a small, flat-looking close-up patch may show mostly one color if the planet's full range is much wider than what's visible in that one patch.
+- *Sources in `REFERENCES.md`*
+
 ### [S11] Blocky meshing by culled faces, on the CPU in a Worker · `decided`
 **Decided and built:** 2026-09-23
 

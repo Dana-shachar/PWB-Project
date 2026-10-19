@@ -45,3 +45,34 @@ export function usePanelResize(
 
   return { width, startResize };
 }
+
+const DEFAULT_DOCK_MIN_HEIGHT = 160;
+const DEFAULT_DOCK_MAX_HEIGHT = 480;
+
+// Same interaction pattern as usePanelResize above (drag a handle, track the
+// cursor against the container's own fixed edge, clamp between min/max),
+// just vertical — for the bottom timeline dock (App.tsx), whose fixed edge
+// is the viewport's own bottom rather than a sibling panel's edge (Dana,
+// 2026-10-14: "the timeline should be stretchable like the side panels are
+// w a minimal height enforced").
+export function useDockHeightResize(initialHeight: number, minHeight = DEFAULT_DOCK_MIN_HEIGHT, maxHeight = DEFAULT_DOCK_MAX_HEIGHT) {
+  const [height, setHeight] = useState(initialHeight);
+
+  function startResize(event: React.MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    const fixedBottom = window.innerHeight;
+
+    function onMove(moveEvent: MouseEvent) {
+      const rawHeight = fixedBottom - moveEvent.clientY;
+      setHeight(Math.min(maxHeight, Math.max(minHeight, rawHeight)));
+    }
+    function onUp() {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  return { height, startResize };
+}

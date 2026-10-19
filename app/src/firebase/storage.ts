@@ -1,6 +1,25 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './client';
 import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
+import type { ErosionRates } from '../erosion/erosionEngine';
+import type { SerializedPatch } from '../planet/patch';
+import type { PlanetSettings } from '../planet/planetControls';
+
+// What gets saved of a run: the panel's own settings plus which patch it
+// ran on, not the simulation's state — erosion is deterministic (same
+// patch, same rates, same duration always erode the same way), so the
+// result is reconstructed by running it again on load, exactly how
+// strokeHistory is replayed rather than a baked image stored ([S10] in
+// SPEC.md). The real reason, not just the elegant one: a run's checkpoints
+// alone run tens of megabytes, far past Firestore's 1MB document limit, so
+// raw simulation state was never going to fit regardless.
+export interface SavedErosionRun {
+  rates: ErosionRates;
+  durationYears: number;
+  gridResolution: number;
+  seaLevel: number;
+  patch: SerializedPatch;
+}
 
 // Each user's saved planets live in a subcollection, not one fixed document
 // — lets a user save multiple named planets and switch between them. See
@@ -16,6 +35,16 @@ export interface Project {
   // source of truth for painted terrain (replayed to reconstruct the actual
   // paint textures on load), and what undo pops from. See ROADMAP.md, Stage 06.
   strokeHistory: StrokeRecord[];
+  // null when no run has ever been done on this planet, or Reset was pressed.
+  erosionRun: SavedErosionRun | null;
+  // Display, Radius, Resolution, Height, the color ramp, Cast shadows — was
+  // global app state shared across every planet until now, so switching
+  // projects silently leaked one planet's settings into the next (Dana,
+  // 2026-10-14: "it didn't save my colors to the project... the new
+  // project colors remained"). null only for saves made before this
+  // existed; loadProject() falls back to the real defaults, not whatever
+  // happens to be in memory. See planet/planetControls.ts.
+  planetSettings: PlanetSettings | null;
   updatedAt: number; // Date.now(), used to sort the project list and to auto-load the most recent on sign-in
 }
 
@@ -49,6 +78,8 @@ export async function loadProject(uid: string, projectId: string): Promise<Proje
     name: (data.name as string) ?? 'Untitled',
     layers: (data.layers as NoiseLayer[]) ?? [],
     strokeHistory: (data.strokeHistory as StrokeRecord[]) ?? [],
+    erosionRun: (data.erosionRun as SavedErosionRun | null) ?? null,
+    planetSettings: (data.planetSettings as PlanetSettings | null) ?? null,
     updatedAt: (data.updatedAt as number) ?? 0,
   };
 }
@@ -56,7 +87,13 @@ export async function loadProject(uid: string, projectId: string): Promise<Proje
 export async function saveProject(
   uid: string,
   projectId: string,
-  data: { name: string; layers: NoiseLayer[]; strokeHistory: StrokeRecord[] },
+  data: {
+    name: string;
+    layers: NoiseLayer[];
+    strokeHistory: StrokeRecord[];
+    erosionRun: SavedErosionRun | null;
+    planetSettings: PlanetSettings;
+  },
 ): Promise<void> {
   await setDoc(doc(planetsCollection(uid), projectId), { ...data, updatedAt: Date.now() });
 }

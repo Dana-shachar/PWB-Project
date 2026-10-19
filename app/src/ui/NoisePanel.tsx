@@ -3,14 +3,37 @@ import { Slider, Select, Toggle, Accordion, EditableText } from './UIElements';
 import { MapView } from '../map/MapView';
 import { NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer, type NoiseType, type BlendMode, type StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
+import { DiceIcon, EyeIcon } from './icons';
 
 // One contained tab per modifier (ui/NoisePanel.tsx's Modifiers section) —
 // Gaea's fixed order: Domain warp → generator/Octaves → Ridged → Terrace.
+// Each tab's own tooltip reuses the exact wording its expanded-state Toggle
+// already has, so the explanation exists before expanding, not only after.
 const MODIFIERS = [
-  { key: 'domainWarp', label: 'Domain warp', enabledField: 'domainWarpEnabled' },
-  { key: 'octaves', label: 'Octaves (fBm)', enabledField: 'octavesEnabled' },
-  { key: 'ridged', label: 'Ridged', enabledField: 'ridgedEnabled' },
-  { key: 'terrace', label: 'Terrace', enabledField: 'terraceEnabled' },
+  {
+    key: 'domainWarp',
+    label: 'Domain warp',
+    enabledField: 'domainWarpEnabled',
+    tooltip: "Distorts the noise's own coordinates before evaluating it, which bends straight features into swirls instead of adding more detail.",
+  },
+  {
+    key: 'octaves',
+    label: 'Octaves (fBm)',
+    enabledField: 'octavesEnabled',
+    tooltip: 'Layers several copies of the noise at increasing frequency and decreasing strength (fractal Brownian motion), adding fine detail on top of the broad shape.',
+  },
+  {
+    key: 'ridged',
+    label: 'Ridged',
+    enabledField: 'ridgedEnabled',
+    tooltip: 'Folds the noise around its midpoint so values near zero become peaks, turning smooth rolling hills into sharp mountain ridges.',
+  },
+  {
+    key: 'terrace',
+    label: 'Terrace',
+    enabledField: 'terraceEnabled',
+    tooltip: 'Quantizes the noise into flat steps, giving terrain a stepped, terraced look instead of a smooth continuous slope.',
+  },
 ] as const;
 
 interface NoisePanelProps {
@@ -27,6 +50,7 @@ interface NoisePanelProps {
   onReorderLayer: (draggedId: string, targetId: string) => void;
   // Applies to every selected layer at once, not just the primary one.
   onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
+  onRandomizeTerrain: () => void;
   brushRadiusPx: number;
   onBrushRadiusPxChange: (value: number) => void;
   brushValue: number; // -1 (erase/black) .. 1 (paint/white)
@@ -68,6 +92,7 @@ export function NoisePanel({
   onRenameLayer,
   onReorderLayer,
   onUpdateSelectedLayer,
+  onRandomizeTerrain,
   brushRadiusPx,
   onBrushRadiusPxChange,
   brushValue,
@@ -158,6 +183,7 @@ export function NoisePanel({
             max={300}
             step={1}
             precision={0}
+            description="How wide the brush paints, in screen pixels at the canvas's own resolution."
           />
           <Slider
             label="Brush"
@@ -167,8 +193,17 @@ export function NoisePanel({
             min={-1}
             max={1}
             step={0.01}
+            description="What the brush paints toward: -1 is black (erase/lower), 1 is white (paint/raise), 0 leaves terrain unchanged."
           />
-          <Slider label="Feather" value={feather} onChange={onFeatherChange} min={0} max={1} step={0.01} />
+          <Slider
+            label="Feather"
+            value={feather}
+            onChange={onFeatherChange}
+            min={0}
+            max={1}
+            step={0.01}
+            description="How soft the brush's edge is, as a fraction of its radius — 0 is a hard edge, 1 fades fully across the stroke, matching Photoshop's hardness."
+          />
           {/* Hidden, not just visually covered, while expanded — the same
               canvas is now shown full-size in the viewport instead (see
               App.tsx), so two mounted MapViews would both be capturing
@@ -199,7 +234,17 @@ export function NoisePanel({
               proportionally correct on both despite their wildly different
               absolute sizes (Dana, 2026-09-24: "can the height be in %?").
               See SceneCanvas.tsx, voxel/landChunk.ts, ISSUES.md. */}
-          <Slider label="Height" unit="%" value={heightScale} onChange={onHeightScaleChange} min={0} max={100} step={0.5} precision={1} />
+          <Slider
+            label="Height"
+            unit="%"
+            value={heightScale}
+            onChange={onHeightScaleChange}
+            min={0}
+            max={100}
+            step={0.5}
+            precision={1}
+            description="Overall terrain relief, as a percentage of whichever view you're in — the same number reads correctly against the planet's radius and the chunk's much smaller footprint."
+          />
         </Accordion>
       </div>
 
@@ -267,17 +312,27 @@ export function NoisePanel({
                   dims when hidden — see .noise-layer-row--hidden. */}
               <button
                 type="button"
-                className="panel-text-btn noise-layer-row-visibility"
+                className="panel-text-btn noise-layer-row-visibility ui-tooltip-anchor"
                 onMouseDown={(event) => event.stopPropagation()}
                 onClick={() => onToggleLayerVisible(layer.id)}
               >
-                👁
+                <EyeIcon />
+                <span className="ui-tooltip">Show/hide this layer</span>
               </button>
             </div>
           ))}
-        <button type="button" className="noise-add-layer-btn" onClick={onAddLayer}>
-          + Add layer
-        </button>
+        <div className="panel-btn-row">
+          <button type="button" className="noise-add-layer-btn" onClick={onAddLayer}>
+            + Add layer
+          </button>
+          {/* Reseeds every layer at once — press it, get a different world,
+              the most direct demonstration that this is a procedural system
+              rather than hand-authored terrain (Dana, 2026-10-13). */}
+          <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={onRandomizeTerrain}>
+            <DiceIcon /> Randomize
+            <span className="ui-tooltip">Reseeds every layer's noise type, frequency, modifiers and more</span>
+          </button>
+        </div>
         </Accordion>
       </div>
 
@@ -290,6 +345,7 @@ export function NoisePanel({
           value={selectedLayer.noiseType}
           onChange={(value) => onUpdateSelectedLayer({ noiseType: value as NoiseType })}
           options={NOISE_TYPE_OPTIONS}
+          description="The base generator this layer builds on. Random is pure static; Perlin and Simplex are smooth rolling noise; Voronoi gives cell-like, sharp-edged patterns."
         />
         <Slider
           label="Seed"
@@ -299,6 +355,7 @@ export function NoisePanel({
           max={1000}
           step={1}
           precision={0}
+          description="Which random variation of this noise type to generate. Same noise type and frequency, different seed, a different world — see Randomize below for all layers at once."
         />
         <Slider
           label="Frequency"
@@ -307,6 +364,7 @@ export function NoisePanel({
           min={0.5}
           max={20}
           step={0.1}
+          description="How many noise features fit across the surface. Low values are broad, continent-scale shapes; high values are small, dense detail."
         />
         <Slider
           label="Opacity"
@@ -315,6 +373,7 @@ export function NoisePanel({
           min={0}
           max={1}
           step={0.01}
+          description="How much this layer shows in the 2D shape/paint composite. Independent of Height below — a layer at 0 opacity still affects real elevation."
         />
         {/* Amplitude/strength, same concept as a height layer in Blender/
             World Machine/Gaea — real elevation from the terrain's zero,
@@ -330,12 +389,14 @@ export function NoisePanel({
           min={0}
           max={10}
           step={0.1}
+          description="How much this layer contributes to real elevation, additive with every other layer and scaled again by the Terrain Height slider above. Unrelated to Opacity — this drives actual relief, not the 2D preview."
         />
         <Select
           label="Blend mode"
           value={selectedLayer.blendMode}
           onChange={(value) => onUpdateSelectedLayer({ blendMode: value as BlendMode })}
           options={BLEND_MODE_OPTIONS}
+          description="How this layer's 2D shape composites with the layers below it — Photoshop-style blend modes (Normal, Add, Multiply and the rest)."
         />
         </Accordion>
       </div>
@@ -372,13 +433,14 @@ export function NoisePanel({
                       key={modifier.key}
                       type="button"
                       className={
-                        'modifier-tab' +
+                        'modifier-tab ui-tooltip-anchor' +
                         (expandedModifier === modifier.key ? ' modifier-tab--expanded' : '') +
                         (enabled ? ' modifier-tab--enabled' : '')
                       }
                       onClick={() => setExpandedModifier(expandedModifier === modifier.key ? null : modifier.key)}
                     >
-                      {modifier.label}
+                      <span className="modifier-tab-label">{modifier.label}</span>
+                      <span className="ui-tooltip">{modifier.tooltip}</span>
                     </button>
                   );
                 })}
@@ -390,6 +452,7 @@ export function NoisePanel({
                     label="Enable"
                     value={selectedLayer.domainWarpEnabled ?? false}
                     onChange={(value) => onUpdateSelectedLayer({ domainWarpEnabled: value })}
+                    description="Distorts the noise's own coordinates before evaluating it, which bends straight features into swirls instead of adding more detail."
                   />
                   <Slider
                     label="Warp strength"
@@ -398,6 +461,7 @@ export function NoisePanel({
                     min={0}
                     max={4}
                     step={0.1}
+                    description="How far the coordinates are pushed before evaluating the noise. Higher values bend features into stronger swirls."
                   />
                 </div>
               )}
@@ -407,6 +471,7 @@ export function NoisePanel({
                     label="Enable"
                     value={selectedLayer.octavesEnabled ?? false}
                     onChange={(value) => onUpdateSelectedLayer({ octavesEnabled: value })}
+                    description="Layers several copies of the noise at increasing frequency and decreasing strength (fractal Brownian motion), adding fine detail on top of the broad shape."
                   />
                   <Slider
                     label="Octaves"
@@ -416,6 +481,7 @@ export function NoisePanel({
                     max={8}
                     step={1}
                     precision={0}
+                    description="How many layered copies to sum. More octaves add finer detail at a higher cost to compute."
                   />
                   <Slider
                     label="Persistence"
@@ -424,6 +490,7 @@ export function NoisePanel({
                     min={0}
                     max={1}
                     step={0.05}
+                    description="How much each added octave is scaled down from the last. Higher values keep fine detail loud relative to the broad shape."
                   />
                   <Slider
                     label="Lacunarity"
@@ -432,6 +499,7 @@ export function NoisePanel({
                     min={1}
                     max={4}
                     step={0.1}
+                    description="How much each added octave's frequency increases from the last. Higher values pack detail in tighter."
                   />
                 </div>
               )}
@@ -441,6 +509,7 @@ export function NoisePanel({
                     label="Enable"
                     value={selectedLayer.ridgedEnabled ?? false}
                     onChange={(value) => onUpdateSelectedLayer({ ridgedEnabled: value })}
+                    description="Folds the noise around its midpoint so values near zero become peaks, turning smooth rolling hills into sharp mountain ridges."
                   />
                   {/* ridge() has no natural continuous parameter of its own
                       to gate (unlike the other 3 modifiers' existing
@@ -454,6 +523,7 @@ export function NoisePanel({
                     min={0}
                     max={1}
                     step={0.01}
+                    description="Blends between the plain noise and the fully ridged version. 0 is unridged, 1 is fully folded into peaks."
                   />
                 </div>
               )}
@@ -463,6 +533,7 @@ export function NoisePanel({
                     label="Enable"
                     value={selectedLayer.terraceEnabled ?? false}
                     onChange={(value) => onUpdateSelectedLayer({ terraceEnabled: value })}
+                    description="Quantizes the noise into flat steps, giving terrain a stepped, terraced look instead of a smooth continuous slope."
                   />
                   <Slider
                     label="Terrace steps"
@@ -472,6 +543,7 @@ export function NoisePanel({
                     max={20}
                     step={1}
                     precision={0}
+                    description="How many flat steps the full height range is divided into. Fewer steps make each terrace taller and more pronounced."
                   />
                 </div>
               )}

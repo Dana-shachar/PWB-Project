@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import vertexShader from '../shaders/vertex.glsl?raw';
-import fragmentShader from '../shaders/fragment.glsl?raw';
+import fragmentShaderBody from '../shaders/fragment.glsl?raw';
+import terrainGlsl from '../shaders/terrain.glsl?raw'; // the elevation color ramp — shared with chunk.frag.glsl, see shaders/terrain.glsl
 import { CUBE_FACES, cubeFacePoint, type CubeFace } from './cubeFace';
+
+const fragmentShader = terrainGlsl + fragmentShaderBody;
 
 
 // The map wraps at longitude ±180°, and that wrap line crosses three of the
@@ -208,6 +211,21 @@ export function planet(radius = 20, segmentsPerFace = 32): THREE.Mesh {
       uLightDirection: { value: new THREE.Vector3(1, 1, 1) },
       // TODO(DS): arbitrary placeholder — future design-system token (ambient light level)
       uAmbient: { value: 0.15 },
+      uLightIntensity: { value: 1 },
+      uSpecularStrength: { value: 0.3 },
+      uShininess: { value: 24 },
+      uCameraPosition: { value: new THREE.Vector3() },
+      // Elevation color ramp — off by default so nothing changes until
+      // Dana turns it on. Placeholder defaults, not a design-system choice
+      // yet (Stage 11 is the real color stage). Low is uBaseColor itself,
+      // not a separate uniform — see shaders/terrain.glsl.
+      uColorByElevation: { value: 0 },
+      uColorMid: { value: new THREE.Color(0x6b8f4e) },
+      uColorHigh: { value: new THREE.Color(0xffffff) },
+      // Overwritten the first time the heightmap is baked (SceneCanvas.tsx)
+      // with this terrain's real low/high — placeholders only.
+      uElevationMin: { value: -0.5 },
+      uElevationMax: { value: 0.5 },
       uHeightMap: { value: flatHeightmapPlaceholder() },
       // TODO(DS): arbitrary placeholder — "global height" multiplier (Stage B, 2026-09-14 plan)
       uDisplacementAmplitude: { value: radius * 0.15 },

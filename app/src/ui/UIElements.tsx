@@ -15,6 +15,14 @@ interface SliderProps {
   snapIncrement?: number; // value snapped to when Cmd/Ctrl is held, default 1
   trackClassName?: string; // extra class on the range track, e.g. for a custom gradient
   disabled?: boolean; // e.g. a view-specific control while both viewport panes are selected, see ui/Panel.tsx
+  // What the control does and what its number means, shown on hover. A label
+  // and a number alone do not say what unit something is in or what moving it
+  // will change (Dana, 2026-10-13: "the menu settings tell me nothing").
+  description?: string;
+  // Overrides the field's default 36px width — for a value that genuinely
+  // needs more room, e.g. Erosion's Duration running to 7 digits, rather
+  // than widening every slider's field to fit the rare long one.
+  fieldWidth?: number;
 }
 
 // Blended slider: a visible draggable range track (from active-geometry's
@@ -34,6 +42,8 @@ export function Slider({
   snapIncrement = 1,
   trackClassName,
   disabled = false,
+  description,
+  fieldWidth,
 }: SliderProps) {
   const fieldRef = useRef<HTMLInputElement>(null);
 
@@ -96,7 +106,8 @@ export function Slider({
   }
 
   return (
-    <div className={'ui-slider-row' + (disabled ? ' ui-slider-row--disabled' : '')}>
+    <div className={'ui-slider-row ui-tooltip-anchor' + (disabled ? ' ui-slider-row--disabled' : '')}>
+      {description && <span className="ui-tooltip">{description}</span>}
       <label className="ui-slider-label">
         {label}
         {unit ? ` (${unit})` : ''}
@@ -115,6 +126,7 @@ export function Slider({
         ref={fieldRef}
         type="text"
         className="ui-slider-field"
+        style={fieldWidth ? { flexBasis: fieldWidth } : undefined}
         defaultValue={value.toFixed(precision)}
         key={value} // resync the field's displayed text whenever value changes externally
         onMouseDown={handleScrubberMouseDown}
@@ -152,19 +164,24 @@ interface ToggleProps {
   label: string;
   value: boolean;
   onChange: (value: boolean) => void;
+  description?: string; // shown on hover, same reason as Slider's
 }
 
-// Native checkbox, accent-colored — matches active-geometry's own checkbox
-// convention (js/uiDesign.js's `checkbox()` helper), not a custom pill/switch.
-export function Toggle({ label, value, onChange }: ToggleProps) {
+// A sliding pill switch, not a checkbox (Dana, 2026-10-14: a track with a
+// knob that slides side to side, the standard iOS/Material toggle). A real
+// <button> underneath (role="switch"), not a styled checkbox — the visual is
+// entirely CSS, see .ui-toggle-button in design.css.
+export function Toggle({ label, value, onChange, description }: ToggleProps) {
   return (
-    <div className="ui-toggle-row">
+    <div className="ui-toggle-row ui-tooltip-anchor">
+      {description && <span className="ui-tooltip">{description}</span>}
       <label className="ui-toggle-label">{label}</label>
-      <input
-        type="checkbox"
-        className="ui-toggle-checkbox"
-        checked={value}
-        onChange={(event) => onChange(event.target.checked)}
+      <button
+        type="button"
+        role="switch"
+        aria-checked={value}
+        className={'ui-toggle-button' + (value ? ' ui-toggle-button--on' : '')}
+        onClick={() => onChange(!value)}
       />
     </div>
   );
@@ -175,13 +192,15 @@ interface SelectProps {
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
+  description?: string; // shown on hover, same reason as Slider's
 }
 
 // Plain <select>, styled to match the panel's other controls — the React
 // equivalent of the gumball's vanilla-DOM view-preset dropdown.
-export function Select({ label, value, onChange, options }: SelectProps) {
+export function Select({ label, value, onChange, options, description }: SelectProps) {
   return (
-    <div className="ui-select-row">
+    <div className="ui-select-row ui-tooltip-anchor">
+      {description && <span className="ui-tooltip">{description}</span>}
       <label className="ui-select-label">{label}</label>
       <select className="ui-select" value={value} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (

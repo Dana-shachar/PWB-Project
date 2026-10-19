@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Slider, ColorPicker, Toggle, Select, Accordion, EditableText } from './UIElements';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
+import { DiceIcon, PaletteIcon } from './icons';
 
 // 'voxel' only affects the land-chunk view for now — a display style, not a
 // chunk-only feature (Dana, 2026-09-23), but the planet doesn't render
@@ -20,6 +21,14 @@ interface PanelProps {
   onLightDirXChange: (value: number) => void;
   lightDirY: number;
   onLightDirYChange: (value: number) => void;
+  lightDirZ: number;
+  onLightDirZChange: (value: number) => void;
+  lightIntensity: number;
+  onLightIntensityChange: (value: number) => void;
+  specularStrength: number;
+  onSpecularStrengthChange: (value: number) => void;
+  shininess: number;
+  onShininessChange: (value: number) => void;
   gridSpacing: number;
   onGridSpacingChange: (value: number) => void;
   gridVisible: boolean;
@@ -31,6 +40,23 @@ interface PanelProps {
   onBaseColorChange: (value: string) => void;
   displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
   onDisplayModeChange: (value: string) => void;
+  onRandomizeTerrain: () => void;
+  // Elevation color ramp (shaders/terrain.glsl) — folded directly into the
+  // Planet section under Base color, not a separate accordion (Dana,
+  // 2026-10-13: "these shouldn't be separated" the first time, then "why
+  // the f was this moved to the right" when it landed in the Terrain
+  // pipeline stage instead of here — "it should go here", the Planet
+  // section alongside Display/Radius/Resolution/Base color).
+  colorByElevation: boolean;
+  onColorByElevationChange: (value: boolean) => void;
+  colorMid: string;
+  onColorMidChange: (value: string) => void;
+  colorHigh: string;
+  onColorHighChange: (value: string) => void;
+  onRandomizeColors: () => void;
+  // Heightmap self-shadowing — a lighting feature, stays with Scene/Lighting.
+  shadowsEnabled: boolean;
+  onShadowsEnabledChange: (value: boolean) => void;
   // Which pane the shared Radius/Size slider currently drives — 'planet' or
   // 'landChunk' when exactly one is in view/selected, null when both panes
   // are selected in Split (a view-specific control, not a joint one like
@@ -57,6 +83,10 @@ interface PanelProps {
   onChunkResolutionChange: (value: number) => void;
   chunkSize: number;
   onChunkSizeChange: (value: number) => void;
+  // Planet mesh — segments per cube face, previously hardcoded with nothing
+  // able to reach it (Dana, 2026-10-13).
+  meshSegments: number;
+  onMeshSegmentsChange: (value: number) => void;
   // Pipeline-stage menu — the structural response to "reads as 3D software,
   // not a procedural system" feedback (Dana, 2026-09-30/2026-10-07; see
   // ROADMAP.md's Procedural System Feedback section). activeStage/
@@ -141,6 +171,14 @@ export function Panel({
   onLightDirXChange,
   lightDirY,
   onLightDirYChange,
+  lightDirZ,
+  onLightDirZChange,
+  lightIntensity,
+  onLightIntensityChange,
+  specularStrength,
+  onSpecularStrengthChange,
+  shininess,
+  onShininessChange,
   gridSpacing,
   onGridSpacingChange,
   gridVisible,
@@ -151,6 +189,16 @@ export function Panel({
   onBaseColorChange,
   displayMode,
   onDisplayModeChange,
+  onRandomizeTerrain,
+  colorByElevation,
+  onColorByElevationChange,
+  colorMid,
+  onColorMidChange,
+  colorHigh,
+  onColorHighChange,
+  onRandomizeColors,
+  shadowsEnabled,
+  onShadowsEnabledChange,
   activeViewContext,
   canUndo,
   onUndo,
@@ -169,6 +217,8 @@ export function Panel({
   onChunkResolutionChange,
   chunkSize,
   onChunkSizeChange,
+  meshSegments,
+  onMeshSegmentsChange,
   activeStage,
   onStageChange,
   stageEnabled,
@@ -277,6 +327,16 @@ export function Panel({
               min={0}
               max={0.5}
               step={0.01}
+              description="The fill light. How bright the unlit side stays. Lower means deeper shadows; 0 makes anything facing away from the light go black."
+            />
+            <Slider
+              label="Light intensity"
+              value={lightIntensity}
+              onChange={onLightIntensityChange}
+              min={0}
+              max={3}
+              step={0.05}
+              description="The key light's own strength. Raising this while Ambient light stays low is what separates a lit surface from shadow — the standard key-against-fill ratio."
             />
             <Slider
               label="X pos light"
@@ -285,6 +345,7 @@ export function Panel({
               min={-10}
               max={10}
               step={0.1}
+              description="Where the light sits left to right. Low values graze the terrain and cast long shading; high values light it flat on."
             />
             <Slider
               label="Y pos light"
@@ -293,6 +354,46 @@ export function Panel({
               min={-10}
               max={10}
               step={0.1}
+              description="Where the light sits up and down."
+            />
+            <Slider
+              label="Light elevation"
+              value={lightDirZ}
+              onChange={onLightDirZChange}
+              min={-10}
+              max={10}
+              step={0.1}
+              description="How high the light sits above the terrain. Near 0 is a grazing, low sun, which casts the longest shadows and shows the most relief — the look of a landscape photo near sunrise."
+            />
+            <Slider
+              label="Specular"
+              value={specularStrength}
+              onChange={onSpecularStrengthChange}
+              min={0}
+              max={1}
+              step={0.01}
+              description="How bright the highlight is where the surface catches the light directly. 0 removes it."
+            />
+            <Slider
+              label="Shininess"
+              value={shininess}
+              onChange={onShininessChange}
+              min={2}
+              max={128}
+              step={1}
+              precision={0}
+              description="How tight the highlight is. Low values spread it into a soft sheen; high values pull it into a small, sharp glint."
+            />
+            {/* A lighting feature (terrain blocking light from reaching
+                terrain behind it), not a terrain-generation one, so it sits
+                here rather than with the elevation color ramp, which moved
+                to the Terrain stage instead (ui/NoisePanel.tsx) — see
+                shaders/terrain.glsl. */}
+            <Toggle
+              label="Cast shadows"
+              value={shadowsEnabled}
+              onChange={onShadowsEnabledChange}
+              description="Terrain blocks the light from reaching terrain behind it, the way real relief does. Land chunk only for now — the planet's curved surface is a separate follow-up."
             />
             {/* TODO(DS): grid spacing range not borrowed from active-geometry — it has no shader-plane grid */}
             <Slider
@@ -315,11 +416,21 @@ export function Panel({
               "planet - size, resolution (sphere/ land chunk), color") — one
               Planet accordion, not a separate always-open "Chunk" section. */}
           <Accordion title="Planet">
+            {/* Same action as the Layers section's own Randomize (Dana,
+                2026-10-13: "add a random seed button at the top of the
+                planet section") — reseeds every layer at once, so it's
+                reachable from here too without hunting through the Terrain
+                stage. */}
+            <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={onRandomizeTerrain}>
+              <DiceIcon /> Randomize
+              <span className="ui-tooltip">Reseeds every layer's noise type, frequency, modifiers and more</span>
+            </button>
             <Select
               label="Display"
               value={displayMode}
               onChange={onDisplayModeChange}
               options={DISPLAY_MODE_OPTIONS}
+              description="Shaded is the real lit surface. Wireframe overlays the mesh's edges on top. Voxel gives the land chunk a blocky, cube-by-cube style (the planet doesn't render voxel yet)."
             />
             {/* One shared slider, not two — Radius (planet) and Size (chunk)
                 are the same kind of control (the view's physical scale), so
@@ -339,29 +450,73 @@ export function Panel({
               step={activeViewContext === 'landChunk' ? 1 : 100}
               precision={0}
               disabled={activeViewContext === null}
+              description={
+                activeViewContext === 'landChunk'
+                  ? 'How much ground the land chunk covers, in kilometers. Detail only comes from Resolution below, not from this.'
+                  : "The planet's physical radius, in kilometers. Select the planet or chunk pane to control that view's own scale."
+              }
             />
-            {/* Detail only — doesn't affect the footprint's physical size,
+            {/* Contextual, the same pattern as the Radius/Size slider above:
+                rebinds to whichever pane is in view rather than showing two
+                separate controls (Dana, 2026-10-13 — this is the same kind
+                of control in both places, how finely that pane's own mesh
+                is divided). The planet's own segment count was hardcoded at
+                32 with nothing able to reach it until now, which is what
+                gave the planet its faceted silhouette once displacement
+                pushed those few vertices out a long way.
+                Detail only — doesn't affect either pane's physical size,
                 which lives in the Radius/Size slider above (Dana,
-                2026-09-23: it used to, incidentally). Max raised
-                64→512→2048 — 512 wasn't a hard ceiling either, just not yet
-                pushed; true UHD (4096) is deliberately held back — the real
-                constraint isn't resolution alone but worst-case triangle
-                count for very noisy terrain, which at 4096 risks actually
-                crashing the tab, not just running slow. See ISSUES.md,
-                2026-09-23. No planet-side (sphere) resolution control
-                exists yet, so this still only drives the land chunk's own
-                resolution — labeled plainly rather than implying it
-                already covers both. */}
+                2026-09-23: it used to, incidentally, for the chunk). The
+                chunk's own max is 2048, matching MAX_PATCH_TEXTURE_RESOLUTION
+                (planet/patch.ts) — the real guaranteed WebGL2 texture-size
+                floor, a hardware-grounded ceiling now, not a round number,
+                for the GPU-only texture smooth/shaded mode bakes into. Past
+                2026-09-23's original
+                triangle-count worry: smooth mode's own mesh density is now
+                fixed regardless of this slider (voxel/landChunk.ts), so
+                that risk no longer applies there, only voxel mode's own
+                mesh still scales with resolution, bounded separately by
+                clampPatchSamples' own lower cap. See ISSUES.md, [B32]. The
+                planet's own range is far smaller: 6 faces at even a few
+                hundred segments each is already a lot of geometry, and a
+                cube-sphere's faceting is visible at far fewer segments than
+                the chunk's flat, close-up patch needs to look smooth. */}
             <Slider
               label="Resolution"
-              value={chunkResolution}
-              onChange={onChunkResolutionChange}
-              min={8}
-              max={2048}
-              step={8}
+              value={activeViewContext === 'landChunk' ? chunkResolution : meshSegments}
+              onChange={activeViewContext === 'landChunk' ? onChunkResolutionChange : onMeshSegmentsChange}
+              min={activeViewContext === 'landChunk' ? 8 : 8}
+              max={activeViewContext === 'landChunk' ? 2048 : 256}
+              step={activeViewContext === 'landChunk' ? 8 : 4}
               precision={0}
+              disabled={activeViewContext === null}
+              description={
+                activeViewContext === 'landChunk'
+                  ? "How finely the land chunk's own ground is measured. Independent of Size above — you can zoom into a low-resolution patch and still see it as low-resolution."
+                  : 'How many segments each of the six cube faces is divided into. Low values show as a faceted, low-poly sphere once displacement pushes vertices out.'
+              }
+            />
+            {/* Above all three color pickers, not between them (Dana,
+                2026-10-14) — it gates the whole group below, including Base
+                color, so it reads as that group's own header switch. A
+                labelled placeholder for Stage 11's real height+climate+
+                biome color shader (ROADMAP.md), not that shader itself. */}
+            <Toggle
+              label="Color by elevation"
+              value={colorByElevation}
+              onChange={onColorByElevationChange}
+              description="Blends Base color (low), Mid and High by height instead of the flat Base color alone. Off by default."
             />
             <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
+            <ColorPicker label="Mid" value={colorMid} onChange={onColorMidChange} />
+            <ColorPicker label="High" value={colorHigh} onChange={onColorHighChange} />
+            {/* Rotates a hue, it doesn't pick three independent random RGB
+                values — see planetControls.ts's randomTerrainPalette() for
+                the conventions this follows. */}
+            <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={onRandomizeColors}>
+              <PaletteIcon /> Randomize colors
+              <span className="ui-tooltip">Rotates a related hue for Base/Mid/High, not independent colors</span>
+            </button>
           </Accordion>
         </div>
 

@@ -2,16 +2,19 @@ import { useRef, useState } from 'react';
 import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { useSceneControls } from './scene/sceneControls';
 import { useSharedGumball } from './scene/sharedGumball';
+import { useSharedViewportRenderer } from './scene/sharedViewportRenderer';
 import { usePlanetControls } from './planet/planetControls';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
-import { usePanelResize } from './ui/panelResize';
+import { usePanelResize, useDockHeightResize } from './ui/panelResize';
 import { PIPELINE_STAGES, type PipelineStage } from './ui/pipelineStages';
 import { useNoiseLayers } from './map/noiseLayers';
 import { MapView } from './map/MapView';
 import { useBrush } from './map/2Dbrush';
 import { useCurrentUser } from './firebase/currentUser';
 import { useSaveProject } from './projectSettings/saveProject';
+import { useErosion } from './erosion/erosionControls';
+import { ErosionTimeline } from './erosion/ErosionTimeline';
 import { useLandChunk } from './voxel/landChunk';
 import { LandChunkCanvas, type LandChunkCanvasHandle } from './voxel/LandChunkCanvas';
 import { ViewModeControl } from './voxel/ViewModeControl';
@@ -28,11 +31,30 @@ function App() {
   const currentUser = useCurrentUser(); // signs in anonymously on load — see firebase/useCurrentUser.ts
   const sceneHandleRef = useRef<SceneCanvasHandle>(null);
   const landChunkHandleRef = useRef<LandChunkCanvasHandle>(null);
+  // Each pane's own layout box (.planet-viewport/.land-chunk-viewport below)
+  // doubles as its viewport rect for the one shared renderer, and as the DOM
+  // element its own OrbitControls listens on — see scene/
+  // sharedViewportRenderer.ts for why neither canvas owns these anymore.
+  const planetViewportRef = useRef<HTMLDivElement>(null);
+  const chunkViewportRef = useRef<HTMLDivElement>(null);
 
   const sceneControls = useSceneControls();
   const planetControls = usePlanetControls();
   const noiseLayers = useNoiseLayers(INITIAL_LAYER_ID);
   const brush = useBrush(sceneHandleRef);
+  // Declared before the land chunk, which consumes its result: erosion runs
+  // on the patch the chunk is showing, and that patch reaches it as a prop
+  // through the panel rather than the two hooks depending on each other.
+  const erosion = useErosion(sceneHandleRef, noiseLayers.layers, brush.paintVersion);
+  const landChunk = useLandChunk(
+    sceneHandleRef,
+    noiseLayers.layers,
+    planetControls.displayMode,
+    planetControls.heightScale,
+    erosion.result,
+  );
+  // Declared after erosion/landChunk, which it persists alongside layers and
+  // paint — see projectSettings/saveProject.ts.
   const project = useSaveProject({
     currentUser,
     sceneHandleRef,
@@ -41,9 +63,17 @@ function App() {
     setSelectedLayerIds: noiseLayers.setSelectedLayerIds,
     strokeHistory: brush.strokeHistory,
     setStrokeHistory: brush.setStrokeHistory,
+    erosion,
+    landChunk,
+    planetControls,
   });
-  const landChunk = useLandChunk(sceneHandleRef, noiseLayers.layers, planetControls.displayMode, planetControls.heightScale);
   const sharedGumball = useSharedGumball(sceneHandleRef, landChunkHandleRef, landChunk.viewMode);
+  // One real renderer for both panes, reusing sharedGumball's own mountRef
+  // (.app-viewport) as the container rather than attaching a second ref to
+  // the same element. This is also what makes a patch's baked GPU texture
+  // usable directly by the land chunk's own material again — see
+  // scene/sharedViewportRenderer.ts and ISSUES.md, [B32].
+  const sharedViewportRenderer = useSharedViewportRenderer(sharedGumball.mountRef);
   // Drives the shared Radius/Size slider (ui/Panel.tsx) — whichever pane is
   // singly in view/selected, or null (disabled) when both are selected in
   // Split, since that slider is view-specific, not a joint control.
@@ -83,7 +113,21 @@ function App() {
     setStageEnabled((previous) => ({ ...previous, [stage]: value }));
   }
 
+  // The global bottom timeline dock (design.css's .app-timeline-dock) — a
+  // full-width strip below the whole left/viewport/right row, not a widget
+  // inside RightPanel, matching the AE/Premiere/C4D convention (Dana,
+  // 2026-10-14). Mounts whenever the currently active stage is time-based,
+  // not hardcoded to Erosion, so a future stage reuses this by flipping
+  // PIPELINE_STAGES' hasTimeline rather than rebuilding the dock.
+  const activeStageHasTimeline = PIPELINE_STAGES.find((stage) => stage.key === activeStage)?.hasTimeline ?? false;
+  // Drag-to-resize for the dock's own height, same pattern as the side
+  // panels' own width resize, with a floor so it can't be dragged down to
+  // unusably small (Dana, 2026-10-14: "the timeline should be stretchable
+  // like the side panels are w a minimal height enforced").
+  const timelineDock = useDockHeightResize(240);
+
   return (
+    <div className="app-shell">
     <div className="app-layout">
       <Panel
         ambientLight={sceneControls.ambientLight}
@@ -92,6 +136,14 @@ function App() {
         onLightDirXChange={sceneControls.setLightDirX}
         lightDirY={sceneControls.lightDirY}
         onLightDirYChange={sceneControls.setLightDirY}
+        lightDirZ={sceneControls.lightDirZ}
+        onLightDirZChange={sceneControls.setLightDirZ}
+        lightIntensity={sceneControls.lightIntensity}
+        onLightIntensityChange={sceneControls.setLightIntensity}
+        specularStrength={sceneControls.specularStrength}
+        onSpecularStrengthChange={sceneControls.setSpecularStrength}
+        shininess={sceneControls.shininess}
+        onShininessChange={sceneControls.setShininess}
         gridSpacing={sceneControls.gridSpacing}
         onGridSpacingChange={sceneControls.setGridSpacing}
         gridVisible={sceneControls.gridVisible}
@@ -102,6 +154,16 @@ function App() {
         onBaseColorChange={planetControls.setBaseColor}
         displayMode={planetControls.displayMode}
         onDisplayModeChange={planetControls.setDisplayMode}
+        onRandomizeTerrain={noiseLayers.randomizeTerrain}
+        colorByElevation={planetControls.colorByElevation}
+        onColorByElevationChange={planetControls.setColorByElevation}
+        colorMid={planetControls.colorMid}
+        onColorMidChange={planetControls.setColorMid}
+        colorHigh={planetControls.colorHigh}
+        onColorHighChange={planetControls.setColorHigh}
+        onRandomizeColors={planetControls.randomizeColors}
+        shadowsEnabled={planetControls.shadowsEnabled}
+        onShadowsEnabledChange={planetControls.setShadowsEnabled}
         activeViewContext={activeViewContext}
         canUndo={brush.strokeHistory.length > 0}
         onUndo={brush.undo}
@@ -118,6 +180,8 @@ function App() {
         onDeleteProject={project.handleDeleteProject}
         chunkResolution={landChunk.resolution}
         onChunkResolutionChange={landChunk.setResolution}
+        meshSegments={planetControls.meshSegments}
+        onMeshSegmentsChange={planetControls.setMeshSegments}
         chunkSize={landChunk.chunkSize}
         onChunkSizeChange={landChunk.setChunkSize}
         activeStage={activeStage}
@@ -162,6 +226,7 @@ function App() {
         ) : (
           <>
             <div
+              ref={planetViewportRef}
               className={
                 'planet-viewport' +
                 (landChunk.viewMode === 'landChunk' ? ' viewport-pane--hidden' : '') +
@@ -176,20 +241,31 @@ function App() {
             >
               <SceneCanvas
                 ref={sceneHandleRef}
+                viewportRef={planetViewportRef}
+                sharedRenderer={sharedViewportRenderer}
                 radius={planetControls.radiusScene}
+                meshSegments={planetControls.meshSegments}
                 baseColor={planetControls.baseColor}
                 ambientLight={sceneControls.ambientLight}
                 lightDirX={sceneControls.lightDirX}
                 lightDirY={sceneControls.lightDirY}
+                lightDirZ={sceneControls.lightDirZ}
+                lightIntensity={sceneControls.lightIntensity}
+                specularStrength={sceneControls.specularStrength}
+                shininess={sceneControls.shininess}
                 displayMode={planetControls.displayMode}
                 gridSpacing={sceneControls.gridSpacing}
                 gridVisible={sceneControls.gridVisible}
                 layers={noiseLayers.layers}
                 heightScale={planetControls.heightScale}
+                colorByElevation={planetControls.colorByElevation}
+                colorMid={planetControls.colorMid}
+                colorHigh={planetControls.colorHigh}
               />
             </div>
             {landChunk.viewMode === 'split' && <div className="viewport-divider" onMouseDown={landChunk.startResize} />}
             <div
+              ref={chunkViewportRef}
               className={
                 'land-chunk-viewport' +
                 (landChunk.viewMode === 'planet' ? ' viewport-pane--hidden' : '') +
@@ -199,13 +275,30 @@ function App() {
             >
               <LandChunkCanvas
                 ref={landChunkHandleRef}
+                viewportRef={chunkViewportRef}
+                sharedRenderer={sharedViewportRenderer}
                 geometry={landChunk.geometry}
                 ambientLight={sceneControls.ambientLight}
                 lightDirX={sceneControls.lightDirX}
                 lightDirY={sceneControls.lightDirY}
+                lightDirZ={sceneControls.lightDirZ}
+                lightIntensity={sceneControls.lightIntensity}
+                specularStrength={sceneControls.specularStrength}
+                shininess={sceneControls.shininess}
                 gridSpacing={sceneControls.gridSpacing}
                 gridVisible={sceneControls.gridVisible}
                 baseColor={planetControls.baseColor}
+                heightMap={landChunk.heightMap}
+                heightMapResolution={landChunk.heightMapResolution}
+                heightMapGreenChannel={planetControls.displayMode !== 'voxel'}
+                chunkSize={landChunk.chunkSize}
+                maxHeight={landChunk.maxHeight}
+                colorByElevation={planetControls.colorByElevation}
+                colorMid={planetControls.colorMid}
+                colorHigh={planetControls.colorHigh}
+                elevationMin={landChunk.elevationMin}
+                elevationMax={landChunk.elevationMax}
+                shadowsEnabled={planetControls.shadowsEnabled}
               />
             </div>
             <ViewModeControl viewMode={landChunk.viewMode} onChange={landChunk.setViewMode} />
@@ -224,6 +317,7 @@ function App() {
         onRenameLayer={noiseLayers.renameLayer}
         onReorderLayer={noiseLayers.reorderLayer}
         onUpdateSelectedLayer={noiseLayers.updateSelectedLayer}
+        onRandomizeTerrain={noiseLayers.randomizeTerrain}
         brushRadiusPx={brush.brushRadiusPx}
         onBrushRadiusPxChange={brush.setBrushRadiusPx}
         brushValue={brush.brushValue}
@@ -237,8 +331,26 @@ function App() {
         onHeightScaleChange={planetControls.setHeightScale}
         isMapExpanded={isMapExpanded}
         onMapExpandedChange={setIsMapExpanded}
+        erosion={erosion}
+        erosionPatch={landChunk.patch}
+        chunkMeshResolution={landChunk.resolution}
         width={rightPanel.width}
       />
+    </div>
+    {activeStageHasTimeline && (
+      <>
+      <div className="app-timeline-dock-handle" onMouseDown={timelineDock.startResize} />
+      <div className="app-timeline-dock" style={{ height: timelineDock.height }}>
+        <ErosionTimeline
+          result={erosion.result}
+          onScrub={erosion.scrubTo}
+          isStale={erosion.isStale}
+          onRun={() => erosion.run(landChunk.patch)}
+          onReset={erosion.clear}
+        />
+      </div>
+      </>
+    )}
     </div>
   );
 }

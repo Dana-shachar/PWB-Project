@@ -21,9 +21,26 @@ function heightAt(heights: Uint32Array, x: number, z: number, resolution: number
 // size"). Vertical scale is untouched by `size` — height is already
 // independently governed by heightScale, baked into `heights` already
 // (see density.ts).
-function buildMesh(heights: Uint32Array, resolution: number, size: number): { positions: Float32Array; normals: Float32Array } {
+function buildMesh(
+  heights: Uint32Array,
+  resolution: number,
+  size: number,
+): { positions: Float32Array; normals: Float32Array; uvs: Float32Array; isTopSurfaces: Float32Array } {
   const positions: number[] = [];
   const normals: number[] = [];
+  // Zeros, not a real per-face mapping — voxel geometry doesn't carry the
+  // uv the elevation-color ramp and cast-shadow march need yet (unlike
+  // smoothMesh.ts), since the column faces don't correspond 1:1 with
+  // heightmap texels the way the smooth top surface's vertices do. Present
+  // only so the geometry always has the attribute the shared shader
+  // declares, rather than leaving it unbound.
+  const uvs: number[] = [];
+  // Always 1 — voxel's own elevation-ramp coloring is already a flat,
+  // known-placeholder limitation (the uv above), not something this new
+  // attribute changes; this only exists so the shared shader (chunk.vert.glsl/
+  // chunk.frag.glsl) always finds it bound, same reasoning as uvs above. See
+  // smoothMesh.ts, ISSUES.md [B32].
+  const isTopSurfaces: number[] = [];
   const horizontalOffset = resolution / 2;
   const cellSize = size / resolution;
 
@@ -33,6 +50,8 @@ function buildMesh(heights: Uint32Array, resolution: number, size: number): { po
   function pushTriangle(p0: [number, number, number], p1: [number, number, number], p2: [number, number, number], normal: [number, number, number]) {
     positions.push(...p0, ...p1, ...p2);
     normals.push(...normal, ...normal, ...normal);
+    uvs.push(0, 0, 0, 0, 0, 0);
+    isTopSurfaces.push(1, 1, 1);
   }
   function pushFlatQuad(p0: [number, number, number], p1: [number, number, number], p2: [number, number, number], p3: [number, number, number], normal: [number, number, number]) {
     pushTriangle(p0, p1, p2, normal);
@@ -86,7 +105,12 @@ function buildMesh(heights: Uint32Array, resolution: number, size: number): { po
   // Bottom cap — flat, spans the whole footprint, no subdivision needed.
   pushFlatQuad(point(0, 0, 0), point(resolution, 0, 0), point(resolution, 0, resolution), point(0, 0, resolution), [0, -1, 0]);
 
-  return { positions: new Float32Array(positions), normals: new Float32Array(normals) };
+  return {
+    positions: new Float32Array(positions),
+    normals: new Float32Array(normals),
+    uvs: new Float32Array(uvs),
+    isTopSurfaces: new Float32Array(isTopSurfaces),
+  };
 }
 
 // Sidesteps a real TS lib conflict: the project's shared tsconfig includes
@@ -100,6 +124,6 @@ const workerScope = self as unknown as {
 };
 
 workerScope.onmessage = (event) => {
-  const { positions, normals } = buildMesh(event.data.heights, event.data.resolution, event.data.size);
-  workerScope.postMessage({ positions, normals }, [positions.buffer, normals.buffer]);
+  const { positions, normals, uvs, isTopSurfaces } = buildMesh(event.data.heights, event.data.resolution, event.data.size);
+  workerScope.postMessage({ positions, normals, uvs, isTopSurfaces }, [positions.buffer, normals.buffer, uvs.buffer, isTopSurfaces.buffer]);
 };

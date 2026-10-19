@@ -2,6 +2,10 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { User } from 'firebase/auth';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 import { createDefaultLayer, migrateLegacyLayers, type NoiseLayer, type StrokeRecord } from '../map/heightmap';
+import { deserializePatch, serializePatch, type TerrainPatch } from '../planet/patch';
+import type { useErosion } from '../erosion/erosionControls';
+import type { useLandChunk } from '../voxel/landChunk';
+import { DEFAULT_PLANET_SETTINGS, type usePlanetControls } from '../planet/planetControls';
 import {
   deleteProject as deleteProjectFromFirestore,
   listProjects,
@@ -10,6 +14,7 @@ import {
   renameProject,
   saveProject as saveProjectToFirestore,
   type ProjectSummary,
+  type SavedErosionRun,
 } from '../firebase/storage';
 
 interface UseSaveProjectArgs {
@@ -24,6 +29,31 @@ interface UseSaveProjectArgs {
   setSelectedLayerIds: (ids: string[]) => void;
   strokeHistory: StrokeRecord[];
   setStrokeHistory: (strokeHistory: StrokeRecord[]) => void;
+  // The erosion stage's own hook, and the land chunk's — passed whole,
+  // same reasoning ui/RightPanel.tsx already uses for erosion: it's one
+  // hook's result being handed to another piece of the app, not a dozen
+  // separate props. Erosion is saved as the run's own settings and which
+  // patch it covered, replayed on load, not as raw simulation state — see
+  // firebase/storage.ts's SavedErosionRun for why.
+  erosion: ReturnType<typeof useErosion>;
+  landChunk: ReturnType<typeof useLandChunk>;
+  // Display, Radius, Resolution, Height, the color ramp, Cast shadows — see
+  // firebase/storage.ts's PlanetSettings for why this is saved per-project
+  // now instead of leaking between planets.
+  planetControls: ReturnType<typeof usePlanetControls>;
+}
+
+// What erosion persists, or null if no run exists yet — shared by every
+// save site below rather than repeating the same three lines each time.
+function currentErosionRun(erosion: ReturnType<typeof useErosion>, patch: TerrainPatch): SavedErosionRun | null {
+  if (!erosion.result) return null;
+  return {
+    rates: erosion.rates,
+    durationYears: erosion.durationYears,
+    gridResolution: erosion.gridResolution,
+    seaLevel: erosion.seaLevel,
+    patch: serializePatch(patch),
+  };
 }
 
 // A generic, always-present name for a newly-created planet — "New Planet
@@ -49,7 +79,7 @@ async function createFreshProject(
 ): Promise<ProjectSummary> {
   const id = newProjectId();
   const name = generateProjectName(existingCount);
-  await saveProjectToFirestore(uid, id, { name, layers, strokeHistory: [] });
+  await saveProjectToFirestore(uid, id, { name, layers, strokeHistory: [], erosionRun: null, planetSettings: DEFAULT_PLANET_SETTINGS });
   setCurrentPlanetId(id);
   setCurrentPlanetName(name);
   return { id, name, updatedAt: Date.now() };
@@ -67,6 +97,9 @@ export function useSaveProject({
   setSelectedLayerIds,
   strokeHistory,
   setStrokeHistory,
+  erosion,
+  landChunk,
+  planetControls,
 }: UseSaveProjectArgs) {
   const hasLoadedRef = useRef(false); // guards against saving the default layer over real saved data before the load below resolves
   // Which saved planet is open. null = a fresh, not-yet-saved planet — see
@@ -99,6 +132,21 @@ export function useSaveProject({
           setStrokeHistory(project.strokeHistory);
           setCurrentPlanetId(mostRecent.id);
           setCurrentPlanetName(project.name);
+          // Erosion is replayed, not loaded from stored state (see
+          // firebase/storage.ts's SavedErosionRun) — the same patch, rates
+          // and duration always erode the same way, so running it again
+          // reproduces the result exactly.
+          if (project.erosionRun) {
+            const patch = deserializePatch(project.erosionRun.patch);
+            landChunk.setPatch(patch);
+            erosion.loadSavedRun(project.erosionRun, patch);
+          } else {
+            erosion.clear();
+          }
+          // null only for saves made before planetSettings existed — the
+          // real defaults, not whatever's currently in memory, same
+          // reasoning as erosion.clear() just above.
+          planetControls.applySettings(project.planetSettings ?? DEFAULT_PLANET_SETTINGS);
         }
       } else {
         const fresh = await createFreshProject(currentUser.uid, 0, layers, setCurrentPlanetId, setCurrentPlanetName);
@@ -124,10 +172,34 @@ export function useSaveProject({
         name: currentPlanetName ?? 'Untitled',
         layers,
         strokeHistory,
+        erosionRun: currentErosionRun(erosion, landChunk.patch),
+        planetSettings: planetControls.currentSettings(),
       });
     }, 3000);
     return () => clearTimeout(timeoutId);
-  }, [layers, strokeHistory, currentUser, currentPlanetId, currentPlanetName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- erosion/landChunk/planetControls are read fresh each call (closes over the latest render's values at the moment the timeout fires, same debounce pattern layers/strokeHistory already use); adding every one of their fields to deps would just restart the 3s debounce on every scrub or slider drag, which isn't a meaningful edit to persist mid-drag.
+  }, [
+    layers,
+    strokeHistory,
+    currentUser,
+    currentPlanetId,
+    currentPlanetName,
+    erosion.result,
+    erosion.rates,
+    erosion.durationYears,
+    erosion.gridResolution,
+    erosion.seaLevel,
+    landChunk.patch,
+    planetControls.radiusKm,
+    planetControls.baseColor,
+    planetControls.displayMode,
+    planetControls.heightScale,
+    planetControls.meshSegments,
+    planetControls.colorByElevation,
+    planetControls.colorMid,
+    planetControls.colorHigh,
+    planetControls.shadowsEnabled,
+  ]);
 
   // Shared by handleNewProject() and handleReset() — clears the canvas to
   // one blank default layer, no paint. Callers decide separately whether
@@ -141,6 +213,8 @@ export function useSaveProject({
     setLayers(freshLayers);
     setSelectedLayerIds([freshId]);
     setStrokeHistory([]);
+    erosion.clear(); // otherwise a previous planet's run would linger onto a blank one
+    planetControls.resetToDefaults(); // same reasoning — Display/Radius/colors shouldn't leak in either
     return freshLayers;
   }
 
@@ -176,6 +250,14 @@ export function useSaveProject({
     setStrokeHistory(project.strokeHistory);
     setCurrentPlanetId(id);
     setCurrentPlanetName(project.name);
+    if (project.erosionRun) {
+      const patch = deserializePatch(project.erosionRun.patch);
+      landChunk.setPatch(patch);
+      erosion.loadSavedRun(project.erosionRun, patch);
+    } else {
+      erosion.clear();
+    }
+    planetControls.applySettings(project.planetSettings ?? DEFAULT_PLANET_SETTINGS);
   }
 
   // Manual "just in case" save — the current planet is always already
@@ -187,6 +269,8 @@ export function useSaveProject({
       name: currentPlanetName ?? 'Untitled',
       layers,
       strokeHistory,
+      erosionRun: currentErosionRun(erosion, landChunk.patch),
+      planetSettings: planetControls.currentSettings(),
     });
     setProjects(await listProjects(currentUser.uid));
   }

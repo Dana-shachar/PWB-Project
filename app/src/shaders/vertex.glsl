@@ -4,6 +4,9 @@ varying vec2 vUv;
 // its tangent basis from this instead of from UV. See ISSUES.md,
 // "Planet Mesh / Adaptive Resolution".
 varying vec3 vSphereDirection;
+// World-space position of the displaced surface, for the specular term's
+// view direction (Blinn-Phong needs both the light and the eye).
+varying vec3 vWorldPosition;
 
 uniform sampler2D uHeightMap;
 uniform float uDisplacementAmplitude;
@@ -19,5 +22,6 @@ void main() {
   float elevation = texture2D(uHeightMap, uv).g;
   vec3 displaced = position + normal * elevation * uDisplacementAmplitude;
 
+  vWorldPosition = (modelMatrix * vec4(displaced, 1.0)).xyz;
   gl_Position = projectionMatrix * modelViewMatrix * vec4(displaced, 1.0);
 }

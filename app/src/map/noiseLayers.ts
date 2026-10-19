@@ -1,5 +1,21 @@
 import { useRef, useState } from 'react';
-import { createDefaultLayer, type NoiseLayer } from './heightmap';
+import { createDefaultLayer, NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer } from './heightmap';
+
+function randomInRange(min: number, max: number): number {
+  return min + Math.random() * (max - min);
+}
+
+function randomInt(min: number, max: number): number {
+  return Math.round(randomInRange(min, max));
+}
+
+function randomFrom<T>(options: T[]): T {
+  return options[Math.floor(Math.random() * options.length)];
+}
+
+// Never picked for a random layer — "randomize" producing a layer that
+// contributes nothing would be the one disappointing result out of the set.
+const RANDOMIZABLE_NOISE_TYPES = NOISE_TYPE_OPTIONS.map((option) => option.value).filter((value) => value !== 'none');
 
 function formatLayerName(number: number): string {
   return `Layer ${String(number).padStart(2, '0')}`;
@@ -86,6 +102,44 @@ export function useNoiseLayers(initialLayerId: string) {
     setLayers(layers.map((layer) => (layer.id === id ? { ...layer, visible: !layer.visible } : layer)));
   }
 
+  // Randomizes every generation parameter on every layer at once, independent
+  // of selection — not just the seed (Dana, 2026-10-13: "i need it to
+  // randomize everything, not just current layer seed noise"). Every range
+  // matches the slider it belongs to in ui/NoisePanel.tsx exactly, so a
+  // randomized value is never one a person couldn't have dragged to
+  // themselves. Pressing it is meant to produce a different world in one
+  // gesture, the most direct demonstration that this is a procedural system
+  // rather than hand-authored terrain. A bigger theme-generation feature
+  // (wetness, tectonics and the rest mapped from continuous axes by one
+  // formula) is tracked separately in ROADMAP.md's Procedural System
+  // Feedback section — this is plain uniform randomization, not that.
+  //
+  // Left alone on purpose: `visible` (a layer silently vanishing would read
+  // as broken, not as a new world) and identity fields (`id`, `name`).
+  function randomizeTerrain() {
+    setLayers(
+      layers.map((layer) => ({
+        ...layer,
+        noiseType: randomFrom(RANDOMIZABLE_NOISE_TYPES),
+        seed: randomInt(0, 1000),
+        frequency: randomInRange(0.5, 20),
+        domainWarpEnabled: Math.random() < 0.5,
+        warpStrength: randomInRange(0, 4),
+        octavesEnabled: Math.random() < 0.5,
+        octaves: randomInt(1, 8),
+        persistence: randomInRange(0, 1),
+        lacunarity: randomInRange(1, 4),
+        ridgedEnabled: Math.random() < 0.5,
+        ridgeAmount: randomInRange(0, 1),
+        terraceEnabled: Math.random() < 0.5,
+        terraceSteps: randomInt(2, 20),
+        opacity: randomInRange(0, 1),
+        heightScale: randomInRange(0, 10),
+        blendMode: randomFrom(BLEND_MODE_OPTIONS.map((option) => option.value)),
+      })),
+    );
+  }
+
   return {
     layers,
     setLayers,
@@ -98,5 +152,6 @@ export function useNoiseLayers(initialLayerId: string) {
     updateSelectedLayer,
     toggleLayerVisible,
     renameLayer,
+    randomizeTerrain,
   };
 }

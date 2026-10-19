@@ -197,16 +197,19 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 
 A detail view into one piece of the planet, shown beside the globe, with a blocky or smooth render style. Syllabus-required, sequenced before Erosion at Dana's call.
 
-#### 07.1 · Terrain patches · 90%
+#### 07.1 · Terrain patches · 95%
 🧭 The chunk is a terrain patch drawn flat: the same unit the planet is made of, not a separate pipeline sampling a shared map. A patch is a cube face, a rectangle on it, and a depth, with its own heightmap. Follows how globe renderers work, where the whole surface is tiles and detail comes from descending rather than from bigger textures. Sources in `REFERENCES.md`.
 
 > **✅ Done**
 > - The chunk reads its own patch, so its Resolution reaches real detail instead of enlarging a small window of a shared map (2026-10-13).
 > - **🧭 Resolution and footprint are separate.** Resolution is how finely a patch's ground is measured; depth is which ground it covers (2026-10-13).
 > - **Picking.** Double-clicking the planet chooses which piece the chunk shows, replacing a hardcoded spot (2026-10-13).
+> - **The planet itself now renders as patches too** (`[B28]` in `ISSUES.md`), not just the chunk: camera-distance-based subdivision (CDLOD-style), per-patch baking, same-face seam balancing plus edge skirts. Built 2026-10-17, not yet visually verified by Dana. Cross-face seam balancing and a patches-aware Wireframe mode are known, flagged gaps, not done this pass.
 >
 > **📋 To do**
 > - **❓ Footprint control.** How much ground the chunk covers has no control in the panel yet. Naming and placement are Dana's call. Not the same as the gumball's zoom, which moves the camera.
+> - **Cross-face seam balancing** for the planet's own patches, and a patches-aware Wireframe overlay, see `[B28]`.
+> - **Re-enable `USE_PLANET_PATCHES`.** Currently hardcoded `false` (`SceneCanvas.tsx`) after the near-black-render/freeze regression, see `[B28]`'s own "Regression" note. Diagnose that for real, fix it, flip the flag back, this is what actually restores the planet's resolution past the old fallback mesh's 256-segment ceiling, agreed next after the chunk color/shadow work (2026-10-19).
 
 #### 07.2 · Voxel meshing pipeline · 90%
 > **✅ Done**
@@ -230,7 +233,8 @@ A detail view into one piece of the planet, shown beside the globe, with a block
 > - **🧭 The chunk shades through the planet's lighting model** rather than Three.js's standard material, so the Scene controls mean the same thing in both views and the intensity-rescaling hacks are gone (2026-10-13).
 >
 > **📋 To do**
-> - **Cast shadows.** Implement once in GLSL, shared by both views, now that they share a lighting model.
+> - **Cast shadows.** Implement once in GLSL, shared by both views, now that they share a lighting model. Land chunk side already built (`terrain.glsl`'s `heightmapShadow`); planet side still outstanding. Separately, the land chunk's own shadows read as too hard-edged, see `[B35]`.
+> - **Gradient color-ramp picker.** A multi-stop editor for the elevation ramp (Figma/Blender Color Ramp/World Machine-style), replacing the current fixed low/mid/high three-stop control. Agreed, not yet scoped at the file level (2026-10-19).
 > - **⏸️ Camera auto-framing.** Not a priority, since the gumball's zoom compensates.
 
 #### 07.5 · Shared gumball · 95%
@@ -240,19 +244,22 @@ A detail view into one piece of the planet, shown beside the globe, with a block
 ---
 
 ## Stage 08 · Erosion Simulation
-░░░░░░░░░░ 0%
+▓▓▓▓▓▓▓░░░ 70%
 
 *Wearing the terrain down over time, as the first real simulation in the pipeline.*
 
 Hydraulic and thermal erosion over time, with a way to scrub its progression. Syllabus-required.
 
-> **📋 To do**
-> - **Built as a general engine** `[S??]`, parameterized by intensity, duration, location and direction, so Stage 13 reuses it rather than needing separate hand-built disaster effects.
+> **✅ Done**
 > - **Grid-based** `[S25]`, following Mei, Decaudin and Hu, since droplets need scattered writes that WebGL handles badly.
-> - **Hydraulic first, thermal second.** Decided 2026-09-23.
 > - **Manual trigger**, a Run button rather than live.
-> - **Real controls** over water, sediment and the rest. Not a black box.
-> - **Timeline** `[S26]` `[S27]`: a bottom strip whose unit follows its zoom, scrubbing recorded frames rather than reversing the simulation. Plays whichever stages are enabled.
+> - **Real controls** over water, sediment rates and duration. Not a black box.
+> - **Checkpointing and scrubbing**, both a basic run and recorded-frame checkpoints to scrub through, engine-side.
+
+> **📋 To do**
+> - **Generalize as a reusable engine** `[S??]`, parameterized by intensity, duration, location and direction, so Stage 13 reuses it rather than needing separate hand-built disaster effects. The core solver exists; this reuse hasn't been built or exercised yet.
+> - **Thermal erosion.** Hydraulic first, thermal second, decided 2026-09-23; thermal itself isn't built.
+> - **Timeline** `[S26]` `[S27]`: the actual bottom-strip UI, a zoom-aware unit ladder and cache bar, scrubbing the recorded frames the engine already supports rather than reversing the simulation. In progress now.
 
 ---
 
@@ -332,6 +339,13 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 #### 14.3 · Wireframe overlay accuracy · 0%
 > **📋 To do**
 > - **Overlay doesn't track displacement.** It is built from undisplaced geometry, so it does not follow the real terrain. Fix is to give it its own shader sampling the same heightmap.
+
+#### 14.4 · Icons and typography · 50%
+> **✅ Done**
+> - **Emoji icons replaced** (🎲 Randomize, 🎨 Randomize colors, 👁 visibility) with real flat SVG icons, no library (2026-10-14).
+
+> **📋 To do**
+> - **Organize typography.** Not yet scoped, needs its own plan before it's buildable (Dana, 2026-10-13: "typography needs organizing for sure").
 
 ---
 

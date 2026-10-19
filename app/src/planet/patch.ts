@@ -42,6 +42,21 @@ export function clampPatchSamples(samples: number): number {
   return Math.min(MAX_PATCH_SAMPLES, Math.max(17, Math.round(samples)));
 }
 
+// A separate, much higher ceiling for a patch's *display* texture, used only
+// where the result stays entirely GPU-side (never read back to the CPU) —
+// the land chunk's smooth-mesh display, since the planet and the chunk now
+// share one renderer/context (scene/sharedViewportRenderer.ts). MAX_PATCH_
+// SAMPLES above still governs anything that does get read back (the color
+// ramp's min/max, the voxel mesh's own CPU data), a real, different cost.
+// 2048 is the real guaranteed WebGL2 texture-size floor (not a guess), this
+// one's actually a hardware-grounded ceiling, not a round number picked by
+// eye. See ISSUES.md, [B32].
+export const MAX_PATCH_TEXTURE_RESOLUTION = 2048;
+
+export function clampPatchTextureResolution(resolution: number): number {
+  return Math.min(MAX_PATCH_TEXTURE_RESOLUTION, Math.max(17, Math.round(resolution)));
+}
+
 // Depth is capped so a runaway value can't ask for an absurd number of
 // patches. At depth 8 a face is split 256 ways per axis, which is far more
 // than anything currently reaches.
@@ -129,4 +144,28 @@ export function patchCenterDirection(patch: TerrainPatch): THREE.Vector3 {
   const centerU = (patch.min.x + patch.max.x) / 2;
   const centerV = (patch.min.y + patch.max.y) / 2;
   return cubeFacePoint(patch.face, centerU, centerV).normalize();
+}
+
+// A patch, but with plain {x,y} objects instead of THREE.Vector2 instances —
+// what a patch looks like once it has to survive a round trip through
+// Firestore, which stores plain data, not class instances with methods.
+// See firebase/storage.ts's SavedErosionRun.
+export interface SerializedPatch {
+  face: CubeFace;
+  min: { x: number; y: number };
+  max: { x: number; y: number };
+  depth: number;
+}
+
+export function serializePatch(patch: TerrainPatch): SerializedPatch {
+  return { face: patch.face, min: { x: patch.min.x, y: patch.min.y }, max: { x: patch.max.x, y: patch.max.y }, depth: patch.depth };
+}
+
+export function deserializePatch(serialized: SerializedPatch): TerrainPatch {
+  return {
+    face: serialized.face,
+    min: new THREE.Vector2(serialized.min.x, serialized.min.y),
+    max: new THREE.Vector2(serialized.max.x, serialized.max.y),
+    depth: serialized.depth,
+  };
 }

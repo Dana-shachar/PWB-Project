@@ -10,9 +10,13 @@
 // with the general settings instead (ROADMAP.md, Stage 11).
 export type PipelineStage = 'terrain' | 'erosion' | 'climate' | 'biome' | 'population' | 'events';
 
-export const PIPELINE_STAGES: { key: PipelineStage; label: string }[] = [
+// hasTimeline: whether this stage's content plays out over time and gets the
+// global bottom timeline dock (App.tsx) rather than a static settings panel.
+// Only Erosion has real timeline content today; a future time-based stage
+// (Climate, Events) just flips this on rather than rebuilding the dock.
+export const PIPELINE_STAGES: { key: PipelineStage; label: string; hasTimeline?: boolean }[] = [
   { key: 'terrain', label: 'Terrain' },
-  { key: 'erosion', label: 'Erosion' },
+  { key: 'erosion', label: 'Erosion', hasTimeline: true },
   { key: 'climate', label: 'Climate' },
   { key: 'biome', label: 'Biome' },
   { key: 'population', label: 'Population' },

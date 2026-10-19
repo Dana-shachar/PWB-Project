@@ -1,46 +1,37 @@
 import * as THREE from 'three';
-import { sampleChunkElevation, type ElevationData } from './chunkGrid';
 
-// A smooth, continuously-displaced alternative to the voxel mesh — same
-// sampled region and vertical scale as density.ts's buildChunkHeights().
-// Extruded
-// down to a solid slab (skirt walls + a bottom cap, not just a bare
-// surface) so it sits grounded on the grid like the voxel version does,
-// rather than floating as a thin disconnected sheet (Dana, 2026-09-23:
-// "it's flat and sits on top, not at the grid level"). Computed directly
-// on the main thread, not a Worker — cheap enough that the extra file/
-// message-passing overhead isn't worth it, unlike the voxel mesh's
-// per-voxel face-culling work.
+// A smooth chunk's geometry, built *flat* — the top surface's real height
+// is no longer baked in here at all. It comes from a vertex shader sampling
+// the patch's own heightmap texture directly (chunk.vert.glsl), the same
+// vertex-texture-fetch technique vertex.glsl already uses for the planet,
+// so the chunk's displayed detail is only the heightmap texture's own
+// resolution, never the CPU-readback cost that used to cap it (see
+// ISSUES.md, [B32]). Extruded down to a solid slab (skirt walls + a bottom
+// cap, not just a bare surface) so it sits grounded on the grid like the
+// voxel version does, rather than floating as a thin disconnected sheet
+// (Dana, 2026-09-23: "it's flat and sits on top, not at the grid level").
+//
+// The new `displace` attribute (1 or 0) tells chunk.vert.glsl which
+// vertices to actually sample-and-displace: the top surface and the
+// skirt walls' own top edge (which shares the top surface's exact uv at
+// that boundary, so it moves by the identical amount and never opens a
+// seam), versus the walls' bottom edge and the bottom cap, which stay
+// fixed at baseDepth and never move, same as before this change.
+//
 // `heightScale` is independent of `resolution` (Dana, 2026-09-23 — see
 // density.ts's own note; the same fix applies here). `size` is the
 // footprint's world-space width/depth, also independent of `resolution` —
 // resolution only controls how finely that fixed-size footprint is
 // subdivided (Dana, 2026-09-23: "the res should affect detail level, not size").
-export function buildSmoothChunkGeometry(elevationData: ElevationData, resolution: number, heightScale: number, size: number): THREE.BufferGeometry {
-  const verticesPerAxis = resolution + 1; // N+1 vertices make N quads per axis
+export function buildSmoothChunkGeometry(resolution: number, size: number): THREE.BufferGeometry {
   const cellSize = size / resolution; // world units per voxel column
   const horizontalOffset = resolution / 2;
 
-  function heightIndex(x: number, z: number): number {
-    return z * verticesPerAxis + x;
-  }
-
-  const heights = new Float32Array(verticesPerAxis * verticesPerAxis);
-  for (let z = 0; z < verticesPerAxis; z++) {
-    for (let x = 0; x < verticesPerAxis; x++) {
-      // +0.5 recenters elevation onto the old 0..1 convention this function
-      // was built around; clamped at 0 (not just scaled) since the skirt-
-      // wall grounding below assumes the top surface never dips below the
-      // y=0 base — elevation can now go negative (see density.ts's same fix).
-      const heightNormalized = Math.max(0, sampleChunkElevation(elevationData, x, z, resolution) + 0.5);
-      heights[heightIndex(x, z)] = heightNormalized * heightScale; // same vertical scale as the voxel version
-    }
-  }
-  function heightAt(x: number, z: number): number {
-    return heights[heightIndex(Math.min(verticesPerAxis - 1, Math.max(0, x)), Math.min(verticesPerAxis - 1, Math.max(0, z)))];
-  }
+  // y is a placeholder (0) for every displaced vertex — the shader sets the
+  // real height from the heightmap, this geometry only carries where a
+  // vertex sits in x/z and whether it should be displaced at all.
   function topPoint(x: number, z: number): THREE.Vector3 {
-    return new THREE.Vector3((x - horizontalOffset) * cellSize, heightAt(x, z), (z - horizontalOffset) * cellSize);
+    return new THREE.Vector3((x - horizontalOffset) * cellSize, 0, (z - horizontalOffset) * cellSize);
   }
   // The base sits below zero rather than at it. Terrain height clamps at
   // zero above, so with a base at zero too, every flat-bottomed area put the
@@ -53,42 +44,106 @@ export function buildSmoothChunkGeometry(elevationData: ElevationData, resolutio
   function bottomPoint(x: number, z: number): THREE.Vector3 {
     return new THREE.Vector3((x - horizontalOffset) * cellSize, baseDepth, (z - horizontalOffset) * cellSize);
   }
-  // Standard central-difference heightmap normal — smaller height where a
-  // neighbor is higher tilts the normal away from it. Hand-derived, not
-  // copied from an external source (same reasoning as meshWorker.ts's face
-  // table — a directly-derivable geometric fact, not a citable algorithm).
-  function topNormal(x: number, z: number): THREE.Vector3 {
-    const dHeightDx = (heightAt(x + 1, z) - heightAt(x - 1, z)) / 2;
-    const dHeightDz = (heightAt(x, z + 1) - heightAt(x, z - 1)) / 2;
-    return new THREE.Vector3(-dHeightDx, 1, -dHeightDz).normalize();
-  }
+  // The top surface's real per-vertex normal can no longer be derived here
+  // at all — its height isn't known until the vertex shader samples the
+  // heightmap. (0,1,0) is just a placeholder; chunk.frag.glsl rebuilds the
+  // real, slope-aware normal itself from the same heightmap's gradient,
+  // for every displaced fragment, at the texture's own resolution rather
+  // than this mesh's vertex density — see chunk.vert.glsl/chunk.frag.glsl.
+  const UP = new THREE.Vector3(0, 1, 0);
 
   const positions: number[] = [];
   const normals: number[] = [];
-  function pushTriangle(p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, n0: THREE.Vector3, n1: THREE.Vector3, n2: THREE.Vector3) {
+  // Matches sampleChunkElevation's old normalization (x/resolution,
+  // z/resolution) convention — shared by the elevation-color ramp and the
+  // cast-shadow march, both of which need to read the raw heightmap at an
+  // arbitrary point, not just at a vertex. See landChunk.ts and
+  // shaders/terrain.glsl.
+  const uvs: number[] = [];
+  // 1 = chunk.vert.glsl samples the heightmap and displaces this vertex
+  // (the top surface, and the skirt walls' own top edge); 0 = stays fixed
+  // at whatever y this geometry already gives it (the walls' bottom edge,
+  // the bottom cap).
+  const displaceFlags: number[] = [];
+  // 1 for every vertex of a top-surface triangle, 0 for every vertex of a
+  // wall or cap triangle — unlike `displace`, never mixed within one
+  // triangle, so chunk.frag.glsl can pick a color source by this with no
+  // interpolation seam (a wall's own top edge still needs displace=1 for
+  // positioning, but isTopSurface=0 for coloring — two different
+  // questions). See ISSUES.md, [B32].
+  const topSurfaceFlags: number[] = [];
+  function uvAt(x: number, z: number): [number, number] {
+    return [x / resolution, z / resolution];
+  }
+  function pushTriangle(
+    p0: THREE.Vector3,
+    p1: THREE.Vector3,
+    p2: THREE.Vector3,
+    n0: THREE.Vector3,
+    n1: THREE.Vector3,
+    n2: THREE.Vector3,
+    uv0: [number, number],
+    uv1: [number, number],
+    uv2: [number, number],
+    d0: number,
+    d1: number,
+    d2: number,
+    isTop: number,
+  ) {
     positions.push(p0.x, p0.y, p0.z, p1.x, p1.y, p1.z, p2.x, p2.y, p2.z);
     normals.push(n0.x, n0.y, n0.z, n1.x, n1.y, n1.z, n2.x, n2.y, n2.z);
+    uvs.push(...uv0, ...uv1, ...uv2);
+    displaceFlags.push(d0, d1, d2);
+    topSurfaceFlags.push(isTop, isTop, isTop);
   }
-  function pushFlatQuad(p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3, normal: THREE.Vector3) {
-    pushTriangle(p0, p1, p2, normal, normal, normal);
-    pushTriangle(p0, p2, p3, normal, normal, normal);
+  // The bottom cap doesn't correspond to any one heightmap texel — (0, 0)
+  // is an arbitrary but harmless choice, same reasoning as giving it a flat
+  // shared normal.
+  const NO_UV: [number, number] = [0, 0];
+  function pushFlatCapQuad(p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3, normal: THREE.Vector3) {
+    pushTriangle(p0, p1, p2, normal, normal, normal, NO_UV, NO_UV, NO_UV, 0, 0, 0, 0);
+    pushTriangle(p0, p2, p3, normal, normal, normal, NO_UV, NO_UV, NO_UV, 0, 0, 0, 0);
+  }
+  // A skirt-wall quad: its *top* two points sit on the top surface's own
+  // edge, so they carry that same real uv and get displaced identically,
+  // never opening a seam against the surface they're meant to meet; its
+  // *bottom* two points stay fixed at baseDepth (displace=0), same as the
+  // cap, but carry their own column's real uv too, not the placeholder
+  // corner — a bottom vertex interpolating toward (0,0) made the fragment
+  // shader's sampled point slide diagonally across the whole heightmap as
+  // it went down the wall, reading unrelated elevation values and cycling
+  // the color ramp into repeated stripes (Dana, 2026-10-18: "why does the
+  // chunk have layers"). Keeping the real uv constant top-to-bottom locks
+  // sampling to this one column's actual height the whole way down, no
+  // drift, just no displacement or a terrain-accurate normal there, which
+  // is already handled separately by `displace`.
+  function pushWallQuad(
+    topA: THREE.Vector3,
+    topB: THREE.Vector3,
+    bottomB: THREE.Vector3,
+    bottomA: THREE.Vector3,
+    uvA: [number, number],
+    uvB: [number, number],
+    normal: THREE.Vector3,
+  ) {
+    pushTriangle(topA, topB, bottomB, normal, normal, normal, uvA, uvB, uvB, 1, 1, 0, 0);
+    pushTriangle(topA, bottomB, bottomA, normal, normal, normal, uvA, uvB, uvA, 1, 0, 0, 0);
   }
 
-  // Top surface — smooth per-vertex normals (winding verified via the
-  // right-hand-rule cross product to give a +Y-dominant normal, matching
-  // topNormal()'s own sign convention).
+  // Top surface — every vertex displaced, winding verified via the
+  // right-hand-rule cross product to give a +Y-dominant placeholder normal.
   for (let z = 0; z < resolution; z++) {
     for (let x = 0; x < resolution; x++) {
       const a = topPoint(x, z);
       const b = topPoint(x + 1, z);
       const c = topPoint(x, z + 1);
       const d = topPoint(x + 1, z + 1);
-      const na = topNormal(x, z);
-      const nb = topNormal(x + 1, z);
-      const nc = topNormal(x, z + 1);
-      const nd = topNormal(x + 1, z + 1);
-      pushTriangle(a, c, b, na, nc, nb);
-      pushTriangle(b, c, d, nb, nc, nd);
+      const uvA = uvAt(x, z);
+      const uvB = uvAt(x + 1, z);
+      const uvC = uvAt(x, z + 1);
+      const uvD = uvAt(x + 1, z + 1);
+      pushTriangle(a, c, b, UP, UP, UP, uvA, uvC, uvB, 1, 1, 1, 1);
+      pushTriangle(b, c, d, UP, UP, UP, uvB, uvC, uvD, 1, 1, 1, 1);
     }
   }
 
@@ -112,11 +167,11 @@ export function buildSmoothChunkGeometry(elevationData: ElevationData, resolutio
     const dx = x2 - x1;
     const dz = z2 - z1;
     const outward = new THREE.Vector3(dz, 0, -dx).normalize(); // travel direction rotated -90°
-    pushFlatQuad(topPoint(x1, z1), topPoint(x2, z2), bottomPoint(x2, z2), bottomPoint(x1, z1), outward);
+    pushWallQuad(topPoint(x1, z1), topPoint(x2, z2), bottomPoint(x2, z2), bottomPoint(x1, z1), uvAt(x1, z1), uvAt(x2, z2), outward);
   }
 
   // Bottom cap, normal (0,-1,0) — flat, no subdivision needed.
-  pushFlatQuad(
+  pushFlatCapQuad(
     bottomPoint(0, 0),
     bottomPoint(resolution, 0),
     bottomPoint(resolution, resolution),
@@ -127,5 +182,8 @@ export function buildSmoothChunkGeometry(elevationData: ElevationData, resolutio
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(positions), 3));
   geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(normals), 3));
+  geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uvs), 2));
+  geometry.setAttribute('displace', new THREE.BufferAttribute(new Float32Array(displaceFlags), 1));
+  geometry.setAttribute('isTopSurface', new THREE.BufferAttribute(new Float32Array(topSurfaceFlags), 1));
   return geometry;
 }

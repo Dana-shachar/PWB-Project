@@ -105,6 +105,40 @@ float fbm3D(vec3 p, float seed, float baseType, float octaves, float persistence
   return value / maxAmplitude; // normalize back to roughly -1..1
 }
 
+// Ridged-multifractal fBm (Musgrave's method, adapted to this project's own
+// ridge()): folds *each octave's own sample* before summing it, with the
+// next octave's contribution weighted by how strongly the previous one
+// folded (the feedback term) — not fbm3D's plain sum folded once at the end.
+// Folding one already-summed signal turns every zero-crossing of that
+// combined signal into an isolated spike (dense and isotropic at high
+// frequency); folding per octave is what keeps ridges continuous and
+// hierarchical across scales instead. See REFERENCES.md and [B31] in
+// ISSUES.md. Deliberately reuses this project's existing ridge() and
+// ridgeAmount (no new gain/offset uniforms, unlike libnoise's RidgedMulti —
+// that would be new UI surface, out of scope for this fix) — weight is the
+// previous octave's own folded magnitude, clamped to [0,1] so it can only
+// ever damp the next octave, never amplify it unboundedly. ridge()'s own
+// output is symmetric about 0 (this file's own convention, see noise.glsl),
+// so the feedback weight uses abs() to read magnitude regardless of sign.
+float ridgedFbm3D(vec3 p, float seed, float baseType, float octaves, float persistence, float lacunarity, float ridgeAmount) {
+  float value = 0.0;
+  float amplitude = 1.0;
+  float maxAmplitude = 0.0;
+  float weight = 1.0;
+  vec3 samplePoint = p;
+  for (int i = 0; i < MAX_OCTAVES; i++) {
+    if (i >= int(octaves)) break;
+    float raw = evalBaseGenerator(samplePoint, seed, baseType);
+    float folded = mix(raw, ridge(raw), ridgeAmount) * weight;
+    value += amplitude * folded;
+    maxAmplitude += amplitude;
+    weight = clamp(abs(folded), 0.0, 1.0);
+    samplePoint *= lacunarity;
+    amplitude *= persistence;
+  }
+  return value / maxAmplitude; // normalize back to roughly -1..1, same convention as fbm3D
+}
+
 // Domain warp: f(p + h(p)) — displaces the sample coordinate by a noise-
 // built offset vector before whatever comes next in the pipeline (the base
 // generator, or fbm sampling at that displaced position), for a more
@@ -195,11 +229,18 @@ float evalLayerNoise(
 ) {
   vec3 samplePoint = domainWarpOn ? domainWarpedPosition(p, seed, noiseType, poleFalloff, warpStrength) : p;
 
-  float value = octavesOn
-    ? fbm3D(samplePoint, seed, noiseType, octaves, persistence, lacunarity)
-    : evalBaseGenerator(samplePoint, seed, noiseType);
-
-  if (ridgedOn) value = mix(value, ridge(value), ridgeAmount);
+  // Ridging several octaves needs its own accumulation (ridgedFbm3D folds
+  // each octave before summing, see its own comment above) — folding a
+  // single sample has nothing "per-octave" to fix, that path is unchanged.
+  float value;
+  if (octavesOn && ridgedOn) {
+    value = ridgedFbm3D(samplePoint, seed, noiseType, octaves, persistence, lacunarity, ridgeAmount);
+  } else {
+    value = octavesOn
+      ? fbm3D(samplePoint, seed, noiseType, octaves, persistence, lacunarity)
+      : evalBaseGenerator(samplePoint, seed, noiseType);
+    if (ridgedOn) value = mix(value, ridge(value), ridgeAmount);
+  }
   if (terraceOn) value = terrace(value, terraceSteps);
 
   return value;

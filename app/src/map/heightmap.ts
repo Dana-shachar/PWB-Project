@@ -7,6 +7,10 @@ import noiseGlsl from '../shaders/noise.glsl?raw';
 import heightmapBrushVertexGlsl from '../shaders/heightmapBrush.vert.glsl?raw';
 import heightmapFragmentGlsl from '../shaders/heightmap.frag.glsl?raw'; // noise compositing (the "Noise" tab)
 import strokePathFragmentGlsl from '../shaders/strokePath.frag.glsl?raw'; // brush stroke rendering, see beginStroke()/paintStroke()
+import minMaxReduceFragmentGlsl from '../shaders/minMaxReduce.frag.glsl?raw'; // elevation-range reduction pyramid, see getRegionMinMaxAsync()
+import elevationHistogramVertexGlsl from '../shaders/elevationHistogram.vert.glsl?raw'; // see getRegionPercentileRangeAsync()
+import elevationHistogramFragmentGlsl from '../shaders/elevationHistogram.frag.glsl?raw';
+import { HISTOGRAM_BINS, CLIP_PERCENT } from './elevationRange';
 
 // TODO(DS): arbitrary placeholder resolution — detail/generation-cost
 // tradeoff (see Dana's question 2026-09-14); lower this first if
@@ -252,6 +256,9 @@ export class HeightmapPipeline {
   private paintTargets = new Map<string, [THREE.WebGLRenderTarget, THREE.WebGLRenderTarget]>();
   // Reused across region bakes while the requested size is unchanged.
   private regionTarget: THREE.WebGLRenderTarget | null = null;
+  // The smooth land chunk's own persistent display texture — see
+  // renderDisplayRegion's own comment for why this needs a separate slot.
+  private displayRegionTarget: THREE.WebGLRenderTarget | null = null;
   private paintActiveIndex = new Map<string, number>();
   private paintPlaceholder: THREE.DataTexture;
   // The stroke currently being drawn, if any — its whole point path is kept
@@ -262,6 +269,21 @@ export class HeightmapPipeline {
   private strokePathCamera: THREE.OrthographicCamera;
   private strokePathMaterial: THREE.ShaderMaterial;
   private activeStroke: { layerId: string; baseIndex: number; points: UV[]; radius: number; feather: number; brushValue: number } | null;
+  // One level of the min/max reduction pyramid — reused every pass/every
+  // call, only its uniforms change. See getRegionMinMaxAsync().
+  private reduceScene: THREE.Scene;
+  private reduceCamera: THREE.OrthographicCamera;
+  private reduceMaterial: THREE.ShaderMaterial;
+  // Percent Clip, computed on the GPU — see getRegionPercentileRangeAsync().
+  // A fixed, reused point cloud (one point per sample position), not
+  // resized per call: it's a dense enough sampling grid to estimate a
+  // percentile regardless of the actual source bake's own resolution,
+  // oversampling a smaller source just means some texels get sampled more
+  // than once, harmless for a distribution estimate.
+  private histogramScene: THREE.Scene;
+  private histogramCamera: THREE.Camera;
+  private histogramMaterial: THREE.ShaderMaterial;
+  private readonly histogramSampleCount: number;
 
   constructor() {
     // FloatType, not the default byte texture — G now carries real,
@@ -340,6 +362,63 @@ export class HeightmapPipeline {
     this.strokePathScene.add(strokePathQuad);
 
     this.activeStroke = null;
+
+    this.reduceScene = new THREE.Scene();
+    this.reduceCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    this.reduceMaterial = new THREE.ShaderMaterial({
+      vertexShader: heightmapBrushVertexGlsl,
+      fragmentShader: minMaxReduceFragmentGlsl,
+      uniforms: {
+        uSource: { value: null },
+        uTexelSize: { value: new THREE.Vector2(1, 1) },
+        uFirstPass: { value: 1 },
+      },
+    });
+    const reduceQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.reduceMaterial);
+    this.reduceScene.add(reduceQuad);
+
+    // A fixed 256x256 grid of sample positions (65536 points) — dense enough
+    // for a stable percentile estimate, built once since it never depends on
+    // which patch/resolution a given call is for (see the sample-UV comment
+    // on the field declaration above).
+    const HISTOGRAM_SAMPLE_GRID = 256;
+    this.histogramSampleCount = HISTOGRAM_SAMPLE_GRID * HISTOGRAM_SAMPLE_GRID;
+    const histogramPositions = new Float32Array(this.histogramSampleCount * 3); // required by THREE.Points/BufferGeometry, unused by the shader itself — gl_Position is set directly from aSampleUV
+    const histogramSampleUVs = new Float32Array(this.histogramSampleCount * 2);
+    let sampleIndex = 0;
+    for (let row = 0; row < HISTOGRAM_SAMPLE_GRID; row++) {
+      for (let col = 0; col < HISTOGRAM_SAMPLE_GRID; col++) {
+        histogramSampleUVs[sampleIndex * 2] = (col + 0.5) / HISTOGRAM_SAMPLE_GRID;
+        histogramSampleUVs[sampleIndex * 2 + 1] = (row + 0.5) / HISTOGRAM_SAMPLE_GRID;
+        sampleIndex++;
+      }
+    }
+    const histogramGeometry = new THREE.BufferGeometry();
+    histogramGeometry.setAttribute('position', new THREE.BufferAttribute(histogramPositions, 3));
+    histogramGeometry.setAttribute('aSampleUV', new THREE.BufferAttribute(histogramSampleUVs, 2));
+
+    this.histogramScene = new THREE.Scene();
+    // No projection/view matrices are read by elevationHistogram.vert.glsl
+    // (it writes gl_Position directly from the bin index), so a plain,
+    // untouched THREE.Camera is enough, Three.js still needs some camera
+    // object to call render() with.
+    this.histogramCamera = new THREE.Camera();
+    this.histogramMaterial = new THREE.ShaderMaterial({
+      vertexShader: elevationHistogramVertexGlsl,
+      fragmentShader: elevationHistogramFragmentGlsl,
+      uniforms: {
+        uSource: { value: null },
+        uRangeMin: { value: 0 },
+        uRangeMax: { value: 1 },
+        uBinCount: { value: HISTOGRAM_BINS },
+      },
+      blending: THREE.AdditiveBlending,
+      depthTest: false,
+      depthWrite: false,
+      transparent: true,
+    });
+    const histogramPoints = new THREE.Points(histogramGeometry, this.histogramMaterial);
+    this.histogramScene.add(histogramPoints);
   }
 
   // Call at the start of a stroke (pointerdown, with its first point) —
@@ -537,7 +616,47 @@ export class HeightmapPipeline {
   // that however fine its own grid is. See ISSUES.md, "Planet mesh and
   // adaptive resolution".
   renderRegion(renderer: THREE.WebGLRenderer, params: RegionParams): THREE.WebGLRenderTarget {
-    const { layers, face, min, max, resolution } = params;
+    return this.renderRegionToSlot(renderer, params, 'regionTarget');
+  }
+
+  // The smooth land chunk's own display texture needs its own persistent
+  // slot, separate from the one getPatchElevationData/erodePatch share: it
+  // stays bound to a material across renders at a much higher resolution,
+  // while the other slot keeps serving the small, cheap CPU readback (color-
+  // ramp min/max, voxel meshing) at its own, unrelated resolution. One
+  // shared slot would otherwise dispose whichever texture wasn't requested
+  // most recently out from under the other's material binding. See
+  // ISSUES.md, [B32].
+  renderDisplayRegion(renderer: THREE.WebGLRenderer, params: RegionParams): THREE.WebGLRenderTarget {
+    return this.renderRegionToSlot(renderer, params, 'displayRegionTarget');
+  }
+
+  private renderRegionToSlot(
+    renderer: THREE.WebGLRenderer,
+    params: RegionParams,
+    slot: 'regionTarget' | 'displayRegionTarget',
+  ): THREE.WebGLRenderTarget {
+    const target = this.acquireRegionTarget(params.resolution, slot);
+    this.bakeRegionInto(renderer, params, target);
+    return target;
+  }
+
+  // The planet-patches renderer ([B28], planet/PlanetPatchRenderer.ts) needs
+  // a different shape of persistence than either existing slot: not one
+  // shared texture (regionTarget) and not one fixed display texture
+  // (displayRegionTarget), but potentially dozens of simultaneous textures,
+  // one per currently-visible patch, each outliving many other patches'
+  // own bakes in between. Neither named slot can serve that without patches
+  // overwriting each other's textures out from under their own materials, so
+  // this bakes into a target the caller creates and owns, rather than one
+  // this class tracks itself. The caller is responsible for disposing it
+  // when that patch is no longer visible.
+  bakeRegionToTarget(renderer: THREE.WebGLRenderer, params: RegionParams, target: THREE.WebGLRenderTarget): void {
+    this.bakeRegionInto(renderer, params, target);
+  }
+
+  private bakeRegionInto(renderer: THREE.WebGLRenderer, params: RegionParams, target: THREE.WebGLRenderTarget): void {
+    const { layers, face, min, max } = params;
     this.syncPaintTargets(renderer, layers);
     this.syncLayerUniforms(layers);
 
@@ -547,27 +666,28 @@ export class HeightmapPipeline {
     (uniforms.uRegionMin.value as THREE.Vector2).set(min.x, min.y);
     (uniforms.uRegionMax.value as THREE.Vector2).set(max.x, max.y);
 
-    const target = this.acquireRegionTarget(resolution);
     renderer.setRenderTarget(target);
     renderer.render(this.scene, this.camera);
     renderer.setRenderTarget(null);
     // Left off so the next whole-globe render() isn't silently still in
     // region mode if it forgets to reset it.
     uniforms.uRegionMode.value = 0;
-    return target;
   }
 
   // Reused while the size matches, so panning or re-meshing doesn't
-  // allocate a new target every time.
-  private acquireRegionTarget(resolution: number): THREE.WebGLRenderTarget {
-    if (this.regionTarget && this.regionTarget.width === resolution && this.regionTarget.height === resolution) {
-      return this.regionTarget;
+  // allocate a new target every time. Each slot owns its own target, see
+  // renderDisplayRegion's own comment for why there are two.
+  private acquireRegionTarget(resolution: number, slot: 'regionTarget' | 'displayRegionTarget'): THREE.WebGLRenderTarget {
+    const current = this[slot];
+    if (current && current.width === resolution && current.height === resolution) {
+      return current;
     }
-    this.regionTarget?.dispose();
+    current?.dispose();
     // FloatType to match the shared map: elevation is real height, which can
     // exceed 1 or go negative. See ISSUES.md, 2026-09-24.
-    this.regionTarget = new THREE.WebGLRenderTarget(resolution, resolution, { type: THREE.FloatType });
-    return this.regionTarget;
+    const target = new THREE.WebGLRenderTarget(resolution, resolution, { type: THREE.FloatType });
+    this[slot] = target;
+    return target;
   }
 
   // Elevation only (the G channel), as a raw Float32Array — same shape and
@@ -587,6 +707,260 @@ export class HeightmapPipeline {
       }
     }
     return { data: elevation, width: size, height: size };
+  }
+
+  // Same result as getRegionElevationData, but without the pipeline stall:
+  // renderer.readRenderTargetPixels (and raw gl.readPixels under it) blocks
+  // the CPU until the GPU catches up, which is what actually reads as a
+  // freeze on a bigger readback, not the byte count itself. This copies into
+  // a PIXEL_PACK_BUFFER instead and awaits a fence, so the GPU keeps working
+  // while the copy happens, then reads the already-ready buffer back with no
+  // stall. Self-contained, correct, and not yet called by anything — wiring
+  // it in means every caller (SceneCanvas.tsx's handle methods, landChunk.ts's
+  // effect, the erosion engine's erodePatch flow) becomes async too, a real
+  // change to how those effects are sequenced, not a drop-in swap, left for
+  // its own separate pass. See ISSUES.md, [B32].
+  async getRegionElevationDataAsync(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget): Promise<ElevationReadback> {
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const size = target.width;
+    const rgba = new Float32Array(size * size * 4);
+
+    renderer.setRenderTarget(target);
+    const pbo = gl.createBuffer();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, rgba.byteLength, gl.STREAM_READ);
+    gl.readPixels(0, 0, size, size, gl.RGBA, gl.FLOAT, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    renderer.setRenderTarget(null);
+
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!;
+    gl.flush();
+    await new Promise<void>((resolve, reject) => {
+      function poll() {
+        const status = gl.clientWaitSync(sync, 0, 0);
+        if (status === gl.WAIT_FAILED) {
+          reject(new Error('getRegionElevationDataAsync: fenceSync wait failed'));
+        } else if (status === gl.TIMEOUT_EXPIRED) {
+          requestAnimationFrame(poll);
+        } else {
+          resolve();
+        }
+      }
+      poll();
+    });
+    gl.deleteSync(sync);
+
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, rgba);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.deleteBuffer(pbo);
+
+    // Same bottom-to-top → top-to-bottom row flip and G-channel extraction
+    // as the synchronous version, so the two are interchangeable to a caller.
+    const elevation = new Float32Array(size * size);
+    for (let row = 0; row < size; row++) {
+      const srcRowStart = row * size * 4;
+      const destRowStart = (size - 1 - row) * size;
+      for (let col = 0; col < size; col++) {
+        elevation[destRowStart + col] = rgba[srcRowStart + col * 4 + 1]; // G
+      }
+    }
+    return { data: elevation, width: size, height: size };
+  }
+
+  // The patch's real low/high, without ever reading back its full-resolution
+  // buffer: a min/max reduction pyramid (Tevs/Ihrke/Seidel 2008, "Maximum
+  // Mipmaps," see REFERENCES.md and shaders/minMaxReduce.frag.glsl) halves
+  // the source over and over, each pass keeping the true min/max of every
+  // 2x2 block rather than blurring it away, until one texel holds the exact
+  // min/max of the whole region. Only that one texel (16 bytes) is ever read
+  // back, via the same async PBO+fence pattern getRegionElevationDataAsync
+  // already uses, so even a large source never costs more than a tiny one
+  // does. Replaces the synchronous full-buffer readback landChunk.ts used to
+  // do purely to find two numbers. See ISSUES.md, [B32].
+  //
+  // Note for whoever next touches this: this returns the patch's literal
+  // min/max, not the Percent Clip range computeElevationRange() (map/
+  // elevationRange.ts) computes from a full CPU buffer today. A reduction
+  // pyramid gives an exact extremum cheaply; it cannot give a percentile
+  // (the 1st/99th-percentile clip that guards against a single outlier
+  // pixel crushing the ramp) without effectively building a histogram on
+  // the GPU too, a different, larger piece of work than what was asked for
+  // here. Worth Dana's own look before this is called fully settled: a
+  // single extreme pixel could once again pull the color ramp toward one
+  // end, the exact failure Percent Clip was originally added to fix.
+  async getRegionMinMaxAsync(renderer: THREE.WebGLRenderer, sourceTarget: THREE.WebGLRenderTarget): Promise<{ min: number; max: number }> {
+    const uniforms = this.reduceMaterial.uniforms;
+    let currentSource: THREE.Texture = sourceTarget.texture;
+    let size = sourceTarget.width;
+    let firstPass = true;
+    let previousLevel: THREE.WebGLRenderTarget | null = null;
+
+    while (size > 1) {
+      const nextSize = Math.max(1, Math.floor(size / 2));
+      const level = new THREE.WebGLRenderTarget(nextSize, nextSize, { type: THREE.FloatType });
+      uniforms.uSource.value = currentSource;
+      (uniforms.uTexelSize.value as THREE.Vector2).set(1 / size, 1 / size);
+      uniforms.uFirstPass.value = firstPass ? 1 : 0;
+      renderer.setRenderTarget(level);
+      renderer.render(this.reduceScene, this.reduceCamera);
+      renderer.setRenderTarget(null);
+
+      previousLevel?.dispose();
+      previousLevel = level;
+      currentSource = level.texture;
+      size = nextSize;
+      firstPass = false;
+    }
+
+    // sourceTarget was already 1x1 — nothing to reduce, read its elevation
+    // (G) directly as both min and max, same convention a first pass would
+    // have used.
+    if (!previousLevel) {
+      const only = new Float32Array(4);
+      renderer.readRenderTargetPixels(sourceTarget, 0, 0, 1, 1, only);
+      return { min: only[1], max: only[1] };
+    }
+
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const rgba = new Float32Array(4);
+    renderer.setRenderTarget(previousLevel);
+    const pbo = gl.createBuffer();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, rgba.byteLength, gl.STREAM_READ);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    renderer.setRenderTarget(null);
+
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!;
+    gl.flush();
+    await new Promise<void>((resolve, reject) => {
+      function poll() {
+        const status = gl.clientWaitSync(sync, 0, 0);
+        if (status === gl.WAIT_FAILED) {
+          reject(new Error('getRegionMinMaxAsync: fenceSync wait failed'));
+        } else if (status === gl.TIMEOUT_EXPIRED) {
+          requestAnimationFrame(poll);
+        } else {
+          resolve();
+        }
+      }
+      poll();
+    });
+    gl.deleteSync(sync);
+
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, rgba);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.deleteBuffer(pbo);
+    previousLevel.dispose();
+
+    return { min: rgba[0], max: rgba[1] };
+  }
+
+  // What the smooth/shaded land chunk's color ramp should actually use:
+  // getRegionMinMaxAsync()'s own literal extremes, Percent Clipped — its own
+  // comment already flagged this gap (a single outlier pixel, which this
+  // terrain's spiky noise reliably produces, can pull the ramp's range far
+  // wider than the terrain's real bulk variation, squeezing everything else
+  // into a narrow slice of it — Dana, 2026-10-18, saw this as repeating
+  // color bands, not a smooth gradient). Real-time auto-exposure solves the
+  // identical problem (one bright pixel shouldn't set a whole frame's
+  // exposure) with a GPU-built histogram instead of raw min/max — see
+  // REFERENCES.md, "GPU histogram". This ports that technique, and walks
+  // the result with the exact same bin-count/clip-percent/cumulative-count
+  // logic elevationRange.ts's own CPU version already uses (imported, not
+  // duplicated), so the two can't drift apart.
+  async getRegionPercentileRangeAsync(renderer: THREE.WebGLRenderer, sourceTarget: THREE.WebGLRenderTarget): Promise<{ min: number; max: number }> {
+    // The literal extremes aren't the answer, they're the histogram's own
+    // bucketing bounds — a real value has to be known before it can be
+    // binned, the same chicken-and-egg a real auto-exposure histogram also
+    // has to resolve, against a known full range first.
+    const { min: trueMin, max: trueMax } = await this.getRegionMinMaxAsync(renderer, sourceTarget);
+    if (!Number.isFinite(trueMin) || !Number.isFinite(trueMax) || trueMax <= trueMin) {
+      return { min: trueMin, max: trueMax };
+    }
+
+    const histogramTarget = new THREE.WebGLRenderTarget(HISTOGRAM_BINS, 1, { type: THREE.FloatType });
+    const uniforms = this.histogramMaterial.uniforms;
+    uniforms.uSource.value = sourceTarget.texture;
+    uniforms.uRangeMin.value = trueMin;
+    uniforms.uRangeMax.value = trueMax;
+
+    // A freshly created render target's own contents are undefined until
+    // cleared — unlike the min/max pyramid's full-screen quad (which
+    // overwrites every pixel every pass regardless), this pass only touches
+    // the handful of pixels its points land on, so every other bin has to
+    // start at a real, known zero. Saved/restored explicitly: renderer.clear()
+    // always uses the renderer's own current clear color, whatever any other
+    // part of the app last set it to, not necessarily black.
+    const previousClearColor = new THREE.Color();
+    renderer.getClearColor(previousClearColor);
+    const previousClearAlpha = renderer.getClearAlpha();
+    renderer.setClearColor(0x000000, 0);
+    renderer.setRenderTarget(histogramTarget);
+    renderer.clear();
+    renderer.render(this.histogramScene, this.histogramCamera);
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(previousClearColor, previousClearAlpha);
+
+    const gl = renderer.getContext() as WebGL2RenderingContext;
+    const rgba = new Float32Array(HISTOGRAM_BINS * 4);
+    renderer.setRenderTarget(histogramTarget);
+    const pbo = gl.createBuffer();
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+    gl.bufferData(gl.PIXEL_PACK_BUFFER, rgba.byteLength, gl.STREAM_READ);
+    gl.readPixels(0, 0, HISTOGRAM_BINS, 1, gl.RGBA, gl.FLOAT, 0);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    renderer.setRenderTarget(null);
+
+    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!;
+    gl.flush();
+    await new Promise<void>((resolve, reject) => {
+      function poll() {
+        const status = gl.clientWaitSync(sync, 0, 0);
+        if (status === gl.WAIT_FAILED) {
+          reject(new Error('getRegionPercentileRangeAsync: fenceSync wait failed'));
+        } else if (status === gl.TIMEOUT_EXPIRED) {
+          requestAnimationFrame(poll);
+        } else {
+          resolve();
+        }
+      }
+      poll();
+    });
+    gl.deleteSync(sync);
+
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, rgba);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.deleteBuffer(pbo);
+    histogramTarget.dispose();
+
+    // Same cumulative-count walk as elevationRange.ts's computeElevationRange,
+    // just fed from a GPU-built histogram (float counts, additive-blended)
+    // instead of one built by counting a CPU array directly — the total
+    // sample count is fixed and known (the point cloud's own size), not
+    // derived from the data, since every point always lands in exactly one
+    // bin regardless of the source's real content.
+    const clipCount = this.histogramSampleCount * CLIP_PERCENT;
+    const binWidth = (trueMax - trueMin) / HISTOGRAM_BINS;
+    let cumulative = 0;
+    let lowBin = 0;
+    for (; lowBin < HISTOGRAM_BINS; lowBin++) {
+      cumulative += rgba[lowBin * 4]; // R — the only channel the fragment shader writes
+      if (cumulative >= clipCount) break;
+    }
+    cumulative = 0;
+    let highBin = HISTOGRAM_BINS - 1;
+    for (; highBin >= 0; highBin--) {
+      cumulative += rgba[highBin * 4];
+      if (cumulative >= clipCount) break;
+    }
+    const clippedMin = trueMin + lowBin * binWidth;
+    const clippedMax = trueMin + (highBin + 1) * binWidth;
+    if (clippedMin >= clippedMax) return { min: trueMin, max: trueMax };
+    return { min: clippedMin, max: clippedMax };
   }
 
   // Creates a paint target for every current layer and disposes orphans.
@@ -661,6 +1035,8 @@ export class HeightmapPipeline {
 
   dispose(): void {
     this.renderTarget.dispose();
+    this.regionTarget?.dispose();
+    this.displayRegionTarget?.dispose();
     this.material.dispose();
     this.scene.remove(this.scene.children[0]);
     this.paintTargets.forEach((pair) => pair.forEach((target) => target.dispose()));
@@ -669,5 +1045,10 @@ export class HeightmapPipeline {
     this.paintPlaceholder.dispose();
     this.strokePathMaterial.dispose();
     this.strokePathScene.remove(this.strokePathScene.children[0]);
+    this.reduceMaterial.dispose();
+    this.reduceScene.remove(this.reduceScene.children[0]);
+    this.histogramMaterial.dispose();
+    (this.histogramScene.children[0] as THREE.Points).geometry.dispose();
+    this.histogramScene.remove(this.histogramScene.children[0]);
   }
 }
