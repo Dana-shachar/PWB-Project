@@ -4,6 +4,8 @@ import patchFragmentShaderBody from '../shaders/planetPatch.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain.glsl?raw';
 import { cubeFacePoint } from './cubeFace';
 import { faceIndex, type TerrainPatch } from './patch';
+import type { EdgeStitchFlags } from './planetPatches';
+import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from './colorRamp';
 
 const patchFragmentShader = terrainGlsl + patchFragmentShaderBody;
 
@@ -25,50 +27,182 @@ const SKIRT_DEPTH_FRACTION = 0.01;
 // using each vertex's own `uv`, identical to how the whole-globe mesh does
 // it — a patch is just a smaller, more sharply focused piece of the same
 // parameterization, not a different one.
-export function buildPatchGeometry(patch: TerrainPatch, radius: number, resolution: number): THREE.BufferGeometry {
+const NO_STITCH: EdgeStitchFlags = { top: false, bottom: false, left: false, right: false };
+
+// Generalizes Stage 1's single-edge stitch (top only) to all four edges,
+// plus the corner case where two adjacent edges both need it at once —
+// the one case de Boer's own geomipmapping fan technique doesn't cover (it
+// bridges one edge's 2:1 density change, not two meeting at a shared
+// point). Architecture: the four corners are built once as single shared
+// vertices (not owned by either adjacent edge), so two independently-
+// doubled edges always agree on where they meet; each edge is built as its
+// own strip of points strictly between its two corners (plain or doubled
+// density, per computeStitchFlags); the interior stays a plain fixed grid,
+// one ring smaller than the full patch, and is stitched to each edge the
+// same way Stage 1 already did. A corner's own small unit cell (bounded by
+// its two adjacent edges' nearest points and the interior's own nearest
+// point) is a simple, convex polygon in parameter space whatever the mix
+// of doubled/plain edges (4, 5, or 6 points), so a fan from the corner
+// vertex itself always triangulates it correctly — reasoned through
+// directly via worked examples (0, 1, and 2 doubled edges at one corner),
+// not asserted. See ISSUES.md [B28], Stage 2/3.
+export function buildPatchGeometry(
+  patch: TerrainPatch,
+  radius: number,
+  resolution: number,
+  stitchFlags: EdgeStitchFlags = NO_STITCH,
+): THREE.BufferGeometry {
   const geometry = new THREE.BufferGeometry();
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
   const indices: number[] = [];
-  const vertsPerRow = resolution + 1;
 
-  function pushGridVertex(localU: number, localV: number, radiusOverride: number) {
+  function pushGridVertex(localU: number, localV: number, radiusOverride: number): number {
     const faceU = patch.min.x + localU * (patch.max.x - patch.min.x);
     const faceV = patch.min.y + localV * (patch.max.y - patch.min.y);
     const unit = cubeFacePoint(patch.face, faceU, faceV).normalize();
     positions.push(unit.x * radiusOverride, unit.y * radiusOverride, unit.z * radiusOverride);
     normals.push(unit.x, unit.y, unit.z);
     uvs.push(localU, localV);
+    return positions.length / 3 - 1;
   }
 
-  for (let j = 0; j <= resolution; j++) {
-    const localV = j / resolution;
-    for (let i = 0; i <= resolution; i++) {
-      const localU = i / resolution;
-      pushGridVertex(localU, localV, radius);
+  const n = resolution;
+  const cornerTL = pushGridVertex(0, 0, radius);
+  const cornerTR = pushGridVertex(1, 0, radius);
+  const cornerBL = pushGridVertex(0, 1, radius);
+  const cornerBR = pushGridVertex(1, 1, radius);
+
+  // One edge's own points strictly between its two corners — doubled
+  // density (2n-1 points) when stitched to a same-face neighbor one level
+  // finer, the plain fixed density (n-1 points) this always used otherwise.
+  // Returns both the vertex indices and the parametric position each was
+  // built at (needed for the skirt's own matching UVs below).
+  function buildBetween(doubled: boolean, pointAt: (t: number) => number): { points: number[]; params: number[] } {
+    const count = doubled ? n * 2 - 1 : n - 1;
+    const points: number[] = [];
+    const params: number[] = [];
+    for (let k = 1; k <= count; k++) {
+      const t = k / (count + 1);
+      points.push(pointAt(t));
+      params.push(t);
+    }
+    return { points, params };
+  }
+  const top = buildBetween(stitchFlags.top, (t) => pushGridVertex(t, 0, radius));
+  const bottom = buildBetween(stitchFlags.bottom, (t) => pushGridVertex(t, 1, radius));
+  const left = buildBetween(stitchFlags.left, (t) => pushGridVertex(0, t, radius));
+  const right = buildBetween(stitchFlags.right, (t) => pushGridVertex(1, t, radius));
+
+  // The interior, always plain fixed density, (n-1)x(n-1) — one ring
+  // smaller than the full patch, since stitching is only ever needed at
+  // the patch's own outer boundary.
+  const interiorRows: number[][] = [];
+  for (let j = 1; j < n; j++) {
+    const row: number[] = [];
+    for (let i = 1; i < n; i++) row.push(pushGridVertex(i / n, j / n, radius));
+    interiorRows.push(row);
+  }
+
+  // Interior-to-interior: the plain grid this always used, now scoped to
+  // just the interior (the outer ring is handled separately below).
+  for (let j = 0; j < interiorRows.length - 1; j++) {
+    const rowTop = interiorRows[j];
+    const rowBottom = interiorRows[j + 1];
+    for (let i = 0; i < rowTop.length - 1; i++) {
+      indices.push(rowTop[i], rowTop[i + 1], rowBottom[i]);
+      indices.push(rowTop[i + 1], rowBottom[i + 1], rowBottom[i]);
     }
   }
-  for (let j = 0; j < resolution; j++) {
-    for (let i = 0; i < resolution; i++) {
-      const a = j * vertsPerRow + i;
-      const b = j * vertsPerRow + i + 1;
-      const c = (j + 1) * vertsPerRow + i;
-      const d = (j + 1) * vertsPerRow + i + 1;
-      indices.push(a, b, c);
-      indices.push(b, d, c);
+
+  // One edge's own middle span, stitched to its adjacent interior row/
+  // column — a 3-triangle fan per coarse cell when doubled (de Boer's
+  // geomipmapping, see REFERENCES.md), a plain 2-triangle quad otherwise.
+  // Reserves exactly the first/last 1 (doubled) or 0 (plain) of `between`'s
+  // own points for the corner fans below to use instead, so neither
+  // double-covers nor leaves a gap right at the corners.
+  function stitchEdgeToInterior(between: number[], interiorRow: number[], doubled: boolean) {
+    for (let i = 0; i < interiorRow.length - 1; i++) {
+      const rowLeft = interiorRow[i];
+      const rowRight = interiorRow[i + 1];
+      if (doubled) {
+        const fineLeft = between[2 * i + 1];
+        const fineMid = between[2 * i + 2];
+        const fineRight = between[2 * i + 3];
+        indices.push(fineLeft, fineMid, rowLeft);
+        indices.push(fineMid, rowRight, rowLeft);
+        indices.push(fineMid, fineRight, rowRight);
+      } else {
+        indices.push(between[i], between[i + 1], rowLeft);
+        indices.push(between[i + 1], rowRight, rowLeft);
+      }
     }
   }
+  stitchEdgeToInterior(top.points, interiorRows[0], stitchFlags.top);
+  stitchEdgeToInterior(bottom.points, interiorRows[interiorRows.length - 1], stitchFlags.bottom);
+  stitchEdgeToInterior(
+    left.points,
+    interiorRows.map((row) => row[0]),
+    stitchFlags.left,
+  );
+  stitchEdgeToInterior(
+    right.points,
+    interiorRows.map((row) => row[row.length - 1]),
+    stitchFlags.right,
+  );
+
+  // A corner's own unit cell: a fan from the shared corner vertex across
+  // however many points its two adjacent edges actually have there.
+  function edgeEnd(between: number[], fromStart: boolean): [number, number] {
+    return fromStart ? [between[0], between[1]] : [between[between.length - 1], between[between.length - 2]];
+  }
+  function buildCornerFan(
+    corner: number,
+    edgeA: [number, number],
+    edgeADoubled: boolean,
+    edgeB: [number, number],
+    edgeBDoubled: boolean,
+    interiorCorner: number,
+  ) {
+    const boundary: number[] = [corner];
+    if (edgeADoubled) boundary.push(edgeA[0]);
+    boundary.push(edgeADoubled ? edgeA[1] : edgeA[0]);
+    boundary.push(interiorCorner);
+    boundary.push(edgeBDoubled ? edgeB[1] : edgeB[0]);
+    if (edgeBDoubled) boundary.push(edgeB[0]);
+    for (let k = 1; k < boundary.length - 1; k++) indices.push(boundary[0], boundary[k], boundary[k + 1]);
+  }
+  buildCornerFan(cornerTL, edgeEnd(top.points, true), stitchFlags.top, edgeEnd(left.points, true), stitchFlags.left, interiorRows[0][0]);
+  buildCornerFan(
+    cornerTR,
+    edgeEnd(right.points, true),
+    stitchFlags.right,
+    edgeEnd(top.points, false),
+    stitchFlags.top,
+    interiorRows[0][interiorRows[0].length - 1],
+  );
+  buildCornerFan(
+    cornerBL,
+    edgeEnd(bottom.points, true),
+    stitchFlags.bottom,
+    edgeEnd(left.points, false),
+    stitchFlags.left,
+    interiorRows[interiorRows.length - 1][0],
+  );
+  buildCornerFan(
+    cornerBR,
+    edgeEnd(right.points, false),
+    stitchFlags.right,
+    edgeEnd(bottom.points, false),
+    stitchFlags.bottom,
+    interiorRows[interiorRows.length - 1][interiorRows[interiorRows.length - 1].length - 1],
+  );
 
   // Skirt: one extra ring per edge, same (u,v) as the edge it extends but
   // pulled to a smaller radius, stitched to that edge with its own
   // triangles. Four edges, each a simple strip, not a full second grid.
   const skirtRadius = radius * (1 - SKIRT_DEPTH_FRACTION);
-  const gridVertexCount = (resolution + 1) * (resolution + 1);
-
-  function edgeIndex(i: number, j: number) {
-    return j * vertsPerRow + i;
-  }
 
   function addSkirtStrip(edgeIndices: number[], localUs: number[], localVs: number[]) {
     const skirtStart = positions.length / 3;
@@ -88,41 +222,12 @@ export function buildPatchGeometry(patch: TerrainPatch, radius: number, resoluti
     }
   }
 
-  const topRow: number[] = [];
-  const topU: number[] = [];
-  const topV: number[] = [];
-  const bottomRow: number[] = [];
-  const bottomU: number[] = [];
-  const bottomV: number[] = [];
-  const leftCol: number[] = [];
-  const leftU: number[] = [];
-  const leftV: number[] = [];
-  const rightCol: number[] = [];
-  const rightU: number[] = [];
-  const rightV: number[] = [];
-  for (let i = 0; i <= resolution; i++) {
-    const u = i / resolution;
-    topRow.push(edgeIndex(i, 0));
-    topU.push(u);
-    topV.push(0);
-    bottomRow.push(edgeIndex(i, resolution));
-    bottomU.push(u);
-    bottomV.push(1);
-  }
-  for (let j = 0; j <= resolution; j++) {
-    const v = j / resolution;
-    leftCol.push(edgeIndex(0, j));
-    leftU.push(0);
-    leftV.push(v);
-    rightCol.push(edgeIndex(resolution, j));
-    rightU.push(1);
-    rightV.push(v);
-  }
-  addSkirtStrip(topRow, topU, topV);
-  addSkirtStrip(bottomRow, bottomU, bottomV);
-  addSkirtStrip(leftCol, leftU, leftV);
-  addSkirtStrip(rightCol, rightU, rightV);
-  void gridVertexCount; // kept for clarity of intent even though unused directly — skirt indices are computed relative to each strip's own start
+  const zeros = (count: number) => new Array(count).fill(0);
+  const ones = (count: number) => new Array(count).fill(1);
+  addSkirtStrip([cornerTL, ...top.points, cornerTR], [0, ...top.params, 1], [0, ...zeros(top.points.length), 0]);
+  addSkirtStrip([cornerBL, ...bottom.points, cornerBR], [0, ...bottom.params, 1], [1, ...ones(bottom.points.length), 1]);
+  addSkirtStrip([cornerTL, ...left.points, cornerBL], [0, ...zeros(left.points.length), 0], [0, ...left.params, 1]);
+  addSkirtStrip([cornerTR, ...right.points, cornerBR], [1, ...ones(right.points.length), 1], [0, ...right.params, 1]);
 
   geometry.setIndex(indices);
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
@@ -147,12 +252,19 @@ export interface PlanetSharedUniforms {
   shininess: number;
   cameraPosition: THREE.Vector3;
   colorByElevation: number;
-  colorMid: THREE.Color;
-  colorHigh: THREE.Color;
+  // The ramp's stops after position 0 (always baseColor above) — see
+  // planet/colorRamp.ts. Generalizes the old fixed colorMid/colorHigh pair.
+  colorStops: ColorStop[];
   elevationMin: number;
   elevationMax: number;
   displacementAmplitude: number;
   radius: number;
+  // Each patch's own display-mesh resolution, driven by the planet's
+  // Resolution slider (planet/patch.ts's clampPatchGridResolution) — not a
+  // material uniform, read directly by PlanetPatchRenderer when building
+  // patch geometry, kept here so it travels alongside every other shared
+  // value instead of as a separate parameter.
+  gridResolution: number;
 }
 
 export function createPatchMaterial(
@@ -161,6 +273,7 @@ export function createPatchMaterial(
   sampleOffset: number,
   shared: PlanetSharedUniforms,
 ): THREE.ShaderMaterial {
+  const ramp = buildRampUniformArrays(shared.baseColor, shared.colorStops);
   return new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader: patchFragmentShader,
@@ -181,8 +294,9 @@ export function createPatchMaterial(
       uShininess: { value: shared.shininess },
       uCameraPosition: { value: shared.cameraPosition.clone() },
       uColorByElevation: { value: shared.colorByElevation },
-      uColorMid: { value: shared.colorMid.clone() },
-      uColorHigh: { value: shared.colorHigh.clone() },
+      uRampColors: { value: ramp.colors },
+      uRampPositions: { value: ramp.positions },
+      uRampCount: { value: ramp.count },
       uElevationMin: { value: shared.elevationMin },
       uElevationMax: { value: shared.elevationMax },
       uHeightMap: { value: heightMap },
@@ -210,8 +324,11 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   u.uShininess.value = shared.shininess;
   (u.uCameraPosition.value as THREE.Vector3).copy(shared.cameraPosition);
   u.uColorByElevation.value = shared.colorByElevation;
-  (u.uColorMid.value as THREE.Color).copy(shared.colorMid);
-  (u.uColorHigh.value as THREE.Color).copy(shared.colorHigh);
+  const ramp = buildRampUniformArrays(shared.baseColor, shared.colorStops);
+  const rampColors = u.uRampColors.value as THREE.Color[];
+  for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
+  (u.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
+  u.uRampCount.value = ramp.count;
   u.uElevationMin.value = shared.elevationMin;
   u.uElevationMax.value = shared.elevationMax;
   u.uDisplacementAmplitude.value = shared.displacementAmplitude;

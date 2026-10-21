@@ -196,8 +196,7 @@ export function useSaveProject({
     planetControls.heightScale,
     planetControls.meshSegments,
     planetControls.colorByElevation,
-    planetControls.colorMid,
-    planetControls.colorHigh,
+    planetControls.colorStops,
     planetControls.shadowsEnabled,
   ]);
 

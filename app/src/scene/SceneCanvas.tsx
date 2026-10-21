@@ -10,9 +10,10 @@ import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 import { computeElevationRange } from '../map/elevationRange';
 import type { ElevationData } from '../voxel/chunkGrid';
-import { clampPatchSamples, clampPatchTextureResolution, faceIndex, patchContaining, type TerrainPatch } from '../planet/patch';
+import { clampPatchGridResolution, clampPatchSamples, clampPatchTextureResolution, faceIndex, patchContaining, type TerrainPatch } from '../planet/patch';
 import { PlanetPatchRenderer } from '../planet/PlanetPatchRenderer';
 import type { PlanetSharedUniforms } from '../planet/planetPatchMesh';
+import { buildRampUniformArrays, DEFAULT_COLOR_STOPS, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
 import {
   ErosionEngine,
   stepsForYears,
@@ -144,15 +145,14 @@ function buildWireframeOverlay(geometry: THREE.BufferGeometry): THREE.LineSegmen
 // wireframe overlay in this pass, so selecting Wireframe falls back to
 // showing the old single mesh regardless of this flag (see the displayMode
 // effect below).
-// Temporarily false (2026-10-18): the planet rendered almost entirely
-// black and the whole app felt frozen/unresponsive after the shared-
-// renderer unification landed. Root cause not fully confirmed yet,
-// strongest lead is the per-frame patch reselect/rebake in
-// PlanetPatchRenderer.updatePatches (RESELECT_DISTANCE_FRACTION /
-// lastCameraPosition), but that wasn't nailed down before this fallback
-// was used to get Dana back to a working, interactive app. Flip back to
-// true once the real cause is found and fixed. See ISSUES.md.
-const USE_PLANET_PATCHES = false;
+// TEMPORARY DIAGNOSTIC FLIP (2026-10-19): set true to get real browser
+// console output for [B28]'s regression (see ISSUES.md) — a 2026-10-18
+// fork ruled out three real candidates (scissor/viewport bleed, float-
+// texture mipmap filtering, an LOD explosion at the default camera
+// distance) by checking actual engine source, but couldn't confirm the
+// actual cause without live console access. Revert to false once that's
+// captured, this isn't the real fix.
+const USE_PLANET_PATCHES = true;
 
 interface SceneCanvasProps {
   radius: number; // planet radius, in scene units (already converted from km by the caller)
@@ -166,8 +166,7 @@ interface SceneCanvasProps {
   specularStrength: number;
   shininess: number;
   colorByElevation: boolean;
-  colorMid: string;
-  colorHigh: string;
+  colorStops: ColorStop[];
   displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
   gridSpacing: number; // minor grid cell size, in world units
   gridVisible: boolean;
@@ -202,8 +201,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     specularStrength,
     shininess,
     colorByElevation,
-    colorMid,
-    colorHigh,
+    colorStops,
     displayMode,
     gridSpacing,
     gridVisible,
@@ -238,12 +236,12 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shininess: 24,
     cameraPosition: new THREE.Vector3(),
     colorByElevation: 0,
-    colorMid: new THREE.Color(0x6b8f4e),
-    colorHigh: new THREE.Color(0xffffff),
+    colorStops: DEFAULT_COLOR_STOPS,
     elevationMin: -0.5,
     elevationMax: 0.5,
     displacementAmplitude: 0,
     radius: 20,
+    gridResolution: 64,
   });
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -593,6 +591,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     gumballTargetRef.current = { camera: perspectiveCamera, cameraControls: orbitControls, referenceDistance: DEFAULT_CAMERA_DISTANCE };
 
     sharedUniformsRef.current.radius = radius;
+    sharedUniformsRef.current.gridResolution = clampPatchGridResolution(meshSegments);
     const planetPatches = new PlanetPatchRenderer();
     planetPatchRendererRef.current = planetPatches;
     scene.add(planetPatches.group);
@@ -736,11 +735,14 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         wireframeStaleRef.current = true;
       }
 
-      // meshSegments doesn't apply to patches (each patch's own grid
-      // resolution is fixed, see PlanetPatchRenderer's PATCH_GRID_RESOLUTION),
-      // only radius does — updatePatches' own radiusChanged check picks this
-      // up on the next animate() frame and re-selects/rebakes accordingly.
+      // meshSegments now also drives each patch's own grid resolution
+      // (clamped, see planet/patch.ts's clampPatchGridResolution — patches
+      // cover far less area than the old whole-globe mesh, so the slider's
+      // full range would mean far more triangles per patch than intended).
+      // updatePatches' own resolutionChanged check picks this up on the
+      // next animate() frame and rebuilds affected patches' geometry.
       sharedUniformsRef.current.radius = radius;
+      sharedUniformsRef.current.gridResolution = clampPatchGridResolution(meshSegments);
     }, 150);
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- displayMode is read fresh when the timeout fires (same debounce pattern saveProject.ts already uses), not a reason to restart this effect's own debounce
@@ -779,8 +781,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, lightDirZ);
     material.uniforms.uDisplacementAmplitude.value = (heightScale / 100) * radius;
     material.uniforms.uColorByElevation.value = colorByElevation ? 1 : 0;
-    material.uniforms.uColorMid.value.set(colorMid);
-    material.uniforms.uColorHigh.value.set(colorHigh);
+    const ramp = buildRampUniformArrays(baseColor, colorStops);
+    const materialRampColors = material.uniforms.uRampColors.value as THREE.Color[];
+    for (let i = 0; i < MAX_COLOR_STOPS; i++) materialRampColors[i].copy(ramp.colors[i]);
+    (material.uniforms.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
+    material.uniforms.uRampCount.value = ramp.count;
 
     const shared = sharedUniformsRef.current;
     shared.baseColor.set(baseColor);
@@ -791,8 +796,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shared.lightDirection.set(lightDirX, lightDirY, lightDirZ);
     shared.displacementAmplitude = (heightScale / 100) * radius;
     shared.colorByElevation = colorByElevation ? 1 : 0;
-    shared.colorMid.set(colorMid);
-    shared.colorHigh.set(colorHigh);
+    shared.colorStops = colorStops;
     planetPatchRendererRef.current?.applyShared(shared);
   }, [
     baseColor,
@@ -806,8 +810,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     heightScale,
     radius,
     colorByElevation,
-    colorMid,
-    colorHigh,
+    colorStops,
   ]);
 
   // Display mode: toggles the wireframe overlay's visibility (it renders

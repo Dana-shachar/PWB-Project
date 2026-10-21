@@ -307,6 +307,156 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   border-color: var(--color-accent);
 }
 
+/* ── Color ramp editor (ui/panels/ColorRampEditor.tsx) ───────
+   The Blender Color Ramp/Figma gradient-editor convention: a gradient bar
+   with draggable stop handles along its bottom edge, click-to-add, a
+   selected stop's own color picker + delete button below. */
+.ui-ramp-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+}
+
+.ui-ramp-preview-row {
+  align-self: flex-start; /* left-aligned, not stretched/centered across the panel */
+}
+
+.ui-ramp-bar {
+  position: relative;
+  height: 20px;
+  margin-top: 34px; /* room for pins sitting above the bar, not hanging below it */
+  border-radius: 2px;
+  border: 0.25px solid var(--color-input-stroke);
+  cursor: copy; /* clicking empty space adds a stop */
+}
+
+/* The hidden native <input type="color"> openColorPicker triggers —
+   opacity: 0, not display: none, so .click() reliably opens the OS picker
+   in every browser (some won't fire it on an element that was never
+   actually rendered). */
+.ui-ramp-hidden-color-input {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* A Figma-style gradient-stop pin: a rounded-square head sitting above the
+   bar with a small diamond "tail" touching it at the stop's exact position,
+   filled with that stop's own real color (Dana, 2026-10-21: "turn the
+   color circles into ramp indicators, so they double as a color and
+   adjusting the ramp"). Replaces the earlier plain circular handle. */
+.ui-ramp-pin {
+  position: absolute;
+  bottom: 100%;
+  margin-bottom: 7px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 6px;
+  border: 1.5px solid var(--color-input-stroke);
+  transform: translateX(-50%);
+  cursor: ew-resize;
+}
+.ui-ramp-pin::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 9px;
+  height: 9px;
+  background: inherit; /* same fill as the pin head, so the tail reads as one continuous shape */
+  transform: translateX(-50%) rotate(45deg);
+}
+.ui-ramp-pin--selected {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 1.5px var(--color-accent);
+}
+/* The small lighter inset square on the selected pin, from Dana's own
+   reference screenshot — distinguishes "selected" from the stop's real
+   color, which stays visible as the pin's own fill either way. */
+.ui-ramp-pin--selected::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 2px;
+  background: var(--color-input-stroke);
+  opacity: 0.8;
+}
+/* Dragged far enough off the bar that releasing it now deletes the stop —
+   faded and shrunk as the same "about to remove" cue drag-to-delete UIs
+   (Blender, After Effects) use. */
+.ui-ramp-pin--pending-delete {
+  opacity: 0.35;
+  transform: translateX(-50%) scale(0.7);
+}
+
+/* One row per stop (plus the fixed base entry), Dana: "all picked colors
+   in a column with their color code." Clicking a row selects that stop,
+   same as clicking its handle on the bar — one shared selection, not a
+   second, disconnected control. */
+.ui-ramp-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.ui-ramp-list-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  padding: var(--gap-sm);
+  border-radius: 4px;
+  cursor: pointer;
+}
+.ui-ramp-list-row:hover {
+  background: var(--color-input-fill);
+}
+.ui-ramp-list-row--selected {
+  background: var(--color-input-fill);
+  box-shadow: inset 0 0 0 1.5px var(--color-accent);
+}
+
+.ui-ramp-list-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  border: 1px solid var(--color-input-stroke);
+  flex-shrink: 0;
+}
+
+.ui-ramp-list-code {
+  font-family: var(--font-mono);
+  flex: 1;
+}
+
+.ui-ramp-list-position {
+  font-family: var(--font-mono);
+  opacity: 0.6;
+  width: 3em;
+  text-align: right;
+}
+
+.ui-ramp-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  cursor: pointer;
+  opacity: 0.7;
+}
+.ui-ramp-delete-btn:hover {
+  opacity: 1;
+}
+
 /* ── Toggle (ui/UIElements.tsx) ────────────────────────────── */
 
 .ui-toggle-row {

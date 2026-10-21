@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import * as THREE from 'three';
+import { DEFAULT_COLOR_STOPS, type ColorStop } from './colorRamp';
 
 // Generates a Low/Mid/High palette that reads as one lit terrain ramp
 // rather than three unrelated colors. What makes them "make sense together"
@@ -69,8 +70,10 @@ export interface PlanetSettings {
   heightScale: number;
   meshSegments: number;
   colorByElevation: boolean;
-  colorMid: string;
-  colorHigh: string;
+  // The ramp's stops after position 0 (always baseColor) — see
+  // planet/colorRamp.ts. Replaces the old fixed colorMid/colorHigh pair
+  // (2026-10-20, the gradient ramp picker, ROADMAP.md Stage 07.4).
+  colorStops: ColorStop[];
   shadowsEnabled: boolean;
 }
 
@@ -81,10 +84,27 @@ export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
   heightScale: 15,
   meshSegments: 32,
   colorByElevation: false,
-  colorMid: '#6b8f4e',
-  colorHigh: '#ffffff',
+  colorStops: DEFAULT_COLOR_STOPS,
   shadowsEnabled: false,
 };
+
+// A saved project from before colorStops existed only has the old
+// colorMid/colorHigh fields (firebase/storage.ts casts whatever Firestore
+// actually returns to PlanetSettings without checking its real shape at
+// runtime, so an old document's data doesn't just vanish, it's still there,
+// just not reflected in this file's own type above). Old field names kept
+// loose/untyped here on purpose — they're migration input, not part of the
+// shape this project writes going forward.
+function migrateColorStops(settings: PlanetSettings & { colorMid?: string; colorHigh?: string }): ColorStop[] {
+  if (Array.isArray(settings.colorStops) && settings.colorStops.length > 0) return settings.colorStops;
+  if (settings.colorMid || settings.colorHigh) {
+    return [
+      { position: 0.5, color: settings.colorMid ?? DEFAULT_COLOR_STOPS[0].color },
+      { position: 1.0, color: settings.colorHigh ?? DEFAULT_COLOR_STOPS[1].color },
+    ];
+  }
+  return DEFAULT_COLOR_STOPS;
+}
 
 // Owns the planet-specific appearance controls — radius, base color, and
 // display mode — distinct from scene/sceneControls.ts's lighting/grid, which
@@ -122,8 +142,7 @@ export function usePlanetControls() {
   // picker duplicated what Base color already means (Dana, 2026-10-13:
   // "the base color should just serve as the low elevation color").
   const [colorByElevation, setColorByElevation] = useState(DEFAULT_PLANET_SETTINGS.colorByElevation);
-  const [colorMid, setColorMid] = useState(DEFAULT_PLANET_SETTINGS.colorMid);
-  const [colorHigh, setColorHigh] = useState(DEFAULT_PLANET_SETTINGS.colorHigh);
+  const [colorStops, setColorStops] = useState<ColorStop[]>(DEFAULT_PLANET_SETTINGS.colorStops);
   // Heightmap self-shadowing — land chunk only for now, see shaders/
   // terrain.glsl for why the planet's curved surface is a separate step.
   const [shadowsEnabled, setShadowsEnabled] = useState(DEFAULT_PLANET_SETTINGS.shadowsEnabled);
@@ -131,18 +150,21 @@ export function usePlanetControls() {
   function randomizeColors() {
     const palette = randomTerrainPalette();
     setBaseColor(palette.low);
-    setColorMid(palette.mid);
-    setColorHigh(palette.high);
+    setColorStops([
+      { position: 0.5, color: palette.mid },
+      { position: 1.0, color: palette.high },
+    ]);
   }
 
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, meshSegments, colorByElevation, colorMid, colorHigh, shadowsEnabled };
+    return { radiusKm, baseColor, displayMode, heightScale, meshSegments, colorByElevation, colorStops, shadowsEnabled };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
   // loaded project replaces all of these at once rather than one at a time.
+  // migrateColorStops handles an old save with no colorStops field yet.
   function applySettings(settings: PlanetSettings) {
     setRadiusKm(settings.radiusKm);
     setBaseColor(settings.baseColor);
@@ -150,8 +172,7 @@ export function usePlanetControls() {
     setHeightScale(settings.heightScale);
     setMeshSegments(settings.meshSegments);
     setColorByElevation(settings.colorByElevation);
-    setColorMid(settings.colorMid);
-    setColorHigh(settings.colorHigh);
+    setColorStops(migrateColorStops(settings));
     setShadowsEnabled(settings.shadowsEnabled);
   }
 
@@ -176,10 +197,8 @@ export function usePlanetControls() {
     setMeshSegments,
     colorByElevation,
     setColorByElevation,
-    colorMid,
-    setColorMid,
-    colorHigh,
-    setColorHigh,
+    colorStops,
+    setColorStops,
     shadowsEnabled,
     setShadowsEnabled,
     randomizeColors,

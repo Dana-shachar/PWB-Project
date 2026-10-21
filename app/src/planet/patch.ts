@@ -57,6 +57,22 @@ export function clampPatchTextureResolution(resolution: number): number {
   return Math.min(MAX_PATCH_TEXTURE_RESOLUTION, Math.max(17, Math.round(resolution)));
 }
 
+// A patch's own *display-mesh* resolution ceiling (real triangle geometry,
+// not a texture) — the planet's Resolution slider now drives this directly
+// (previously only the old single whole-globe mesh's segment count, which
+// this project's patches have otherwise replaced, see ISSUES.md [B28]).
+// Each patch already covers far less area than a whole cube face, so
+// reusing that slider's old 8-256 range unclamped here would mean far more
+// triangles per patch than the fixed value (64) this replaces, multiplied
+// by however many patches are visible at once. 128 is a conservative,
+// deliberately-picked ceiling (2x the original default), not the slider's
+// own full range.
+export const MAX_PATCH_GRID_RESOLUTION = 128;
+
+export function clampPatchGridResolution(resolution: number): number {
+  return Math.min(MAX_PATCH_GRID_RESOLUTION, Math.max(8, Math.round(resolution)));
+}
+
 // Depth is capped so a runaway value can't ask for an absurd number of
 // patches. At depth 8 a face is split 256 ways per axis, which is far more
 // than anything currently reaches.

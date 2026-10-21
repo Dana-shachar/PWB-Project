@@ -24,8 +24,9 @@ uniform float uSpecularStrength;
 uniform float uShininess;
 uniform vec3 uCameraPosition;
 uniform float uColorByElevation;
-uniform vec3 uColorMid;
-uniform vec3 uColorHigh;
+uniform vec3 uRampColors[MAX_COLOR_STOPS];
+uniform float uRampPositions[MAX_COLOR_STOPS];
+uniform float uRampCount;
 uniform float uElevationMin;
 uniform float uElevationMax;
 uniform sampler2D uHeightMap;
@@ -128,7 +129,7 @@ void main() {
   if (uColorByElevation > 0.5) {
     float elevationRaw = texture2D(uHeightMap, vUv).g;
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
-    vec3 ramp = terrainRampColor(elevationFraction, uBaseColor, uColorMid, uColorHigh);
+    vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
     const float REFERENCE_HEIGHT_FRACTION = 0.1;
     float heightFraction = uDisplacementAmplitude / max(0.0001, uRadius);
     float colorContrast = clamp(heightFraction / REFERENCE_HEIGHT_FRACTION, 0.0, 1.0);

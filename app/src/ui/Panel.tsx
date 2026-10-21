@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Slider, ColorPicker, Toggle, Select, Accordion, EditableText } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText } from './UIElements';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
 import { DiceIcon, PaletteIcon } from './icons';
+import { ColorRampEditor } from './panels/ColorRampEditor';
+import type { ColorStop } from '../planet/colorRamp';
 
 // 'voxel' only affects the land-chunk view for now — a display style, not a
 // chunk-only feature (Dana, 2026-09-23), but the planet doesn't render
@@ -23,6 +25,11 @@ interface PanelProps {
   onLightDirYChange: (value: number) => void;
   lightDirZ: number;
   onLightDirZChange: (value: number) => void;
+  // The land chunk's own elevation, independent of the planet's — see
+  // scene/sceneControls.ts, ISSUES.md [B28]. Every other light setting
+  // stays shared between the two views, only this one doesn't.
+  chunkLightDirZ: number;
+  onChunkLightDirZChange: (value: number) => void;
   lightIntensity: number;
   onLightIntensityChange: (value: number) => void;
   specularStrength: number;
@@ -49,10 +56,8 @@ interface PanelProps {
   // section alongside Display/Radius/Resolution/Base color).
   colorByElevation: boolean;
   onColorByElevationChange: (value: boolean) => void;
-  colorMid: string;
-  onColorMidChange: (value: string) => void;
-  colorHigh: string;
-  onColorHighChange: (value: string) => void;
+  colorStops: ColorStop[];
+  onColorStopsChange: (stops: ColorStop[]) => void;
   onRandomizeColors: () => void;
   // Heightmap self-shadowing — a lighting feature, stays with Scene/Lighting.
   shadowsEnabled: boolean;
@@ -173,6 +178,8 @@ export function Panel({
   onLightDirYChange,
   lightDirZ,
   onLightDirZChange,
+  chunkLightDirZ,
+  onChunkLightDirZChange,
   lightIntensity,
   onLightIntensityChange,
   specularStrength,
@@ -192,10 +199,8 @@ export function Panel({
   onRandomizeTerrain,
   colorByElevation,
   onColorByElevationChange,
-  colorMid,
-  onColorMidChange,
-  colorHigh,
-  onColorHighChange,
+  colorStops,
+  onColorStopsChange,
   onRandomizeColors,
   shadowsEnabled,
   onShadowsEnabledChange,
@@ -356,10 +361,17 @@ export function Panel({
               step={0.1}
               description="Where the light sits up and down."
             />
+            {/* The one light setting that doesn't stay shared between the
+                planet and the chunk (Dana, 2026-10-20) — the chunk is a
+                flat patch always facing one fixed direction, so an
+                elevation tuned for the planet (where some point on the
+                sphere always faces the light) can leave it dim; everything
+                else above/below still rebinds to the same shared value
+                either way. */}
             <Slider
               label="Light elevation"
-              value={lightDirZ}
-              onChange={onLightDirZChange}
+              value={activeViewContext === 'landChunk' ? chunkLightDirZ : lightDirZ}
+              onChange={activeViewContext === 'landChunk' ? onChunkLightDirZChange : onLightDirZChange}
               min={-10}
               max={10}
               step={0.1}
@@ -477,23 +489,25 @@ export function Panel({
                 that risk no longer applies there, only voxel mode's own
                 mesh still scales with resolution, bounded separately by
                 clampPatchSamples' own lower cap. See ISSUES.md, [B32]. The
-                planet's own range is far smaller: 6 faces at even a few
-                hundred segments each is already a lot of geometry, and a
-                cube-sphere's faceting is visible at far fewer segments than
-                the chunk's flat, close-up patch needs to look smooth. */}
+                planet's own max is 128, matching MAX_PATCH_GRID_RESOLUTION
+                (planet/patch.ts) — now a per-patch mesh resolution, not the
+                old single whole-globe mesh's segment count (patches render
+                the planet now, each with its own grid, see [B28]); 128 is a
+                deliberate, conservative ceiling since a patch already
+                covers far less area than a whole cube face did. */}
             <Slider
               label="Resolution"
               value={activeViewContext === 'landChunk' ? chunkResolution : meshSegments}
               onChange={activeViewContext === 'landChunk' ? onChunkResolutionChange : onMeshSegmentsChange}
               min={activeViewContext === 'landChunk' ? 8 : 8}
-              max={activeViewContext === 'landChunk' ? 2048 : 256}
+              max={activeViewContext === 'landChunk' ? 2048 : 128}
               step={activeViewContext === 'landChunk' ? 8 : 4}
               precision={0}
               disabled={activeViewContext === null}
               description={
                 activeViewContext === 'landChunk'
                   ? "How finely the land chunk's own ground is measured. Independent of Size above — you can zoom into a low-resolution patch and still see it as low-resolution."
-                  : 'How many segments each of the six cube faces is divided into. Low values show as a faceted, low-poly sphere once displacement pushes vertices out.'
+                  : "How finely each visible patch's own ground is measured — every patch you see rebuilds at this resolution, same control as before, now reaching what's actually on screen."
               }
             />
             {/* Above all three color pickers, not between them (Dana,
@@ -505,11 +519,9 @@ export function Panel({
               label="Color by elevation"
               value={colorByElevation}
               onChange={onColorByElevationChange}
-              description="Blends Base color (low), Mid and High by height instead of the flat Base color alone. Off by default."
+              description="Blends the gradient ramp below by height instead of the flat Base color alone. Off by default."
             />
-            <ColorPicker label="Base color" value={baseColor} onChange={onBaseColorChange} />
-            <ColorPicker label="Mid" value={colorMid} onChange={onColorMidChange} />
-            <ColorPicker label="High" value={colorHigh} onChange={onColorHighChange} />
+            <ColorRampEditor baseColor={baseColor} onBaseColorChange={onBaseColorChange} stops={colorStops} onStopsChange={onColorStopsChange} />
             {/* Rotates a hue, it doesn't pick three independent random RGB
                 values — see planetControls.ts's randomTerrainPalette() for
                 the conventions this follows. */}

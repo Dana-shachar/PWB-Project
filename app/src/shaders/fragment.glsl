@@ -16,8 +16,12 @@ uniform vec3 uCameraPosition;
 // only for now (flat-plane march; the planet's curved surface needs the
 // same idea projected onto its local tangent plane, a scoped follow-up).
 uniform float uColorByElevation;
-uniform vec3 uColorMid;
-uniform vec3 uColorHigh;
+// The ramp's stops — see shaders/terrain.glsl's terrainRampColor and
+// planet/colorRamp.ts for how these are assembled (colors[0]/positions[0]
+// is always uBaseColor at 0, not stored separately here).
+uniform vec3 uRampColors[MAX_COLOR_STOPS];
+uniform float uRampPositions[MAX_COLOR_STOPS];
+uniform float uRampCount;
 // This terrain's own real low and high, read back from the baked heightmap
 // rather than guessed — per-layer Height stacks additively with no fixed
 // bound, so a hardcoded range either never reached Base or never reached
@@ -117,7 +121,7 @@ void main() {
     // composite the bump normal above reads from R. See [S14] in SPEC.md.
     float elevationRaw = texture2D(uHeightMap, vUv).g;
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
-    vec3 ramp = terrainRampColor(elevationFraction, uBaseColor, uColorMid, uColorHigh);
+    vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
     // The stretch above always fills the full ramp, however small the real
     // relief is — it normalizes against whatever variation currently
     // exists, never an absolute scale, so a paint stroke at Height 0% still

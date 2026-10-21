@@ -3,6 +3,12 @@ import vertexShader from '../shaders/vertex.glsl?raw';
 import fragmentShaderBody from '../shaders/fragment.glsl?raw';
 import terrainGlsl from '../shaders/terrain.glsl?raw'; // the elevation color ramp — shared with chunk.frag.glsl, see shaders/terrain.glsl
 import { CUBE_FACES, cubeFacePoint, type CubeFace } from './cubeFace';
+import { buildRampUniformArrays, DEFAULT_COLOR_STOPS } from './colorRamp';
+
+// Matches this file's own uBaseColor placeholder (0x3a7bd5) below —
+// overwritten for real the moment Panel.tsx's controls reach this material
+// (SceneCanvas.tsx), same as every other uniform here.
+const INITIAL_RAMP = buildRampUniformArrays(new THREE.Color(0x3a7bd5), DEFAULT_COLOR_STOPS);
 
 const fragmentShader = terrainGlsl + fragmentShaderBody;
 
@@ -220,8 +226,9 @@ export function planet(radius = 20, segmentsPerFace = 32): THREE.Mesh {
       // yet (Stage 11 is the real color stage). Low is uBaseColor itself,
       // not a separate uniform — see shaders/terrain.glsl.
       uColorByElevation: { value: 0 },
-      uColorMid: { value: new THREE.Color(0x6b8f4e) },
-      uColorHigh: { value: new THREE.Color(0xffffff) },
+      uRampColors: { value: INITIAL_RAMP.colors },
+      uRampPositions: { value: INITIAL_RAMP.positions },
+      uRampCount: { value: INITIAL_RAMP.count },
       // Overwritten the first time the heightmap is baked (SceneCanvas.tsx)
       // with this terrain's real low/high — placeholders only.
       uElevationMin: { value: -0.5 },

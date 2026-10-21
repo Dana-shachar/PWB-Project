@@ -27,8 +27,9 @@ uniform vec3 uCameraPosition;
 // face has no top-down uv), see REFERENCES.md (Geiss, GPU Gems 3).
 uniform sampler2D uHeightMap;
 uniform float uColorByElevation;
-uniform vec3 uColorMid;
-uniform vec3 uColorHigh;
+uniform vec3 uRampColors[MAX_COLOR_STOPS];
+uniform float uRampPositions[MAX_COLOR_STOPS];
+uniform float uRampCount;
 // This patch's own real low and high — see fragment.glsl's matching uniforms.
 uniform float uElevationMin;
 uniform float uElevationMax;
@@ -100,11 +101,17 @@ void main() {
 
   vec3 lightDir = normalize(uLightDirection);
 
-  // Same Blinn-Phong terms as fragment.glsl, same uniform values, so the
-  // Scene controls mean the same thing in both views ([S23] in SPEC.md) —
-  // this is what makes it look good here too, not a separate chunk-only
-  // tuning.
-  float diffuse = max(dot(normal, lightDir), 0.0) * uLightIntensity;
+  // Half Lambert (Mitchell, "Shading in Valve's Source Engine," SIGGRAPH
+  // 2006, see REFERENCES.md), not a plain clamped Lambert term like
+  // fragment.glsl's: the chunk is always a flat patch facing one fixed
+  // direction, so a grazing light (legitimate on the sphere, where some
+  // point always faces it) can leave the whole chunk close to unlit, with
+  // no bright side to compensate. Half Lambert softens the falloff instead
+  // of hard-clamping to 0, so there's no fully flat, lightless side. Dana:
+  // "the chunk should always have light on it, but i should be able to
+  // tweak the lighting settings" — ambient/intensity/specular/shininess/
+  // direction still all apply normally on top of this.
+  float diffuse = pow(dot(normal, lightDir) * 0.5 + 0.5, 2.0) * uLightIntensity;
 
   vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
   vec3 halfVector = normalize(lightDir + viewDir);
@@ -132,7 +139,7 @@ void main() {
     float sideElevationRaw = (vWorldPosition.y / uMaxHeight) - 0.5;
     float effectiveElevationRaw = vIsTopSurface > 0.5 ? elevationRaw : sideElevationRaw;
     float elevationFraction = (effectiveElevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
-    vec3 ramp = terrainRampColor(elevationFraction, uBaseColor, uColorMid, uColorHigh);
+    vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
     // Contrast fades in with real relief — see fragment.glsl's matching
     // comment. uMaxHeight/uChunkSize recovers the same Height (%) the
     // slider shows, the chunk's own version of uDisplacementAmplitude/uRadius.

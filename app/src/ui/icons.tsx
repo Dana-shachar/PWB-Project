@@ -130,3 +130,14 @@ export function ResetIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+// Deletes the selected stop in the gradient ramp editor (ui/panels/
+// ColorRampEditor.tsx) — a plain X, same flat line-art convention as every
+// other icon here.
+export function CloseIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden="true">
+      <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" />
+    </svg>
+  );
+}

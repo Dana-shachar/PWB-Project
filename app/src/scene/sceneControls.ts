@@ -4,8 +4,8 @@ import { useState } from 'react';
 // from planet/planetControls.ts, which is the planet itself, not the scene
 // around it. See ISSUES.md, 2026-09-22.
 export function useSceneControls() {
-  const [ambientLight, setAmbientLight] = useState(0.12); // the fill — lower means deeper shadow
-  const [lightDirX, setLightDirX] = useState(1);
+  const [ambientLight, setAmbientLight] = useState(0.26); // the fill — lower means deeper shadow
+  const [lightDirX, setLightDirX] = useState(1.6);
   const [lightDirY, setLightDirY] = useState(1);
   // The light's elevation. Was hardcoded to 1 (uLightDirection.set(x, y, 1)
   // in SceneCanvas/LandChunkCanvas) with no control reaching it at all — a
@@ -14,7 +14,16 @@ export function useSceneControls() {
   // unreachable. Reverted the invented "Contrast" curve in favor of this
   // plus uLightIntensity below: known Blinn-Phong terms, not a reshaped
   // falloff. See ISSUES.md, 2026-10-13.
-  const [lightDirZ, setLightDirZ] = useState(1);
+  const [lightDirZ, setLightDirZ] = useState(-4.3);
+  // The land chunk's own elevation, independent of the planet's (Dana,
+  // 2026-10-20: "that's basically the only difference between the two,
+  // they can share all light settings, beside the elevation"). The chunk
+  // is a flat patch always facing one fixed direction, so a grazing
+  // elevation tuned for the planet (where some point on the sphere always
+  // faces the light regardless) can leave the whole chunk dim — a problem
+  // specific to elevation, not the other light terms. 0.7 is Dana's own
+  // found-by-testing value.
+  const [chunkLightDirZ, setChunkLightDirZ] = useState(0.7);
   // The key light's own strength — the conventional way to separate lit
   // from shadow is a brighter key against the ambient fill, not a contrast
   // curve on the result.
@@ -22,7 +31,7 @@ export function useSceneControls() {
   // Blinn-Phong specular (Blinn, 1977): a highlight is what reads as a lit
   // surface rather than flat-shaded. Strength is how bright it is;
   // shininess how tight.
-  const [specularStrength, setSpecularStrength] = useState(0.3);
+  const [specularStrength, setSpecularStrength] = useState(0);
   const [shininess, setShininess] = useState(24);
   const [gridSpacing, setGridSpacing] = useState(10);
   const [gridVisible, setGridVisible] = useState(true);
@@ -36,6 +45,8 @@ export function useSceneControls() {
     setLightDirY,
     lightDirZ,
     setLightDirZ,
+    chunkLightDirZ,
+    setChunkLightDirZ,
     lightIntensity,
     setLightIntensity,
     specularStrength,

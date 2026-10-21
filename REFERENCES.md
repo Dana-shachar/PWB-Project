@@ -52,7 +52,10 @@
 
 ## 🎨 Visual
 
-*Nothing yet.*
+**Multi-stop gradient ramp editor** · Blender Color Ramp · `UX pattern used`
+- A horizontal bar; each stop has its own position and color; drag a stop to reposition it, an Add control inserts a new one, a Delete control removes the selected one; Linear is one of several interpolation modes between stops.
+- The convention `ui/panels/ColorRampEditor.tsx` follows: drag along the bar, click empty space to add (sampling the ramp's own current color there), delete the selected stop, linear interpolation. Base color stays the fixed stop at position 0 (Dana, 2026-10-13), not a separate control.
+- *[Blender Manual, Color Ramp Widget](https://docs.blender.org/manual/en/4.1/interface/controls/templates/color_ramp.html). Verified 2026-10-20.*
 
 ---
 
@@ -102,6 +105,21 @@
 - One `WebGLRenderer` draws into one canvas; each view gets its own `setScissor()`/`setViewport()` rectangle per frame, read from a DOM placeholder element's own `getBoundingClientRect()` (converted from the DOM's top-left origin to WebGL's bottom-left one), with the scissor test on so each region clears and draws independently without touching the others. Built as the fix for the planet and land chunk previously being unable to share a GPU texture at all, each owned a separate `WebGLRenderer`/context, and a render target's texture belongs to the context that created it. See `scene/sharedViewportRenderer.ts`, `[S28]` in `SPEC.md`, `[B32]` in `ISSUES.md`.
 - *[mrdoob/three.js](https://github.com/mrdoob/three.js), `examples/webgl_multiple_elements.html`. Verified 2026-10-17.*
 
+**A world-space direction, re-expressed in a point's own local frame** · geodesy / tangent-space lighting · `superseded 2026-10-20`
+- Geodesy's East-North-Up (ENU) local tangent plane: a direction vector (e.g. a sun vector) at a specific point on a sphere is rotated into that point's own local frame, built from its own local "up" (the surface normal there), not world up. Tangent-space normal mapping does the identical thing for a light vector against a surface's own basis.
+- Was used to fix the land chunk's light direction via a new `patchLightDirection()` (`planet/patch.ts`). Reverted the same day: Dana decided the chunk shouldn't be tied to its real position at all ("it's located somewhere in space so it really doesn't matter"), `patchLightDirection()` was removed entirely. See `ISSUES.md` `[B28]` for what replaced it (a chunk-only elevation value, plus Half Lambert below).
+- *[Local tangent plane coordinates](https://en.wikipedia.org/wiki/Local_tangent_plane_coordinates) · [ECEF ↔ ENU transforms, ESA Navipedia](https://gssc.esa.int/navipedia/index.php/Transformations_between_ECEF_and_ENU_coordinates) · [Normal mapping](https://en.wikipedia.org/wiki/Normal_mapping). Verified 2026-10-19.*
+
+**Soft shadows from a raymarch, free of extra cost** · Quilez · `method used`
+- During a shadow march that already steps toward the light checking for an occluder, track the minimum ratio of how far above/below the ray each sample's height gap is relative to the distance traveled, instead of returning a hard 0/1 the moment one sample occludes. Converts a binary hit into a continuous penumbra, same march, same step count, no new samples.
+- Adapted here for a heightfield march (the original is for a signed-distance-field raymarch): the "distance to the nearest surface" term becomes the ray's own height above the sampled terrain at that step, converted to world units via the patch's own `maxHeightWorld`, divided by the real world distance traveled, scaled by a tunable softness constant (`SHADOW_SOFTNESS`, `shaders/terrain.glsl`).
+- *[Quilez, "Soft Shadows"](https://iquilezles.org/articles/rmshadows/). Read 2026-10-20.*
+
+**Half Lambert, so a surface's unlit side isn't flat black** · Mitchell / Valve · `method used`
+- Remaps the diffuse dot product from its usual -1..1 range to 0..1 (`dot * 0.5 + 0.5`, then squared) instead of clamping anything below 0 straight to black. Valve's own description: keeps an object's rear from looking flat.
+- Used for the land chunk's own diffuse term (`shaders/chunk.frag.glsl`): it's a flat patch always facing one fixed direction, so a grazing or unfavorable light angle can leave it looking fully unlit with plain Lambert, this softens that without overriding any of Dana's own lighting controls.
+- *[Half Lambert, Valve Developer Community](https://developer.valvesoftware.com/wiki/Half_Lambert) · [Mitchell, "Shading in Valve's Source Engine," SIGGRAPH 2006](https://advances.realtimerendering.com/s2006/Mitchell-ShadingInValvesSourceEngine.pdf). Verified 2026-10-20.*
+
 ### Erosion
 
 **Hydraulic erosion, droplet-based** · Sebastian Lague · `considered` · MIT
@@ -142,6 +160,16 @@
 - mapping tiles onto a sphere by latitude and longitude stretches them near the equator and crushes them at the poles, where the vertical coordinate runs to infinity
 - the evidence for not building the patch system on the existing sphere grid
 - *[gamedev.net, mapping tiles onto a sphere](https://gamedev.net/forums/topic/719766-correctly-mapping-web-mercator-map-tiles-onto-a-3d-sphere-in-opengl/5473769/) · [jMonkeyEngine, spherical and planetary terrains](https://hub.jmonkeyengine.org/t/spherical-planetary-terrains/17487)*
+
+**Budgeting how many tiles load per frame** · Unigine · `method used`
+- Separate per-frame caps: how many tiles get passed to the virtual texture each frame, and how many actually load (default 4), rather than loading everything that became visible all at once.
+- Why the planet felt choppy loading in: `PlanetPatchRenderer.updatePatches` built and baked every newly-visible patch synchronously, a real GPU bake plus a shader compile each. `MAX_NEW_PATCHES_PER_FRAME` caps this the same way, draining a queue a few patches at a time instead.
+- *[Unigine, terrain streaming settings](https://developer.unigine.com/en/docs/2.17/editor2/settings/render_settings/landscape/). Read 2026-10-19.*
+
+**Stitching a 2:1 vertex-density LOD boundary with a triangle fan** · de Boer, "geomipmapping" · `method used`
+- Where a coarser block's edge meets a finer neighbor's edge at twice the vertex density, the standard fix is a fan of 3 triangles per coarse cell (instead of the usual 2), welding the finer side's one extra in-between point down to the coarser edge, rather than leaving it unrepresented (the T-junction crack).
+- The planet's own patches hit exactly this case: a fixed 65 vertices per edge regardless of patch size means a patch bordering a same-face neighbor one level finer has half as many edge points as that boundary actually needs. `planet/planetPatchMesh.ts`'s `buildPatchGeometry` now builds a stitched edge this way when flagged (`planet/planetPatches.ts`'s `computeStitchFlags`), one edge direction at a time. See `ISSUES.md` [B28].
+- *de Boer, "Fast Terrain Rendering using Geometrical Mipmapping," flipCode featured articles, October 2000 · [Panda3D, Geometrical MipMapping](https://docs.panda3d.org/1.9/cpp/programming/terrain/geometrical-mipmapping) (confirms the technique and its origin; the original flipCode PDF's current live URL wasn't independently verified this pass). Read 2026-10-20.*
 
 ### Height data without a rectangular map
 

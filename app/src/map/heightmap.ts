@@ -336,6 +336,10 @@ export class HeightmapPipeline {
         uRegionFace: { value: 0 },
         uRegionMin: { value: new THREE.Vector2(-1, -1) },
         uRegionMax: { value: new THREE.Vector2(1, 1) },
+        // The bake target's own resolution — lets the fragment shader
+        // correct for sampling each texel at its center rather than its
+        // edge, see heightmap.frag.glsl and bakeRegionInto() below, [B28].
+        uRegionSamples: { value: 65 },
         ...paintTextureUniforms,
       },
     });
@@ -665,6 +669,7 @@ export class HeightmapPipeline {
     uniforms.uRegionFace.value = face;
     (uniforms.uRegionMin.value as THREE.Vector2).set(min.x, min.y);
     (uniforms.uRegionMax.value as THREE.Vector2).set(max.x, max.y);
+    uniforms.uRegionSamples.value = target.width;
 
     renderer.setRenderTarget(target);
     renderer.render(this.scene, this.camera);

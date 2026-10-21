@@ -138,6 +138,8 @@ function App() {
         onLightDirYChange={sceneControls.setLightDirY}
         lightDirZ={sceneControls.lightDirZ}
         onLightDirZChange={sceneControls.setLightDirZ}
+        chunkLightDirZ={sceneControls.chunkLightDirZ}
+        onChunkLightDirZChange={sceneControls.setChunkLightDirZ}
         lightIntensity={sceneControls.lightIntensity}
         onLightIntensityChange={sceneControls.setLightIntensity}
         specularStrength={sceneControls.specularStrength}
@@ -157,10 +159,8 @@ function App() {
         onRandomizeTerrain={noiseLayers.randomizeTerrain}
         colorByElevation={planetControls.colorByElevation}
         onColorByElevationChange={planetControls.setColorByElevation}
-        colorMid={planetControls.colorMid}
-        onColorMidChange={planetControls.setColorMid}
-        colorHigh={planetControls.colorHigh}
-        onColorHighChange={planetControls.setColorHigh}
+        colorStops={planetControls.colorStops}
+        onColorStopsChange={planetControls.setColorStops}
         onRandomizeColors={planetControls.randomizeColors}
         shadowsEnabled={planetControls.shadowsEnabled}
         onShadowsEnabledChange={planetControls.setShadowsEnabled}
@@ -259,8 +259,7 @@ function App() {
                 layers={noiseLayers.layers}
                 heightScale={planetControls.heightScale}
                 colorByElevation={planetControls.colorByElevation}
-                colorMid={planetControls.colorMid}
-                colorHigh={planetControls.colorHigh}
+                colorStops={planetControls.colorStops}
               />
             </div>
             {landChunk.viewMode === 'split' && <div className="viewport-divider" onMouseDown={landChunk.startResize} />}
@@ -281,7 +280,7 @@ function App() {
                 ambientLight={sceneControls.ambientLight}
                 lightDirX={sceneControls.lightDirX}
                 lightDirY={sceneControls.lightDirY}
-                lightDirZ={sceneControls.lightDirZ}
+                lightDirZ={sceneControls.chunkLightDirZ}
                 lightIntensity={sceneControls.lightIntensity}
                 specularStrength={sceneControls.specularStrength}
                 shininess={sceneControls.shininess}
@@ -294,8 +293,7 @@ function App() {
                 chunkSize={landChunk.chunkSize}
                 maxHeight={landChunk.maxHeight}
                 colorByElevation={planetControls.colorByElevation}
-                colorMid={planetControls.colorMid}
-                colorHigh={planetControls.colorHigh}
+                colorStops={planetControls.colorStops}
                 elevationMin={landChunk.elevationMin}
                 elevationMax={landChunk.elevationMax}
                 shadowsEnabled={planetControls.shadowsEnabled}

@@ -8,6 +8,7 @@ import { controls } from '../scene/controls';
 import { grid } from '../scene/grid';
 import type { GumballTarget } from '../scene/Gumball';
 import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
+import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
 
 const chunkFragmentGlsl = terrainGlsl + chunkFragmentBody;
 
@@ -22,8 +23,8 @@ interface LandChunkCanvasProps {
   geometry: THREE.BufferGeometry | null;
   // Shared with the planet's own Scene controls (Dana, 2026-09-23 — lighting
   // shouldn't be a separate, independent setting per viewport), not this
-  // component's own state. Direction is used as-is; intensity is rescaled
-  // for this material — see the lighting effect below for why.
+  // component's own state. Used raw, not tied to this patch's real position
+  // on the sphere — see the lighting effect below.
   ambientLight: number;
   lightDirX: number;
   lightDirY: number;
@@ -47,8 +48,7 @@ interface LandChunkCanvasProps {
   chunkSize: number;
   maxHeight: number;
   colorByElevation: boolean;
-  colorMid: string;
-  colorHigh: string;
+  colorStops: ColorStop[];
   // This patch's own real low and high, in raw elevation units — the color
   // ramp spans this range, not a guessed or fixed-anchor one. See
   // voxel/landChunk.ts and shaders/terrain.glsl.
@@ -99,8 +99,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     chunkSize,
     maxHeight,
     colorByElevation,
-    colorMid,
-    colorHigh,
+    colorStops,
     elevationMin,
     elevationMax,
     shadowsEnabled,
@@ -171,6 +170,15 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   // planet, because both go through the same model (shaders/chunk.frag.glsl
   // and shaders/fragment.glsl). The old rescaling multipliers are gone with
   // the standard material that needed them.
+  //
+  // Deliberately NOT rotated into the patch's own real position on the
+  // sphere (tried briefly, 2026-10-19/20, then reverted) — the chunk is an
+  // inspection view, not a simulation of that exact spot's real day/night
+  // side, and a patch can legitimately face away from the sun.
+  // Dana: "it's located somewhere in space so it really doesn't matter...
+  // the chunk should always have light on it, but i should be able to tweak
+  // the lighting settings." Raw direction keeps the Scene panel's sliders
+  // behaving the same, predictable way here as on the planet.
   useEffect(() => {
     const material = materialRef.current;
     if (!material) return;
@@ -201,8 +209,11 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     material.uniforms.uChunkSize.value = chunkSize;
     material.uniforms.uMaxHeight.value = maxHeight;
     material.uniforms.uColorByElevation.value = colorByElevation ? 1 : 0;
-    material.uniforms.uColorMid.value.set(colorMid);
-    material.uniforms.uColorHigh.value.set(colorHigh);
+    const ramp = buildRampUniformArrays(baseColor, colorStops);
+    const rampColors = material.uniforms.uRampColors.value as THREE.Color[];
+    for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
+    (material.uniforms.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
+    material.uniforms.uRampCount.value = ramp.count;
     material.uniforms.uElevationMin.value = elevationMin;
     material.uniforms.uElevationMax.value = elevationMax;
     material.uniforms.uShadowsEnabled.value = shadowsEnabled ? 1 : 0;
@@ -213,8 +224,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     chunkSize,
     maxHeight,
     colorByElevation,
-    colorMid,
-    colorHigh,
+    baseColor,
+    colorStops,
     elevationMin,
     elevationMax,
     shadowsEnabled,
@@ -255,6 +266,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     // DoubleSide as a safety net against any wall-winding mistakes — Three.js
     // flips the lighting normal for back-facing polygons automatically, so
     // this stays visually correct either way, not just a visibility patch.
+    const initialRamp = buildRampUniformArrays(baseColor, colorStops);
     const material = new THREE.ShaderMaterial({
       vertexShader: chunkVertexGlsl,
       fragmentShader: chunkFragmentGlsl,
@@ -274,8 +286,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uChunkSize: { value: chunkSize },
         uMaxHeight: { value: maxHeight },
         uColorByElevation: { value: colorByElevation ? 1 : 0 },
-        uColorMid: { value: new THREE.Color(colorMid) },
-        uColorHigh: { value: new THREE.Color(colorHigh) },
+        uRampColors: { value: initialRamp.colors },
+        uRampPositions: { value: initialRamp.positions },
+        uRampCount: { value: initialRamp.count },
         uElevationMin: { value: elevationMin },
         uElevationMax: { value: elevationMax },
         uShadowsEnabled: { value: shadowsEnabled ? 1 : 0 },

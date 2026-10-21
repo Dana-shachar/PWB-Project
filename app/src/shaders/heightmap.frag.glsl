@@ -177,6 +177,7 @@ uniform float uRegionMode; // 0 = whole globe, 1 = the region below
 uniform float uRegionFace; // 0..5, matching CUBE_FACES in planet/mesh.ts
 uniform vec2 uRegionMin;   // face-local coordinates, each in [-1, 1]
 uniform vec2 uRegionMax;
+uniform float uRegionSamples; // the bake target's own resolution, see below
 
 // Mirrors cubeFacePoint() in planet/mesh.ts. Kept deliberately identical:
 // the region a patch bakes has to be the same surface the mesh builds, or
@@ -275,7 +276,15 @@ void main() {
   vec3 basePosition;
   vec2 paintUV;
   if (uRegionMode > 0.5) {
-    vec2 faceCoord = mix(uRegionMin, uRegionMax, vUv);
+    // vUv is sampled at each texel's own center ("pixel is area"), so a raw
+    // mix() put the edge texel's data slightly inside the region, not on
+    // its true boundary — two neighboring patches then each measure a
+    // slightly different physical point for what's meant to be one shared
+    // edge. Remapped to "pixel is point" (the standard GeoTIFF/DEM tiling
+    // fix for this exact mismatch, see REFERENCES.md) so texel 0 lands
+    // exactly on uRegionMin and the last texel exactly on uRegionMax.
+    vec2 edgeAlignedUV = (vUv * uRegionSamples - 0.5) / (uRegionSamples - 1.0);
+    vec2 faceCoord = mix(uRegionMin, uRegionMax, edgeAlignedUV);
     basePosition = normalize(cubeFacePoint(uRegionFace, faceCoord.x, faceCoord.y));
     paintUV = spherePositionToPaintUv(basePosition);
   } else {
