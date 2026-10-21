@@ -8,6 +8,11 @@ interface ColorRampEditorProps {
   onBaseColorChange: (value: string) => void;
   stops: ColorStop[];
   onStopsChange: (stops: ColorStop[]) => void;
+  // Whether "Color by elevation" is on — when it's off, the ramp doesn't
+  // apply at all, so only the plain base color makes sense to show (Dana,
+  // 2026-10-21: "when ramp is nt active its ok to show only base color.
+  // when ramp is active all colors should show as a part of it").
+  rampActive: boolean;
 }
 
 function clamp01(value: number): number {
@@ -47,11 +52,14 @@ function hexToHsl(hex: string): [number, number, number] {
 
 type ColorCodeFormat = 'hex' | 'rgb' | 'hsl';
 
+// No "rgb(...)"/"hsl(...)" wrapper — Dana: "if i switched to rgb, no need
+// to write that in the color code, same for hsl." The format dropdown
+// already says which one it is.
 function formatColorCode(hex: string, format: ColorCodeFormat): string {
   if (format === 'hex') return hex;
-  if (format === 'rgb') return `rgb(${hexToRgb(hex).join(', ')})`;
+  if (format === 'rgb') return hexToRgb(hex).join(', ');
   const [h, s, l] = hexToHsl(hex);
-  return `hsl(${h}, ${s}%, ${l}%)`;
+  return `${h}, ${s}%, ${l}%`;
 }
 
 // Linear interpolation across baseColor + stops, matching terrainRampColor's
@@ -101,7 +109,7 @@ function cssGradient(baseColor: string, stops: ColorStop[]): string {
 // deletable; `stops` holds every stop after it, freely added, dragged, or
 // removed, up to MAX_COLOR_STOPS total (GLSL ES 1.00's fixed-size ramp
 // array, see shaders/terrain.glsl).
-export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsChange }: ColorRampEditorProps) {
+export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsChange, rampActive }: ColorRampEditorProps) {
   const barRef = useRef<HTMLDivElement | null>(null);
   // null = baseColor's own fixed stop selected; otherwise an index into
   // `stops`. Selecting reveals that one stop's own color picker + delete
@@ -110,8 +118,14 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
   const draggingIndex = useRef<number | null>(null);
   // Set mid-drag once a handle's moved far enough off the bar that
   // releasing it now deletes the stop instead of repositioning it — see
-  // DELETE_DRAG_DISTANCE.
+  // DELETE_DRAG_DISTANCE. Tinted as a warning (not dimmed — dimming read as
+  // "disabled," not "about to be removed," Dana 2026-10-21), full opacity.
   const [pendingDeleteIndex, setPendingDeleteIndex] = useState<number | null>(null);
+  // Set only once a drag-release actually triggers deletion, for a brief
+  // fade-out before the stop is really removed — Dana: "would be better if
+  // it just disappeared (fade)," replacing the old dim-then-vanish feel.
+  const [deletingIndex, setDeletingIndex] = useState<number | null>(null);
+  const DELETE_FADE_MS = 150;
   // Pointerdown's own clientX/Y, to tell a click from a drag on release —
   // see CLICK_MOVEMENT_THRESHOLD. null whenever no pin is currently pressed.
   const dragStart = useRef<{ x: number; y: number } | null>(null);
@@ -156,6 +170,19 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
     setSelected(null);
   }
 
+  // Same real deletion, just preceded by a brief opacity fade instead of
+  // vanishing instantly — used everywhere a stop gets removed, so every
+  // path (drag-away, the list's own delete button, Backspace) feels the
+  // same way.
+  function deleteStopWithFade(index: number) {
+    if (stops.length <= 1) return;
+    setDeletingIndex(index);
+    setTimeout(() => {
+      deleteStop(index);
+      setDeletingIndex(null);
+    }, DELETE_FADE_MS);
+  }
+
   // Backspace/Delete removes the selected stop — a document-level listener
   // rather than the handle button's own onKeyDown, since clicking a button
   // doesn't reliably give it keyboard focus in every browser (Safari's
@@ -169,11 +196,11 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
       event.preventDefault();
-      deleteStop(selected);
+      deleteStopWithFade(selected);
     }
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- deleteStop closes over stops/onStopsChange, which already change identity whenever stops itself does, re-subscribing on selected alone is enough
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deleteStopWithFade closes over stops/onStopsChange, which already change identity whenever stops itself does, re-subscribing on selected alone is enough
   }, [selected, stops]);
 
   function handleBarPointerDown(event: React.PointerEvent<HTMLDivElement>) {
@@ -218,7 +245,7 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
     const start = dragStart.current;
     dragStart.current = null;
     if (index !== null && pendingDeleteIndex === index) {
-      deleteStop(index);
+      deleteStopWithFade(index);
       setPendingDeleteIndex(null);
       return;
     }
@@ -245,8 +272,6 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
     }
   }
 
-  const selectedColor = selected === null ? baseColor : (stops[selected]?.color ?? baseColor);
-
   // Base color plus every stop, in one ascending-position list — Dana:
   // "i would want to see all picked colors in a column with their color
   // code." `index` is null for the fixed base entry (not part of `stops`,
@@ -256,23 +281,68 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
     ...stops.map((stop, index) => ({ key: `stop-${index}`, position: stop.position, color: stop.color, index })),
   ].sort((a, b) => a.position - b.position);
 
+  // Ramp off: it doesn't apply, so only the plain base color makes sense to
+  // show, same plain row every other single-color control in this panel
+  // uses, not the ramp's own machinery. See rampActive's own comment above.
+  if (!rampActive) {
+    return <ColorPicker label="Color" value={baseColor} onChange={onBaseColorChange} />;
+  }
+
   return (
     <div className="ui-ramp-editor">
-      {/* A secondary, always-available way to edit the current selection's
-          color — left-aligned, above the bar (Dana, 2026-10-21: the
-          centered one below "looks weird"). Clicking a pin directly below
-          now also opens its own native picker, so this is no longer the
-          only way to change a color, just a stable readout of whichever
-          stop is currently selected plus another path to the same edit. */}
-      <div className="ui-ramp-preview-row">
-        <ColorPicker
-          label="Color"
-          value={selectedColor}
-          onChange={(value) => {
-            if (selected === null) onBaseColorChange(value);
-            else onStopsChange(stops.map((stop, i) => (i === selected ? { ...stop, color: value } : stop)));
-          }}
-        />
+      {/* The format picker sits above the color list, which includes base
+          color as its own first row, same template as every stop (Dana,
+          2026-10-21: "move the color format above the base color... make
+          all of the colors picked in the same template"), not a separate
+          standalone color picker above the list. */}
+      <Select
+        label="Code format"
+        value={codeFormat}
+        onChange={(value) => setCodeFormat(value as ColorCodeFormat)}
+        options={[
+          { value: 'hex', label: 'Hex' },
+          { value: 'rgb', label: 'RGB' },
+          { value: 'hsl', label: 'HSL' },
+        ]}
+      />
+      {/* A header labeling the position column — Dana, 2026-10-21: "i'm
+          also missing an indication for the elevation of the color," the
+          bare "%" by itself didn't say what it was a percentage of. */}
+      <div className="ui-ramp-list-header">
+        <span className="ui-ramp-list-header-position">Elevation</span>
+      </div>
+      <div className="ui-ramp-list">
+        {allEntries.map((entry) => (
+          <div
+            key={entry.key}
+            className={
+              'ui-ramp-list-row' +
+              (selected === entry.index ? ' ui-ramp-list-row--selected' : '') +
+              (deletingIndex === entry.index ? ' ui-ramp-list-row--deleting' : '')
+            }
+            onClick={() => {
+              setSelected(entry.index);
+              openColorPicker(entry.index);
+            }}
+          >
+            <span className="ui-ramp-list-swatch" style={{ background: entry.color }} />
+            <span className="ui-ramp-list-code">{formatColorCode(entry.color, codeFormat)}</span>
+            <span className="ui-ramp-list-position">{Math.round(entry.position * 100)}%</span>
+            {entry.index !== null && stops.length > 1 && (
+              <button
+                type="button"
+                className="ui-ramp-delete-btn"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  deleteStopWithFade(entry.index as number);
+                }}
+                aria-label="Delete this color stop"
+              >
+                <CloseIcon />
+              </button>
+            )}
+          </div>
+        ))}
       </div>
       <div className="ui-ramp-bar" ref={barRef} onPointerDown={handleBarPointerDown} style={{ background: cssGradient(baseColor, stops) }}>
         {/* One shared hidden input, reused for whichever pin was last
@@ -306,7 +376,8 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
             className={
               'ui-ramp-pin' +
               (selected === index ? ' ui-ramp-pin--selected' : '') +
-              (pendingDeleteIndex === index ? ' ui-ramp-pin--pending-delete' : '')
+              (pendingDeleteIndex === index ? ' ui-ramp-pin--pending-delete' : '') +
+              (deletingIndex === index ? ' ui-ramp-pin--deleting' : '')
             }
             style={{ left: `${stop.position * 100}%`, background: stop.color }}
             onPointerDown={(event) => handleHandlePointerDown(event, index)}
@@ -314,42 +385,6 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
             onPointerUp={handleHandlePointerUp}
             aria-label={`Color stop at ${(stop.position * 100).toFixed(0)}%`}
           />
-        ))}
-      </div>
-      <Select
-        label="Code format"
-        value={codeFormat}
-        onChange={(value) => setCodeFormat(value as ColorCodeFormat)}
-        options={[
-          { value: 'hex', label: 'Hex' },
-          { value: 'rgb', label: 'RGB' },
-          { value: 'hsl', label: 'HSL' },
-        ]}
-      />
-      <div className="ui-ramp-list">
-        {allEntries.map((entry) => (
-          <div
-            key={entry.key}
-            className={'ui-ramp-list-row' + (selected === entry.index ? ' ui-ramp-list-row--selected' : '')}
-            onClick={() => setSelected(entry.index)}
-          >
-            <span className="ui-ramp-list-swatch" style={{ background: entry.color }} />
-            <span className="ui-ramp-list-code">{formatColorCode(entry.color, codeFormat)}</span>
-            <span className="ui-ramp-list-position">{Math.round(entry.position * 100)}%</span>
-            {entry.index !== null && stops.length > 1 && (
-              <button
-                type="button"
-                className="ui-ramp-delete-btn"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  deleteStop(entry.index as number);
-                }}
-                aria-label="Delete this color stop"
-              >
-                <CloseIcon />
-              </button>
-            )}
-          </div>
         ))}
       </div>
     </div>

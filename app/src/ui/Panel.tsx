@@ -510,25 +510,33 @@ export function Panel({
                   : "How finely each visible patch's own ground is measured — every patch you see rebuilds at this resolution, same control as before, now reaching what's actually on screen."
               }
             />
-            {/* Above all three color pickers, not between them (Dana,
-                2026-10-14) — it gates the whole group below, including Base
-                color, so it reads as that group's own header switch. A
-                labelled placeholder for Stage 11's real height+climate+
-                biome color shader (ROADMAP.md), not that shader itself. */}
-            <Toggle
-              label="Color by elevation"
-              value={colorByElevation}
-              onChange={onColorByElevationChange}
-              description="Blends the gradient ramp below by height instead of the flat Base color alone. Off by default."
-            />
-            <ColorRampEditor baseColor={baseColor} onBaseColorChange={onBaseColorChange} stops={colorStops} onStopsChange={onColorStopsChange} />
-            {/* Rotates a hue, it doesn't pick three independent random RGB
-                values — see planetControls.ts's randomTerrainPalette() for
-                the conventions this follows. */}
-            <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={onRandomizeColors}>
-              <PaletteIcon /> Randomize colors
-              <span className="ui-tooltip">Rotates a related hue for Base/Mid/High, not independent colors</span>
-            </button>
+            {/* Every color control grouped under its own named subsection
+                (Dana, 2026-10-21), not loose in Planet's own body. */}
+            <Accordion title="Color" nested>
+              {/* Gates the whole group below (Dana, 2026-10-14) — a
+                  labelled placeholder for Stage 11's real height+climate+
+                  biome color shader (ROADMAP.md), not that shader itself. */}
+              <Toggle
+                label="Color by elevation"
+                value={colorByElevation}
+                onChange={onColorByElevationChange}
+                description="Blends the gradient ramp below by height instead of the flat Base color alone. Off by default."
+              />
+              <ColorRampEditor
+                baseColor={baseColor}
+                onBaseColorChange={onBaseColorChange}
+                stops={colorStops}
+                onStopsChange={onColorStopsChange}
+                rampActive={colorByElevation}
+              />
+              {/* Rotates a hue, it doesn't pick three independent random RGB
+                  values — see planetControls.ts's randomTerrainPalette() for
+                  the conventions this follows. */}
+              <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={onRandomizeColors}>
+                <PaletteIcon /> Randomize colors
+                <span className="ui-tooltip">Rotates a related hue for Base/Mid/High, not independent colors</span>
+              </button>
+            </Accordion>
           </Accordion>
         </div>
 

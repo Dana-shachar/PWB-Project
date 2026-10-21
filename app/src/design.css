@@ -317,10 +317,6 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   gap: var(--gap-md);
 }
 
-.ui-ramp-preview-row {
-  align-self: flex-start; /* left-aligned, not stretched/centered across the panel */
-}
-
 .ui-ramp-bar {
   position: relative;
   height: 20px;
@@ -387,11 +383,36 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   opacity: 0.8;
 }
 /* Dragged far enough off the bar that releasing it now deletes the stop —
-   faded and shrunk as the same "about to remove" cue drag-to-delete UIs
-   (Blender, After Effects) use. */
+   a warning-colored ring, not dimmed (dimming read as "disabled," not
+   "about to be removed," Dana 2026-10-21), full opacity so the stop's own
+   color stays clearly visible right up until it's actually gone.
+   --color-axis-x is this design system's only existing red, reused here
+   rather than inventing a new color for "danger." */
 .ui-ramp-pin--pending-delete {
-  opacity: 0.35;
-  transform: translateX(-50%) scale(0.7);
+  border-color: var(--color-axis-x);
+  box-shadow: 0 0 0 1.5px var(--color-axis-x);
+}
+/* The actual removal, a brief fade instead of vanishing instantly (Dana:
+   "would be better if it just disappeared (fade)") — DELETE_FADE_MS in
+   ColorRampEditor.tsx must match this duration. */
+.ui-ramp-pin--deleting,
+.ui-ramp-list-row--deleting {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+/* Labels the position column — Dana: "i'm also missing an indication for
+   the elevation of the color." Roughly lines up over .ui-ramp-list-position
+   below, not a strict table, a hint is enough. */
+.ui-ramp-list-header {
+  display: flex;
+  justify-content: flex-end;
+}
+.ui-ramp-list-header-position {
+  font: 400 var(--font-size-xs) var(--font-ui);
+  color: var(--color-text);
+  opacity: 0.6;
+  padding-right: var(--gap-sm);
 }
 
 /* One row per stop (plus the fixed base entry), Dana: "all picked colors
@@ -429,12 +450,12 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 }
 
 .ui-ramp-list-code {
-  font-family: var(--font-mono);
+  font: 400 var(--font-size-sm) var(--font-ui);
   flex: 1;
 }
 
 .ui-ramp-list-position {
-  font-family: var(--font-mono);
+  font: 400 var(--font-size-sm) var(--font-ui);
   opacity: 0.6;
   width: 3em;
   text-align: right;
@@ -545,6 +566,21 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   border-radius: 2px;
   color: var(--color-text);
   font: 300 var(--font-size-sm) var(--font-ui);
+  /* Without this, a <select>'s own displayed value can render with the
+     OS/browser's native text color instead of the custom one above (a
+     real, documented cross-browser quirk, not specific to this one
+     dropdown) — every select in the app, not just this session's new one,
+     is affected, so fixed at the shared rule, root cause not a one-off
+     patch. */
+  appearance: none;
+  /* appearance: none also removes the browser's own dropdown arrow, so a
+     plain, minimal one replaces it (same simple chevron glyph the
+     accordion header already uses, as a drawn shape instead of a font
+     character here since it's a background-image, not real text). */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0L5 6L10 0Z' fill='%23ffffff'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 22px;
 }
 .ui-select:focus {
   outline: none;
