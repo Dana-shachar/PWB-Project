@@ -252,8 +252,9 @@ A detail view into one piece of the planet, shown beside the globe, with a block
 >   - Also fixed in passing: `.ui-ramp-list-row`'s hover/selected background referenced an undefined `--color-input-bg` token (silently did nothing), corrected to the real `--color-input-fill`.
 >
 > **📋 To do**
-> - **Cast shadows.** Implement once in GLSL, shared by both views, now that they share a lighting model. Land chunk side already built (`terrain.glsl`'s `heightmapShadow`); planet side still outstanding. Separately, the land chunk's own shadows read as too hard-edged, see `[B35]`.
+> - **Cast shadows for the planet.** Land chunk side already built (`terrain.glsl`'s `heightmapShadow`, now soft, see `[B35]`, fixed); the planet itself still has none.
 > - **⏸️ Camera auto-framing.** Not a priority, since the gumball's zoom compensates.
+> - **❓ The ramp's position shows as a bare 0-100%, not a real elevation number** (Dana, 2026-10-21: "how's % reflect elevation? i need actual numbers"). That percentage is a fraction of the planet's real elevation range, but that range (`sharedUniformsRef.current.elevationMin/Max`) currently only exists inside `scene/SceneCanvas.tsx`, it was never plumbed up to the React UI layer (`ui/Panel.tsx`/`ui/panels/ColorRampEditor.tsx`) at all. Real next step: expose the live range up to the panel (the existing `getElevationRange()` imperative-handle method already returns it, the gap is wiring it into UI state, not computing it fresh), then decide the actual open question, Dana's call: show the raw dimensionless elevation value, or convert it into a real physical unit (height is already tracked as a % of context elsewhere in this app, `heightScale`/`radius`/`effectiveHeightScale`, see `voxel/landChunk.ts` and `scene/SceneCanvas.tsx` for the existing conversion). Not started.
 
 #### 07.5 · Shared gumball · 95%
 > **✅ Done**

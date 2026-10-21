@@ -338,13 +338,16 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Widened the gradient step to 32 texels, matching `fragment.glsl`'s (the planet's) own already-validated `sampleOffset` for the identical problem, same reasoning carried over rather than re-derived.
 
 ### [B35] Land chunk shadows look harsh · `minor`
-**🔴 Open** · **Found:** 2026-10-19 · **Where:** `shaders/terrain.glsl` (`heightmapShadow`)
+**✅ Fixed:** 2026-10-20 · **Found:** 2026-10-19 · **Where:** `shaders/terrain.glsl` (`heightmapShadow`)
 
-**What happens**
+**What happened**
 - Dana, pointing back at her earlier screenshots: "the shadows are harsh... in the land chunk."
 
 **Cause**
-- Not yet diagnosed against real technique, only a structural observation: `heightmapShadow` is a binary hit-test, a sample point is either fully lit or fully shadowed (`return 0.0`/`return 1.0`), with no soft edge/penumbra at all. That's inherent to the simple raking self-shadow march this uses (real, cited technique, see `REFERENCES.md`), not a bug in how it's wired, so this is new work (a soft-shadow technique), not a fix to something broken. Needs research into real soft self-shadow approaches before proposing anything specific, per standing rule, not something to invent from first principles.
+- `heightmapShadow` was a binary hit-test, a sample point either fully lit or fully shadowed (`return 0.0`/`return 1.0`), with no soft edge/penumbra at all. That's inherent to the simple raking self-shadow march this uses (real, cited technique, see `REFERENCES.md`), not a bug in how it's wired.
+
+**Fix**
+- Quilez's raymarched soft-shadow technique (see `REFERENCES.md`): the march now tracks the smallest ratio of (how far the ray sits above the sampled terrain, in world units) to (world distance traveled so far), `SHADOW_SOFTNESS` scaling how quickly a near-miss darkens, instead of returning a hard 0/1 the instant one sample occludes. Same march, same step count, no new samples. Adapted from the original SDF version (distance-to-nearest-surface) to this heightfield march's own ray-height-minus-sampled-height gap.
 
 ---
 
