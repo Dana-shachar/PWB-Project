@@ -1,11 +1,14 @@
 # Roadmap
 
-`Last updated: 2026-10-13`
+`Last updated: 2026-10-21`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
 > [!NOTE]
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
+
+> [!IMPORTANT]
+> **Pick up here (2026-10-21):** Stage 07.4 below, "To do." Next task is real elevation numbers on the color-ramp picker's position column — not started, needs the live elevation range plumbed from `scene/SceneCanvas.tsx` up to the UI panel, see that section for the full note. Planet-side cast shadows are the other open item there. Everything else from the 2026-10-20/21 session (planet patch seams, the gradient ramp picker, land chunk lighting) is done, committed, and pushed to `main`.
 
 **Overall** ▓▓▓▓▓▓░░░░ 61%
 
