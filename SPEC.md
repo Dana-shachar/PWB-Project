@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-10-21`
+`Last updated: 2026-10-23`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -99,16 +99,18 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Merging back happens farther out than splitting, so a camera near a boundary does not flip patches.
 - *Dana, 2026-10-21: detail should be added only where needed, not erased and rebuilt.* 📚 The conventions are two thresholds per switch and refinement that replaces a tile only when needed. Keeping a parent until its children are ready, and the cache eviction rule, are common practice but unverified. Sources in `REFERENCES.md`.
 
-### [S32] 📚 Planet detail follows screen-space error, and Resolution is a detail bias · `decided`
+### [S32] 📚 Planet detail follows screen-space error, and Resolution is a pixel threshold · `decided`
 **Decided:** 2026-10-21 · **Built:** 2026-10-21, untested on screen · **Drove:** [B38], [B45], [B47] · **Replaces:** the earlier uniform minimum floor
 
 - *A patch splits when its error, measured in pixels on screen, passes a threshold.* This is how Cesium drives detail (a tile's geometric error in meters becomes a screen-space error in pixels, compared with a maximum). 📚 The formula used (error times screen height over distance times twice the tangent of half the field of view) is the widely used form, medium trust, not confirmed from an official page. The CDLOD paper is unread.
-- The Resolution slider is a detail bias on that threshold: 0.25x to 8x on a log scale, default 1x, which is automatic. Zooming in sharpens on its own. A manual push adds detail only where pixels warrant it.
+- The Resolution slider is that threshold itself, in pixels (Cesium's `maximumScreenSpaceError` convention): 0.5 to 32 px on a log scale with a reversed track, so sliding right is sharper, default 8 px, which is automatic. Zooming in sharpens on its own. A manual push adds detail only where pixels warrant it. Saves migrate from the earlier multiplier and per-face values.
 - Zoomed out, nothing exceeds the threshold, so raising the slider builds nothing extra and costs nothing.
 - The triangle budget and the depth cap stay as safeguards. Over budget, the pixel threshold rises by one step instead of lowering depth.
 - A bias change only adds or merges patches through the lifecycle in `[S34]`, so the planet is never rebuilt from scratch. A radius change still flushes everything.
 - **Why it replaced the floor:** forcing one minimum depth everywhere meant up to 384 patches at startup, made zoom stop sharpening (the floor already matched what zoom reached), and made every slider change look like a rebuild.
-- ⚠️ The threshold of 8 pixels, the bake size rule, the depth cap of 10 and the 1.25 step are tunable guesses.
+- **Close-up budget (Dana, 2026-10-21: "the more I zoom the more you could allow res to go way up, you're only loading this specific patch"):** the total work is shared across visible patches. With few patches in view, each may bake up to 1025 samples (built small first, upgraded one per frame) and use a mesh of 128 or 256 cells; with many in view they stay at 64 cells. The texel budget is `PATCH_BAKE_TEXEL_BUDGET` (8M, about 128 MB).
+- **Depth cap 11,** set by float precision, not by an arbitrary count: past it a float step becomes a visible part of a sample. Going deeper needs per-tile local origins (AGI, "Precisions, Precisions"; CESIUM_RTC), which means changing the bake shader.
+- ⚠️ The threshold of 8 pixels, the bake size rule, the texel budget, the grid tiers and the 1.25 step are tunable guesses.
 
 ### [S14] Shape and elevation are separate channels · `decided`
 **Decided and built:** 2026-09-24 · **Drove:** [B18]

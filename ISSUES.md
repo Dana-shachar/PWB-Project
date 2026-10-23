@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-10-21`
+`Last updated: 2026-10-23`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -423,7 +423,9 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Between 0.5 and 1.0 the change is subtle, because points stay inside their own cells and the default is already the maximum. ❓ Optional, Dana's call: lower the default to about 0.7 so the slider has room both ways.
 
 **Next**
-- The second pass fades Ridged, Terrace, domain warp and Voronoi. Dana approved it with only a tiny, grid-spacing softening. A fractal type selector awaits her go (`[S36]`).
+- **Built, untested (2026-10-21):** a Fractal type selector inside the Octaves modifier (fBm, Multifractal, Hybrid, Hetero terrain, Ridged multifractal, with their own Offset and Gain, from Blender v3.6.0's shader; renormalizing the unbounded output is inferred and tunable), and octaves by depth (a patch's octave series continues past the layer's setting, up to 24, as far as its spacing can resolve; off for the noise canvas and warp).
+- ⚠️ The per-frame build budget does not count octaves, so close-up bakes may hitch. Precision holds to depth 10 at 257 samples by calculation only.
+- **Still to build:** the second pass fades Ridged, Terrace, domain warp and Voronoi. Dana approved it with only a tiny, grid-spacing softening.
 
 ### [B45] Resolution seems fake past about 1024 · `wrong but workable`
 **🟡 Built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** the planet's patch bake and detail limits
@@ -441,6 +443,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - The close-up blockiness was texel density: a close patch kept 65 samples over a large screen area. Bake size now follows the patch's on-screen width (`TARGET_BAKE_TEXEL_PIXELS` 4, 129 or 257 samples), within the texel budget. These values are tunable guesses.
 - **Filtering ruled out:** the patch bake targets already request `LinearFilter` with `FloatType`, Three.js requests `OES_texture_float_linear`, and Dana's browser reports the extension available. Filtering is not the cause of the stair steps.
 - ⚠️ Risks: the cost of a 12-octave bake per patch is unmeasured, and seam content can still differ between depths.
+- **Dana, 2026-10-21 16:17, after testing the screen-size pipeline:** detail sharpens as she zooms and the planet no longer rebuilds from scratch, but it is "not enough". The more she zooms, the more resolution each patch can have, since only a few patches are loaded.
+- **Built, untested, as the answer:** the Resolution slider is now the maximum screen error in pixels (lower is sharper, reversed log track, default 8 px; saves migrate to `detailVersion` 4). Close-up patches bake up to 1025 samples (built small first, upgraded one per frame) within a shared texel budget (`PATCH_BAKE_TEXEL_BUDGET` 8M), mesh grids scale 64, 128 or 256 cells when few patches are visible, and the depth cap is 11, limited by float precision (going deeper needs per-tile local origins). All values are tunable guesses.
 
 ### [B44] The planet discards and rebuilds patches on every view change · `wrong but workable`
 **🟡 Fix built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** `planet/PlanetPatchRenderer.ts`, `planet/planetPatches.ts`, `planet/patchLifecycle.ts`

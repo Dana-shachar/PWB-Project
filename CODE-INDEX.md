@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-10-21`
+`Last updated: 2026-10-23`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 

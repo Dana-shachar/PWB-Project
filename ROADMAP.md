@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-10-21`
+`Last updated: 2026-10-23`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -10,9 +10,24 @@
 > [!IMPORTANT]
 > **Start from here (2026-10-21):** *a fresh session reads this block, then `CLAUDE.md`, then `CODE-INDEX.md` before searching the code.*
 >
-> **State.** Everything built this session is **uncommitted and untested on screen** (about 40 modified files). Typecheck passes. Shaders compiled with no console errors in Dana's test, but most new features were never exercised. The last build, the planet Resolution in pixels, is finished in code: a reversed log slider (lower is sharper, default 8 px), saves migrate to `detailVersion` 4, bakes up to 1025 samples within a texel budget, mesh tiers 64, 128 and 256, depth cap 11 (limited by float precision). The old Node harness in the scratchpad no longer builds against the new patch code and needs updating.
+> **State.** Everything is committed and pushed as `88b689a` (private repo `Dana-shachar/PWB-Project`, the working tree is clean). The commit email for this repo is set locally to the GitHub no-reply address, so new commits no longer carry the real one. The code is **untested on screen** apart from a console check (no errors). The planet Resolution in pixels is finished in code. The old Node harness in the scratchpad no longer builds against the new patch code.
 >
-> **Next step.** Dana tests the batch (noise controls and new fractal types, masks, planet zoom and Resolution, tooltips, lighting and ramp), then fixes, then docs, then a commit with no attribution.
+> **Next step, 1: publish the repo to the professor (Dana's decision: make it public).** Not started. Approach decided (in place); confirm with Dana, then do it.
+> 1. Move the Firebase config out of `app/src/firebase/client.ts` into `VITE_FIREBASE_*` env vars (`app/.env.local`, already git-ignored by `*.local`, plus a new `app/.env.example`). Check the app still loads without the config, and add a small guard if it crashes.
+> 2. Back up the repo as a `git bundle`, then rewrite the whole history: every author and committer becomes the no-reply address `229999390+Dana-shachar@users.noreply.github.com`, and every historical `client.ts` gets the env-var version. `git-filter-repo` is not installed, `git filter-branch` is. Verify no commit contains `229999390+Dana-shachar@users.noreply.github.com` or the key `REDACTED...`.
+> 3. **Dana decided 2026-10-21: rewrite in place** and force-push over the existing repo, since the residual risk (GitHub may keep force-pushed commits reachable by ID until support purges them; unverified, from memory of its docs) is small. No new repo. Then make it public.
+> 4. Dana prefers one live repo, not dual commits (two histories would have different IDs and drift). Unpushed commits stay local until Dana chooses to push.
+> 5. The professor will not have Firebase sign-in or saving unless Dana gives another way. Adding him as a collaborator needs his write access (personal repos have no read-only role) and was blocked by the permission check; his GitHub user is `jomasan` (Jose Sanchez, Associate Professor Cornell Tech). Dana decided on public instead.
+> 6. **Before sharing or submitting, check:** the commit email, committed config, what a public repo shows (history, issues, docs paths), and that `CLAUDE.md` stays ignored.
+>
+> **Next step, 2: Dana's test list.** Hard-refresh first and keep the console open (any red error matters).
+> - **Planet detail:** load speed; zoom in slowly (does detail sharpen by itself, is the close-up still blocky or stair-stepped, is it sharp enough); Resolution (px) slider right = sharper (little change when zoomed out, adds detail in place when close); rotate (no rebuild); watch for cracks, black slivers and hitches while zooming.
+> - **Noise:** Frequency 0.1 to 500 (log), shimmer at high values; Octaves to 12; Persistence, Lacunarity, Warp, Terrace ranges; Fractal type (Multifractal, Hybrid, Hetero, Ridged; Hetero should give smooth lowlands and rough highlands); Offset, Stretch, Warp scale and octaves, Voronoi Jitter and Distance, Ridge offset and gain; Randomize (about half of layers carve, since Height can be negative).
+> - **Masks:** the row icon popup (pattern, seed, frequency, Invert, Coverage, Softness, Shuffle) changes the planet and the noise canvas; two selected layers say "editing 2 layers"; an older project still loads.
+> - **Color ramp:** colors show fully as set; drag, type and scrub elevations; delete down to 2 stops; each row's picker opens at that row.
+> - **Lighting:** the Scene panel Wrap slider; the chunk stays lit (light elevation is separate).
+> - **Panels:** the Planet Terrain header, the icon buttons, black wrapped tooltips on screen.
+> - **Known gaps, do not report:** Cmd+Z covers only paint strokes (`[B42]`), planet cast shadows not built, the Ridged/Terrace/warp/Voronoi fade not built, layer Height has no units yet. Then fixes, docs, a commit.
 >
 > **Loose threads, in build order**
 > - **Modifier fade, second pass.** Ridged, Terrace, warp and Voronoi shimmer when features are smaller than the grid. Approved: fade before the non-linear step and soften step edges only as wide as the grid spacing, constants tunable. Partly inferred, flagged in `REFERENCES.md`.
