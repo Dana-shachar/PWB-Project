@@ -13,10 +13,35 @@ interface ColorRampEditorProps {
   // 2026-10-21: "when ramp is nt active its ok to show only base color.
   // when ramp is active all colors should show as a part of it").
   rampActive: boolean;
+  // The terrain's real (dimensionless) elevation range the ramp spans, and
+  // how many meters one unit of it displaces by (Height % of radius/size).
+  elevationRange: { min: number; max: number };
+  elevationScaleMeters: number;
 }
 
 function clamp01(value: number): number {
   return Math.min(1, Math.max(0, value));
+}
+
+// A ramp position (0-1) back to the raw elevation it colors, the same
+// linear map the shaders use (elevationFraction in shaders/fragment.glsl).
+function rawElevationAt(position: number, range: { min: number; max: number }): number {
+  return range.min + position * (range.max - range.min);
+}
+
+function positionFromMeters(meters: number, range: { min: number; max: number }, scaleMeters: number): number {
+  const raw = meters / Math.max(1e-6, scaleMeters);
+  return clamp01((raw - range.min) / Math.max(0.0001, range.max - range.min));
+}
+
+function formatElevationMeters(meters: number): string {
+  return Math.round(meters).toLocaleString('en-US');
+}
+
+// Accepts what formatElevationMeters shows (commas) or a plain typed number.
+function parseElevationMeters(text: string): number | null {
+  const parsed = parseFloat(text.replace(/[,\sm]/g, ''));
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -62,12 +87,12 @@ function formatColorCode(hex: string, format: ColorCodeFormat): string {
   return `${h}, ${s}%, ${l}%`;
 }
 
-// Linear interpolation across baseColor + stops, matching terrainRampColor's
+// Linear interpolation across the stops, matching terrainRampColor's
 // own math (shaders/terrain.glsl) closely enough for a UI preview — not
 // pixel-identical to the shader (sRGB-vs-linear blending differences aren't
 // worth chasing for a swatch), same as any gradient-editor preview bar.
-function rampColorAt(baseColor: string, stops: ColorStop[], t: number): string {
-  const all = [{ position: 0, color: baseColor }, ...stops].sort((a, b) => a.position - b.position);
+function rampColorAt(stops: ColorStop[], t: number): string {
+  const all = [...stops].sort((a, b) => a.position - b.position);
   if (t <= all[0].position) return all[0].color;
   if (t >= all[all.length - 1].position) return all[all.length - 1].color;
   for (let i = 0; i < all.length - 1; i++) {
@@ -85,6 +110,9 @@ function rampColorAt(baseColor: string, stops: ColorStop[], t: number): string {
 // keyframe, not an invented gesture.
 const DELETE_DRAG_DISTANCE = 40;
 
+// Fewer than two stops is just a flat color, which Base color already is.
+const MIN_COLOR_STOPS = 2;
+
 // Total pointer movement (down to up) below this, in px, counts as a click
 // rather than a drag — Dana: "when clicking on them the color picker
 // should pop up." Distinguishes "picked this stop up and put it back down
@@ -95,25 +123,30 @@ const CLICK_MOVEMENT_THRESHOLD = 5;
 // A CSS linear-gradient built from the same stop list, for the bar's own
 // background — the browser does the actual interpolation, this only needs
 // to hand it ascending color-stop pairs.
-function cssGradient(baseColor: string, stops: ColorStop[]): string {
-  const all = [{ position: 0, color: baseColor }, ...stops].sort((a, b) => a.position - b.position);
+function cssGradient(stops: ColorStop[]): string {
+  const all = [...stops].sort((a, b) => a.position - b.position);
   const stopList = all.map((stop) => `${stop.color} ${(stop.position * 100).toFixed(1)}%`).join(', ');
   return `linear-gradient(to right, ${stopList})`;
 }
 
 // A real multi-stop gradient ramp editor — the Blender Color Ramp/Figma
 // gradient-editor convention (ROADMAP.md Stage 07.4), replacing the old
-// fixed Base/Mid/High three-stop pickers. baseColor is always the stop at
-// position 0 (Dana, 2026-10-13: "the base color should just serve as the
-// low elevation color"), shown on the bar but not part of `stops` and not
-// deletable; `stops` holds every stop after it, freely added, dragged, or
-// removed, up to MAX_COLOR_STOPS total (GLSL ES 1.00's fixed-size ramp
-// array, see shaders/terrain.glsl).
-export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsChange, rampActive }: ColorRampEditorProps) {
+// fixed Base/Mid/High three-stop pickers. Every stop is equal: freely added,
+// dragged, typed into or removed, between MIN_COLOR_STOPS and
+// MAX_COLOR_STOPS (GLSL ES 1.00's fixed-size ramp array, see
+// shaders/terrain.glsl). baseColor is only the flat color shown here when
+// the ramp is off (Dana, 2026-10-21).
+export function ColorRampEditor({
+  baseColor,
+  onBaseColorChange,
+  stops,
+  onStopsChange,
+  rampActive,
+  elevationRange,
+  elevationScaleMeters,
+}: ColorRampEditorProps) {
   const barRef = useRef<HTMLDivElement | null>(null);
-  // null = baseColor's own fixed stop selected; otherwise an index into
-  // `stops`. Selecting reveals that one stop's own color picker + delete
-  // button below the bar, same as Blender's own ramp widget.
+  // An index into `stops`, or null for none selected.
   const [selected, setSelected] = useState<number | null>(null);
   const draggingIndex = useRef<number | null>(null);
   // Set mid-drag once a handle's moved far enough off the bar that
@@ -138,19 +171,21 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
   const colorInputRef = useRef<HTMLInputElement | null>(null);
   const colorInputTarget = useRef<number | null>(null);
 
-  function openColorPicker(index: number | null) {
+  function openColorPicker(index: number) {
     const input = colorInputRef.current;
     if (!input) return;
     colorInputTarget.current = index;
-    input.value = index === null ? baseColor : (stops[index]?.color ?? baseColor);
+    input.value = stops[index].color;
+    // Moved under the clicked pin, since the native picker opens at its input.
+    input.style.left = `${stops[index].position * 100}%`;
     input.click();
   }
 
   function handleHiddenColorChange(event: React.ChangeEvent<HTMLInputElement>) {
     const index = colorInputTarget.current;
+    if (index === null) return;
     const value = event.target.value;
-    if (index === null) onBaseColorChange(value);
-    else onStopsChange(stops.map((stop, i) => (i === index ? { ...stop, color: value } : stop)));
+    onStopsChange(stops.map((stop, i) => (i === index ? { ...stop, color: value } : stop)));
   }
   // Which text format the column list below shows every color's code in —
   // Dana: "depends on the code type - rgb, hex, hsl, etc." One shared
@@ -164,8 +199,51 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
     return clamp01((event.clientX - rect.left) / rect.width);
   }
 
+  // Typing an elevation moves that stop there, same as dragging its pin;
+  // values past the terrain's own low/high clamp to its ends.
+  function commitStopElevation(index: number, text: string) {
+    const meters = parseElevationMeters(text);
+    if (meters === null) return;
+    const position = positionFromMeters(meters, elevationRange, elevationScaleMeters);
+    onStopsChange(stops.map((stop, i) => (i === index ? { ...stop, position } : stop)));
+  }
+
+  // Click-drag on an elevation box scrubs the stop's elevation like the
+  // sliders' number fields do (Slider in ui/UIElements.tsx); a click without
+  // movement focuses it for typing. Cmd/Ctrl snaps to whole 100 m.
+  const stopsRef = useRef(stops);
+  stopsRef.current = stops;
+  function handleElevationMouseDown(event: React.MouseEvent<HTMLInputElement>, index: number) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const field = event.currentTarget;
+    const spanMeters = Math.max(1, (elevationRange.max - elevationRange.min) * elevationScaleMeters);
+    const metersPerPixel = spanMeters / 200; // about 200 px sweeps the whole range
+    let meters = rawElevationAt(stopsRef.current[index].position, elevationRange) * elevationScaleMeters;
+    let hasMoved = false;
+
+    const onMove = (moveEvent: MouseEvent) => {
+      hasMoved = true;
+      meters += moveEvent.movementX * metersPerPixel;
+      const next = moveEvent.metaKey || moveEvent.ctrlKey ? Math.round(meters / 100) * 100 : meters;
+      const position = positionFromMeters(next, elevationRange, elevationScaleMeters);
+      onStopsChange(stopsRef.current.map((stop, i) => (i === index ? { ...stop, position } : stop)));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (!hasMoved) {
+        field.focus();
+        field.select();
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
   function deleteStop(index: number) {
-    if (stops.length <= 1) return; // always keep at least one real stop beyond the fixed base color
+    if (stops.length <= MIN_COLOR_STOPS) return;
     onStopsChange(stops.filter((_, i) => i !== index));
     setSelected(null);
   }
@@ -175,7 +253,7 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
   // path (drag-away, the list's own delete button, Backspace) feels the
   // same way.
   function deleteStopWithFade(index: number) {
-    if (stops.length <= 1) return;
+    if (stops.length <= MIN_COLOR_STOPS) return;
     setDeletingIndex(index);
     setTimeout(() => {
       deleteStop(index);
@@ -209,9 +287,9 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
     // stop at the clicked position, its starting color sampled from the
     // ramp's own current color there, the same "insert" convention
     // Blender's Color Ramp uses.
-    if (stops.length + 1 >= MAX_COLOR_STOPS) return; // +1 for baseColor's own slot
+    if (stops.length >= MAX_COLOR_STOPS) return;
     const position = positionFromEvent(event);
-    const color = rampColorAt(baseColor, stops, position);
+    const color = rampColorAt(stops, position);
     const nextStops = [...stops, { position, color }];
     onStopsChange(nextStops);
     setSelected(nextStops.length - 1);
@@ -255,31 +333,12 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
     }
   }
 
-  function handleBasePointerDown(event: React.PointerEvent<HTMLButtonElement>) {
-    event.stopPropagation();
-    dragStart.current = { x: event.clientX, y: event.clientY };
-    setSelected(null);
-  }
-
-  function handleBasePointerUp(event: React.PointerEvent<HTMLButtonElement>) {
-    const start = dragStart.current;
-    dragStart.current = null;
-    // Base never repositions/deletes (fixed at position 0), so any
-    // down-then-up on it is a click — no movement threshold needed, but
-    // still guards against a drag that started here and released elsewhere.
-    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) < CLICK_MOVEMENT_THRESHOLD) {
-      openColorPicker(null);
-    }
-  }
-
-  // Base color plus every stop, in one ascending-position list — Dana:
-  // "i would want to see all picked colors in a column with their color
-  // code." `index` is null for the fixed base entry (not part of `stops`,
-  // not deletable), otherwise its real index into `stops`.
-  const allEntries = [
-    { key: 'base', position: 0, color: baseColor, index: null as number | null },
-    ...stops.map((stop, index) => ({ key: `stop-${index}`, position: stop.position, color: stop.color, index })),
-  ].sort((a, b) => a.position - b.position);
+  // Every stop in one ascending-position list — Dana: "i would want to see
+  // all picked colors in a column with their color code." `index` is the
+  // stop's real index into `stops`.
+  const allEntries = stops
+    .map((stop, index) => ({ key: `stop-${index}`, position: stop.position, color: stop.color, index }))
+    .sort((a, b) => a.position - b.position);
 
   // Ramp off: it doesn't apply, so only the plain base color makes sense to
   // show, same plain row every other single-color control in this panel
@@ -290,11 +349,6 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
 
   return (
     <div className="ui-ramp-editor">
-      {/* The format picker sits above the color list, which includes base
-          color as its own first row, same template as every stop (Dana,
-          2026-10-21: "move the color format above the base color... make
-          all of the colors picked in the same template"), not a separate
-          standalone color picker above the list. */}
       <Select
         label="Code format"
         value={codeFormat}
@@ -305,36 +359,76 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
           { value: 'hsl', label: 'HSL' },
         ]}
       />
-      {/* A header labeling the position column — Dana, 2026-10-21: "i'm
-          also missing an indication for the elevation of the color," the
-          bare "%" by itself didn't say what it was a percentage of. */}
+      {/* Column headers, one per column (Dana, 2026-10-21). */}
       <div className="ui-ramp-list-header">
-        <span className="ui-ramp-list-header-position">Elevation</span>
+        <span className="ui-ramp-list-header-label">Color code</span>
+        <span className="ui-ramp-list-header-label ui-ramp-list-header-elevation">Elevation (m)</span>
       </div>
       <div className="ui-ramp-list">
-        {allEntries.map((entry) => (
+        {allEntries.map((entry) => {
+          const elevationText = formatElevationMeters(rawElevationAt(entry.position, elevationRange) * elevationScaleMeters);
+          // Every box takes the widest number's width, so they line up.
+          const elevationWidth = Math.max(...allEntries.map((other) => formatElevationMeters(rawElevationAt(other.position, elevationRange) * elevationScaleMeters).length));
+          return (
           <div
             key={entry.key}
             className={
-              'ui-ramp-list-row' +
+              // Same row/label/swatch template as the base color control
+              // (ColorPicker in ui/UIElements.tsx), per [B37].
+              'ui-color-row ui-ramp-list-row' +
               (selected === entry.index ? ' ui-ramp-list-row--selected' : '') +
               (deletingIndex === entry.index ? ' ui-ramp-list-row--deleting' : '')
             }
-            onClick={() => {
+            // Opens this row's own swatch, so the picker pops up at the row.
+            onClick={(event) => {
               setSelected(entry.index);
-              openColorPicker(entry.index);
+              event.currentTarget.querySelector<HTMLInputElement>('.ui-color-swatch')?.click();
             }}
           >
-            <span className="ui-ramp-list-swatch" style={{ background: entry.color }} />
-            <span className="ui-ramp-list-code">{formatColorCode(entry.color, codeFormat)}</span>
-            <span className="ui-ramp-list-position">{Math.round(entry.position * 100)}%</span>
-            {entry.index !== null && stops.length > 1 && (
+            <input
+              type="color"
+              className="ui-color-swatch"
+              value={entry.color}
+              // Stops the row from re-clicking this same swatch.
+              onClick={(event) => {
+                event.stopPropagation();
+                setSelected(entry.index);
+              }}
+              onChange={(event) => {
+                const value = event.target.value;
+                onStopsChange(stops.map((stop, i) => (i === entry.index ? { ...stop, color: value } : stop)));
+              }}
+            />
+            <span className="ui-color-label">{formatColorCode(entry.color, codeFormat)}</span>
+            {/* The design system's number field (Slider's own), typed into
+                directly, sized to the widest number. */}
+            <input
+              type="text"
+              className="ui-slider-field ui-ramp-list-elevation"
+              defaultValue={elevationText}
+              key={elevationText} // resyncs when the stop moves or the range changes
+              style={{ width: `calc(${elevationWidth}ch + 16px)` }}
+              onClick={(event) => event.stopPropagation()}
+              onMouseDown={(event) => handleElevationMouseDown(event, entry.index)}
+              onBlur={(event) => commitStopElevation(entry.index, event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
+                if (event.key === 'Escape') {
+                  event.currentTarget.value = elevationText;
+                  event.currentTarget.blur();
+                }
+              }}
+            />
+            {stops.length <= MIN_COLOR_STOPS ? (
+              // Keeps every elevation field lined up under its header.
+              <span className="ui-ramp-delete-placeholder" />
+            ) : (
               <button
                 type="button"
                 className="ui-ramp-delete-btn"
                 onClick={(event) => {
                   event.stopPropagation();
-                  deleteStopWithFade(entry.index as number);
+                  deleteStopWithFade(entry.index);
                 }}
                 aria-label="Delete this color stop"
               >
@@ -342,9 +436,10 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
               </button>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
-      <div className="ui-ramp-bar" ref={barRef} onPointerDown={handleBarPointerDown} style={{ background: cssGradient(baseColor, stops) }}>
+      <div className="ui-ramp-bar" ref={barRef} onPointerDown={handleBarPointerDown} style={{ background: cssGradient(stops) }}>
         {/* One shared hidden input, reused for whichever pin was last
             clicked — see openColorPicker/handleHiddenColorChange. Kept in
             the layout (opacity: 0), not display: none, since some browsers
@@ -357,17 +452,6 @@ export function ColorRampEditor({ baseColor, onBaseColorChange, stops, onStopsCh
           onChange={handleHiddenColorChange}
           aria-hidden="true"
           tabIndex={-1}
-        />
-        {/* baseColor's own fixed stop, position 0, not part of `stops` and
-            never draggable or deletable — see this component's own header
-            comment for why. A plain click still opens its own color picker. */}
-        <button
-          type="button"
-          className={'ui-ramp-pin' + (selected === null ? ' ui-ramp-pin--selected' : '')}
-          style={{ left: '0%', background: baseColor }}
-          onPointerDown={handleBasePointerDown}
-          onPointerUp={handleBasePointerUp}
-          aria-label="Base color stop (position 0)"
         />
         {stops.map((stop, index) => (
           <button

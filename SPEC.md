@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-10-13`
+`Last updated: 2026-10-21`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -91,6 +91,25 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - The documented method, and the algebraic inverse of the cube-to-sphere projection, so picking and geometry cannot disagree.
 - **⚠️ Known limitation:** plain normalization makes patches near a face's center cover more ground than those at its corners, so detail is not perfectly even across a face.
 
+### [S34] A patch's lifetime follows need, not visibility · `decided`
+**Decided and built:** 2026-10-21 · untested on screen
+
+- A patch that only turns out of view is hidden and cached, not destroyed, so rotating does not rebuild the planet.
+- A replaced patch stays drawn until its replacements are built, so a split or merge leaves no holes.
+- Merging back happens farther out than splitting, so a camera near a boundary does not flip patches.
+- *Dana, 2026-10-21: detail should be added only where needed, not erased and rebuilt.* 📚 The conventions are two thresholds per switch and refinement that replaces a tile only when needed. Keeping a parent until its children are ready, and the cache eviction rule, are common practice but unverified. Sources in `REFERENCES.md`.
+
+### [S32] 📚 Planet detail follows screen-space error, and Resolution is a detail bias · `decided`
+**Decided:** 2026-10-21 · **Built:** 2026-10-21, untested on screen · **Drove:** [B38], [B45], [B47] · **Replaces:** the earlier uniform minimum floor
+
+- *A patch splits when its error, measured in pixels on screen, passes a threshold.* This is how Cesium drives detail (a tile's geometric error in meters becomes a screen-space error in pixels, compared with a maximum). 📚 The formula used (error times screen height over distance times twice the tangent of half the field of view) is the widely used form, medium trust, not confirmed from an official page. The CDLOD paper is unread.
+- The Resolution slider is a detail bias on that threshold: 0.25x to 8x on a log scale, default 1x, which is automatic. Zooming in sharpens on its own. A manual push adds detail only where pixels warrant it.
+- Zoomed out, nothing exceeds the threshold, so raising the slider builds nothing extra and costs nothing.
+- The triangle budget and the depth cap stay as safeguards. Over budget, the pixel threshold rises by one step instead of lowering depth.
+- A bias change only adds or merges patches through the lifecycle in `[S34]`, so the planet is never rebuilt from scratch. A radius change still flushes everything.
+- **Why it replaced the floor:** forcing one minimum depth everywhere meant up to 384 patches at startup, made zoom stop sharpening (the floor already matched what zoom reached), and made every slider change look like a rebuild.
+- ⚠️ The threshold of 8 pixels, the bake size rule, the depth cap of 10 and the 1.25 step are tunable guesses.
+
 ### [S14] Shape and elevation are separate channels · `decided`
 **Decided and built:** 2026-09-24 · **Drove:** [B18]
 
@@ -100,17 +119,67 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - **Accepted consequence:** a layer at zero opacity still affects elevation, which follows from the two being unrelated.
 
 ### [S15] Height is a percentage of its context · `decided`
-**Decided and built:** 2026-09-24
+**Decided and built:** 2026-09-24 · **To be superseded:** by `[S33]`, not yet changed in code
 
 - The same value looked reasonable against the planet's large radius and dwarfed the chunk's much smaller footprint.
 - Converting the chunk through the planet's kilometre factor was worked through and rejected: it would make the same value proportionally more dominant, not less.
 - A percentage self-normalizes with no unit bookkeeping and no change to either view's own units.
+
+### [S33] 📚 Height is a max elevation in meters, with a display-only Exaggeration · `decided`
+**Decided:** 2026-10-21 · **Built:** not yet
+
+- Dana's call: the Height setting becomes a max elevation in meters, and Exaggeration is a separate multiplier that only stretches the drawing. It replaces `[S15]` when the height scale step is built.
+- Reason: meters are physically consistent between the planet and the chunk, since a chunk is a slice of the same planet, and they match the meters on the color ramp.
+- At planet scale a real mountain is a tiny share of the radius, so the planet view needs Exaggeration to stay readable. The ramp's meters use the true height, not the exaggerated one.
+- Sources in `REFERENCES.md`.
 
 ---
 
 ## 🧱 Noise and layers
 
 *How terrain is generated and composed.*
+
+### [S31] 📚 A layer owns its own mask pattern · `decided`
+**Decided:** 2026-10-21 · **Built:** 2026-10-21, untested on screen · **Drove:** [B48]
+
+- Each layer can carry a mask: a pattern of its own (noise type, seed, frequency) where bright means fully affected and dark means untouched, the convention in Gaea. The layer's strength is multiplied by the mask at each point.
+- Controls: Coverage, Softness, Invert, and a Shuffle that rerolls the mask's own seed. A wider Softness is a gentler edge. Invert is a convenience that is not in Gaea's docs. Defaults are ours, since Gaea documents none.
+- Coverage is the share of the planet the mask lets through. It is measured as a percentile of the pattern's real values on a 64 by 64 grid per cube face, cached by pattern (32 entries).
+- 🧭 **Why a layer owns its pattern, decided by Dana 2026-10-21:** a mask that pointed at another layer left an empty source list, a mixed-up layer and a guard to maintain. A mask on one layer and the same mask on every layer differ only in how many layers are selected, so the noise-menu Mask section was dropped.
+- It is edited from a mask icon beside the eye on each layer row, which opens a popup. Opening it with several layers selected edits all of them with the same values, so the masks line up.
+- One mechanism covers calm swathes (a slow pattern on the detail layers) and merged terrain types (one terrain uses a mask, another its inverse).
+- Old masks migrate: a mask that pointed at a layer takes that layer's noise type, seed and frequency as its own. Its modifiers are not copied, so the look can shift.
+- ⚠️ The mask pattern has no octave fade, so a high mask frequency may shimmer at a distance.
+- 📚 Photoshop, Procreate and Substance Painter attach a mask to the layer with a thumbnail on its row. A group mask reaches every layer inside the group, but a mask on the top layer alone does not reach the layers below it. A group mask is a possible later addition.
+- Sources in `REFERENCES.md`.
+
+### [S35] Noise control ranges live in one table, and Randomize reads it · `decided`
+**Decided:** 2026-10-21 · **Built:** 2026-10-21, untested on screen
+
+- Every noise control's minimum, maximum, step and scale lives in one shared table. The sliders and Randomize both read it, so a range is changed in one place.
+- Randomize is never hardcoded. It picks from whatever each range allows, on the control's own scale, so a log slider such as Frequency is sampled logarithmically.
+- Why: the sliders were too tight to show what the shader can resolve (Frequency stopped at 20), and Randomize had copied those limits.
+- Ranges set 2026-10-21: Frequency 0.1 to 500 (log), Octaves 1 to 12, Persistence 0 to 1.5, Lacunarity 1 to 6, Warp 0 to 10, Terrace 2 to 64, layer Height -10 to 10. The seed range stays 0 to 1000 even with the new hash.
+- The table gained seven keys for the new per-layer controls (see `[S36]`). The Slider gained a log scale option.
+- Layer Height -10 to 10 is our own audit recommendation, not a sourced range. Negative values carve, and Dana accepted that for Randomize. Revisit it when the bounded-heights step normalizes the total.
+
+### [S36] The noise engine fades detail by sample spacing, with a better hash · `decided`
+**Decided:** 2026-10-21 · **Built:** 2026-10-21, untested on screen
+
+- *The rule for how a deeper patch shows finer detail without the terrain's large shape changing.*
+- The noise stays a pure function of world position, so every patch and depth agrees on the coarse shape. Deeper patches only add octaves. The sum is divided by the full series' amplitude, not by the octaves used, so the coarse octaves stay identical at every depth.
+- Each octave fades out as its wavelength approaches the patch's sample spacing, using a smooth weight against the Nyquist limit (half the sample rate). The starting constants, `NYQUIST_FADE_MIN` 0.25 and `NYQUIST_FADE_MAX` 0.95, come from a paper tuned for pixel shading, so they are tunable here, not proven for vertex grids.
+- A new `uSampleSpacing` uniform carries the spacing. Zero means no fade, so the 2D noise canvas is unchanged. Every planet patch bake already sets it for its own depth.
+- The octave is faded before the Ridged fold. That placement is an unsourced forum hint, not a documented recipe.
+- 📚 The bake grid stays a fixed size per patch, and detail comes from depth, as in CDLOD and Cesium.
+- 💡 A patch bakes more samples when it shows more octaves: 65 until depth 5, then 129, then 257, capped by a texel budget (`PATCH_BAKE_SAMPLES_MIN`, `PATCH_BAKE_SAMPLES_MAX`, `PATCH_BAKE_GROW_FROM_DEPTH`). This is Dana's inference, not sourced, and the values are tunable.
+- The sin-based hash is replaced by Hoskins' "hash without sine", which uses floats only and is safe in this app's shader language (GLSL ES 1.00 has no integers). ⚠️ Its constants were typed from memory because the source page was unreachable, so they need checking. Saved planets look different, which Dana accepted.
+- Float precision: the loss came from the seed shifting the coordinates by up to about 60,000, which left a resolution coarser than a deep patch's spacing. The seed is now a whole-cell shift on the lattice index. That may have been part of the stair-stepping Dana saw. A local origin per patch is not needed at depth 8, where the spacing is about 1000 times the float step.
+- New per-layer controls built: noise Offset, Stretch X, Y and Z, Voronoi Jitter and Distance, warp scale, warp octaves, and ridged Offset and Gain.
+- Left out: rotation (not needed) and a clamp on a layer's output, which belongs to the bounded-heights step.
+- ❓ Fractal type selector: Blender's Multifractal, Hybrid, Hetero terrain and Ridged multifractal recurrences are documented, and Hybrid and Hetero give smooth valleys and rough peaks. Planned after the builds settle, awaiting Dana's go.
+- Second pass, approved by Dana: fade Ridged, Terrace, domain warp and Voronoi. Amplitude fade alone is not enough after a nonlinear step, because a crease or a hard edge carries energy at every higher frequency. The plan is to fade the octave before the nonlinearity and to soften step edges only as wide as the sample spacing, so they sharpen as the grid gets finer. Terrace is the best supported. Warp and Voronoi are inferred. All of it is tunable.
+- Sources in `REFERENCES.md`.
 
 ### [S17] Modifiers are toggles on any base generator · `decided`
 **Decided and built:** 2026-09-30
@@ -149,7 +218,7 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 **Decided:** 2026-09-16, after 4 attempts
 
 - Tried: percentage with a growing radius, additive, subtractive in pixels, then percentage with the radius held fixed.
-- The last matches Photoshop's hardness behaviour, which is what was wanted. Each of the first three only revealed its problem once tested.
+- The last matches Photoshop's hardness behavior, which is what was wanted. Each of the first three only revealed its problem once tested.
 
 ---
 
@@ -214,8 +283,19 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 ### [S03] The right panel is organized by technique, not by the planet's parts · `decided`
 **Decided:** 2026-09-14
 
-- Noise, paint, erosion and colour all operate on the same data as sequential operations rather than as independent domains, which is also how World Machine and Gaea organize themselves.
+- Noise, paint, erosion and color all operate on the same data as sequential operations rather than as independent domains, which is also how World Machine and Gaea organize themselves.
 - Organizing by planet part only makes sense once a feature has genuinely independent state.
+
+### [S30] 📚 One shared undo history over the project's settings · `decided`
+**Decided:** 2026-10-21 · **Built:** not yet
+
+- Cmd+Z and Cmd+Shift+Z move through one snapshot history, not a separate stack per feature, so the order of actions is a single timeline. It covers layers, planet settings (including ramp stops), lighting and erosion parameters, with paint strokes folded in.
+- A drag is one step, an instant action (delete, toggle) is one step at once, and a typed value is one step on Enter or blur.
+- Not undoable: camera, view mode, panel widths, selection, accordion state, switching projects, and saving.
+- Undoing an erosion setting restores its saved parameter data, never the simulation result, which is recomputed.
+- Randomize (terrain and colors) and a layer's mask Shuffle are each one undo step, so Cmd+Z returns to randomized settings Dana liked.
+- Priority goes to actions that change the planet's look. Snapshots suit this because every setting is already plain data, the same data a project saves.
+- Sources in `REFERENCES.md`.
 
 ### [S05] Panel width changes only on an explicit drag · `decided`
 **Decided:** 2026-09-30 · **Drove:** [B22]
@@ -250,7 +330,7 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 ### [S25] Erosion is grid-based, not droplet-based · `decided`
 **Decided:** 2026-10-13 · **Supersedes** the September droplet decision
 
-- Water and sediment live per cell on a grid and move between neighbours, following Mei, Decaudin and Hu, rather than particles running downhill.
+- Water and sediment live per cell on a grid and move between neighbors, following Mei, Decaudin and Hu, rather than particles running downhill.
 - Droplets need scattered writes that WebGL handles badly, so they would have to run on the CPU with the heightmap copied back every step. Grid models are designed for the GPU, which is where the rest of this project already runs.
 - *Dana, 2026-10-13: "obvs adjust to fit the current stack." Sources in `REFERENCES.md`*
 

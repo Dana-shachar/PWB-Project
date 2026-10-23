@@ -1,107 +1,430 @@
 import * as THREE from 'three';
-import { CUBE_FACES } from './cubeFace';
-import { MAX_PATCH_DEPTH, patchCenterDirection, rootPatch, subdivide, type TerrainPatch } from './patch';
+import { CUBE_FACES, cubeFacePoint, type CubeFace } from './cubeFace';
+import {
+  MAX_PATCH_DEPTH,
+  PATCH_GRID_TIERS,
+  neighborProbe,
+  patchCenterDirection,
+  PATCH_EDGES,
+  rootPatch,
+  subdivide,
+  type PatchEdge,
+  type TerrainPatch,
+} from './patch';
 
-// How close the camera needs to be, relative to a patch's own world size,
-// before that patch is worth splitting further — the same distance/size
-// ratio CDLOD's own LOD selection uses (Strugar 2009, see REFERENCES.md):
-// a patch much smaller than the camera's distance to it contributes little
-// extra visible detail, so there's no reason to resolve it any finer.
-const LOD_DISTANCE_FACTOR = 2.2;
+// Level of detail by screen-space error, the rule Cesium documents for
+// terrain and 3D Tiles: a patch splits when its simplification error, as
+// pixels on screen, is over a threshold (the 3D Tiles spec derives screen-
+// space error from a tile's geometricError; Cesium's maximumScreenSpaceError
+// is the threshold, lower means more detail). The formula below is the widely
+// used form, medium trust. The distance rule is CDLOD's (Strugar 2009).
+// Zoomed out, nothing's error reaches the threshold, so little is built.
+//
+// The Resolution slider is that threshold (planet/patch.ts, in pixels).
+// When few patches are in view and the triangle budget has room, the
+// threshold drops below it by BONUS_STEP per step, to at most
+// MIN_AUTO_ERROR_PIXELS: a close-up gets sharper on its own. That bonus is
+// an inference from Dana's request, not a documented rule; TUNABLE.
+export const MIN_AUTO_ERROR_PIXELS = 2;
+const BONUS_FILL = 0.3;
+const MAX_BONUS_STEPS = 6;
+// A patch already split merges back only once its error is this much below
+// the threshold, so a camera hovering at the split point doesn't flip it
+// (the two-threshold hysteresis chunked-LOD uses; replaces the distance
+// factors 2.2 and 2.6, which are this same ratio).
+export const MERGE_SSE_RATIO = 0.85;
 
-// A patch's own rough world size — proportional to the fraction of its
-// face's u/v range it covers times the radius. Not exact (a cube face isn't
-// isotropic after normalizing onto the sphere, corners stretch slightly more
-// than centers), but it only needs to rank patches against each other and
-// against camera distance, not measure physical size precisely.
+// A patch's width along the sphere, in world units: its share of a cube
+// face's width times a quarter turn of the radius. An average (a face's
+// center is about 1.3 times wider per unit than its corners), it only needs
+// to rank patches against camera distance, not measure them exactly.
 function patchWorldSize(patch: TerrainPatch, radius: number): number {
-  return ((patch.max.x - patch.min.x) / 2) * radius;
+  return ((patch.max.x - patch.min.x) / 2) * (Math.PI / 2) * radius;
 }
 
-function shouldSplit(patch: TerrainPatch, cameraPosition: THREE.Vector3, radius: number): boolean {
-  if (patch.depth >= MAX_PATCH_DEPTH) return false;
+// What the screen-space-error rule needs besides the camera's position.
+export interface PatchDetail {
+  // The Resolution slider: the screen-space error, in pixels, a patch may
+  // have before it splits. Lower is sharper.
+  maxErrorPixels: number;
+  // Cells across a patch's mesh (the selection picks the tier, see
+  // PATCH_GRID_TIERS; this is the one in force).
+  gridResolution: number;
+  // The viewport's height in pixels, and the camera's vertical field of view.
+  viewHeightPixels: number;
+  fieldOfViewRadians: number;
+  // What the camera sees. Patches outside it are not split, so a close-up
+  // builds only what is in view; the coarse placeholders stay. Absent means
+  // no culling beyond the horizon.
+  frustum?: THREE.Frustum;
+  // How far terrain can rise above the sphere, so a tall patch isn't culled.
+  elevationMargin: number;
+}
+
+// Distance from the camera to the near side of a patch's bounding sphere,
+// kept above a small floor so a camera at the surface can't divide by zero.
+function distanceToPatch(patch: TerrainPatch, cameraPosition: THREE.Vector3, radius: number): number {
   const center = patchCenterDirection(patch).multiplyScalar(radius);
-  const distance = center.distanceTo(cameraPosition);
-  return distance < patchWorldSize(patch, radius) * LOD_DISTANCE_FACTOR;
+  const boundingRadius = patchWorldSize(patch, radius) * 0.75;
+  return Math.max(center.distanceTo(cameraPosition) - boundingRadius, radius * 0.001);
 }
 
-function collectLeaves(patch: TerrainPatch, cameraPosition: THREE.Vector3, radius: number, out: TerrainPatch[]): void {
-  if (shouldSplit(patch, cameraPosition, radius)) {
-    for (const child of subdivide(patch)) collectLeaves(child, cameraPosition, radius, out);
+// Pixels per world unit at a distance: viewport height over the view's
+// height at that distance (2 * distance * tan(fov / 2)).
+function pixelsPerWorldUnit(distance: number, detail: PatchDetail): number {
+  return detail.viewHeightPixels / (distance * 2 * Math.tan(detail.fieldOfViewRadians / 2));
+}
+
+// The patch's geometricError is the world spacing between its mesh cells
+// (patch width over the grid), the coarsest thing it draws; the screen-space
+// error is that spacing in pixels from the camera.
+export function screenSpaceError(patch: TerrainPatch, cameraPosition: THREE.Vector3, radius: number, detail: PatchDetail): number {
+  const geometricError = patchWorldSize(patch, radius) / detail.gridResolution;
+  return geometricError * pixelsPerWorldUnit(distanceToPatch(patch, cameraPosition, radius), detail);
+}
+
+// How wide a patch appears on screen, in pixels, for choosing its bake size.
+export function patchPixelWidth(patch: TerrainPatch, cameraPosition: THREE.Vector3, radius: number, detail: PatchDetail): number {
+  return patchWorldSize(patch, radius) * pixelsPerWorldUnit(distanceToPatch(patch, cameraPosition, radius), detail);
+}
+
+// The most triangles worth drawing at once. Over it, the threshold rises one
+// step at a time, so the refinements that matter least (the fewest pixels of
+// error) are dropped first and what is under the camera keeps its detail.
+const MAX_VISIBLE_TRIANGLES = 6_000_000;
+// Each pressure step multiplies the pixel threshold by this, up to the max.
+const PRESSURE_THRESHOLD_STEP = 1.25;
+const MAX_PRESSURE = 16;
+// Balancing adds some patches after the count is taken, so leave headroom.
+const BUDGET_HEADROOM = 1.25;
+// Pressure only steps back down when the lower level fits well inside the
+// budget, so it can't oscillate right at the limit.
+const BUDGET_RELAX = 0.85;
+
+interface SelectionContext {
+  cameraPosition: THREE.Vector3;
+  cameraDirection: THREE.Vector3;
+  radius: number;
+  detail: PatchDetail;
+  horizonAngle: number;
+  // How many budget steps raise the pixel threshold.
+  pressure: number;
+  // The previous selection, to tell a patch that was already split.
+  previousIndex?: LeafIndex;
+}
+
+// A patch already split stays so a little past the horizon, so one hovering
+// at the edge of view doesn't flip.
+const HORIZON_HYSTERESIS_ANGLE = 0.05;
+
+// A patch inside the horizon cone (plus its own angular radius) and the
+// camera's frustum can actually be seen. Culls the far side of the planet and
+// whatever is out of view. A margin keeps a patch already split from flipping.
+function isVisible(patch: TerrainPatch, context: SelectionContext, margin = 0): boolean {
+  const halfExtent = (patch.max.x - patch.min.x) / 2;
+  const angularRadius = halfExtent * Math.SQRT2;
+  const center = patchCenterDirection(patch);
+  if (center.angleTo(context.cameraDirection) >= context.horizonAngle + angularRadius + margin) return false;
+  const frustum = context.detail.frustum;
+  if (!frustum) return true;
+  return patchIntersectsFrustum(patch, context.radius, context.detail.elevationMargin, frustum, margin > 0 ? patchWorldSize(patch, context.radius) * 0.25 : 0);
+}
+
+// The conservative corner test: a patch's column of terrain (its four corners
+// and center, at the lowest and highest the ground can be) is outside the
+// frustum only if all of those points lie behind one of its planes. Tighter
+// than a bounding sphere, which tall terrain would inflate until nothing was
+// culled. `inflate` loosens it a little for a patch already split.
+const cullPoint = new THREE.Vector3();
+function patchIntersectsFrustum(patch: TerrainPatch, radius: number, elevationMargin: number, frustum: THREE.Frustum, inflate: number): boolean {
+  const spots: Array<[number, number]> = [
+    [patch.min.x, patch.min.y],
+    [patch.max.x, patch.min.y],
+    [patch.min.x, patch.max.y],
+    [patch.max.x, patch.max.y],
+    [(patch.min.x + patch.max.x) / 2, (patch.min.y + patch.max.y) / 2],
+  ];
+  const directions = spots.map(([u, v]) => cubeFacePoint(patch.face, u, v).normalize());
+  for (const plane of frustum.planes) {
+    let anyInside = false;
+    for (const direction of directions) {
+      for (const height of [-elevationMargin, elevationMargin]) {
+        cullPoint.copy(direction).multiplyScalar(radius + height);
+        if (plane.distanceToPoint(cullPoint) >= -inflate) {
+          anyInside = true;
+          break;
+        }
+      }
+      if (anyInside) break;
+    }
+    if (!anyInside) return false;
+  }
+  return true;
+}
+
+// Whether a patch is in view from a camera position, for choosing how big its
+// bake should be (patches out of view stay small).
+export function patchInView(patch: TerrainPatch, cameraPosition: THREE.Vector3, radius: number, detail: PatchDetail): boolean {
+  const cameraDistance = Math.max(cameraPosition.length(), radius * 1.0001);
+  const context = {
+    cameraPosition,
+    cameraDirection: cameraPosition.clone().normalize(),
+    radius,
+    detail,
+    horizonAngle: Math.acos(Math.min(1, radius / cameraDistance)),
+    pressure: 0,
+  } as SelectionContext;
+  return isVisible(patch, context);
+}
+
+// True if the previous selection had this patch split into deeper leaves.
+function wasSplit(patch: TerrainPatch, context: SelectionContext): boolean {
+  if (!context.previousIndex) return false;
+  const previous = leafContaining(context.previousIndex, patch.face, (patch.min.x + patch.max.x) / 2, (patch.min.y + patch.max.y) / 2);
+  return !!previous && previous.depth > patch.depth;
+}
+
+// The pixel threshold at a budget level: above 0 the budget is tight and the
+// threshold rises; below 0 there is room and it drops, never under the
+// automatic floor (the slider itself may go lower).
+function thresholdFor(maxErrorPixels: number, pressure: number): number {
+  const scaled = maxErrorPixels * PRESSURE_THRESHOLD_STEP ** pressure;
+  return pressure < 0 ? Math.max(scaled, Math.min(maxErrorPixels, MIN_AUTO_ERROR_PIXELS)) : scaled;
+}
+
+function shouldSplit(patch: TerrainPatch, context: SelectionContext): boolean {
+  if (patch.depth >= MAX_PATCH_DEPTH) return false;
+  const split = wasSplit(patch, context);
+  if (!isVisible(patch, context, split ? HORIZON_HYSTERESIS_ANGLE : 0)) return false;
+  const threshold = thresholdFor(context.detail.maxErrorPixels, context.pressure);
+  const error = screenSpaceError(patch, context.cameraPosition, context.radius, context.detail);
+  return error > (split ? threshold * MERGE_SSE_RATIO : threshold);
+}
+
+function collectLeaves(patch: TerrainPatch, context: SelectionContext, out: TerrainPatch[]): void {
+  if (shouldSplit(patch, context)) {
+    for (const child of subdivide(patch)) collectLeaves(child, context, out);
   } else {
     out.push(patch);
   }
 }
 
-const EPSILON = 1e-6;
-
-function overlaps1D(aMin: number, aMax: number, bMin: number, bMax: number): boolean {
-  return aMin < bMax - EPSILON && bMin < aMax - EPSILON;
+function collectAllFaces(context: SelectionContext): TerrainPatch[] {
+  const leaves: TerrainPatch[] = [];
+  for (const face of CUBE_FACES) collectLeaves(rootPatch(face), context, leaves);
+  return leaves;
 }
 
-// Two patches on the same cube face share an edge of nonzero length — the
-// adjacency restricted-quadtree balancing (below) needs to find, to decide
-// whether a neighbor's depth is too far from this one's.
-function shareEdge(a: TerrainPatch, b: TerrainPatch): boolean {
-  const verticalEdge =
-    (Math.abs(a.max.x - b.min.x) < EPSILON || Math.abs(b.max.x - a.min.x) < EPSILON) && overlaps1D(a.min.y, a.max.y, b.min.y, b.max.y);
-  const horizontalEdge =
-    (Math.abs(a.max.y - b.min.y) < EPSILON || Math.abs(b.max.y - a.min.y) < EPSILON) && overlaps1D(a.min.x, a.max.x, b.min.x, b.max.x);
-  return verticalEdge || horizontalEdge;
+// Leaves indexed by cell (face, depth, column, row), so "which leaf contains
+// this point" is a short walk down the tree instead of a scan of every leaf.
+export type LeafIndex = Map<string, TerrainPatch>;
+
+function cellKey(face: CubeFace, depth: number, column: number, row: number): string {
+  return `${face}:${depth}:${column}:${row}`;
 }
 
-// Restricted quadtree: no two same-face neighboring leaves differ by more
-// than one depth level. Real chunked-LOD terrain either enforces this (the
-// simpler, well-known mitigation) or does true per-vertex morphing across
-// every possible neighbor combination (CDLOD's own full technique) — this
-// project takes the simpler route for now, same-face only, plus a physical
-// skirt per patch (planet/planetPatchMesh.ts) to visually cover whatever
-// crack a one-level difference (or an unhandled cross-face boundary) still
-// leaves. Cross-face balancing is NOT done here: two different faces have
-// entirely different local (u,v) frames, so "neighboring across a face
-// boundary" is a harder, separate problem than this pass takes on, flagged
-// in ISSUES.md rather than silently skipped.
-function balanceFace(leaves: TerrainPatch[]): TerrainPatch[] {
+function leafKeyOf(patch: TerrainPatch): string {
+  const cells = 2 ** patch.depth;
+  return cellKey(patch.face, patch.depth, Math.round(((patch.min.x + 1) / 2) * cells), Math.round(((patch.min.y + 1) / 2) * cells));
+}
+
+export function buildLeafIndex(leaves: TerrainPatch[]): LeafIndex {
+  const index: LeafIndex = new Map();
+  for (const leaf of leaves) index.set(leafKeyOf(leaf), leaf);
+  return index;
+}
+
+function leafContaining(index: LeafIndex, face: CubeFace, u: number, v: number): TerrainPatch | undefined {
+  for (let depth = 0; depth <= MAX_PATCH_DEPTH; depth++) {
+    const cells = 2 ** depth;
+    const column = Math.min(cells - 1, Math.max(0, Math.floor(((u + 1) / 2) * cells)));
+    const row = Math.min(cells - 1, Math.max(0, Math.floor(((v + 1) / 2) * cells)));
+    const leaf = index.get(cellKey(face, depth, column, row));
+    if (leaf) return leaf;
+  }
+  return undefined;
+}
+
+// The leaf across one of a patch's edges, `t` along it, whether on the same
+// cube face or the next one over (see neighborProbe in patch.ts).
+function leafAcross(index: LeafIndex, patch: TerrainPatch, edge: PatchEdge, t: number): TerrainPatch | undefined {
+  const probe = neighborProbe(patch, edge, t);
+  return leafContaining(index, probe.face, probe.coord.x, probe.coord.y);
+}
+
+// Restricted quadtree: no two neighboring leaves differ by more than one
+// depth level, across cube-face edges as well as within a face. Real chunked-
+// LOD terrain either enforces this (the simpler, well-known mitigation) or
+// does true per-vertex morphing across every neighbor combination (CDLOD's
+// own full technique), this project takes the simpler route. A patch too
+// shallow next to a much deeper one is split, repeatedly, until none are. The
+// physical skirt per patch (planet/planetPatchMesh.ts) stays as a last-resort
+// cover, not the thing hiding cracks.
+function balance(leaves: TerrainPatch[]): TerrainPatch[] {
   let current = leaves;
-  for (let pass = 0; pass < MAX_PATCH_DEPTH; pass++) {
-    let changed = false;
-    const next: TerrainPatch[] = [];
+  for (let pass = 0; pass < MAX_PATCH_DEPTH * 2; pass++) {
+    const index = buildLeafIndex(current);
+    const tooShallow = new Set<TerrainPatch>();
     for (const patch of current) {
-      const tooShallow = current.some((other) => other !== patch && shareEdge(patch, other) && other.depth > patch.depth + 1);
-      if (tooShallow) {
-        next.push(...subdivide(patch));
-        changed = true;
-      } else {
-        next.push(patch);
+      if (patch.depth < 2) continue;
+      for (const edge of PATCH_EDGES) {
+        const neighbor = leafAcross(index, patch, edge, 0.5);
+        if (neighbor && neighbor.depth < patch.depth - 1) tooShallow.add(neighbor);
       }
     }
+    if (tooShallow.size === 0) break;
+    const next: TerrainPatch[] = [];
+    for (const patch of current) {
+      if (tooShallow.has(patch)) next.push(...subdivide(patch));
+      else next.push(patch);
+    }
     current = next;
-    if (!changed) break;
   }
   return current;
 }
 
-// This frame's (or this update's — selection is throttled by the caller,
-// not necessarily re-run every single frame) actual list of patches to bake
-// and render: distance-based LOD per face, then balanced so no same-face
-// neighbors ever differ by more than one depth level.
-export function selectLeafPatches(cameraPosition: THREE.Vector3, radius: number): TerrainPatch[] {
-  const result: TerrainPatch[] = [];
-  for (const face of CUBE_FACES) {
-    const faceLeaves: TerrainPatch[] = [];
-    collectLeaves(rootPatch(face), cameraPosition, radius, faceLeaves);
-    result.push(...balanceFace(faceLeaves));
-  }
-  return result;
+// The leaves of a selection that cover a given patch's ground: the patch
+// itself, the one leaf that absorbed it, or every leaf it was split into.
+// What a replaced patch waits on before it can be released.
+export function coveringLeaves(index: LeafIndex, patch: TerrainPatch): TerrainPatch[] {
+  const containing = leafContaining(index, patch.face, (patch.min.x + patch.max.x) / 2, (patch.min.y + patch.max.y) / 2);
+  if (!containing) return [];
+  if (containing.depth <= patch.depth) return [containing];
+  const covering: TerrainPatch[] = [];
+  collectDescendantLeaves(index, patch, covering);
+  return covering;
 }
 
-// Which of a patch's own four edges border two same-face neighbors one
-// level finer — the balancing above guarantees a same-face neighbor is
-// never more than one depth level away, so an edge bordered by exactly two
-// depth+1 neighbors is the only case where this patch's own fixed vertex
-// count (buildPatchGeometry, planetPatchMesh.ts) leaves real points
-// unrepresented that the finer side actually has — the T-junction crack
-// Dana saw as dark gaps between patches. See ISSUES.md [B28].
+function collectDescendantLeaves(index: LeafIndex, patch: TerrainPatch, out: TerrainPatch[]): void {
+  const leaf = index.get(leafKeyOf(patch));
+  if (leaf) {
+    out.push(leaf);
+    return;
+  }
+  if (patch.depth >= MAX_PATCH_DEPTH) return;
+  for (const child of subdivide(patch)) collectDescendantLeaves(index, child, out);
+}
+
+export interface PatchSelection {
+  leaves: TerrainPatch[];
+  // How many budget steps are in force (negative: the sharpening bonus),
+  // passed back in as `previous` next time.
+  pressure: number;
+  // The mesh grid tier in force.
+  gridResolution: number;
+  // How many selected patches are actually in view, for the bake budget.
+  visibleCount: number;
+  // False when something moved this update, so one more pass is due.
+  settled: boolean;
+}
+
+// A tier steps up when this few patches are in view and back down when this
+// many are, with a gap so the grid (and every mesh) doesn't flip.
+const TIER_UP_VISIBLE = 80;
+const TIER_DOWN_VISIBLE = 240;
+
+// This update's actual list of patches to bake and render, by screen-space
+// error, then balanced. Few patches in view get a denser mesh grid; if the
+// triangle budget is blown the pixel threshold is raised, and if there is
+// plenty of room it drops (the bonus). Given the previous selection, the grid
+// tier and the budget pressure each move by at most one step per update (so a
+// small camera move can't mass-rebuild) and splits use hysteresis; the first
+// selection has no previous one and settles fully.
+export function selectPatchesIncremental(
+  cameraPosition: THREE.Vector3,
+  radius: number,
+  detail: PatchDetail,
+  previous?: { leaves: TerrainPatch[]; pressure: number; gridResolution: number },
+): PatchSelection {
+  const cameraDistance = Math.max(cameraPosition.length(), radius * 1.0001);
+  const baseContext: SelectionContext = {
+    cameraPosition,
+    cameraDirection: cameraPosition.clone().normalize(),
+    radius,
+    detail,
+    horizonAngle: Math.acos(Math.min(1, radius / cameraDistance)),
+    pressure: previous ? Math.min(Math.max(previous.pressure, -MAX_BONUS_STEPS), MAX_PRESSURE) : 0,
+    previousIndex: previous ? buildLeafIndex(previous.leaves) : undefined,
+  };
+  let tier = Math.max(0, PATCH_GRID_TIERS.indexOf(previous?.gridResolution ?? PATCH_GRID_TIERS[0]));
+  const collectAt = (tierIndex: number, pressure: number): TerrainPatch[] =>
+    collectAllFaces({ ...baseContext, pressure, detail: { ...detail, gridResolution: PATCH_GRID_TIERS[tierIndex] } });
+  const visibleOf = (leaves: TerrainPatch[], tierIndex: number): number => {
+    const visibleContext = { ...baseContext, detail: { ...detail, gridResolution: PATCH_GRID_TIERS[tierIndex] } };
+    return leaves.filter((leaf) => isVisible(leaf, visibleContext)).length;
+  };
+  const triangles = (count: number, tierIndex: number) => count * 2 * PATCH_GRID_TIERS[tierIndex] ** 2 * BUDGET_HEADROOM;
+  const overBudget = (count: number, tierIndex: number, factor = 1) => triangles(count, tierIndex) > MAX_VISIBLE_TRIANGLES * factor;
+
+  let pressure = baseContext.pressure;
+  let leaves = collectAt(tier, pressure);
+  let visibleCount = visibleOf(leaves, tier);
+
+  if (!previous) {
+    while (tier < PATCH_GRID_TIERS.length - 1 && visibleCount <= TIER_UP_VISIBLE) {
+      tier++;
+      leaves = collectAt(tier, pressure);
+      visibleCount = visibleOf(leaves, tier);
+    }
+    while (overBudget(leaves.length, tier) && pressure < MAX_PRESSURE) {
+      pressure++;
+      leaves = collectAt(tier, pressure);
+    }
+    visibleCount = visibleOf(leaves, tier);
+    return { leaves: balance(leaves), pressure, gridResolution: PATCH_GRID_TIERS[tier], visibleCount, settled: true };
+  }
+
+  let settled = true;
+  if (visibleCount <= TIER_UP_VISIBLE && tier < PATCH_GRID_TIERS.length - 1) {
+    tier++;
+    settled = false;
+  } else if (visibleCount > TIER_DOWN_VISIBLE && tier > 0) {
+    tier--;
+    settled = false;
+  }
+  if (!settled) {
+    leaves = collectAt(tier, pressure);
+    visibleCount = visibleOf(leaves, tier);
+  } else if (overBudget(leaves.length, tier) && pressure < MAX_PRESSURE) {
+    pressure++;
+    leaves = collectAt(tier, pressure);
+    settled = false;
+  } else if (pressure > 0) {
+    const lowered = collectAt(tier, pressure - 1);
+    if (!overBudget(lowered.length, tier, BUDGET_RELAX)) {
+      pressure--;
+      leaves = lowered;
+      settled = false;
+    }
+  } else if (pressure > -MAX_BONUS_STEPS) {
+    // Room to spare: one step sharper while the result stays well in budget.
+    const sharper = collectAt(tier, pressure - 1);
+    if (!overBudget(sharper.length, tier, BONUS_FILL)) {
+      pressure--;
+      leaves = sharper;
+      settled = false;
+    }
+  }
+  if (pressure < 0 && overBudget(leaves.length, tier, BONUS_FILL * 1.2)) {
+    pressure++;
+    leaves = collectAt(tier, pressure);
+    settled = false;
+  }
+  visibleCount = visibleOf(leaves, tier);
+  return { leaves: balance(leaves), pressure, gridResolution: PATCH_GRID_TIERS[tier], visibleCount, settled };
+}
+
+export function selectLeafPatches(cameraPosition: THREE.Vector3, radius: number, detail: PatchDetail): TerrainPatch[] {
+  return selectPatchesIncremental(cameraPosition, radius, detail).leaves;
+}
+
+// Which of a patch's own four edges border two neighbors one level finer
+// (same face or across a cube edge) — the balancing above guarantees a
+// neighbor is never more than one depth level away, so an edge bordered by
+// exactly two depth+1 neighbors is the only case where this patch's own
+// fixed vertex count (buildPatchGeometry, planetPatchMesh.ts) leaves real
+// points unrepresented that the finer side actually has — the T-junction
+// crack Dana saw as dark gaps between patches. See ISSUES.md [B28].
 export interface EdgeStitchFlags {
   top: boolean;
   bottom: boolean;
@@ -111,29 +434,19 @@ export interface EdgeStitchFlags {
 
 // Matches buildPatchGeometry's own edge naming exactly: top = min.y, bottom
 // = max.y, left = min.x, right = max.x (planetPatchMesh.ts's topRow/
-// bottomRow/leftCol/rightCol).
+// bottomRow/leftCol/rightCol). Probes a quarter and three quarters along
+// each edge: two different finer leaves there means it's bordered by two.
 export function computeStitchFlags(leaves: TerrainPatch[]): Map<string, EdgeStitchFlags> {
+  const index = buildLeafIndex(leaves);
   const result = new Map<string, EdgeStitchFlags>();
   for (const patch of leaves) {
-    const finerSameFace = leaves.filter(
-      (other) => other !== patch && other.face === patch.face && other.depth === patch.depth + 1,
-    );
-    const borderedByTwo = (predicate: (other: TerrainPatch) => boolean) => finerSameFace.filter(predicate).length === 2;
-
-    const top = borderedByTwo(
-      (other) => Math.abs(other.max.y - patch.min.y) < EPSILON && overlaps1D(other.min.x, other.max.x, patch.min.x, patch.max.x),
-    );
-    const bottom = borderedByTwo(
-      (other) => Math.abs(other.min.y - patch.max.y) < EPSILON && overlaps1D(other.min.x, other.max.x, patch.min.x, patch.max.x),
-    );
-    const left = borderedByTwo(
-      (other) => Math.abs(other.max.x - patch.min.x) < EPSILON && overlaps1D(other.min.y, other.max.y, patch.min.y, patch.max.y),
-    );
-    const right = borderedByTwo(
-      (other) => Math.abs(other.min.x - patch.max.x) < EPSILON && overlaps1D(other.min.y, other.max.y, patch.min.y, patch.max.y),
-    );
-
-    result.set(patchKey(patch), { top, bottom, left, right });
+    const flags: EdgeStitchFlags = { top: false, bottom: false, left: false, right: false };
+    for (const edge of PATCH_EDGES) {
+      const first = leafAcross(index, patch, edge, 0.25);
+      const second = leafAcross(index, patch, edge, 0.75);
+      flags[edge] = !!first && !!second && first !== second && first.depth === patch.depth + 1 && second.depth === patch.depth + 1;
+    }
+    result.set(patchKey(patch), flags);
   }
   return result;
 }

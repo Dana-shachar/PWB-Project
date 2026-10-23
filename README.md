@@ -1,6 +1,6 @@
 # Procedural World Building
 
-`Last updated: 2026-10-13`
+`Last updated: 2026-10-21`
 
 Cornell Tech, DESIGN 6197/4197, a procedural planet-building tool: paint and generate terrain on a sphere, built with Three.js + GLSL. This README is written for anyone with zero context on the project, what it is, and where everything lives. Kept up to date as the project changes, not a dated log.
 
@@ -18,6 +18,8 @@ This will eventually grow into the fuller README the course's final deliverable 
 >
 > 📅 **`WEEKLY-PUSHES.md`**, the syllabus's graded weekly report, chronological.
 >
+> 🧭 **`CODE-INDEX.md`**, where every part of the code lives, by file and function name.
+>
 > 📚 **`REFERENCES.md`**, every outside source the project relies on, grouped as conceptual, visual and computational.
 >
 > ⚙️ **`CLAUDE.md`**, working rules for how Dana and Claude collaborate on this repo (not project content).
@@ -31,7 +33,7 @@ This will eventually grow into the fuller README the course's final deliverable 
 | path | holds |
 |---|---|
 | `app/` | the Vite, React, TypeScript and Three.js project |
-| `Screenshots/` | shots linked from the docs, named by date |
+| `Screenshots/` | copies of the shots linked from the docs, named by date; the originals live outside the repo, in the course folder `Cornell/Fall 26/PWB/Screenshots/` |
 | `.obsidian/` | vault config. Any `.md` anywhere in the repo is part of it, with no sync step |
 | `firebase.json`, `.firebaserc`, `firestore.rules` | Firebase config and security rules, deployed via its CLI |
 | the `.md` files | see the doc map above |
@@ -54,8 +56,8 @@ Related small pieces are grouped by the feature they serve, so one file can hold
 |---|---|
 | `ui/` | React-rendered panels and the shared component set |
 | `scene/` | the Three.js scene, camera, renderer, grid, and the gumball |
-| `planet/` | the planet's geometry and shader, and terrain patches |
-| `map/` | the heightmap pipeline and its 2D preview, including the brush |
+| `planet/` | the planet's geometry and shader, terrain patches and their lifecycle |
+| `map/` | the heightmap pipeline, the shared noise ranges table, and its 2D preview, including the brush |
 | `voxel/` | the land chunk: its two render styles and its own viewport |
 | `shaders/` | GLSL, loaded as text |
 | `firebase/` | the client, anonymous auth, and reads and writes |

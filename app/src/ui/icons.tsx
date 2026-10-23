@@ -141,3 +141,61 @@ export function CloseIcon({ className }: IconProps) {
     </svg>
   );
 }
+
+// Undo/Redo in the Edit section (ui/Panel.tsx): a curved arrow, RedoIcon its
+// mirror image.
+export function UndoIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      width={ICON_SIZE}
+      height={ICON_SIZE}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.3}
+      aria-hidden="true"
+    >
+      <path d="M5.5 3 2.5 6l3 3" />
+      <path d="M2.5 6H9a4 4 0 0 1 0 8H6" />
+    </svg>
+  );
+}
+
+export function RedoIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      width={ICON_SIZE}
+      height={ICON_SIZE}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.3}
+      aria-hidden="true"
+    >
+      <path d="M10.5 3 13.5 6l-3 3" />
+      <path d="M13.5 6H7a4 4 0 0 0 0 8h3" />
+    </svg>
+  );
+}
+
+// A layer's mask (ui/NoisePanel.tsx's layer rows): a framed square with a
+// circle cut into it, the common layer-mask glyph.
+export function MaskIcon({ className }: IconProps) {
+  return (
+    <svg
+      className={className}
+      width={ICON_SIZE}
+      height={ICON_SIZE}
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.3}
+      aria-hidden="true"
+    >
+      <rect x={2} y={2} width={12} height={12} rx={1.5} />
+      <circle cx={8} cy={8} r={3} />
+    </svg>
+  );
+}

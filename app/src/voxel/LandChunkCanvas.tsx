@@ -32,6 +32,7 @@ interface LandChunkCanvasProps {
   lightIntensity: number;
   specularStrength: number;
   shininess: number;
+  diffuseWrap: number;
   gridSpacing: number;
   gridVisible: boolean;
   // Shared with the planet's own "Base color" control (Dana, 2026-09-23 —
@@ -91,6 +92,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     lightIntensity,
     specularStrength,
     shininess,
+    diffuseWrap,
     gridSpacing,
     gridVisible,
     baseColor,
@@ -186,8 +188,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     material.uniforms.uLightIntensity.value = lightIntensity;
     material.uniforms.uSpecularStrength.value = specularStrength;
     material.uniforms.uShininess.value = shininess;
+    material.uniforms.uDiffuseWrap.value = diffuseWrap;
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, lightDirZ);
-  }, [ambientLight, lightIntensity, specularStrength, shininess, lightDirX, lightDirY, lightDirZ]);
+  }, [ambientLight, lightIntensity, specularStrength, shininess, diffuseWrap, lightDirX, lightDirY, lightDirZ]);
 
   // Base color — shared with the planet's own ColorPicker, not a separate
   // hardcoded placeholder.
@@ -209,7 +212,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     material.uniforms.uChunkSize.value = chunkSize;
     material.uniforms.uMaxHeight.value = maxHeight;
     material.uniforms.uColorByElevation.value = colorByElevation ? 1 : 0;
-    const ramp = buildRampUniformArrays(baseColor, colorStops);
+    const ramp = buildRampUniformArrays(colorStops);
     const rampColors = material.uniforms.uRampColors.value as THREE.Color[];
     for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
     (material.uniforms.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
@@ -266,7 +269,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     // DoubleSide as a safety net against any wall-winding mistakes — Three.js
     // flips the lighting normal for back-facing polygons automatically, so
     // this stays visually correct either way, not just a visibility patch.
-    const initialRamp = buildRampUniformArrays(baseColor, colorStops);
+    const initialRamp = buildRampUniformArrays(colorStops);
     const material = new THREE.ShaderMaterial({
       vertexShader: chunkVertexGlsl,
       fragmentShader: chunkFragmentGlsl,
@@ -278,6 +281,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uLightIntensity: { value: lightIntensity },
         uSpecularStrength: { value: specularStrength },
         uShininess: { value: shininess },
+        uDiffuseWrap: { value: diffuseWrap },
         uCameraPosition: { value: new THREE.Vector3() },
         // Current values at creation time — the effect below keeps these in
         // sync afterward without needing a whole new material.

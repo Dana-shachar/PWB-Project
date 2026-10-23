@@ -1,13 +1,6 @@
 import { useRef, useState } from 'react';
-import { createDefaultLayer, NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer } from './heightmap';
-
-function randomInRange(min: number, max: number): number {
-  return min + Math.random() * (max - min);
-}
-
-function randomInt(min: number, max: number): number {
-  return Math.round(randomInRange(min, max));
-}
+import { createDefaultLayer, NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, VORONOI_DISTANCE_OPTIONS, FRACTAL_TYPE_OPTIONS, type NoiseLayer } from './heightmap';
+import { NOISE_RANGES, randomForRange, type NoiseRangeKey } from './noiseRanges';
 
 function randomFrom<T>(options: T[]): T {
   return options[Math.floor(Math.random() * options.length)];
@@ -95,6 +88,12 @@ export function useNoiseLayers(initialLayerId: string) {
     setLayers(layers.map((layer) => (selectedLayerIds.includes(layer.id) ? { ...layer, ...patch } : layer)));
   }
 
+  // Edits the given layers by id, independent of the selection, for controls
+  // that act on the row they sit on (the mask popup).
+  function updateLayers(ids: string[], patch: Partial<NoiseLayer>) {
+    setLayers(layers.map((layer) => (ids.includes(layer.id) ? { ...layer, ...patch } : layer)));
+  }
+
   // Photoshop-style hide/unhide (Dana, 2026-09-23) — the row's own eye
   // toggle, independent of selection: flips exactly the layer clicked,
   // regardless of which layer(s) are currently selected for editing.
@@ -104,8 +103,8 @@ export function useNoiseLayers(initialLayerId: string) {
 
   // Randomizes every generation parameter on every layer at once, independent
   // of selection — not just the seed (Dana, 2026-10-13: "i need it to
-  // randomize everything, not just current layer seed noise"). Every range
-  // matches the slider it belongs to in ui/NoisePanel.tsx exactly, so a
+  // randomize everything, not just current layer seed noise"). Every value
+  // comes from map/noiseRanges.ts, the same table the sliders read, so a
   // randomized value is never one a person couldn't have dragged to
   // themselves. Pressing it is meant to produce a different world in one
   // gesture, the most direct demonstration that this is a procedural system
@@ -117,24 +116,41 @@ export function useNoiseLayers(initialLayerId: string) {
   // Left alone on purpose: `visible` (a layer silently vanishing would read
   // as broken, not as a new world) and identity fields (`id`, `name`).
   function randomizeTerrain() {
+    // A control left out of Randomize in the table keeps the layer's value.
+    const pick = (key: NoiseRangeKey, current: number) => (NOISE_RANGES[key].randomize === false ? current : randomForRange(key));
     setLayers(
       layers.map((layer) => ({
         ...layer,
         noiseType: randomFrom(RANDOMIZABLE_NOISE_TYPES),
-        seed: randomInt(0, 1000),
-        frequency: randomInRange(0.5, 20),
+        seed: randomForRange('seed'),
+        frequency: randomForRange('frequency'),
         domainWarpEnabled: Math.random() < 0.5,
-        warpStrength: randomInRange(0, 4),
+        warpStrength: randomForRange('warpStrength'),
         octavesEnabled: Math.random() < 0.5,
-        octaves: randomInt(1, 8),
-        persistence: randomInRange(0, 1),
-        lacunarity: randomInRange(1, 4),
+        octaves: randomForRange('octaves'),
+        persistence: randomForRange('persistence'),
+        lacunarity: randomForRange('lacunarity'),
         ridgedEnabled: Math.random() < 0.5,
-        ridgeAmount: randomInRange(0, 1),
+        ridgeAmount: randomForRange('ridgeAmount'),
         terraceEnabled: Math.random() < 0.5,
-        terraceSteps: randomInt(2, 20),
-        opacity: randomInRange(0, 1),
-        heightScale: randomInRange(0, 10),
+        terraceSteps: randomForRange('terraceSteps'),
+        offsetX: pick('offset', layer.offsetX),
+        offsetY: pick('offset', layer.offsetY),
+        offsetZ: pick('offset', layer.offsetZ),
+        stretchX: pick('stretch', layer.stretchX),
+        stretchY: pick('stretch', layer.stretchY),
+        stretchZ: pick('stretch', layer.stretchZ),
+        warpScale: pick('warpScale', layer.warpScale),
+        warpOctaves: pick('warpOctaves', layer.warpOctaves),
+        voronoiJitter: pick('voronoiJitter', layer.voronoiJitter),
+        voronoiDistance: randomFrom(VORONOI_DISTANCE_OPTIONS.map((option) => option.value)),
+        ridgeOffset: pick('ridgeOffset', layer.ridgeOffset),
+        ridgeGain: pick('ridgeGain', layer.ridgeGain),
+        fractalType: randomFrom(FRACTAL_TYPE_OPTIONS.map((option) => option.value)),
+        fractalOffset: pick('fractalOffset', layer.fractalOffset),
+        fractalGain: pick('fractalGain', layer.fractalGain),
+        opacity: randomForRange('opacity'),
+        heightScale: randomForRange('layerHeight'),
         blendMode: randomFrom(BLEND_MODE_OPTIONS.map((option) => option.value)),
       })),
     );
@@ -150,6 +166,7 @@ export function useNoiseLayers(initialLayerId: string) {
     deleteLayer,
     reorderLayer,
     updateSelectedLayer,
+    updateLayers,
     toggleLayerVisible,
     renameLayer,
     randomizeTerrain,

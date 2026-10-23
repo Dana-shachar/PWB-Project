@@ -47,7 +47,12 @@ uniform float uFace;
 // codes this against the shared map's fixed 1024 width; a patch's own baked
 // texture is a different, per-patch resolution (planet/patch.ts's
 // clampPatchSamples), so this has to be a uniform instead of a constant.
-uniform float uSampleOffset;
+// How far apart (in world units) the bump gradient reads, a fixed ground
+// distance so lighting doesn't change with patch depth. See the clamp below.
+uniform float uGradientStepWorld;
+// The baked texture's width in texels, which varies with the patch's depth.
+uniform float uBakeSamples;
+uniform float uDiffuseWrap;
 uniform mat3 normalMatrix;
 
 varying vec2 vUv;
@@ -103,21 +108,13 @@ void main() {
   vec3 dPdu = ((rawDPdu - localNormal * dot(localNormal, rawDPdu)) / cubeRadius) * uRadius * (uPatchMax.x - uPatchMin.x);
   vec3 dPdv = ((rawDPdv - localNormal * dot(localNormal, rawDPdv)) / cubeRadius) * uRadius * (uPatchMax.y - uPatchMin.y);
 
-  float hL = texture2D(uHeightMap, vUv - vec2(uSampleOffset, 0.0)).r;
-  float hR = texture2D(uHeightMap, vUv + vec2(uSampleOffset, 0.0)).r;
-  float hD = texture2D(uHeightMap, vUv - vec2(0.0, uSampleOffset)).r;
-  float hU = texture2D(uHeightMap, vUv + vec2(0.0, uSampleOffset)).r;
-  float dHdu = (hR - hL) / (2.0 * uSampleOffset);
-  float dHdv = (hU - hD) / (2.0 * uSampleOffset);
-
-  const float MAX_BUMP_STRENGTH = 1.0;
-  float bumpStrength = min(uDisplacementAmplitude, MAX_BUMP_STRENGTH);
-  vec3 tangentU = dPdu + localNormal * dHdu * bumpStrength;
-  vec3 tangentV = dPdv + localNormal * dHdv * bumpStrength;
-  vec3 normal = normalize(normalMatrix * cross(tangentV, tangentU));
+  // The step is a fixed world length turned into uv for this patch, kept
+  // between 2 and 8 of its own baked texels (under 2 reads noise as slope).
+  float stepUv = clamp(uGradientStepWorld / max(0.0001, length(dPdu)), 2.0 / uBakeSamples, 8.0 / uBakeSamples);
+  vec3 normal = normalize(normalMatrix * heightfieldNormal(uHeightMap, vUv, stepUv, 1.0, dPdu, dPdv, localNormal, uDisplacementAmplitude));
 
   vec3 lightDir = normalize(uLightDirection);
-  float diffuse = max(dot(normal, lightDir), 0.0) * uLightIntensity;
+  float diffuse = softDiffuse(normal, lightDir, uDiffuseWrap) * uLightIntensity;
 
   vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
   vec3 halfVector = normalize(lightDir + viewDir);
@@ -130,10 +127,7 @@ void main() {
     float elevationRaw = texture2D(uHeightMap, vUv).g;
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
-    const float REFERENCE_HEIGHT_FRACTION = 0.1;
-    float heightFraction = uDisplacementAmplitude / max(0.0001, uRadius);
-    float colorContrast = clamp(heightFraction / REFERENCE_HEIGHT_FRACTION, 0.0, 1.0);
-    surfaceColor = mix(uBaseColor, ramp, colorContrast);
+    surfaceColor = ramp;
   }
 
   gl_FragColor = vec4(surfaceColor * (ambient + diffuse) + specular, 1.0);

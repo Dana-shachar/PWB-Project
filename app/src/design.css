@@ -34,6 +34,7 @@
   --color-input-stroke: #f2f2f7;
   --color-panel-bg: #49494a;
   --color-divider: rgba(255, 255, 255, 0.2);
+  --color-tooltip-bg: #000; /* tooltips read as black, apart from the panel (Dana, 2026-10-21) */
   --divider-weight: 0.5px;
   --color-btn-bg: #0c0c0d;
   --color-btn-hover-bg: #1a1a1a;
@@ -401,19 +402,19 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   transition: opacity 150ms ease;
 }
 
-/* Labels the position column — Dana: "i'm also missing an indication for
-   the elevation of the color." Roughly lines up over .ui-ramp-list-position
-   below, not a strict table, a hint is enough. */
+/* Column headers. Padding mirrors a row's own (its padding, plus the delete
+   X and gap on the right) so each header sits over its column. */
 .ui-ramp-list-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  padding: 0 calc(var(--gap-sm) * 2 + 20px) 0 var(--gap-sm);
 }
-.ui-ramp-list-header-position {
+.ui-ramp-list-header-label {
   font: 400 var(--font-size-xs) var(--font-ui);
   color: var(--color-text);
   opacity: 0.6;
-  padding-right: var(--gap-sm);
 }
+
 
 /* One row per stop (plus the fixed base entry), Dana: "all picked colors
    in a column with their color code." Clicking a row selects that stop,
@@ -425,10 +426,9 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   gap: var(--gap-sm);
 }
 
+/* Layout comes from .ui-color-row (the base color control's own row); this
+   only adds the clickable/selectable container around it. */
 .ui-ramp-list-row {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-md);
   padding: var(--gap-sm);
   border-radius: 4px;
   cursor: pointer;
@@ -441,24 +441,22 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   box-shadow: inset 0 0 0 1.5px var(--color-accent);
 }
 
-.ui-ramp-list-swatch {
-  width: 18px;
-  height: 18px;
-  border-radius: 3px;
-  border: 1px solid var(--color-input-stroke);
-  flex-shrink: 0;
+/* The elevation field, on top of .ui-slider-field: typed into rather than
+   scrubbed, its width set inline to hug the number, pushed to the row's right. */
+.ui-ramp-list-elevation {
+  flex: 0 0 auto;
+  margin-left: auto;
+  cursor: ew-resize; /* drag to scrub, click to type */
+  box-sizing: content-box;
+}
+/* A real minimum width, so flex can't squash it to a sliver. */
+.ui-ramp-list-row .ui-color-swatch {
+  flex: 0 0 28px;
+  min-width: 28px;
 }
 
-.ui-ramp-list-code {
-  font: 400 var(--font-size-sm) var(--font-ui);
-  flex: 1;
-}
-
-.ui-ramp-list-position {
-  font: 400 var(--font-size-sm) var(--font-ui);
-  opacity: 0.6;
-  width: 3em;
-  text-align: right;
+.ui-ramp-delete-placeholder {
+  flex: 0 0 20px; /* same width as .ui-ramp-delete-btn */
 }
 
 .ui-ramp-delete-btn {
@@ -1138,8 +1136,9 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 }
 /* Active (selected, drives RightPanel) reads via text color, not a border
    box — there's no box to color anymore. */
-.pipeline-stage-header--active .pipeline-stage-label {
-  color: var(--color-accent);
+.pipeline-stage-header--active .pipeline-stage-label,
+.ui-accordion-header--active {
+  color: var(--color-accent); /* the active stage, whether a stage row or the Planet Terrain accordion */
 }
 
 .pipeline-stage-enabled-dot {
@@ -1520,18 +1519,21 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 .ui-tooltip-anchor {
   position: relative;
 }
+/* Positioned by placeTooltip in ui/UIElements.tsx, which keeps it inside the
+   window; fixed so no panel's overflow can clip it. */
 .ui-tooltip {
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: 240px;
   padding: 4px 8px;
   border-radius: var(--panel-radius);
-  background: var(--color-panel-bg);
+  background: var(--color-tooltip-bg);
   border: var(--divider-weight) solid var(--color-divider);
   color: var(--color-text);
   font: 300 var(--font-size-xs) var(--font-ui);
-  white-space: nowrap;
+  white-space: normal;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.1s;
@@ -1542,21 +1544,33 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   opacity: 1;
 }
 
-/* Slider/Toggle/Select rows anchor the same tooltip to their whole row (so
-   hovering anywhere in the row reveals it, same reach the old native `title`
-   attribute had), but a row is a wide, label-plus-control shape, not a small
-   square icon button: centering over the full row would float the label far
-   from where the mouse actually is, and these descriptions are full
-   sentences, not a one-word icon label, so they need to wrap rather than
-   stay on one unreadable nowrap line. Anchored to the row's left edge, near
-   the label, with a sensible max-width instead. */
-.ui-slider-row.ui-tooltip-anchor > .ui-tooltip,
-.ui-toggle-row.ui-tooltip-anchor > .ui-tooltip,
-.ui-select-row.ui-tooltip-anchor > .ui-tooltip {
-  left: 0;
-  transform: none;
-  white-space: normal;
-  max-width: 220px;
+/* Row-shaped anchors (slider, toggle, select, accordion) hang the tooltip
+   from the row's left edge, near the label, instead of centering it. */
+
+/* A floating panel hung off a trigger (Popup in ui/UIElements.tsx). */
+.ui-popup {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+  padding: var(--panel-padding);
+  background: var(--color-panel-bg);
+  border: var(--divider-weight) solid var(--color-divider);
+  border-radius: var(--panel-radius);
+  color: var(--color-text);
+  font: 300 var(--font-size-sm) var(--font-ui);
+}
+
+/* A layer row's right-hand actions: mask, then eye. */
+.noise-layer-row-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+/* The mask glyph lights up when the layer has a mask source. */
+.noise-layer-row-mask--active {
+  color: var(--color-accent);
 }
 
 /* Expanded noise canvas — replaces .app-viewport's normal planet/chunk
@@ -1625,6 +1639,11 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   display: flex;
   gap: var(--gap-sm);
 }
-.panel-btn-row > button {
-  flex: 1;
+/* A button stacked in a column hugs its text instead of stretching across. */
+.panel-btn-hug {
+  align-self: flex-start;
+}
+.ui-icon-btn {
+  justify-content: center;
+  padding: 6px;
 }

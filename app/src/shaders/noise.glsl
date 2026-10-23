@@ -5,31 +5,42 @@
 // control yet — so adding the type-selector dropdown later doesn't require
 // touching this file again.
 //
-// Every function takes a `seed` that offsets the sampling coordinate, so
-// one shared seed field can drive whichever type is selected consistently.
+// Every function takes a `seed` that shifts the lattice, so one shared seed
+// field can drive whichever type is selected consistently. The shift is a
+// whole number of cells applied to the cell index only, never added to the
+// coordinate: a large offset on the coordinate costs float32 its fractional
+// digits and stair-steps deep patches (the large-value split follows AGI's
+// "Precisions, Precisions"; the whole-cell choice is this file's own).
 
-vec2 seedOffset(float seed) {
-  return vec2(seed * 37.234, seed * 17.921);
+vec2 seedCell(float seed) {
+  return floor(vec2(seed * 37.234, seed * 17.921) + 0.5);
 }
 
-vec3 seedOffset3(float seed) {
-  return vec3(seed * 37.234, seed * 17.921, seed * 61.417);
+vec3 seedCell3(float seed) {
+  return floor(vec3(seed * 37.234, seed * 17.921, seed * 61.417) + 0.5);
 }
 
 // ---- Shared hash helpers ----
-vec2 hash2(vec2 p) {
-  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-  return -1.0 + 2.0 * fract(sin(p) * 43758.5453123);
+// Dave Hoskins' "hash without sine", a float-only hash that is safe in GLSL
+// ES 1.00 (no integers) and listed in Jarzynski and Olano, "Hash Functions
+// for GPU Rendering" (JCGT 2020), which finds sin-based hashes visibly
+// banded and repeating. Constants typed from memory, not diffed against the
+// Shadertoy original (4djSRW, unreachable when this was written).
+float hash1(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
 }
 
-float hash1(vec2 p) {
-  return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+vec2 hash2(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yzx + 33.33);
+  return -1.0 + 2.0 * fract((p3.xx + p3.yz) * p3.zy); // -1..1
 }
 
 // ---- Random (value noise) ----
 float randomNoise(vec2 p, float seed) {
-  p += seedOffset(seed);
-  vec2 i = floor(p);
+  vec2 i = floor(p) + seedCell(seed);
   vec2 f = fract(p);
   float a = hash1(i);
   float b = hash1(i + vec2(1.0, 0.0));
@@ -41,8 +52,7 @@ float randomNoise(vec2 p, float seed) {
 
 // ---- Perlin (classic gradient) noise ----
 float perlinNoise(vec2 p, float seed) {
-  p += seedOffset(seed);
-  vec2 i = floor(p);
+  vec2 i = floor(p) + seedCell(seed);
   vec2 f = fract(p);
   vec2 u = f * f * (3.0 - 2.0 * f);
   float a = dot(hash2(i), f);
@@ -58,14 +68,13 @@ vec3 permute(vec3 x) {
 }
 
 float simplexNoise(vec2 p, float seed) {
-  p += seedOffset(seed);
   const vec4 C = vec4(0.211324865405187, 0.366025403784439, -0.577350269189626, 0.024390243902439);
   vec2 i  = floor(p + dot(p, C.yy));
   vec2 x0 = p - i + dot(i, C.xx);
   vec2 i1 = (x0.x > x0.y) ? vec2(1.0, 0.0) : vec2(0.0, 1.0);
   vec4 x12 = x0.xyxy + C.xxzz;
   x12.xy -= i1;
-  i = mod(i, 289.0);
+  i = mod(i + seedCell(seed), 289.0);
   vec3 p3 = permute(permute(i.y + vec3(0.0, i1.y, 1.0)) + i.x + vec3(0.0, i1.x, 1.0));
   vec3 m = max(0.5 - vec3(dot(x0, x0), dot(x12.xy, x12.xy), dot(x12.zw, x12.zw)), 0.0);
   m = m * m;
@@ -83,8 +92,7 @@ float simplexNoise(vec2 p, float seed) {
 
 // ---- Voronoi / cellular (Worley) noise ----
 float voronoiNoise(vec2 p, float seed) {
-  p += seedOffset(seed);
-  vec2 i = floor(p);
+  vec2 i = floor(p) + seedCell(seed);
   vec2 f = fract(p);
   float minDist = 1.0;
   for (int y = -1; y <= 1; y++) {
@@ -105,8 +113,9 @@ float voronoiNoise(vec2 p, float seed) {
 // here is. That broke the Height/elevation system's assumption that a
 // layer's raw output has no built-in bias — see ISSUES.md, 2026-09-24, and
 // heightmap.frag.glsl's elevation accumulation below.
-float ridge(float noiseValue) {
-  return 2.0 * (1.0 - abs(noiseValue)) - 1.0;
+// `offset` is Blender's Ridged Multifractal Offset; 1 reproduces the fold above.
+float ridge(float noiseValue, float offset) {
+  return 2.0 * (offset - abs(noiseValue)) - 1.0;
 }
 
 // ---- Terrace — a transform, not a generator; apply to any noise above ----
@@ -117,23 +126,23 @@ float terrace(float noiseValue, float steps) {
 }
 
 // ---- 3D hash helpers, for the 3D noise variants below ----
-float hash1_3d(vec3 p) {
-  return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
+// Same Hoskins hash as above (hash13 / hash33 forms), same caveat on the
+// constants.
+float hash1_3d(vec3 p3) {
+  p3 = fract(p3 * 0.1031);
+  p3 += dot(p3, p3.zyx + 31.32);
+  return fract((p3.x + p3.y) * p3.z);
 }
 
-vec3 hash3_3d(vec3 p) {
-  p = vec3(
-    dot(p, vec3(127.1, 311.7, 74.7)),
-    dot(p, vec3(269.5, 183.3, 246.1)),
-    dot(p, vec3(113.5, 271.9, 124.6))
-  );
-  return fract(sin(p) * 43758.5453123);
+vec3 hash3_3d(vec3 p3) {
+  p3 = fract(p3 * vec3(0.1031, 0.1030, 0.0973));
+  p3 += dot(p3, p3.yxz + 33.33);
+  return fract((p3.xxy + p3.yxx) * p3.zyx);
 }
 
 // ---- Random (value noise) 3D — trilinear-interpolated hash ----
 float randomNoise3D(vec3 p, float seed) {
-  p += seedOffset3(seed);
-  vec3 i = floor(p);
+  vec3 i = floor(p) + seedCell3(seed);
   vec3 f = fract(p);
   vec3 u = f * f * (3.0 - 2.0 * f);
 
@@ -156,22 +165,37 @@ float randomNoise3D(vec3 p, float seed) {
 }
 
 // ---- Voronoi / cellular (Worley) noise 3D — 3x3x3 neighbor search ----
+// Per-layer extras, set in main() before each layer is evaluated so they
+// need not be threaded through every noise call. Jitter 0..1 is how far a
+// cell's point strays from its center (Blender's Randomness, Gaea's Jitter);
+// distance is 0 Euclidean, 1 Manhattan, 2 Chebychev (both tools offer them).
+float gVoronoiJitter = 1.0;
+float gVoronoiDistance = 0.0;
+
+float voronoiMetric(vec3 diff) {
+  if (gVoronoiDistance < 0.5) return length(diff);
+  if (gVoronoiDistance < 1.5) return abs(diff.x) + abs(diff.y) + abs(diff.z);
+  return max(abs(diff.x), max(abs(diff.y), abs(diff.z)));
+}
+
 float voronoiNoise3D(vec3 p, float seed) {
-  p += seedOffset3(seed);
-  vec3 i = floor(p);
+  vec3 i = floor(p) + seedCell3(seed);
   vec3 f = fract(p);
   float minDist = 10.0;
   for (int z = -1; z <= 1; z++) {
     for (int y = -1; y <= 1; y++) {
       for (int x = -1; x <= 1; x++) {
         vec3 neighbor = vec3(float(x), float(y), float(z));
-        vec3 point = hash3_3d(i + neighbor);
+        vec3 point = 0.5 + (hash3_3d(i + neighbor) - 0.5) * gVoronoiJitter;
         vec3 diff = neighbor + point - f;
-        minDist = min(minDist, length(diff));
+        minDist = min(minDist, voronoiMetric(diff));
       }
     }
   }
-  return minDist * 2.0 - 1.0; // roughly -1..1
+  // The other metrics read larger than Euclidean, so they are clamped to
+  // keep the usual -1..1 range (this clamp is not from a source).
+  float value = minDist * 2.0 - 1.0; // roughly -1..1
+  return gVoronoiDistance < 0.5 ? value : clamp(value, -1.0, 1.0);
 }
 
 // ---- Perlin 3D — for sampling noise directly on a sphere's surface ----
@@ -188,8 +212,7 @@ vec4 permute4(vec4 x) {
 }
 
 float perlinNoise3D(vec3 p, float seed) {
-  p += seedOffset3(seed);
-  vec3 Pi0 = floor(p);
+  vec3 Pi0 = floor(p) + seedCell3(seed);
   vec3 Pi1 = Pi0 + vec3(1.0);
   Pi0 = mod(Pi0, 289.0);
   Pi1 = mod(Pi1, 289.0);
@@ -262,7 +285,6 @@ vec3 mod289(vec3 x) {
 }
 
 float simplexNoise3D(vec3 v, float seed) {
-  v += seedOffset3(seed);
   const vec2 C = vec2(1.0 / 6.0, 1.0 / 3.0);
   const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
 
@@ -278,7 +300,7 @@ float simplexNoise3D(vec3 v, float seed) {
   vec3 x2 = x0 - i2 + C.yyy;
   vec3 x3 = x0 - D.yyy;
 
-  i = mod289(i);
+  i = mod289(i + seedCell3(seed));
   vec4 p = permute4(permute4(permute4(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
 
   float n_ = 0.142857142857;

@@ -23,6 +23,7 @@ interface RightPanelProps {
   onRenameLayer: (id: string, name: string) => void;
   onReorderLayer: (draggedId: string, targetId: string) => void;
   onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
+  onUpdateLayers: (ids: string[], patch: Partial<NoiseLayer>) => void;
   onRandomizeTerrain: () => void;
   brushRadiusPx: number;
   onBrushRadiusPxChange: (value: number) => void;

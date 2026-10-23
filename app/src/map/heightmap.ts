@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { NOISE_RANGES } from './noiseRanges';
 import noiseGlsl from '../shaders/noise.glsl?raw';
 // Shared by both passes below — a plain full-screen-quad pass-through, identical
 // either way since both render the same quad geometry through the same ortho
@@ -44,6 +45,34 @@ export const NOISE_TYPE_OPTIONS: { value: NoiseType; label: string }[] = [
   { value: 'simplex', label: 'Simplex' },
   { value: 'voronoi', label: 'Voronoi' },
 ];
+
+// Voronoi's distance function (Blender and Gaea both offer these).
+export type VoronoiDistance = 'euclidean' | 'manhattan' | 'chebychev';
+
+export const VORONOI_DISTANCE_OPTIONS: { value: VoronoiDistance; label: string }[] = [
+  { value: 'euclidean', label: 'Euclidean' },
+  { value: 'manhattan', label: 'Manhattan' },
+  { value: 'chebychev', label: 'Chebychev' },
+];
+
+// How a layer's octaves combine (Musgrave's fractal types, as Blender
+// implements them). A setting of the Octaves modifier, so any base noise can
+// use it; fBm is the plain sum every layer used before this existed.
+export type FractalType = 'fbm' | 'multifractal' | 'hybrid' | 'hetero' | 'ridgedMulti';
+
+export const FRACTAL_TYPE_OPTIONS: { value: FractalType; label: string }[] = [
+  { value: 'fbm', label: 'fBm' },
+  { value: 'multifractal', label: 'Multifractal' },
+  { value: 'hybrid', label: 'Hybrid' },
+  { value: 'hetero', label: 'Hetero terrain' },
+  { value: 'ridgedMulti', label: 'Ridged multifractal' },
+];
+
+// Matches heightmap.frag.glsl's uLayerFractalType.
+const FRACTAL_TYPE_INDEX: Record<FractalType, number> = { fbm: 0, multifractal: 1, hybrid: 2, hetero: 3, ridgedMulti: 4 };
+
+// Matches heightmap.frag.glsl's uLayerVoronoiDistance.
+const VORONOI_DISTANCE_INDEX: Record<VoronoiDistance, number> = { euclidean: 0, manhattan: 1, chebychev: 2 };
 
 const NOISE_TYPE_INDEX: Record<NoiseType, number> = {
   random: 0,
@@ -113,6 +142,30 @@ export interface NoiseLayer {
   ridgeAmount: number;
   terraceEnabled: boolean;
   terraceSteps: number;
+  // Transform: translate the noise (in lattice cells, separate from seed) and
+  // stretch it per axis, as Unity/Blender/Terragen/Gaea offer.
+  offsetX: number;
+  offsetY: number;
+  offsetZ: number;
+  stretchX: number;
+  stretchY: number;
+  stretchZ: number;
+  // Domain warp's own scale and octave count (its strength is warpStrength).
+  warpScale: number;
+  warpOctaves: number;
+  // Voronoi only: how far each cell's point strays from its center (0-1) and
+  // the distance function.
+  voronoiJitter: number;
+  voronoiDistance: VoronoiDistance;
+  // Ridged only, after Blender's Ridged Multifractal: the fold's Offset and
+  // the Gain on the feedback between octaves. 1 and 1 are the old look.
+  ridgeOffset: number;
+  ridgeGain: number;
+  // Octaves modifier only: how the octaves combine, plus the Offset and Gain
+  // the hybrid, hetero and ridged types use.
+  fractalType: FractalType;
+  fractalOffset: number;
+  fractalGain: number;
   opacity: number; // 0-1
   // Amplitude, distinct from opacity: scales how much this layer's noise
   // deviates from neutral (flat) before blending, not how much it overrides
@@ -128,6 +181,72 @@ export interface NoiseLayer {
   // discarded) every pixel; visible=false skips that work entirely, and
   // keeps the concept separate from the user's actual opacity setting.
   visible: boolean;
+  // Mask (Gaea's convention: bright = fully affected, dark = untouched): this
+  // layer's contribution is multiplied by the layer's own mask pattern, a
+  // plain base generator with its own seed and frequency. 'none' = unmasked.
+  maskNoiseType: NoiseType;
+  maskSeed: number;
+  maskFrequency: number;
+  maskInvert: boolean;
+  // Percent of the planet the mask lets this layer through (0-100), and the
+  // width of the edge fade as a percent of the planet's area (0 = sharp).
+  maskCoverage: number;
+  maskSoftness: number;
+}
+
+// A mask is on once it has a pattern to draw.
+export function hasMask(layer: NoiseLayer): boolean {
+  return layer.maskNoiseType !== 'none';
+}
+
+// Fields an older save may still carry: masks used to point at another layer
+// and, before that, held a raw brightness band.
+interface LegacyMaskFields {
+  maskLayerId?: string | null;
+  maskMin?: number;
+  maskMax?: number;
+}
+
+// What a layer saved before these controls existed is filled in with: the
+// values that reproduce its old look.
+export const DEFAULT_NOISE_EXTRA_FIELDS = {
+  offsetX: NOISE_RANGES.offset.default,
+  offsetY: NOISE_RANGES.offset.default,
+  offsetZ: NOISE_RANGES.offset.default,
+  stretchX: NOISE_RANGES.stretch.default,
+  stretchY: NOISE_RANGES.stretch.default,
+  stretchZ: NOISE_RANGES.stretch.default,
+  warpScale: NOISE_RANGES.warpScale.default,
+  warpOctaves: NOISE_RANGES.warpOctaves.default,
+  voronoiJitter: NOISE_RANGES.voronoiJitter.default,
+  voronoiDistance: 'euclidean' as VoronoiDistance,
+  ridgeOffset: NOISE_RANGES.ridgeOffset.default,
+  ridgeGain: NOISE_RANGES.ridgeGain.default,
+  fractalType: 'fbm' as FractalType,
+  fractalOffset: NOISE_RANGES.fractalOffset.default,
+  fractalGain: NOISE_RANGES.fractalGain.default,
+};
+
+export const DEFAULT_MASK_FIELDS = {
+  maskNoiseType: 'none' as NoiseType,
+  maskSeed: NOISE_RANGES.seed.default,
+  maskFrequency: NOISE_RANGES.frequency.default,
+  maskInvert: false,
+  maskCoverage: 50,
+  maskSoftness: 20,
+};
+
+// Per-face sample grid used to measure a mask pattern's value distribution.
+const MASK_SAMPLE_SIZE = 64;
+// How many distinct mask patterns stay measured before the cache resets.
+const MASK_CACHE_LIMIT = 32;
+
+// Value at percentile `fraction` (0-1) of a sorted sample; with no sample
+// (a paint-only source) the value scale itself stands in, i.e. uniform.
+function quantileOf(sorted: Float32Array | null, fraction: number): number {
+  const clamped = Math.min(1, Math.max(0, fraction));
+  if (!sorted) return clamped;
+  return sorted[Math.min(sorted.length - 1, Math.floor(clamped * (sorted.length - 1)))];
 }
 
 export function createDefaultLayer(id: string, name: string): NoiseLayer {
@@ -135,22 +254,24 @@ export function createDefaultLayer(id: string, name: string): NoiseLayer {
     id,
     name,
     noiseType: 'none',
-    seed: 0,
-    frequency: 4,
+    seed: NOISE_RANGES.seed.default,
+    frequency: NOISE_RANGES.frequency.default,
     domainWarpEnabled: false,
-    warpStrength: 1.0,
+    warpStrength: NOISE_RANGES.warpStrength.default,
     octavesEnabled: false,
-    octaves: 4,
-    persistence: 0.5,
-    lacunarity: 2.0,
+    octaves: NOISE_RANGES.octaves.default,
+    persistence: NOISE_RANGES.persistence.default,
+    lacunarity: NOISE_RANGES.lacunarity.default,
     ridgedEnabled: false,
-    ridgeAmount: 1, // fully ridged once enabled, matching the old dedicated 'ridged' type's look
+    ridgeAmount: NOISE_RANGES.ridgeAmount.default, // fully ridged once enabled, matching the old dedicated 'ridged' type's look
     terraceEnabled: false,
-    terraceSteps: 8,
-    opacity: 1,
-    heightScale: 1,
+    terraceSteps: NOISE_RANGES.terraceSteps.default,
+    ...DEFAULT_NOISE_EXTRA_FIELDS,
+    opacity: NOISE_RANGES.opacity.default,
+    heightScale: NOISE_RANGES.layerHeight.default,
     blendMode: 'normal',
     visible: true,
+    ...DEFAULT_MASK_FIELDS,
   };
 }
 
@@ -168,10 +289,19 @@ const LEGACY_MODIFIER_TYPE_TO_FIELD: Record<string, 'ridgedEnabled' | 'octavesEn
 };
 
 export function migrateLegacyLayers(layers: NoiseLayer[]): NoiseLayer[] {
-  return layers.map((layer) => {
+  return layers.map((saved) => {
+    const layer = { ...DEFAULT_NOISE_EXTRA_FIELDS, ...DEFAULT_MASK_FIELDS, ...saved };
     const legacyField = LEGACY_MODIFIER_TYPE_TO_FIELD[layer.noiseType as string];
-    if (!legacyField) return layer;
-    return { ...layer, noiseType: 'perlin', [legacyField]: true };
+    return legacyField ? { ...layer, noiseType: 'perlin' as const, [legacyField]: true } : layer;
+  }).map((layer, _index, all) => {
+    // A mask that pointed at another layer becomes that layer's pattern (type,
+    // seed, frequency) as the mask's own; a missing or paint-only source means
+    // no mask. The look may shift, since the layer's modifiers are not copied.
+    const { maskLayerId, maskMin: _maskMin, maskMax: _maskMax, ...current } = layer as NoiseLayer & LegacyMaskFields;
+    if (!maskLayerId) return current;
+    const source = all.find((other) => other.id === maskLayerId);
+    if (!source || source.noiseType === 'none') return { ...current, maskNoiseType: 'none' as NoiseType };
+    return { ...current, maskNoiseType: source.noiseType, maskSeed: source.seed, maskFrequency: source.frequency };
   });
 }
 
@@ -259,6 +389,9 @@ export class HeightmapPipeline {
   // The smooth land chunk's own persistent display texture — see
   // renderDisplayRegion's own comment for why this needs a separate slot.
   private displayRegionTarget: THREE.WebGLRenderTarget | null = null;
+  // Measures a mask source's value distribution, see resolveMaskBand().
+  private maskSampleTarget: THREE.WebGLRenderTarget | null = null;
+  private maskSampleCache = new Map<string, Float32Array>();
   private paintActiveIndex = new Map<string, number>();
   private paintPlaceholder: THREE.DataTexture;
   // The stroke currently being drawn, if any — its whole point path is kept
@@ -327,9 +460,31 @@ export class HeightmapPipeline {
         uLayerRidgeAmount: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerTerraceOn: { value: new Array(MAX_LAYERS).fill(0) },
         uLayerTerraceSteps: { value: new Array(MAX_LAYERS).fill(8) },
+        uLayerOffset: { value: new Array(MAX_LAYERS).fill(null).map(() => new THREE.Vector3(0, 0, 0)) },
+        uLayerStretch: { value: new Array(MAX_LAYERS).fill(null).map(() => new THREE.Vector3(1, 1, 1)) },
+        uLayerWarpScale: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerWarpOctaves: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerVoronoiJitter: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerVoronoiDistance: { value: new Array(MAX_LAYERS).fill(0) },
+        uLayerRidgeOffset: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerRidgeGain: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerFractalType: { value: new Array(MAX_LAYERS).fill(0) },
+        uLayerFractalOffset: { value: new Array(MAX_LAYERS).fill(0) },
+        uLayerFractalGain: { value: new Array(MAX_LAYERS).fill(1) },
+        // Spacing between baked samples in face coordinates, 0 = no octave
+        // fade. Only a region (patch) bake sets it, see bakeRegionInto().
+        uSampleSpacing: { value: 0 },
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerHeightScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
+        // Masks: packed index of each layer's mask source (-1 = none), and
+        // whether a packed layer adds terrain (a hidden mask source doesn't).
+        uLayerMaskType: { value: new Array(MAX_LAYERS).fill(-1) },
+        uLayerMaskSeed: { value: new Array(MAX_LAYERS).fill(0) },
+        uLayerMaskFrequency: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerMaskInvert: { value: new Array(MAX_LAYERS).fill(0) },
+        uLayerMaskMin: { value: new Array(MAX_LAYERS).fill(0.3) },
+        uLayerMaskMax: { value: new Array(MAX_LAYERS).fill(0.7) },
         // Region bake — off unless renderRegion() turns it on. See
         // heightmap.frag.glsl and renderRegion() below.
         uRegionMode: { value: 0 },
@@ -602,7 +757,7 @@ export class HeightmapPipeline {
     // `layers` list) — hiding is a display toggle, not a delete.
     // !== false, not truthy — layers saved before this field existed have
     // visible === undefined, and should default to visible (Dana, 2026-09-23).
-    this.syncLayerUniforms(layers);
+    this.syncLayerUniforms(renderer, layers);
     uniforms.uRegionMode.value = 0;
     renderer.setRenderTarget(this.renderTarget);
     renderer.render(this.scene, this.camera);
@@ -662,7 +817,7 @@ export class HeightmapPipeline {
   private bakeRegionInto(renderer: THREE.WebGLRenderer, params: RegionParams, target: THREE.WebGLRenderTarget): void {
     const { layers, face, min, max } = params;
     this.syncPaintTargets(renderer, layers);
-    this.syncLayerUniforms(layers);
+    this.syncLayerUniforms(renderer, layers);
 
     const uniforms = this.material.uniforms;
     uniforms.uRegionMode.value = 1;
@@ -670,13 +825,16 @@ export class HeightmapPipeline {
     (uniforms.uRegionMin.value as THREE.Vector2).set(min.x, min.y);
     (uniforms.uRegionMax.value as THREE.Vector2).set(max.x, max.y);
     uniforms.uRegionSamples.value = target.width;
+    // Octaves finer than this grid can show are faded out (heightmap.frag.glsl).
+    uniforms.uSampleSpacing.value = (max.x - min.x) / Math.max(1, target.width - 1);
 
     renderer.setRenderTarget(target);
     renderer.render(this.scene, this.camera);
     renderer.setRenderTarget(null);
     // Left off so the next whole-globe render() isn't silently still in
-    // region mode if it forgets to reset it.
+    // region mode (or fading octaves) if it forgets to reset them.
     uniforms.uRegionMode.value = 0;
+    uniforms.uSampleSpacing.value = 0;
   }
 
   // Reused while the size matches, so panning or re-meshing doesn't
@@ -996,12 +1154,82 @@ export class HeightmapPipeline {
     }
   }
 
+  // A mask pattern's values over the whole planet, sorted. The pattern is
+  // rendered alone, as a plain layer of the same type, seed and frequency
+  // (every real layer hidden, Height 1, no mask) on a coarse grid per cube
+  // face, so a value read back is exactly the mask's brightness. Cached by
+  // pattern, so layers sharing one pattern share one measurement.
+  private maskSortedValues(renderer: THREE.WebGLRenderer, layers: NoiseLayer[], layer: NoiseLayer): Float32Array {
+    const signature = JSON.stringify([layer.maskNoiseType, layer.maskSeed, layer.maskFrequency]);
+    const cached = this.maskSampleCache.get(signature);
+    if (cached) return cached;
+
+    if (!this.maskSampleTarget) this.maskSampleTarget = new THREE.WebGLRenderTarget(MASK_SAMPLE_SIZE, MASK_SAMPLE_SIZE, { type: THREE.FloatType });
+    // Real layers stay in the list, hidden, so their paint targets survive the sync.
+    const probe: NoiseLayer = {
+      ...createDefaultLayer('mask-probe', 'mask-probe'),
+      noiseType: layer.maskNoiseType,
+      seed: layer.maskSeed,
+      frequency: layer.maskFrequency,
+      heightScale: 1,
+    };
+    const probeLayers = [...layers.map((other) => ({ ...other, visible: false, maskNoiseType: 'none' as NoiseType })), probe];
+    const faceTexels = MASK_SAMPLE_SIZE * MASK_SAMPLE_SIZE;
+    const values = new Float32Array(6 * faceTexels);
+    const rgba = new Float32Array(faceTexels * 4);
+    for (let face = 0; face < 6; face++) {
+      this.bakeRegionInto(
+        renderer,
+        { layers: probeLayers, face, min: new THREE.Vector2(-1, -1), max: new THREE.Vector2(1, 1), resolution: MASK_SAMPLE_SIZE },
+        this.maskSampleTarget,
+      );
+      renderer.readRenderTargetPixels(this.maskSampleTarget, 0, 0, MASK_SAMPLE_SIZE, MASK_SAMPLE_SIZE, rgba);
+      // Elevation (G) is Height 1 times (brightness - 0.5), so add 0.5 back.
+      for (let texel = 0; texel < faceTexels; texel++) values[face * faceTexels + texel] = rgba[texel * 4 + 1] + 0.5;
+    }
+    values.sort();
+    if (this.maskSampleCache.size >= MASK_CACHE_LIMIT) this.maskSampleCache.clear();
+    this.maskSampleCache.set(signature, values);
+    return values;
+  }
+
+  // The brightness band the shader's smoothstep needs for a layer's mask,
+  // from Coverage and Softness measured against the pattern's real value
+  // distribution: Coverage = share of the planet shown, Softness = share of
+  // the planet's area spanned by the fade.
+  private resolveMaskBand(renderer: THREE.WebGLRenderer, layers: NoiseLayer[], layer: NoiseLayer): { min: number; max: number } {
+    const coverage = Math.min(1, Math.max(0, layer.maskCoverage / 100));
+    const softness = Math.min(1, Math.max(0, layer.maskSoftness / 100));
+    // Share of the planet where the mask amount is high (Invert flips which side shows).
+    const passFraction = layer.maskInvert ? 1 - coverage : coverage;
+    if (passFraction <= 0) return { min: 2, max: 2.0001 };
+    if (passFraction >= 1) return { min: -2, max: -1.9999 };
+    const sorted = this.maskSortedValues(renderer, layers, layer);
+    const cut = 1 - passFraction;
+    return { min: quantileOf(sorted, cut - softness / 2), max: quantileOf(sorted, cut + softness / 2) };
+  }
+
   // Shared by the whole-globe and region paths so the two can't drift apart.
-  private syncLayerUniforms(layers: NoiseLayer[]): void {
+  private syncLayerUniforms(renderer: THREE.WebGLRenderer, layers: NoiseLayer[]): void {
+    // Resolved first: measuring a mask pattern renders, which overwrites uniforms.
+    const maskBands = new Map<string, { min: number; max: number }>();
+    for (const layer of layers) {
+      if (layer.visible !== false && hasMask(layer)) {
+        maskBands.set(layer.id, this.resolveMaskBand(renderer, layers, layer));
+      }
+    }
     const uniforms = this.material.uniforms;
     const visibleLayers = layers.filter((layer) => layer.visible !== false);
     uniforms.uLayerCount.value = visibleLayers.length;
     visibleLayers.forEach((layer, i) => {
+      // -1 = unmasked, else the mask pattern's generator type.
+      uniforms.uLayerMaskType.value[i] = hasMask(layer) ? NOISE_TYPE_INDEX[layer.maskNoiseType] : -1;
+      uniforms.uLayerMaskSeed.value[i] = layer.maskSeed;
+      uniforms.uLayerMaskFrequency.value[i] = layer.maskFrequency;
+      uniforms.uLayerMaskInvert.value[i] = layer.maskInvert ? 1 : 0;
+      const maskBand = maskBands.get(layer.id);
+      uniforms.uLayerMaskMin.value[i] = maskBand?.min ?? 0.3;
+      uniforms.uLayerMaskMax.value[i] = maskBand?.max ?? 0.7;
       // ?? perlin — a safety net, not the expected path: noiseType should
       // already be current-shape by the time render() runs (migrated at
       // the load boundary, projectSettings/saveProject.ts), but an
@@ -1022,6 +1250,27 @@ export class HeightmapPipeline {
       uniforms.uLayerRidgeAmount.value[i] = layer.ridgeAmount ?? 1;
       uniforms.uLayerTerraceOn.value[i] = layer.terraceEnabled ? 1 : 0;
       uniforms.uLayerTerraceSteps.value[i] = layer.terraceSteps;
+      // ?? defaults, same old-data reasoning as heightScale below.
+      const extras = DEFAULT_NOISE_EXTRA_FIELDS;
+      (uniforms.uLayerOffset.value[i] as THREE.Vector3).set(
+        layer.offsetX ?? extras.offsetX,
+        layer.offsetY ?? extras.offsetY,
+        layer.offsetZ ?? extras.offsetZ,
+      );
+      (uniforms.uLayerStretch.value[i] as THREE.Vector3).set(
+        layer.stretchX ?? extras.stretchX,
+        layer.stretchY ?? extras.stretchY,
+        layer.stretchZ ?? extras.stretchZ,
+      );
+      uniforms.uLayerWarpScale.value[i] = layer.warpScale ?? extras.warpScale;
+      uniforms.uLayerWarpOctaves.value[i] = layer.warpOctaves ?? extras.warpOctaves;
+      uniforms.uLayerVoronoiJitter.value[i] = layer.voronoiJitter ?? extras.voronoiJitter;
+      uniforms.uLayerVoronoiDistance.value[i] = VORONOI_DISTANCE_INDEX[layer.voronoiDistance ?? extras.voronoiDistance];
+      uniforms.uLayerRidgeOffset.value[i] = layer.ridgeOffset ?? extras.ridgeOffset;
+      uniforms.uLayerRidgeGain.value[i] = layer.ridgeGain ?? extras.ridgeGain;
+      uniforms.uLayerFractalType.value[i] = FRACTAL_TYPE_INDEX[layer.fractalType ?? extras.fractalType] ?? 0;
+      uniforms.uLayerFractalOffset.value[i] = layer.fractalOffset ?? extras.fractalOffset;
+      uniforms.uLayerFractalGain.value[i] = layer.fractalGain ?? extras.fractalGain;
       uniforms.uLayerOpacity.value[i] = layer.opacity;
       // ?? 1, not layer.heightScale directly — layers saved before this
       // field existed have heightScale === undefined, and should default to
@@ -1042,6 +1291,7 @@ export class HeightmapPipeline {
     this.renderTarget.dispose();
     this.regionTarget?.dispose();
     this.displayRegionTarget?.dispose();
+    this.maskSampleTarget?.dispose();
     this.material.dispose();
     this.scene.remove(this.scene.children[0]);
     this.paintTargets.forEach((pair) => pair.forEach((target) => target.dispose()));

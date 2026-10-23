@@ -10,10 +10,11 @@ import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 import { computeElevationRange } from '../map/elevationRange';
 import type { ElevationData } from '../voxel/chunkGrid';
-import { clampPatchGridResolution, clampPatchSamples, clampPatchTextureResolution, faceIndex, patchContaining, type TerrainPatch } from '../planet/patch';
+import { clampPatchSamples, clampPatchTextureResolution, faceIndex, patchContaining, type TerrainPatch } from '../planet/patch';
 import { PlanetPatchRenderer } from '../planet/PlanetPatchRenderer';
 import type { PlanetSharedUniforms } from '../planet/planetPatchMesh';
 import { buildRampUniformArrays, DEFAULT_COLOR_STOPS, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
+import { AUTO_MAX_ERROR_PIXELS } from '../planet/patch';
 import {
   ErosionEngine,
   stepsForYears,
@@ -154,9 +155,18 @@ function buildWireframeOverlay(geometry: THREE.BufferGeometry): THREE.LineSegmen
 // captured, this isn't the real fix.
 const USE_PLANET_PATCHES = true;
 
+// Scratch objects for the planet patches' per-frame view of the camera.
+const patchViewMatrix = new THREE.Matrix4();
+const patchFrustum = new THREE.Frustum();
+const patchViewDirection = new THREE.Vector3();
+
+// The old single whole-globe mesh (only shown in Wireframe) has its own
+// fixed density now that the Resolution slider is a detail bias.
+const OLD_MESH_SEGMENTS = 64;
+
 interface SceneCanvasProps {
   radius: number; // planet radius, in scene units (already converted from km by the caller)
-  meshSegments: number; // segments per cube face — how finely the base sphere is subdivided
+  maxErrorPixels: number; // the Resolution slider: the largest screen error in pixels before a patch splits, lower is sharper (see planet/planetPatches.ts)
   baseColor: string; // hex string, e.g. "#3a7bd5"
   ambientLight: number;
   lightDirX: number;
@@ -165,6 +175,7 @@ interface SceneCanvasProps {
   lightIntensity: number;
   specularStrength: number;
   shininess: number;
+  diffuseWrap: number;
   colorByElevation: boolean;
   colorStops: ColorStop[];
   displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
@@ -180,6 +191,9 @@ interface SceneCanvasProps {
   // owns a <canvas> of its own. See scene/sharedViewportRenderer.ts.
   viewportRef: RefObject<HTMLDivElement | null>;
   sharedRenderer: SharedViewportRenderer;
+  // Reports the terrain's real elevation range up to the UI each time it's
+  // recomputed, so the color ramp can show its stops in meters.
+  onElevationRangeChange?: (range: { min: number; max: number }) => void;
 }
 
 // Renders nothing of its own — App.tsx's .planet-viewport div is both this
@@ -191,7 +205,7 @@ interface SceneCanvasProps {
 export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(function SceneCanvas(
   {
     radius,
-    meshSegments,
+    maxErrorPixels,
     baseColor,
     ambientLight,
     lightDirX,
@@ -200,6 +214,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     lightIntensity,
     specularStrength,
     shininess,
+    diffuseWrap,
     colorByElevation,
     colorStops,
     displayMode,
@@ -209,13 +224,14 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     heightScale,
     viewportRef,
     sharedRenderer,
+    onElevationRangeChange,
   },
   handleRef,
 ) {
   const planetMeshRef = useRef<THREE.Mesh | null>(null);
   const wireframeOverlayRef = useRef<THREE.LineSegments | null>(null);
   // True whenever the sphere geometry has changed since the wireframe
-  // overlay was last rebuilt from it (radius/meshSegments effect skips that
+  // overlay was last rebuilt from it (radius effect skips that
   // rebuild while wireframe mode isn't even visible, see [B32]) — the
   // displayMode effect checks this and rebuilds lazily the moment wireframe
   // mode is actually selected, rather than ever showing a stale overlay.
@@ -234,6 +250,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     lightIntensity: 1,
     specularStrength: 0.3,
     shininess: 24,
+    diffuseWrap: 0.5,
     cameraPosition: new THREE.Vector3(),
     colorByElevation: 0,
     colorStops: DEFAULT_COLOR_STOPS,
@@ -241,7 +258,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     elevationMax: 0.5,
     displacementAmplitude: 0,
     radius: 20,
-    gridResolution: 64,
+    maxErrorPixels: AUTO_MAX_ERROR_PIXELS,
+    viewHeightPixels: 800,
+    fieldOfViewRadians: Math.PI / 4,
   });
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -255,6 +274,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   // being rebuilt every time the slider moves.
   const heightScaleRef = useRef(heightScale);
   heightScaleRef.current = heightScale;
+  // Same "latest prop" pattern, since updateElevationRange runs from effects.
+  const onElevationRangeChangeRef = useRef(onElevationRangeChange);
+  onElevationRangeChangeRef.current = onElevationRangeChange;
 
   // Shared by applyStrokeHistory() and loadProject() below: replays each of
   // `layers`' stroke history (grouped by layer) and recomposites. Callers
@@ -300,6 +322,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     sharedUniformsRef.current.elevationMin = range.min;
     sharedUniformsRef.current.elevationMax = range.max;
     planetPatchRendererRef.current?.applyShared(sharedUniformsRef.current);
+    onElevationRangeChangeRef.current?.({ min: range.min, max: range.max });
   }
 
   useImperativeHandle(
@@ -569,7 +592,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // whatever DOM element represents that pane's own screen region.
     const orbitControls = controls(perspectiveCamera, viewportElement);
     const gridMesh = grid(gridSpacing);
-    const planetMesh = planet(radius, meshSegments);
+    const planetMesh = planet(radius, OLD_MESH_SEGMENTS);
     // Centered at the origin (matches the camera/orbit-controls target) so
     // changing the radius grows/shrinks the planet symmetrically in place,
     // rather than anchoring one edge and letting the center drift.
@@ -591,7 +614,6 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     gumballTargetRef.current = { camera: perspectiveCamera, cameraControls: orbitControls, referenceDistance: DEFAULT_CAMERA_DISTANCE };
 
     sharedUniformsRef.current.radius = radius;
-    sharedUniformsRef.current.gridResolution = clampPatchGridResolution(meshSegments);
     const planetPatches = new PlanetPatchRenderer();
     planetPatchRendererRef.current = planetPatches;
     scene.add(planetPatches.group);
@@ -625,6 +647,15 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
       const webglRenderer = webglRendererRef.current;
       if (planetPatches && heightmapPipeline && webglRenderer && USE_PLANET_PATCHES) {
         sharedUniformsRef.current.cameraPosition.copy(perspectiveCamera.position);
+        sharedUniformsRef.current.viewHeightPixels = Math.max(1, viewportElement?.clientHeight ?? 1);
+        sharedUniformsRef.current.fieldOfViewRadians = THREE.MathUtils.degToRad(perspectiveCamera.fov);
+        // What the camera sees, so close-ups build only what is in view.
+        perspectiveCamera.updateMatrixWorld();
+        patchViewMatrix.multiplyMatrices(perspectiveCamera.projectionMatrix, perspectiveCamera.matrixWorldInverse);
+        patchFrustum.setFromProjectionMatrix(patchViewMatrix);
+        sharedUniformsRef.current.frustum = patchFrustum;
+        perspectiveCamera.getWorldDirection(patchViewDirection);
+        sharedUniformsRef.current.viewDirection = patchViewDirection;
         planetPatches.applyShared(sharedUniformsRef.current);
         // Internally throttled by how far the camera's actually moved — see
         // PlanetPatchRenderer.updatePatches — cheap to call every frame.
@@ -692,12 +723,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // them changing in between.
   }, []);
 
-  // Radius and mesh segments: both rebuild the sphere geometry and (while
-  // wireframe mode is actually visible) the wireframe overlay with it,
-  // since WireframeGeometry is a one-time snapshot, not dynamically linked
-  // to the source geometry. Segments was hardcoded at 32 with nothing able
-  // to change it, which is what gave the planet its faceted silhouette once
-  // displacement pushed those few vertices out a long way (Dana, 2026-10-13).
+  // Radius: rebuilds the old whole-globe mesh and (while wireframe mode is
+  // actually visible) the wireframe overlay with it, since WireframeGeometry
+  // is a one-time snapshot, not dynamically linked to the source geometry.
   //
   // Debounced (same setTimeout/clearTimeout pattern as the project's own
   // autosave, projectSettings/saveProject.ts) — a dragged slider fires many
@@ -712,7 +740,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
       const planetMesh = planetMeshRef.current;
       if (!planetMesh) return; // not mounted yet — the effect above uses the current values on first build
       planetMesh.geometry.dispose();
-      planetMesh.geometry = planetGeometry(radius, meshSegments);
+      planetMesh.geometry = planetGeometry(radius, OLD_MESH_SEGMENTS);
 
       // Keep this in sync with the new radius too, not just the geometry —
       // uDisplacementAmplitude is set in the lighting effect below now, it's
@@ -735,18 +763,18 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         wireframeStaleRef.current = true;
       }
 
-      // meshSegments now also drives each patch's own grid resolution
-      // (clamped, see planet/patch.ts's clampPatchGridResolution — patches
-      // cover far less area than the old whole-globe mesh, so the slider's
-      // full range would mean far more triangles per patch than intended).
-      // updatePatches' own resolutionChanged check picks this up on the
-      // next animate() frame and rebuilds affected patches' geometry.
+      // updatePatches picks the radius up on the next animate() frame.
       sharedUniformsRef.current.radius = radius;
-      sharedUniformsRef.current.gridResolution = clampPatchGridResolution(meshSegments);
     }, 150);
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- displayMode is read fresh when the timeout fires (same debounce pattern saveProject.ts already uses), not a reason to restart this effect's own debounce
-  }, [radius, meshSegments]);
+  }, [radius]);
+
+  // The Resolution slider: only adds or merges patches on the next frame
+  // (selection is cheap, builds are budgeted), so no debounce is needed.
+  useEffect(() => {
+    sharedUniformsRef.current.maxErrorPixels = maxErrorPixels;
+  }, [maxErrorPixels]);
 
   // Grid spacing: rebuilds the grid mesh (its cell size is baked into a
   // shader uniform at construction, simplest to just rebuild it).
@@ -781,7 +809,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, lightDirZ);
     material.uniforms.uDisplacementAmplitude.value = (heightScale / 100) * radius;
     material.uniforms.uColorByElevation.value = colorByElevation ? 1 : 0;
-    const ramp = buildRampUniformArrays(baseColor, colorStops);
+    const ramp = buildRampUniformArrays(colorStops);
     const materialRampColors = material.uniforms.uRampColors.value as THREE.Color[];
     for (let i = 0; i < MAX_COLOR_STOPS; i++) materialRampColors[i].copy(ramp.colors[i]);
     (material.uniforms.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
@@ -793,6 +821,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shared.lightIntensity = lightIntensity;
     shared.specularStrength = specularStrength;
     shared.shininess = shininess;
+    shared.diffuseWrap = diffuseWrap;
     shared.lightDirection.set(lightDirX, lightDirY, lightDirZ);
     shared.displacementAmplitude = (heightScale / 100) * radius;
     shared.colorByElevation = colorByElevation ? 1 : 0;
@@ -804,6 +833,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     lightIntensity,
     specularStrength,
     shininess,
+    diffuseWrap,
     lightDirX,
     lightDirY,
     lightDirZ,
@@ -828,7 +858,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     const planetPatches = planetPatchRendererRef.current;
     if (!planetMesh) return;
 
-    // The radius/meshSegments effect skips rebuilding this overlay while
+    // The radius effect skips rebuilding this overlay while
     // wireframe mode isn't visible, to avoid paying that cost on every
     // change regardless (see [B32]) — catch up now, the one moment it
     // actually matters, rather than show whatever stale geometry it was

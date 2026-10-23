@@ -1,6 +1,6 @@
 # 📚 References
 
-`Last updated: 2026-10-13`
+`Last updated: 2026-10-21`
 
 *Every outside source this project relies on, with what it is and what was taken from it. Cited once here, linked from everywhere else.*
 
@@ -93,11 +93,13 @@
 - The same problem this project already solved on the CPU for Percent Clip (`map/elevationRange.ts`: bin the data, walk the cumulative count to a percentile, instead of trusting the literal extremes) has a standard GPU equivalent, used in production for HDR auto-exposure: build a histogram of the frame's own values (luminance, there; elevation, here), then compute the average/range from the bins between a low and high cutoff percentage, discarding the rest, exactly Percent Clip's own definition. Unity's Post-Processing auto-exposure and a documented Bevy compute-shader implementation both build a histogram (64 bins) this way, then filter it by percentile cutoffs before using it.
 - WebGL (no compute shaders, this project's whole constraint) builds a histogram by rasterization instead: draw one point per source pixel, compute that pixel's bin index, position the point at that bin's location in a 1D output texture, and let additive blending (`gl.ONE, gl.ONE` blend func) accumulate the count per bin, into a float render target (WebGL has no integer blending/atomics, so counts must be floats). Matches this project's own existing pattern of multi-pass fragment-shader rendering (erosion, the min/max pyramid above) rather than needing a new rendering style.
 - Built for `[B32]`: a histogram pass (256 bins, matching `elevationRange.ts`'s own bin count, now exported and shared rather than duplicated) over the same region-bake texture the min/max pyramid already reads, then a tiny readback (256 floats, not the full buffer) to walk the cumulative count to the 1st/99th percentile client-side, the same walk `computeElevationRange()` already does, just fed from a GPU-built histogram instead of a full CPU array. See `map/heightmap.ts`'s `getRegionPercentileRangeAsync()`.
-- *[Unity Auto Exposure / Eye Adaptation docs](https://docs.unity3d.com/Packages/com.unity.postprocessing@2.0/manual/Auto-Exposure.html) (percentile histogram filtering, "Filtering" low/high percentages). [Creating a histogram using rasterization? — Khronos community forum](https://community.khronos.org/t/creating-a-histogram-using-rasterization/76746) and [webgl2fundamentals: 16-bit histogram](https://webgl2fundamentals.org/webgl/lessons/webgl-qna-how-can-i-create-a-16bit-historgram-of-16bit-data.html) (point-sprite + additive-blending construction, the WebGL-compatible mechanism). Verified 2026-10-18.*
+- *[Unity Auto Exposure / Eye Adaptation docs](https://docs.unity3d.com/Packages/com.unity.postprocessing@2.0/manual/Auto-Exposure.html) (percentile histogram filtering, "Filtering" low/high percentages). [Creating a histogram using rasterization?: Khronos community forum](https://community.khronos.org/t/creating-a-histogram-using-rasterization/76746) and [webgl2fundamentals: 16-bit histogram](https://webgl2fundamentals.org/webgl/lessons/webgl-qna-how-can-i-create-a-16bit-historgram-of-16bit-data.html) (point-sprite + additive-blending construction, the WebGL-compatible mechanism). Verified 2026-10-18.*
 
 **Whole-dataset vs. current-view color stretch** · QGIS raster symbology · `method used`
-- A real, named choice in GIS tools, not one universal rule: `WholeRaster` (stretch computed once from the entire dataset, stays fixed at every zoom/pan) versus `CurrentCanvas`/`UpdatedCanvas` (stretch recomputed from whatever's currently visible, shifts as you navigate). This project's own color ramp uses the first: a shared elevation range computed once from the whole planet, so the same real elevation reads as the same color everywhere, whether zoomed into the planet or one land-chunk patch of it, matching the project's own earlier decision that the ramp "should encompass all terrain levels that exist in the planet." The chunk's own per-patch range computation (tonight's GPU histogram work included) was a drift from that decision, corrected by reading the planet's already-computed range instead of recomputing one locally.
-- *[QgsRasterMinMaxOrigin — QGIS C++ API docs](https://api.qgis.org/api/3.40/classQgsRasterMinMaxWidget.html) (`Limits` enum: `WholeRaster` vs `CurrentCanvas`/`UpdatedCanvas`). Verified 2026-10-18.*
+- A real, named choice in GIS tools, not one universal rule: `WholeRaster` (stretch computed once from the entire dataset, stays fixed at every zoom/pan) versus `CurrentCanvas`/`UpdatedCanvas` (stretch recomputed from whatever's currently visible, shifts as you navigate).
+  - This project's own color ramp uses the first: a shared elevation range computed once from the whole planet, so the same real elevation reads as the same color everywhere, whether zoomed into the planet or one land-chunk patch of it, matching the project's own earlier decision that the ramp "should encompass all terrain levels that exist in the planet."
+  - The chunk's own per-patch range computation (tonight's GPU histogram work included) was a drift from that decision, corrected by reading the planet's already-computed range instead of recomputing one locally.
+- *[QgsRasterMinMaxOrigin: QGIS C++ API docs](https://api.qgis.org/api/3.40/classQgsRasterMinMaxWidget.html) (`Limits` enum: `WholeRaster` vs `CurrentCanvas`/`UpdatedCanvas`). Verified 2026-10-18.*
 
 ### Rendering
 
@@ -256,6 +258,109 @@
 - Video stores a complete frame periodically and only differences in between, so jumping to a point means starting at the previous complete frame and playing forward to it.
 - The established name for recording periodically and replaying the few steps between, and the tradeoff that sizes the gap: a longer gap saves memory and costs seek time.
 - *[Group of pictures](https://www.forasoft.com/learn/video-encoding/glossary/terms/gop). Read 2026-10-13*
+
+**Undo as a shared history of snapshots** · Redux, Nutrient · `method`
+- A history is a list of past states, the present, and a list of future states, and undo moves the present between them. Snapshots work for any change but add up, so they are capped. The alternative, storing each action's inverse, gets hard to write for every control.
+- Where the shared snapshot history for undo and redo comes from.
+- *[Redux, implementing undo history](https://redux.js.org/usage/implementing-undo-history) · [Approaches to undo and redo](https://www.nutrient.io/blog/approaches-to-undo-and-redo/). Read 2026-10-21*
+
+**Soft shadows on a height field** · Snyder and Nowrouzezahrai · `method`
+- Shadows on terrain come from either horizon maps or marching a ray toward the light, with a mip pyramid to cover long distances.
+- The basis for the planet's cast shadows, and for the land chunk's existing march.
+- *[Fast soft self-shadowing on dynamic height fields, 2008](https://diglib.eg.org/handle/10.2312/CGF.v27i4pp1275-1283). Read 2026-10-21*
+
+**Soft shadows on curved terrain** · arXiv · `method`
+- A maximum-mipmap approach for shadows across a curved surface. Only the introduction was read, so details are unconfirmed.
+- The accurate alternative to treating each patch as flat.
+- *[Optimally fast soft shadows on curved terrain, 2005.06671](https://arxiv.org/pdf/2005.06671). Read 2026-10-21 (intro only)*
+
+**How much relief a planet has, and how tools scale it** · `background`
+- Earth's tallest relief is about 0.14% of its radius and Mars's about 0.6%. A Moon figure of about 1.1% came from a forum only, so it is unverified. Generators have no standard ratio, amplitude is a setting. Vertical exaggeration is a separate display multiplier on true elevation.
+- Where the realistic Height scale and the Exaggeration idea come from.
+- *[Beyond elevation, new metrics for relief, 2208.01600](https://arxiv.org/pdf/2208.01600) · [Comparative analysis of procedural planet generators, 2510.24764](https://arxiv.org/pdf/2510.24764) · [Gaia Sky, procedural planets](https://gaia.ari.uni-heidelberg.de/gaiasky/docs/3.7.1/Procedural-planets.html) · [CesiumJS VerticalExaggeration](https://cesium.com/learn/cesiumjs/ref-doc/VerticalExaggeration.html). Read 2026-10-21*
+
+### Terrain shaping and masks
+
+**Gaea documentation, masks and shaping** · QuadSpinner · `method used`
+- a mask is a grayscale map where bright means fully affected, and nearly every node takes an optional mask. Selectors (Slope, Height) have Min, Max and Falloff. Terrace, FractalTerraces and Clamp shape plateaus and strata. Insert drops flat shapes into terrain while preserving its relative heights
+- where the layer Mask controls, the Plateau section and the plateau-then-sea idea come from. The docs mark many pages as being updated for 1.3 and give almost no numeric ranges or defaults, so ours are our own. The docs have moved to docs.gaea.app, which was not read. Using Clamp for plateaus becoming continents is our inference
+- *[Modify Shapes](https://docs.quadspinner.com/Guide/Using-Gaea/Modify-Shapes.html) · [Draw/Modify](https://docs.quadspinner.com/Learning/Techniques/Draw-Modify.html) · [Combine](https://docs.quadspinner.com/Reference/Adjustments/Combine.html) · [Slope](https://docs.quadspinner.com/Reference/Data/Slope.html) · [Height](https://docs.quadspinner.com/Reference/Data/Height.html) · [Terrace](https://docs.quadspinner.com/Reference/Profile/Terrace.html) · [FractalTerraces](https://docs.quadspinner.com/Reference/Profile/FractalTerraces.html) · [Clamp](https://docs.quadspinner.com/Reference/Adjustments/Clamp.html) · [Curve](https://docs.quadspinner.com/Reference/Adjustments/Curve.html) · [Sea](https://docs.quadspinner.com/Reference/Water/Sea.html) · [Controlling Water](https://docs.quadspinner.com/Learning/Techniques/Control-Water.html) · [Insert](https://docs.quadspinner.com/Reference/Adjustments/Insert.html).
+  - Read 2026-10-21*
+
+**Normalizing and layering noise** · various · `method used`
+- divide an octave sum by the sum of its amplitudes to keep it in range, though that alone does not shape the distribution. Each octave raises frequency and lowers amplitude. Ridged noise gives pointed summits. The same function must return the same height at any scale, so zooming adds detail without moving the large shape
+- where the bounded heights step and detail-by-zoom come from. ⚠️ The continent-as-low-frequency-base idea and normalizing a layer sum have no verified standard source, only common practice
+- *[Red Blob Games, terrain from noise](https://redblobgames.com/maps/terrain-from-noise/) · [Blender, Musgrave texture](https://docs.blender.org/manual/es/4.0/modeling/geometry_nodes/texture/musgrave.html) · [Quilez, fbm](https://iquilezles.org/articles/fbm) · [Cesium, procedural terrain with noise functions](https://cesium.com/blog/2017/11/17/procedural-terrain-generation-with-noise-functions) · [Earth's topography spectrum, 2009.04918](https://arxiv.org/pdf/2009.04918). Read 2026-10-21*
+
+### Detail by level and noise ranges
+
+**Band-limited noise and fBm** · Quilez, Cesium, NVIDIA, Outerra, Blender, Gaea · `method used`
+- fade each noise octave out as its wavelength nears the sample spacing, so deeper tiles show more octaves while coarse octaves stay identical. Noise must be a pure function of world position, so every tile and depth agrees
+- where the octave fade and the wider slider ranges come from. Trust: Quilez's bandlimiting and fbm articles are medium-high (a recognized expert's blog), Cesium's article is medium (company blog), GPU Gems 3 chapter 1 is a primary book chapter. Outerra is low-medium: read only through search summaries, and it is the only source for a patch-local origin against float precision loss
+- ⚠️ Not documented: threshold constants for a vertex grid (Quilez's are tuned for pixels), how a fixed 65-sample bake interacts with octave count, and band-limiting Ridged, Terrace or domain warp. The Musgrave book chapters and the CDLOD paper were not read. The Blender noise manual and the Gaea Perlin and Combine pages list no numeric slider ranges, so the new ranges come from shader limits and design judgment
+- *[Quilez, bandlimiting](https://iquilezles.org/articles/bandlimiting/) · [Quilez, fbm](https://iquilezles.org/articles/fbm/) · [Cesium, procedural terrain with noise functions](https://cesium.com/blog/2017/11/17/procedural-terrain-generation-with-noise-functions) · [NVIDIA, GPU Gems 3 chapter 1](https://developer.nvidia.com/gpugems/gpugems3/part-i-geometry/chapter-1-generating-complex-procedural-terrains-using-gpu) · [Blender, Noise Texture](https://docs.blender.org/manual/en/4.2/render/shader_nodes/textures/noise.html) · [Gaea, Perlin](https://docs.quadspinner.com/Reference/Primitives/Perlin.html) · [Gaea, Combine](https://docs.quadspinner.com/Reference/Adjustments/Combine.html). Read 2026-10-21*
+
+### Layer masks in editors
+
+**Layer mask conventions** · Adobe, Procreate · `method used`
+- Photoshop and Substance Painter attach a mask to a layer, with a thumbnail on the layer's row and finer controls in a properties panel. Procreate allows one mask per layer. A mask on a group reaches every layer inside it
+- where the mask icon and popup on the layer row come from. ⚠️ A top-layer mask alone not reaching layers below was inferred from these docs, and Substance and Procreate group-mask behavior was not confirmed
+- *[Adobe, fine-tune layer masks](https://helpx.adobe.com/bg/photoshop/how-to/fine-tune-layer-masks.html) · [Procreate, layer masks](https://help.procreate.com/procreate/handbook/layers/layers-mask) · [Adobe Substance 3D Painter, layer stack](https://helpx.adobe.com/substance-painter/using/layer-stack.html). Read 2026-10-21*
+
+### Refining terrain tiles without popping
+
+**Tile refinement and hysteresis** · CS354R, Pulsegeek, Cesium · `method used`
+- use two thresholds per detail switch, with merging farther out than splitting, and pick detail by screen error. A tile is drawn only if it passes the error test, otherwise its children are
+- where the patch cache plan comes from. ⚠️ Keeping a parent drawn until its children are ready, and evicting least recently used tiles, are common practice but no source confirmed them
+- *[CS354R lecture](https://www.cs.utexas.edu/~theshark/courses/cs354r/lectures/cs354r-23.pdf) · [Pulsegeek, terrain stitching and chunking](https://pulsegeek.com/articles/terrain-stitching-and-chunking-seamless-streaming/) · [Cesium3DTileRefine](https://ci-builds.cesium.com/cesium/main/Build/Coverage/Firefox%20145.0%20(Linux%200.0.0)/engine/Source/Scene/Cesium3DTileRefine.js.html). Read 2026-10-21*
+
+### Lighting a heightfield across detail levels
+
+**Normals from heightfields** · Khronos forum, gamedev.net, NVIDIA · `method used`
+- take a height on each side, difference them, and cross the tangents, with spacing in real ground distance at each detail level. Normals should come from the finest data, and mismatched normals between levels make lighting jump. Toksvig-style widening of highlights handles varied normals cheaply
+- where the shared normal function and soft diffuse come from. ⚠️ The sources are forum and docs level, and none was found for per-tile world-scale normals, curvature-based ambient occlusion or hemisphere ambient on terrain
+- *[Khronos, surface normals for a height field](https://community.khronos.org/t/surface-normals-for-a-height-field/104854) · [gamedev.net, GPU clipmaps normals](https://gamedev.net/forums/topic/604196-gpu-clipmaps-normal-map-transition/4826703/) · [NVIDIA, mipmapping normal maps](https://developer.download.nvidia.cn/whitepapers/2006/Mipmapping_Normal_Maps.pdf). Read 2026-10-21*
+
+**Noise detail by sample spacing** · Lagae and Drettakis, Quilez, Cesium · `method used`
+- weight each octave by a smooth step on its frequency against the Nyquist limit, one over twice the sample spacing, so a deeper patch shows more octaves while the coarse shape stays identical. The paper's Perlin constants, 0.25 and 0.95, were "determined experimentally" for pixel shading, so here they are tunable starting values, not proven for vertex grids
+- trust: peer-reviewed paper for the weight, a recognized expert's blog for the idea, and a vendor blog for "the closer the camera, the greater the number of octaves". ⚠️ Not documented: fade constants for a vertex grid, and band-limiting Ridged, Terrace, domain warp or Voronoi (one low-trust forum thread says to fade before the nonlinear step)
+- *[Lagae and Drettakis, Filtering Solid Gabor Noise, supplementary](https://graphics.kuleuven.be/publications/LD11FSGN/LD11FSGN_supplementary.pdf) · [Quilez, band limiting](https://iquilezles.org/articles/bandlimiting/) · [Quilez, fBm](https://iquilezles.org/articles/fbm/) · [Cesium, procedural terrain with noise](https://cesium.com/blog/2017/11/17/procedural-terrain-generation-with-noise-functions). Read 2026-10-21*
+
+**Fixed grid per tile** · CDLOD (Strugar) · `method used`
+- one fixed-size grid mesh renders every quadtree node, detail changes through tile size, and levels blend over the last 15 to 30 percent of their range. Trust: the author's own paper
+- *[CDLOD paper](https://github.com/fstrugar/CDLOD). Read 2026-10-21*
+
+**Float precision at deep zoom** · AGI, Precisions, Precisions · `method used`
+- single precision holds about seven decimal digits, so render relative to a local origin, with a high and low split if needed. Trust: authors of Cesium. Outerra's forum reports the same problem (anecdotal, low trust)
+- *[AGI, Precisions, Precisions](https://help.agi.com/AGIComponents/html/BlogPrecisionsPrecisions.htm). Read 2026-10-21*
+
+**GPU hash functions** · Jarzynski and Olano, JCGT 2020 · `method used`
+- the sin-based hash shows visible banding and repeats. Integer hashes such as pcg3d and xxhash32 are better. Trust: peer-reviewed. ⚠️ No sourced precision limit for the sin hash at large inputs. Built with Hoskins' "hash without sine" (listed in the paper, float-only, safe in GLSL ES 1.00, which has no integers). ⚠️ Its constants were typed from memory because the Shadertoy page returned an error, so they need checking
+- *[Hash Functions for GPU Rendering, JCGT](https://www.jcgt.org/published/0009/03/02/paper.pdf). Read 2026-10-21*
+
+**Noise controls across terrain tools** · Unity, World Creator, Gaea, Terragen, Blender, Houdini · `reference`
+- the controls each tool exposes: offset, warp scale and octaves, Voronoi jitter and distance function, anisotropic stretch, rotation, output clamp, fractal type, ridged offset and gain. Trust: official docs, except Unreal (a search summary) and World Machine (a third-party guide)
+- ⚠️ No tool documents octave defaults, a persistence range, a seed range or high-frequency precision. Terragen's "Smallest scale" is the closest documented match to octave fading
+- *[Unity Terrain noise](https://docs.unity3d.com/Manual/terrain-Noise-Ref.html) · [World Creator noises](https://docs.world-creator.com/reference/terrain/noises) · [Gaea Perlin](https://docs.quadspinner.com/Reference/Primitives/Perlin.html) and [Voronoi](https://docs.quadspinner.com/Reference/Primitives/Voronoi.html) · [Terragen Power Fractal v3](https://docs.planetside.co.uk/wiki/Power_Fractal_Shader_v3) · [Blender Noise](https://docs.blender.org/manual/ar/4.4/modeling/geometry_nodes/texture/noise.html) and [Voronoi](https://docs.blender.org/manual/en/4.2/modeling/geometry_nodes/texture/voronoi.html) · [Houdini HeightField Noise](https://www.sidefx.com/docs/houdini/nodes/sop/heightfield_noise.html). Read 2026-10-21*
+
+**Antialiasing noise after nonlinear steps** · Yang and Barnes, Quilez, Cook and DeRose · `method used`
+- band-limiting means smoothing with a low-pass filter. Amplitude fade alone is not enough after abs, a terrace or a Voronoi edge, because a crease or a hard edge carries energy at every higher frequency. Fade the octave before the nonlinearity, and soften a step to the filter width. Trust: Yang and Barnes 2017 is peer reviewed and was read in full. Quilez's bandlimiting article is a recognized expert's blog and was read only through search summaries. The Wavelet Noise paper was read as an abstract
+- where the second pass on Ridged, Terrace, domain warp and Voronoi comes from. ⚠️ Inferred, not documented: the smoothed abs for ridged noise, the extra fade for warp, the smooth minimum for Voronoi, and fading before the nonlinearity (only an unsourced forum hint). No terrain-specific guide or filtered Voronoi method was found
+- *[Yang and Barnes 2017, arXiv 1706.01208](https://arxiv.org/pdf/1706.01208) · [Quilez, bandlimiting](https://iquilezles.org/articles/bandlimiting/) · [Cook and DeRose, Wavelet Noise](https://graphics.pixar.com/library/WaveletNoise). Read 2026-10-21*
+
+### Fractal types for terrain
+
+**Musgrave fractal types** · Blender source, Blender manual, Unity · `method used`
+- fBm, multifractal, hybrid multifractal, hetero terrain and ridged multifractal each have a short recurrence in Blender's shader source. Hybrid and hetero scale each octave by the height so far, which gives smooth valleys and rough peaks. Offset and Gain are the shared extra controls
+- where the planned fractal type selector comes from. Trust: Blender's open-source GLSL (v3.6.0) is a primary source. The manual quotes are from the 2.80 page. ⚠️ Not documented: formulas for Billow and Strata (Unity gives only one-line descriptions), and Musgrave's own chapter was not readable. Renormalizing the unbounded outputs is our inference
+- *[Blender v3.6.0, musgrave shader source](https://raw.githubusercontent.com/blender/blender/v3.6.0/source/blender/gpu/shaders/material/gpu_shader_material_tex_musgrave.glsl) · [Blender manual, Musgrave](https://docs.blender.org/manual/es/2.80/render/shader_nodes/textures/musgrave.html) · [Unity Terrain Tools, noise](https://docs.unity3d.com/Packages/com.unity.terrain-tools@5.2/manual/sculpt-noise.html). Read 2026-10-21*
+
+### Detail by screen-space error
+
+**Screen-space-error LOD** · 3D Tiles specification, Cesium3DTileset and Globe docs · `method used`
+- a tile carries a geometric error in meters. At runtime it becomes a screen-space error in pixels, and a tile is refined into its children only when that error passes a maximum. Cesium exposes the maximum as the quality control (default 16 for 3D tiles, 2 for the globe), so a lower value gives more detail. Caches and load budgets are separate settings
+- where the Resolution slider as a detail bias comes from (`[S32]`). Trust: official docs, high. ⚠️ The exact formula (error times screen height over distance times twice the tangent of half the field of view) is the widely used form, medium trust, and was not confirmed from an official page. The CDLOD paper could not be read, and Unreal and Unity bias settings were not documented anywhere authoritative
+- *[3D Tiles specification](https://github.com/CesiumGS/3d-tiles/tree/main/specification) · [Cesium3DTileset](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileset.html) · [Cesium Globe](https://cesium.com/learn/cesiumjs/ref-doc/Globe.html). Read 2026-10-21*
 
 ### Considered, not used
 

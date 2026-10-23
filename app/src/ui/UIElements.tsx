@@ -1,4 +1,38 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { createPortal } from 'react-dom';
+
+const TOOLTIP_MARGIN = 8;
+const TOOLTIP_GAP = 6;
+const WIDE_ANCHOR_WIDTH = 160;
+
+// Places an anchor's tooltip above it (below if there's no room), centered
+// for small anchors and left-aligned for row-shaped ones, clamped inside the
+// window on every side. One shared rule for every .ui-tooltip.
+function placeTooltip(anchor: HTMLElement): void {
+  const tooltip = anchor.querySelector<HTMLElement>(':scope > .ui-tooltip') ?? anchor.querySelector<HTMLElement>('.ui-tooltip');
+  if (!tooltip) return;
+  const anchorRect = anchor.getBoundingClientRect();
+  const tipRect = tooltip.getBoundingClientRect();
+  const wide = anchorRect.width > WIDE_ANCHOR_WIDTH;
+  const idealLeft = wide ? anchorRect.left : anchorRect.left + anchorRect.width / 2 - tipRect.width / 2;
+  const left = Math.min(Math.max(TOOLTIP_MARGIN, idealLeft), window.innerWidth - tipRect.width - TOOLTIP_MARGIN);
+  const above = anchorRect.top - tipRect.height - TOOLTIP_GAP;
+  const top = above >= TOOLTIP_MARGIN ? above : Math.min(anchorRect.bottom + TOOLTIP_GAP, window.innerHeight - tipRect.height - TOOLTIP_MARGIN);
+  tooltip.style.left = `${Math.max(TOOLTIP_MARGIN, left)}px`;
+  tooltip.style.top = `${Math.max(TOOLTIP_MARGIN, top)}px`;
+}
+
+// One delegated listener for the whole app, so each tooltip needs no
+// component of its own and none is patched per control.
+if (typeof document !== 'undefined') {
+  const handleTooltipTrigger = (event: Event) => {
+    const target = event.target as Element | null;
+    const anchor = target?.closest?.('.ui-tooltip-anchor');
+    if (anchor instanceof HTMLElement) placeTooltip(anchor);
+  };
+  document.addEventListener('mouseover', handleTooltipTrigger);
+  document.addEventListener('focusin', handleTooltipTrigger);
+}
 
 interface SliderProps {
   label: string;
@@ -23,6 +57,14 @@ interface SliderProps {
   // needs more room, e.g. Erosion's Duration running to 7 digits, rather
   // than widening every slider's field to fit the rare long one.
   fieldWidth?: number;
+  // 'log' maps the track logarithmically (min must be above 0), for controls
+  // spanning orders of magnitude like noise frequency. The number field still
+  // takes exact values.
+  scale?: 'linear' | 'log';
+  // Runs the track and the scrub backwards, so moving right means a smaller
+  // number, for a control where lower is the stronger setting (a pixel error
+  // threshold). The number field still shows and takes the real value.
+  reversed?: boolean;
 }
 
 // Blended slider: a visible draggable range track (from active-geometry's
@@ -44,11 +86,26 @@ export function Slider({
   disabled = false,
   description,
   fieldWidth,
+  scale = 'linear',
+  reversed = false,
 }: SliderProps) {
   const fieldRef = useRef<HTMLInputElement>(null);
+  const isLog = scale === 'log' && min > 0;
+  const logSpan = Math.log(max / min);
+
+  // The track runs 0..1 in log mode, mapped to and from the real value.
+  // Reversed flips it, so the far right end is the minimum.
+  function valueFromTrack(trackValue: number): number {
+    const position = reversed ? (isLog ? 1 - trackValue : min + max - trackValue) : trackValue;
+    if (!isLog) return position;
+    const raw = min * Math.exp(position * logSpan);
+    return Math.min(max, Math.max(min, Math.round(raw / step) * step));
+  }
+  const forwardPosition = isLog ? Math.log(Math.max(min, value) / min) / logSpan : value;
+  const trackPosition = reversed ? (isLog ? 1 - forwardPosition : min + max - forwardPosition) : forwardPosition;
 
   function handleTrackChange(event: React.ChangeEvent<HTMLInputElement>) {
-    onChange(parseFloat(event.target.value));
+    onChange(valueFromTrack(parseFloat(event.target.value)));
   }
 
   function handleFieldCommit() {
@@ -84,7 +141,9 @@ export function Slider({
 
     const onMove = (moveEvent: MouseEvent) => {
       hasMoved = true;
-      currentValue = currentValue + moveEvent.movementX * sensitivity;
+      // Log controls scrub by a proportion, so each pixel feels the same at any magnitude.
+      const drag = reversed ? -moveEvent.movementX : moveEvent.movementX;
+      currentValue = isLog ? currentValue * Math.exp(drag * sensitivity * 0.1) : currentValue + drag * sensitivity;
       if (moveEvent.metaKey || moveEvent.ctrlKey) {
         currentValue = Math.round(currentValue / snapIncrement) * snapIncrement;
       }
@@ -115,10 +174,10 @@ export function Slider({
       <input
         type="range"
         className={'ui-slider-track' + (trackClassName ? ` ${trackClassName}` : '')}
-        min={min}
-        max={max}
-        step={step}
-        value={value}
+        min={isLog ? 0 : min}
+        max={isLog ? 1 : max}
+        step={isLog ? 0.001 : step}
+        value={trackPosition}
         onChange={handleTrackChange}
         disabled={disabled}
       />
@@ -275,6 +334,12 @@ interface AccordionProps {
   title: string;
   defaultOpen?: boolean;
   nested?: boolean; // lighter/smaller header + indented content, for an accordion inside another one (e.g. "My Projects" inside "Project Settings")
+  // For an accordion that doubles as a pipeline stage ("Planet Terrain" in
+  // ui/Panel.tsx): runs on every header click, and highlights it while active.
+  onHeaderClick?: () => void;
+  active?: boolean;
+  // What the section is for, shown on hover like a Slider's description.
+  description?: string;
   children: ReactNode;
 }
 
@@ -283,15 +348,109 @@ interface AccordionProps {
 // (Dana, 2026-09-22). `nested` styles it as a subordinate of its parent
 // section rather than a peer category (Dana, 2026-09-23 — "Project Settings"
 // and "My Projects" read as equal-weight siblings with no `nested` variant).
-export function Accordion({ title, defaultOpen = true, nested = false, children }: AccordionProps) {
+export function Accordion({ title, defaultOpen = true, nested = false, onHeaderClick, active = false, description, children }: AccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
     <div className={'ui-accordion' + (nested ? ' ui-accordion--nested' : '')}>
-      <button type="button" className="ui-accordion-header" onClick={() => setIsOpen(!isOpen)}>
+      <button
+        type="button"
+        className={'ui-accordion-header' + (active ? ' ui-accordion-header--active' : '') + (description ? ' ui-tooltip-anchor ui-accordion-header--described' : '')}
+        onClick={() => {
+          setIsOpen(!isOpen);
+          onHeaderClick?.();
+        }}
+      >
         <span>{title}</span>
+        {description && <span className="ui-tooltip">{description}</span>}
         <span className={'ui-accordion-chevron' + (isOpen ? ' ui-accordion-chevron--open' : '')}>▾</span>
       </button>
       {isOpen && <div className="ui-accordion-content">{children}</div>}
     </div>
+  );
+}
+
+interface IconButtonProps {
+  icon: ReactNode;
+  label: string; // the hover tooltip, and the accessible name
+  onClick: () => void;
+  disabled?: boolean;
+}
+
+// The text button's frame (.noise-add-layer-btn) around an icon alone, with
+// a hover tooltip naming it (Dana, 2026-10-21). Added to the design system
+// since it had no icon-only button.
+export function IconButton({ icon, label, onClick, disabled = false }: IconButtonProps) {
+  return (
+    <button
+      type="button"
+      className="noise-add-layer-btn ui-icon-btn ui-tooltip-anchor"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+    >
+      {icon}
+      <span className="ui-tooltip">{label}</span>
+    </button>
+  );
+}
+
+interface PopupProps {
+  open: boolean;
+  anchorRef: RefObject<HTMLElement | null>; // the trigger it hangs off
+  onClose: () => void;
+  children: ReactNode;
+}
+
+const POPUP_WIDTH = 260;
+const POPUP_MARGIN = 8;
+
+// A small floating panel under its trigger, right-aligned to it and kept
+// inside the window. Closes on an outside click or Escape. Drawn through a
+// portal so the side panel's scrolling can't clip it. Added to the design
+// system for the layer mask controls (Dana, 2026-10-21).
+export function Popup({ open, anchorRef, onClose, children }: PopupProps) {
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  const [position, setPosition] = useState({ left: 0, top: 0 });
+
+  useLayoutEffect(() => {
+    const anchor = anchorRef.current;
+    if (!open || !anchor) return;
+    const rect = anchor.getBoundingClientRect();
+    const left = Math.min(Math.max(POPUP_MARGIN, rect.right - POPUP_WIDTH), window.innerWidth - POPUP_WIDTH - POPUP_MARGIN);
+    setPosition({ left, top: rect.bottom + 6 });
+  }, [open, anchorRef]);
+
+  useEffect(() => {
+    if (!open) return;
+    function handleMouseDown(event: MouseEvent) {
+      const target = event.target as Node;
+      if (popupRef.current?.contains(target) || anchorRef.current?.contains(target)) return;
+      onClose();
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleMouseDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [open, anchorRef, onClose]);
+
+  if (!open) return null;
+  return createPortal(
+    // Portal events still bubble through React ancestors, so stop them here (a layer row would start a drag).
+    <div
+      ref={popupRef}
+      className="ui-popup"
+      style={{ left: position.left, top: position.top, width: POPUP_WIDTH }}
+      role="dialog"
+      onMouseDown={(event) => event.stopPropagation()}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {children}
+    </div>,
+    document.body,
   );
 }

@@ -8,7 +8,7 @@ import { buildRampUniformArrays, DEFAULT_COLOR_STOPS } from './colorRamp';
 // Matches this file's own uBaseColor placeholder (0x3a7bd5) below —
 // overwritten for real the moment Panel.tsx's controls reach this material
 // (SceneCanvas.tsx), same as every other uniform here.
-const INITIAL_RAMP = buildRampUniformArrays(new THREE.Color(0x3a7bd5), DEFAULT_COLOR_STOPS);
+const INITIAL_RAMP = buildRampUniformArrays(DEFAULT_COLOR_STOPS);
 
 const fragmentShader = terrainGlsl + fragmentShaderBody;
 

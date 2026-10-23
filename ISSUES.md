@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-10-18`
+`Last updated: 2026-10-21`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -11,10 +11,10 @@
 > Bugs only. Architecture and the decisions behind it are in `SPEC.md`. Status by stage is in `ROADMAP.md`.
 
 ```
-🔴 Open        3
-🟡 Partial     1
-📋 Tracked     4
-✅ Fixed      26
+🔴 Open       1
+🟡 Partial   16
+📋 Tracked    4
+✅ Fixed     29
 ```
 
 <details>
@@ -64,7 +64,9 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **Cause**
 - Every longitude converges to one point at each pole, so data stored in a rectangular map bunches up there. Visible directly in the 2D preview, whose top and bottom edges smear the same way.
 - Not fixable while the map is where detail lives. Goes with [B28].
-- More precisely: the noise itself is correct at every point, `heightmap.frag.glsl`'s `uvToSpherePosition()` samples the true 3D position, not the distorted flat map. The actual cause is in `fragment.glsl`'s per-pixel bump mapping. The analytic tangent `dPdu` correctly shrinks toward zero at the poles via its `cosLat` factor, but the finite-difference height gradient `dHdu` divides by a fixed UV-space `sampleOffset` (32/1024) with no equivalent tapering. Near a pole, that fixed UV offset spans an almost vanishing physical distance, so the gradient term comes to dominate the tangent exactly where the real tangent collapses toward zero. Blur and ridging are the same ill-conditioned normal basis read two ways, blur where neighboring texels' noise happens to land close, ridging where it diverges, both equally likely since nothing tapers the base noise amplitude near a pole on this path.
+- More precisely: the noise itself is correct at every point, `heightmap.frag.glsl`'s `uvToSpherePosition()` samples the true 3D position, not the distorted flat map. The actual cause is in `fragment.glsl`'s per-pixel bump mapping.
+  - The analytic tangent `dPdu` correctly shrinks toward zero at the poles via its `cosLat` factor, but the finite-difference height gradient `dHdu` divides by a fixed UV-space `sampleOffset` (32/1024) with no equivalent tapering. Near a pole, that fixed UV offset spans an almost vanishing physical distance, so the gradient term comes to dominate the tangent exactly where the real tangent collapses toward zero.
+  - Blur and ridging are the same ill-conditioned normal basis read two ways, blur where neighboring texels' noise happens to land close, ridging where it diverges, both equally likely since nothing tapers the base noise amplitude near a pole on this path.
 
 ### [B24] Terrain tore into streaks at both poles · `blocks work`
 **✅ Fixed:** 2026-10-13 · **Found:** 2026-10-13 · **Where:** `planet/mesh.ts`
@@ -178,7 +180,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Invisible while the old pipeline clamped everything, but once Height applied the raw value as unclamped additive elevation, the bias scaled with it.
 
 **Fix**
-- Re-centred `ridge` itself rather than special-casing one noise type downstream.
+- Re-centered `ridge` itself rather than special-casing one noise type downstream.
 
 ### [B10] A new layer visually erased painted terrain beneath it · `blocks work`
 **✅ Fixed:** 2026-09-22, after 2 wrong attempts · **Found:** 2026-09-22
@@ -216,13 +218,19 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 **The remaining stall: a min/max reduction pyramid, not a bigger readback**
 - Dana separately reported the whole app stalling briefly on every Resolution change (2026-10-17: "the whole software seems to get stuck for a bit"), traced to the color ramp's min/max calculation running a full synchronous CPU readback (`getPatchElevationData`) on every change, purely to find two numbers.
-- Fixed for smooth/shaded style: a min/max reduction pyramid (Tevs, Ihrke & Seidel 2008, "Maximum Mipmaps," see `REFERENCES.md`) halves the baked patch over and over in `map/heightmap.ts`'s new `getRegionMinMaxAsync()`, each pass keeping the true min/max of every 2x2 block rather than blurring it away, down to one texel holding the patch's exact min/max. Only that one texel is ever read back, via the async PBO+fence method already built (`getRegionElevationDataAsync`, which had no caller until now). Guarded against the request race Dana flagged ("the color needs to be live or it will get stuck"): `landChunk.ts`'s `minMaxRequestIdRef` tags each request, and a slower, older request resolving after a newer one is silently discarded rather than overwriting the ramp.
+- Fixed for smooth/shaded style: a min/max reduction pyramid (Tevs, Ihrke & Seidel 2008, "Maximum Mipmaps," see `REFERENCES.md`) halves the baked patch over and over in `map/heightmap.ts`'s new `getRegionMinMaxAsync()`, each pass keeping the true min/max of every 2x2 block rather than blurring it away, down to one texel holding the patch's exact min/max.
+  - Only that one texel is ever read back, via the async PBO+fence method already built (`getRegionElevationDataAsync`, which had no caller until now).
+  - Guarded against the request race Dana flagged ("the color needs to be live or it will get stuck"): `landChunk.ts`'s `minMaxRequestIdRef` tags each request, and a slower, older request resolving after a newer one is silently discarded rather than overwriting the ramp.
 - When an erosion run already has the elevation data in memory, that's used directly (free, no new readback of any kind), the reduction pyramid only runs for a fresh bake.
 - Voxel style is unchanged and still pays the full synchronous readback, its own mesh is genuinely built from that CPU array, not just shaded by it, the same accepted `[B05]` constraint as the display-path fix above.
-- **That open question was real: confirmed, then fixed.** The literal min/max above let one outlier pixel (this terrain's own spiky noise reliably produces one) set the ramp's range far wider than the terrain's real bulk variation, squeezing everything else into a narrow slice of it — Dana, 2026-10-18, saw this directly as repeating color bands following the terrain's contours, not a gradient, confirmed not the Terrace modifier. Fixed with a GPU-built histogram (same technique real-time HDR auto-exposure uses so one bright pixel can't blow out a whole frame's exposure, see `REFERENCES.md`, "GPU histogram"): `map/heightmap.ts`'s new `getRegionPercentileRangeAsync()` scatters a fixed 256x256 grid of sample points (`shaders/elevationHistogram.vert.glsl`/`.frag.glsl`) into a 256-bin, 1px-tall target via additive blending, bucketed against the reduction pyramid's own literal extremes, then reads back just those 256 values and walks them to the 1st/99th percentile with the exact same logic `map/elevationRange.ts`'s CPU version already used (`HISTOGRAM_BINS`/`CLIP_PERCENT` now exported from there and shared, not duplicated). Wired into `landChunk.ts`'s smooth-style branch in place of the literal min/max call, same request-id race guard as before. Voxel style is untouched, still correct, still uses the CPU histogram directly.
+- **That open question was real: confirmed, then fixed.** The literal min/max above let one outlier pixel (this terrain's own spiky noise reliably produces one) set the ramp's range far wider than the terrain's real bulk variation, squeezing everything else into a narrow slice of it, Dana, 2026-10-18, saw this directly as repeating color bands following the terrain's contours, not a gradient, confirmed not the Terrace modifier.
+  - Fixed with a GPU-built histogram (same technique real-time HDR auto-exposure uses so one bright pixel can't blow out a whole frame's exposure, see `REFERENCES.md`, "GPU histogram"): `map/heightmap.ts`'s new `getRegionPercentileRangeAsync()` scatters a fixed 256x256 grid of sample points (`shaders/elevationHistogram.vert.glsl`/`.frag.glsl`) into a 256-bin, 1px-tall target via additive blending, bucketed against the reduction pyramid's own literal extremes, then reads back just those 256 values and walks them to the 1st/99th percentile with the exact same logic `map/elevationRange.ts`'s CPU version already used (`HISTOGRAM_BINS`/`CLIP_PERCENT` now exported from there and shared, not duplicated).
+  - Wired into `landChunk.ts`'s smooth-style branch in place of the literal min/max call, same request-id race guard as before. Voxel style is untouched, still correct, still uses the CPU histogram directly.
 
 **The real fix was one level up: a shared range, not a better local one**
-- Dana caught the actual inconsistency, 2026-10-18: "the chunk should be a part of the planet... it should use the planet's values." Computing any range fresh per patch, however correctly, means the same real elevation can read as a different color depending on which patch you're looking at, and duplicates work the planet already does. The GIS convention for this (QGIS's `WholeRaster` raster-symbology option, see `REFERENCES.md`, "Whole-dataset vs. current-view color stretch") is a stretch computed once per dataset, applied everywhere, not recomputed per tile, exactly this project's own earlier decision that the ramp "should encompass all terrain levels that exist in the planet," which the chunk's own percent-clip work had drifted away from.
+- Dana caught the actual inconsistency, 2026-10-18: "the chunk should be a part of the planet... it should use the planet's values."
+  - Computing any range fresh per patch, however correctly, means the same real elevation can read as a different color depending on which patch you're looking at, and duplicates work the planet already does.
+  - The GIS convention for this (QGIS's `WholeRaster` raster-symbology option, see `REFERENCES.md`, "Whole-dataset vs. current-view color stretch") is a stretch computed once per dataset, applied everywhere, not recomputed per tile, exactly this project's own earlier decision that the ramp "should encompass all terrain levels that exist in the planet," which the chunk's own percent-clip work had drifted away from.
 - `SceneCanvas.tsx` gains `getElevationRange()`, returning the planet's own global range, already computed once whenever its heightmap changes and already kept live for every planet patch (`sharedUniformsRef`), nothing new to compute. `landChunk.ts`'s smooth and voxel branches both now read this instead of computing their own, voxel's CPU elevation data stays exactly as needed for its own mesh, only the ramp's range source changed. `minMaxRequestIdRef` and its race-guard, and the `computeElevationRange` import, are now dead and removed, nothing in this file computes a range anymore, it only reads one.
 - The GPU histogram pass above is no longer called by the chunk, but stays in the codebase: it's still the right mechanism for a real, separate follow-up (making the planet's own `updateElevationRange()` cheaper, which still does a full CPU readback today), not required for this fix, not yet approved to build.
 - Expected, not a bug: a small, flat-looking close-up patch may now show mostly one color if the planet's full range is much wider than what's visible in that one patch, that's the correct behavior for a whole-dataset stretch.
@@ -230,15 +238,20 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **The wall/cut face: layers, then a flat color by design**
 - The chunk's vertical skirt walls showed repeating horizontal "layers" (Dana: "why does the chunk have layers"). Cause: the wall's bottom edge carried a placeholder uv of `(0,0)` while its top edge carried the real terrain uv, interpolated between the two down the wall's height, so the sampled point slid diagonally across the whole heightmap as you went down, reading unrelated elevation values and cycling the ramp into stripes. Fixed in `voxel/smoothMesh.ts`: the bottom edge now carries its own column's real uv too (not the placeholder), locking sampling to one real column the whole way down, no drift.
 - Dana then decided the wall shouldn't read the elevation ramp at all: "the color of the cut area should be one color of that height, which is likely the low elevation color." A cut face has no single elevation of its own to color by. Fixed in `shaders/chunk.frag.glsl`: the ramp calculation is now gated to `vDisplace > 0.5` (the real top surface only), walls/the bottom cap keep `surfaceColor`'s own default, `uBaseColor`, untouched by the ramp entirely.
-- Dana then reversed that too: "and if the ground is cut in the middle of a mountain?? is it still low elevation colors?" A flat base color for every wall regardless of what it's under was wrong. Fixed, first attempt: the ramp was extended to walls using a new `wallElevationRaw`, recovered from the fragment's own world-space height, picked via `vDisplace > 0.5 ? elevationRaw : wallElevationRaw`. Since `vDisplace` is a per-vertex attribute that interpolates smoothly across a wall fragment, this ternary switched height sources mid-wall, at the exact line where interpolated `vDisplace` crosses 0.5, a hard color seam across every wall (Dana, 2026-10-19, screenshot: "there's a clear color border between the land chunk inside and outside color... a harsh border that shouldn't exist"). **Real fix:** `wallElevationRaw` and the ternary were unnecessary, removed entirely. `elevationRaw` (the plain texture sample at `vUv`) already gives each wall fragment its own column's real terrain height, constant down the whole wall, because the uv-placeholder fix two steps above already made a wall's top and bottom vertices share one real uv — exactly the per-column coloring Dana wanted, with no second height source and no seam.
-- **Reopened, 2026-10-19:** the "expected, not a bug" line below was Dana's own earlier decision described after the fact, not something she'd signed off on seeing in practice — her retest showed real flattening and she rejected it ("it might be a tradeoff to you, i never agreed to this"). Still open: whether to revert to a per-patch range (the percent-clip histogram work below, already built, currently unused), add a separate local-contrast-stretch display layer on top of the global range (a different, real GIS convention from `WholeRaster`, to be researched before proposing specifics), or something else. Dana's call.
+- Dana then reversed that too: "and if the ground is cut in the middle of a mountain?? is it still low elevation colors?" A flat base color for every wall regardless of what it's under was wrong.
+  - Fixed, first attempt: the ramp was extended to walls using a new `wallElevationRaw`, recovered from the fragment's own world-space height, picked via `vDisplace > 0.5 ? elevationRaw : wallElevationRaw`. Since `vDisplace` is a per-vertex attribute that interpolates smoothly across a wall fragment, this ternary switched height sources mid-wall, at the exact line where interpolated `vDisplace` crosses 0.5, a hard color seam across every wall (Dana, 2026-10-19, screenshot: "there's a clear color border between the land chunk inside and outside color... a harsh border that shouldn't exist").
+  - **Real fix:** `wallElevationRaw` and the ternary were unnecessary, removed entirely. `elevationRaw` (the plain texture sample at `vUv`) already gives each wall fragment its own column's real terrain height, constant down the whole wall, because the uv-placeholder fix two steps above already made a wall's top and bottom vertices share one real uv, exactly the per-column coloring Dana wanted, with no second height source and no seam.
+- **Reopened, 2026-10-19:** the "expected, not a bug" line below was Dana's own earlier decision described after the fact, not something she'd signed off on seeing in practice, her retest showed real flattening and she rejected it ("it might be a tradeoff to you, i never agreed to this"). Still open: whether to revert to a per-patch range (the percent-clip histogram work below, already built, currently unused), add a separate local-contrast-stretch display layer on top of the global range (a different, real GIS convention from `WholeRaster`, to be researched before proposing specifics), or something else. Dana's call.
 
 **The wall ramp, take two: top and sides as two separate materials, not one shared value**
 - Dana's actual ask, restated in her own words: "cutting a slice of cake, the sides show the inside only, the top is the frosting and it does not bleed into the sides." The top surface keeps the real elevation ramp (`elevationRaw`, full detail, unchanged). The walls/bottom cap get their own plain, direct world-height-to-color mapping, no blending with the top's value at the boundary, no "subtle"/strata treatment, just the same `terrainRampColor` fed a different height source.
-- New `isTopSurface` attribute (`voxel/smoothMesh.ts`, threaded through `shaders/chunk.vert.glsl`/`chunk.frag.glsl` as `vIsTopSurface`), 1 for every vertex of a top-surface triangle, 0 for every vertex of a wall/cap triangle, always uniform within one triangle, unlike `displace` (which must stay mixed within a wall quad for vertex positioning). Confirmed against real GLSL documentation first (Khronos forum threads on `flat`/provoking-vertex): a per-triangle-constant attribute shows up with no interpolation artifact, because interpolating a constant returns the same constant, this project's chunk mesh already builds the top surface and the walls as separate, non-shared triangles, so this applies directly.
+- New `isTopSurface` attribute (`voxel/smoothMesh.ts`, threaded through `shaders/chunk.vert.glsl`/`chunk.frag.glsl` as `vIsTopSurface`), 1 for every vertex of a top-surface triangle, 0 for every vertex of a wall/cap triangle, always uniform within one triangle, unlike `displace` (which must stay mixed within a wall quad for vertex positioning).
+  - Confirmed against real GLSL documentation first (Khronos forum threads on `flat`/provoking-vertex): a per-triangle-constant attribute shows up with no interpolation artifact, because interpolating a constant returns the same constant, this project's chunk mesh already builds the top surface and the walls as separate, non-shared triangles, so this applies directly.
 - `chunk.frag.glsl` now branches the ramp's elevation source on `vIsTopSurface` (not `vDisplace`, which is what caused the earlier mid-wall seam): top surface uses `elevationRaw`; walls/cap use a plain `(vWorldPosition.y / uMaxHeight) - 0.5`. The branch is safe this time because `vIsTopSurface` never takes an intermediate value within a triangle, so every fragment in a given triangle agrees on which side of the branch it's on.
-- Voxel mode's own separate mesh (`voxel/meshWorker.ts`) also had to gain this attribute (shared shader), set uniformly to 1 for every face — voxel's own elevation-ramp coloring is already a known, accepted placeholder limitation (its `uv` is always `(0,0)`, unrelated to this fix), so this keeps its current behavior unchanged rather than silently improving or regressing it as a side effect.
-- **Same bleed, a different block:** Dana still saw a divide "from certain angles" after the above (2026-10-19). The normal-reconstruction block and the shadow block in `chunk.frag.glsl` were still gated on `vDisplace > 0.5`, not switched over to `vIsTopSurface` with the ramp. Since `vDisplace` still interpolates smoothly across a wall quad (it has to, for vertex positioning), the upper half of every wall was still getting the top surface's heightmap-gradient normal formula wrongly applied to it, switching to the wall's own correct flat normal only below the crossover point — invisible at light angles where the two normals happen to produce similar brightness, a sharp seam at others. Fixed: both blocks now key off `vIsTopSurface` too, same as the ramp. `vDisplace` itself is untouched, still needed for vertex positioning in `chunk.vert.glsl`.
+- Voxel mode's own separate mesh (`voxel/meshWorker.ts`) also had to gain this attribute (shared shader), set uniformly to 1 for every face, voxel's own elevation-ramp coloring is already a known, accepted placeholder limitation (its `uv` is always `(0,0)`, unrelated to this fix), so this keeps its current behavior unchanged rather than silently improving or regressing it as a side effect.
+- **Same bleed, a different block:** Dana still saw a divide "from certain angles" after the above (2026-10-19). The normal-reconstruction block and the shadow block in `chunk.frag.glsl` were still gated on `vDisplace > 0.5`, not switched over to `vIsTopSurface` with the ramp.
+  - Since `vDisplace` still interpolates smoothly across a wall quad (it has to, for vertex positioning), the upper half of every wall was still getting the top surface's heightmap-gradient normal formula wrongly applied to it, switching to the wall's own correct flat normal only below the crossover point, invisible at light angles where the two normals happen to produce similar brightness, a sharp seam at others. Fixed: both blocks now key off `vIsTopSurface` too, same as the ramp.
+  - `vDisplace` itself is untouched, still needed for vertex positioning in `chunk.vert.glsl`.
 
 **The slider's own max still didn't match the real ceiling**
 - Diagnosed while chasing a separate flattening report: the Resolution slider's max was still 2048, while `MAX_PATCH_TEXTURE_RESOLUTION` (the real GPU-texture ceiling restored above) is 1024, the same honest-UI mismatch this issue originally started as, recurring in the newer cap. Fixed in `ui/Panel.tsx`: max lowered to 1024.
@@ -277,7 +290,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Both panes stay mounted and only their visibility toggles.
 
 ### [B20] Chunk sat half-buried under the grid · `minor`
-**✅ Fixed:** 2026-09-23 · The mesh centred all three axes including the vertical one.
+**✅ Fixed:** 2026-09-23 · The mesh centered all three axes including the vertical one.
 
 ---
 
@@ -305,7 +318,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **✅ No longer reproducing:** 2026-10-19 (Dana: "it doesnt, its fine") · **Found:** 2026-10-13 · **Where:** `shaders/fragment.glsl`, `shaders/chunk.frag.glsl`
 
 **What happened**
-- The ramp's Mid/High contrast fades in as Height (%) rises, rather than always filling the full range — but Dana reported it still appeared too sudden even after that fix. Re-checked 2026-10-19 (after the unrelated chunk-color/[B32] work above), no longer seen. Left as-is, not re-diagnosed further, since there's nothing left to chase.
+- The ramp's Mid/High contrast fades in as Height (%) rises, rather than always filling the full range, but Dana reported it still appeared too sudden even after that fix. Re-checked 2026-10-19 (after the unrelated chunk-color/[B32] work above), no longer seen. Left as-is, not re-diagnosed further, since there's nothing left to chase.
 
 ### [B30] Steep terrain went near-black with Cast shadows off · `wrong but workable`
 **✅ Fixed:** 2026-10-14 · **Found:** 2026-10-14 · **Where:** `shaders/fragment.glsl`, `shaders/chunk.frag.glsl`, `shaders/terrain.glsl`
@@ -323,7 +336,9 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **✅ Fixed:** 2026-10-14 · **Found:** 2026-10-14 · **Where:** `shaders/heightmap.frag.glsl`
 
 **Cause**
-- `ridge()` (`shaders/noise.glsl`) folded the *final*, already-summed fBm value once, rather than folding each octave individually the way real ridged-multifractal noise does (Musgrave's method, see `REFERENCES.md`). Folding a single high-frequency signal turns every zero-crossing into a sharp peak, which read as a few broad ridgelines at low frequency but as a dense field of small, isotropic spikes at high frequency. `randomizeTerrain()` (`map/noiseLayers.ts`) can independently roll `frequency` up to 20 (5x the default of 4), `heightScale` up to 10 (10x the default of 1), and `ridgedEnabled` true, all at the same time, this combination was a likely result of one randomize press, not a rare edge case.
+- `ridge()` (`shaders/noise.glsl`) folded the *final*, already-summed fBm value once, rather than folding each octave individually the way real ridged-multifractal noise does (Musgrave's method, see `REFERENCES.md`).
+  - Folding a single high-frequency signal turns every zero-crossing into a sharp peak, which read as a few broad ridgelines at low frequency but as a dense field of small, isotropic spikes at high frequency.
+  - `randomizeTerrain()` (`map/noiseLayers.ts`) can independently roll `frequency` up to 20 (5x the default of 4), `heightScale` up to 10 (10x the default of 1), and `ridgedEnabled` true, all at the same time, this combination was a likely result of one randomize press, not a rare edge case.
 
 **Fix**
 - Added `ridgedFbm3D()`, a real per-octave ridged accumulation: each octave's own sample is folded via `ridge()` before being summed, weighted by the previous octave's own folded magnitude as a feedback term, matching the cited algorithm's structure rather than approximating it. Reuses the existing `ridge()` and `ridgeAmount`, no new uniforms. Only replaces the path when both Octaves and Ridged are enabled together, a single ridged sample with no octaves had nothing per-octave to fix.
@@ -354,6 +369,189 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ## 🖥️ UI & panels
 
 *The controls and the viewport around them.*
+
+### [B49] Tooltips are hard to read and can run off screen · `minor`
+**🟡 Built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** `design.css` (`.ui-tooltip`), every control with a tooltip
+
+**What happens**
+- Tooltips should be black, wrap their text, and stay on screen. Today they use the panel color and can run past the screen edge (Dana, screenshot).
+- It is a design-system change, so it affects every tooltip.
+- Built: black through a new design-system token (`--color-tooltip-bg`), text wraps at 240px, and the tooltip uses a fixed position clamped to the window.
+- One shared placement function (`placeTooltip` in `ui/UIElements.tsx`) and one delegated listener cover every tooltip.
+
+### [B48] Mask controls: wrong layer, empty source list, and a duplicate section · `wrong but workable`
+**🟡 Redesign built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** `ui/MaskControls.tsx`, `ui/NoisePanel.tsx`, `map/heightmap.ts`
+
+**What happens**
+- The mask layer references got mixed up: a row's popup edits the clicked layer, while the Mask section edits the selected layer, so the two can show different layers.
+- The mask source dropdown showed only None, even with other layers present (Dana, screenshot).
+- Dana doubts the Mask section in the noise menu is needed, since masks are per layer.
+- Causes: the popup and the section edit different layers, and the source guard lists only layers with a noise type, so the dropdown can hold only None.
+- 🧭 **Redesign approved by Dana and built 2026-10-21, untested:** the mask has its own pattern (noise type, seed, frequency), plus Coverage, Softness, Invert and Shuffle, with no layer picker. The noise-menu Mask section is gone, since the row icon covers it. A multi-layer selection edits all selected layers with the same values, and old masks migrate. That removes the empty dropdown, the mixed-up layer and the source guard. See `[S31]`.
+- Coverage is measured as a percentile of the pattern on a 64 by 64 grid per cube face, cached by pattern. A migrated mask takes its old source's type, seed and frequency but not its modifiers, so the look can shift.
+- ⚠️ The mask pattern has no octave fade, so a high mask frequency may shimmer at a distance. The shader, the popup and multi-layer editing have never run on screen.
+- A Warning message style (a design-system token from the warning status color) is needed only if a warning message is ever shown.
+- Supersedes `[B41]`'s open part.
+
+### [B47] Changing Resolution rebuilds the whole planet from scratch · `wrong but workable`
+**🟡 Built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** `planet/PlanetPatchRenderer.ts`, `planet/patchLifecycle.ts`
+
+**What happens**
+- The Resolution change path flushed every patch, so the whole planet rebuilt (Dana: "not efficient"). Detail should be added only where needed. Extends `[B44]`.
+
+**Built, untested**
+- Detail now follows screen-space error (`[S32]`), so the slider is a detail bias. Raising it only adds patches where pixels need them, and none are disposed. A radius change still flushes everything.
+- Harness numbers (Node, mock baker): bias 1 to 2 gave 72 to 236 patches with 164 new bakes, 0 existing patches disposed and no holes. Going back to 1 baked nothing.
+- Earlier today: a grid-size change rebuilds meshes only, with no re-bake, and drawn patches go first.
+- Verified in a Node harness with a mock baker: refining 256 to 1024 gave no holes, no overlaps and kept 66 of 66 patches, coarsening back baked nothing, and a grid-only slider step baked nothing.
+- ⚠️ Risks: neighbors at different grids can crack briefly mid-change, and neighbors at different depths now differ by the finest octave at shared edges. Skirts are the only cover for both, and neither has been seen on screen. At Resolution 2048 the memory is bounded only by the triangle budget.
+
+### [B46] Noise Frequency cap of 20 limits zoom detail · `wrong but workable`
+**🟡 Built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** `ui/NoisePanel.tsx`, `map/noiseLayers.ts`, `map/noiseRanges.ts`, `shaders/`
+
+**What happens**
+- A layer's Frequency stopped at 20, which capped how fine the terrain could get when zoomed in. Dana asked to raise it, or to make detail depend on the patch.
+
+**Built, untested**
+- Ranges widened in one shared table (`[S35]`): Frequency 0.1 to 500 on a log scale, Octaves up to 12, and the rest. Randomize reads the table.
+- Dana confirmed 2026-10-21 that the browser console shows no errors, so the shaders compile.
+- The noise engine (`[S36]`): octaves fade by sample spacing, so deeper patches show finer detail without the large shape moving. Hoskins' float-only hash replaces the sin-based one. New controls: Offset, Stretch, Voronoi Jitter and Distance, warp scale and octaves, ridged Offset and Gain.
+- ⚠️ Risks: a layer using all 12 octaves costs up to 50% more per sample, and warp octaves up to 8 are costly. The Hoskins constants are unverified, and the fade constants are tunable guesses. Frequency 500 can shimmer until the fade reaches Ridged, Terrace, warp and Voronoi.
+
+**Voronoi Jitter: works, no bug**
+- Dana confirmed that Jitter 0 changes the cells. At 0, each cell's seed point sits at the center of its cell, so the cells form an even, regular grid. As Jitter rises, the points scatter.
+- Between 0.5 and 1.0 the change is subtle, because points stay inside their own cells and the default is already the maximum. ❓ Optional, Dana's call: lower the default to about 0.7 so the slider has room both ways.
+
+**Next**
+- The second pass fades Ridged, Terrace, domain warp and Voronoi. Dana approved it with only a tiny, grid-spacing softening. A fractal type selector awaits her go (`[S36]`).
+
+### [B45] Resolution seems fake past about 1024 · `wrong but workable`
+**🟡 Built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** the planet's patch bake and detail limits
+
+**What happens**
+- Past about 1024 nothing gets sharper, even when zooming in. Terrain at 1056 shows stair steps (Dana, screenshot). Changing mask Softness seems to bring some details back.
+
+**Cause**
+- Likely cause: the noise has nothing finer to show past its frequency and octave caps, so extra samples only trace the same shape.
+- Earlier research covered patch selection, stitching and refinement, but not how procedural noise gains detail per level. The sourced answer is built under `[B46]` and `[S36]`.
+- A second likely cause was found while building: the seed shifted the noise coordinates by up to about 60,000, which left a resolution coarser than a deep patch's spacing. That may be part of the stair-stepping. The seed is now a whole-cell shift.
+
+**Built, untested**
+- Every patch bake passes its own sample spacing, so the octave fade takes effect, and the noise now has finer octaves to show (up to 12).
+- The close-up blockiness was texel density: a close patch kept 65 samples over a large screen area. Bake size now follows the patch's on-screen width (`TARGET_BAKE_TEXEL_PIXELS` 4, 129 or 257 samples), within the texel budget. These values are tunable guesses.
+- **Filtering ruled out:** the patch bake targets already request `LinearFilter` with `FloatType`, Three.js requests `OES_texture_float_linear`, and Dana's browser reports the extension available. Filtering is not the cause of the stair steps.
+- ⚠️ Risks: the cost of a 12-octave bake per patch is unmeasured, and seam content can still differ between depths.
+
+### [B44] The planet discards and rebuilds patches on every view change · `wrong but workable`
+**🟡 Fix built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** `planet/PlanetPatchRenderer.ts`, `planet/planetPatches.ts`, `planet/patchLifecycle.ts`
+
+**What happens**
+- Rotating or moving the camera makes the planet visibly rebuild, with a distinct look (Dana). It is not intended. Detail should be added only where needed, not erased and rebuilt.
+
+**Cause**
+- A structural bug: a patch's lifetime is tied to whether it is visible, not whether it is needed. Hidden patches are disposed at once, and re-baked, with a shader compile, when they return.
+- A replaced parent is deleted in the same pass that its children are only queued, so holes show until they build.
+- Splitting has one distance threshold with no hysteresis, so a camera near the boundary flips patches back and forth. The triangle budget can also flip the whole layout.
+
+**Fix, built and untested**
+- Changing Resolution used to rebuild the whole planet. That is now built separately, see `[B47]`.
+- 🧭 A new `PatchLifecycle` (`planet/patchLifecycle.ts`) tracks each patch as active, retiring or cached. A patch that leaves view is hidden and kept, evicted least recently used first against `PATCH_CACHE_MAX_VERTICES` (2.5 million). A bake version evicts stale hidden patches, so none returns with old terrain.
+- A replaced patch stays drawn (retiring) until all its replacements are built, then they swap in together. Merging works the same way.
+- Merging back uses `MERGE_DISTANCE_FACTOR` (2.6), farther than the split factor (2.2). Budget pressure changes by at most one step per update (`selectPatchesIncremental`). Hidden patches are not raycast. A radius or grid change flushes everything.
+- Verified by simulation: no holes in 1,067 frames, and a camera hovering at a boundary changed 8 patches instead of 198.
+- ⚠️ Risks: neighbors can differ by up to 3 depth levels while patches retire (269 of 141,326 pairs, skirts should hide it, unseen). The cache holds about 125 MB, so at Resolution 2048 rotating still rebuilds. Hysteresis does not cover the over-budget distance lowering.
+
+### [B43] Harsh lighting on the planet's patches and the land chunk · `wrong but workable`
+**🟡 Fix built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** the shared lighting model (`shaders/planetPatch.frag.glsl`, `shaders/chunk.frag.glsl`, `shaders/terrain.glsl`)
+
+**What happens**
+- Lighting and shadows look harsh on both the planet and the land chunk. It is a recurring issue (see `[B34]` and `[B35]`).
+
+**Cause**
+- The planet's bump slope read the wrong data channel: `.r` (the 2D shape composite) instead of `.g` (the real elevation). The slope step also depended on patch size, and the bump strength was capped below the drawn height. The planet and chunk each carried their own copy of the lighting math, and the two differed.
+- 🧭 **Built:** one shared `heightfieldNormal()` and `softDiffuse()` in `shaders/terrain.glsl`, used by both views, with a new Wrap slider in the Scene panel. Light elevation stays separate between the planet and the chunk, because a shared elevation once put the chunk in the dark (Dana). Untested on screen.
+- 📚 Established practice: slope needs real ground distance at each detail level, and normals should come from the finest data. Sources in `REFERENCES.md`, some forum-level.
+
+### [B42] Undo does not restore a deleted ramp color · `wrong but workable`
+**📋 Tracked, not scheduled earlier** · **Found:** 2026-10-21 · **Where:** `map/2Dbrush.ts`, `ui/panels/ColorRampEditor.tsx`
+
+**What happens**
+- Cmd+Z after deleting a ramp color does nothing (Dana, twice).
+
+**Cause**
+- Known. Undo only covers paint strokes today. The shared undo history (`[S30]`) is the last step of the build order, so this is fixed there.
+
+### [B41] Layer Mask controls are not wired · `wrong but workable`
+**🟡 Superseded 2026-10-21 by the mask redesign in [B48], built, untested** · **Found:** 2026-10-21 · **Where:** `ui/NoisePanel.tsx`, `ui/MaskControls.tsx`, `map/heightmap.ts`
+
+**What happens**
+- Coverage shows 0 where the default is 50, and changing Coverage, Softness or Invert changes neither the planet nor the noise canvas (Dana, screenshot).
+
+**Cause**
+- The wiring itself is intact. The likely cause is a paint-only mask source (a layer with noise type none), which has no pattern to measure, so the mask hides the layer at any Coverage under 100. A missing guard: the control accepts a source that cannot produce a pattern.
+- The source guard that was built for this was removed with the redesign, since a mask no longer points at another layer. Its defaults still cannot produce a Coverage of 0. Not confirmed on screen.
+
+### [B40] Ramp colors: base color overpowers the others, top white barely shows · `wrong but workable`
+**🟡 Fix built 2026-10-21, awaiting Dana's test** · **Found:** 2026-10-21 · **Where:** `planet/colorRamp.ts`, `ui/panels/ColorRampEditor.tsx`, the ramp shaders
+
+**What happens**
+- The first color dominates the planet without reason, and the top white stop only slightly lightens the highest terrain (Dana, screenshot). It started after the base color became an ordinary ramp stop.
+
+**Cause**
+- A structural leftover. All three surface shaders blended the ramp toward the base color by a Height-based amount, from when base was the ramp's first stop. Below 10% Height the base color dominated.
+- **Fixed:** the blend is removed in the three surface shaders, and the ramp still blends smoothly between stops. The base color is only used when Color by elevation is off. Untested on screen.
+
+### [B39] Tiny dark seams on the planet's surface · `minor`
+**🟡 Stale-stitching fix built 2026-10-21. Dana reports the seams look solved, final confirmation pending** · **Found:** 2026-10-21 · **Where:** `planet/PlanetPatchRenderer.ts`
+
+**What happens**
+- Small black slivers show between spikes on the planet (Dana, screenshot 2026-10-21). They disappear when the planet is rotated away and back, so they depend on the view, not the terrain.
+
+**Cause**
+- Diagnosed from the code, not yet confirmed on screen. Likely stale stitching: a patch that stays selected keeps the edge it was built with, so when a neighbor's detail level changes as the camera moves, its edge no longer matches, and only the thin skirt covers the gap. Skirts are known to fail at grazing angles, which fits slivers that vanish when the planet rotates.
+- Second candidate: the cross-face gap from `[B28]`. Cross-face balancing is now built too.
+- Dana wants proper infrastructure fixes, not quick patches: the fix is to rebuild a patch whenever its stitching changes, not to widen the skirt.
+- **Built, untested:** a kept patch now rebuilds its geometry (geometry only, no re-bake) when its neighbors' detail changes. Cross-face balancing is built as well, checked by an automated watertight topology test across 32 camera and resolution cases, and awaits Dana's on-screen test.
+
+### [B38] Planet Resolution can't be raised without zooming in · `wrong but workable`
+**🟡 Built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** `ui/Panel.tsx`, `planet/PlanetPatchRenderer.ts`, `planet/patch.ts`
+
+**What happens**
+- Dana: the planet's Resolution slider has to be able to add detail on its own, without zooming the camera in. Today it only changes each visible patch's own grid (capped at 128), while how many patches are visible, and how deep they subdivide, is decided by camera distance (see `[B28]`). So the slider tops out quickly and the globe only gets finer when the camera moves closer.
+
+**Requirement**
+- Dana, 2026-10-21: Resolution must be uniform across all visible parts of the planet.
+- 🧭 First confirmed 2026-10-21 as one uniform minimum detail level, then replaced the same day by Dana's clearer model: detail sharpens automatically as she zooms in, and the slider pushes it further by hand. See `[S32]`. Everything still needs a cap and a budget so performance holds and the app does not crash.
+- A budget on total visible triangles replaces the per-patch cap. See `[S32]`.
+- Cross-face balancing is built as part of finishing the system, not conditional on the slivers.
+
+**Cause**
+- Planet detail is two things: subdivision depth, chosen by camera distance, and each patch's grid, chosen by the slider. Only the second is user-controlled.
+
+**Superseded 2026-10-21 (`[S32]`)**
+- The uniform minimum floor was built, then replaced: it forced up to 384 patches at startup and stopped zoom from sharpening. Dana's model is the right one: detail sharpens automatically with zoom, and the slider pushes further.
+- Now built, untested: detail follows screen-space error (`planet/planetPatches.ts`: `screenSpaceError()`, `BASE_SSE_PIXELS` 8, `MERGE_SSE_RATIO` 0.85). Budget pressure raises the pixel threshold 1.25x per step, and `MAX_PATCH_DEPTH` is 10. The geometric error is the patch width over its 64 mesh cells.
+- The Resolution slider is a detail bias (log, 0.25x to 8x, default 1x). `meshSegments` became `detailBias` (`detailVersion` 3), and old saves migrate once.
+- Harness numbers: startup 72 patches in 22 frames (was up to 384). Zoomed out, 6 patches at bias 1 and 2, and 24 at bias 4. Closest zoom: 294 patches and about 92 MB of bakes. Zooming in, depth rose from 0 to 9 with no holes or overlaps.
+- ⚠️ The threshold, the bake size rule, the depth cap and the step are tunable guesses.
+
+### [B37] Color ramp rows don't use the base color's template · `wrong but workable`
+**🟡 Rebuilt 2026-10-21, awaiting Dana's test** · **Found:** 2026-10-21 · **Where:** `ui/panels/ColorRampEditor.tsx`, `design.css`
+
+**What happens**
+- Dana asked for every ramp color to share the base color control's template. The rows got their own invented style instead: a smaller rounded swatch, 400-weight text where the design system's labels are 300, and a selection outline the base control never had.
+
+**Cause**
+- Built as a new list component rather than on `ColorPicker`'s own row, swatch and label styles.
+
+### [B36] Base color row invisible in the ramp's color list · `wrong but workable`
+**🟡 Superseded 2026-10-21, awaiting Dana's test:** base is no longer a special row, every ramp color is an equal stop (see `ROADMAP.md` 07.4) · **Found:** 2026-10-21 · **Where:** `ui/panels/ColorRampEditor.tsx`
+
+**What happens**
+- The list shows every stop except base. Its space is still there, as an empty gap above the first row.
+
+**Cause**
+- One value meaning two things. `null` means both "no stop is fading out on delete" and "this row is base", so base always matches the fade-out state and stays fully transparent. First blamed on a stale browser tab, which was wrong.
 
 ### [B22] Panel width changed with content · `wrong but workable`
 **✅ Fixed:** 2026-09-30 · **Found:** 2026-09-30
@@ -403,26 +601,35 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **Fix**
 - The planet renders as patches that subdivide by camera distance (CDLOD-style, see `REFERENCES.md`), walking `patch.ts`'s existing quadtree, each patch baking and sampling its own small heightmap via `heightmapPipeline.bakeRegionToTarget()` (a new method, since the existing `renderRegion`/`renderDisplayRegion` each only ever hold one texture at a time, and the planet now needs many simultaneously).
 - **Seam handling**: a restricted quadtree, no two same-face neighboring patches differ by more than one depth level, plus a physical skirt around every patch's edge to visually cover whatever gap a one-level difference (or an un-balanced cross-face boundary) still leaves. Full CDLOD vertex-morphing across every neighbor combination was the more complete alternative; this is the simpler, well-known mitigation, chosen given the scope of a single pass.
-- **Known gap, not silently dropped**: cross-face seam balancing (between two different cube faces, not just within one) isn't implemented, only same-face. The skirt mitigates how visible this is but doesn't eliminate it. Worth a follow-up pass once Dana has actually seen how noticeable it is.
+- **Cross-face seam balancing is now built** (2026-10-21), checked by an automated watertight topology test, and awaits Dana's on-screen test. It was a known gap before this.
 - **Known gap**: Wireframe display mode isn't reimplemented for patches this pass, selecting it falls back to the old single-mesh planet (kept fully intact behind `USE_PLANET_PATCHES` in `SceneCanvas.tsx`, a real fallback, not scaffolding).
 - A side effect worth knowing: the old pole/seam-unwrapping complexity in `planet/mesh.ts` (`SEAM_FACE`, `facePatches`, equirect UV unwrapping) existed specifically because of the lat/long tangent basis the single shared map needed. A patch's own cube-face-local tangent basis has no pole singularity and no wrap line at all, so this likely also resolves [B26], not just [B28], though that needs Dana's own visual confirmation, not asserted here.
 - **Regression, 2026-10-18:** turning this on made the planet render almost entirely black with the whole app feeling frozen/unresponsive. Root cause not confirmed, strongest lead (noted in-code, `SceneCanvas.tsx`) is the per-frame patch reselect/rebake in `PlanetPatchRenderer.updatePatches`. `USE_PLANET_PATCHES` was set back to `false` as a working fallback (the old single-mesh path stays fully built either way, just hidden) rather than shipped broken. Still open: diagnose this for real, fix it, flip the flag back to `true`. This is what actually governs the planet's resolution ceiling, the 256 limit Dana's been seeing belongs to the old fallback mesh (`meshSegments`), not to this system.
-- **Re-tested, 2026-10-19:** a diagnostic fork ruled out three real candidates for the blackness/freeze by checking actual Three.js source (scissor/viewport bleed, float-texture mipmap filtering, an LOD explosion at the default camera distance), and found one small, genuine, unrelated bug (`planetPatch.frag.glsl`'s bump gradient sampled `.r` instead of `.g`, the project's own elevation-channel convention, cosmetic only, not yet fixed). `USE_PLANET_PATCHES` was then actually flipped to `true` to get real output: the near-black/frozen regression did **not** reproduce. What Dana saw instead: the Scene panel's stored default lighting values read as near-black on this terrain (not a patches-specific bug), and visible dark seams between patches, not aligning, "the main issue." The original 2026-10-18 report was most likely this same bad-default-lighting reading as "black," compounded by the choppy-load issue below reading as "frozen," not a deeper rendering bug, though this isn't asserted with certainty, only consistent with everything observed since.
-- **Fixed, 2026-10-19 — the chunk and planet didn't actually agree on lighting:** Dana: "the chunk looks dark, why don't they match, the chunk should be located where the planet is." Real cause: the land chunk always renders its patch flat with world +Y as "up," but the patch itself can be anywhere on the real sphere, with its own real outward direction. The chunk fed the raw shared light vector straight in regardless, correct only by coincidence for a patch directly under the light. Confirmed by Dana's own empirical detail: the mismatch showed up "mostly" in light elevation, exactly the component measured against local up, so the most sensitive to this. Fixed with `planet/patch.ts`'s new `patchLightDirection()`, the same East-North-Up-style reframing geodesy uses to re-express a direction at a point on a sphere (see `REFERENCES.md`): rotates the shared light vector by whatever rotation takes the patch's real surface direction to `(0,1,0)`. `LandChunkCanvas.tsx` now takes `patch` as a prop and uses this instead of the raw vector; `App.tsx` passes it through.
+- **Re-tested, 2026-10-19:** a diagnostic fork ruled out three real candidates for the blackness/freeze by checking actual Three.js source (scissor/viewport bleed, float-texture mipmap filtering, an LOD explosion at the default camera distance), and found one small, genuine, unrelated bug (`planetPatch.frag.glsl`'s bump gradient sampled `.r` instead of `.g`, the project's own elevation-channel convention, cosmetic only, not yet fixed). `USE_PLANET_PATCHES` was then actually flipped to `true` to get real output: the near-black/frozen regression did **not** reproduce.
+  - What Dana saw instead: the Scene panel's stored default lighting values read as near-black on this terrain (not a patches-specific bug), and visible dark seams between patches, not aligning, "the main issue." The original 2026-10-18 report was most likely this same bad-default-lighting reading as "black," compounded by the choppy-load issue below reading as "frozen," not a deeper rendering bug, though this isn't asserted with certainty, only consistent with everything observed since.
+- **Fixed, 2026-10-19: the chunk and planet didn't actually agree on lighting:** Dana: "the chunk looks dark, why don't they match, the chunk should be located where the planet is." Real cause: the land chunk always renders its patch flat with world +Y as "up," but the patch itself can be anywhere on the real sphere, with its own real outward direction.
+  - The chunk fed the raw shared light vector straight in regardless, correct only by coincidence for a patch directly under the light. Confirmed by Dana's own empirical detail: the mismatch showed up "mostly" in light elevation, exactly the component measured against local up, so the most sensitive to this.
+  - Fixed with `planet/patch.ts`'s new `patchLightDirection()`, the same East-North-Up-style reframing geodesy uses to re-express a direction at a point on a sphere (see `REFERENCES.md`): rotates the shared light vector by whatever rotation takes the patch's real surface direction to `(0,1,0)`. `LandChunkCanvas.tsx` now takes `patch` as a prop and uses this instead of the raw vector; `App.tsx` passes it through.
 - **Reverted, 2026-10-20:** the rotation above made the chunk go dark whenever its current patch happened to face away from the light, real and physically consistent, but not what Dana wants: "it's located somewhere in space so it really doesn't matter... the chunk should always have light on it, but i should be able to tweak the lighting settings." The chunk is an inspection view, not a simulation of that exact spot's day/night side. `patchLightDirection()` removed entirely (now unused), `LandChunkCanvas.tsx` back to the raw shared vector, its own `patch` prop and `App.tsx`'s pass-through removed along with it.
 - **Found the same turn, the actual remaining cause of chunk darkness:** independent of the above, the Scene panel's own default `lightDirY` was `-1` (light from *below* horizontal). The chunk's top surface always faces exactly `+Y`, so a negative `lightDirY` gives it zero real diffuse light, ambient only, dark by construction, regardless of rotation or direction logic. The planet never showed this, a sphere always has some surface facing any given direction. Fixed in `scene/sceneControls.ts`: `lightDirY` flipped from `-1` to `1`, sign only, same grazing character intended for the 2026-10-19 default otherwise.
-- **Still dark after that, 2026-10-20 — the real structural fix.** The sign flip wasn't enough: a grazing elevation (small vertical component relative to the horizontal ones) is reasonable *on the planet*, where a sphere always has some point facing closer to the light, but the chunk's fixed flat `+Y` can never get that — any sufficiently grazing shared elevation dims it, sign aside. Dana: "they can share all light settings, beside the elevation." Fixed by actually splitting that one value: `scene/sceneControls.ts` gained `chunkLightDirZ`/`setChunkLightDirZ`, independent of the planet's own `lightDirZ`, defaulted to `0.7` (Dana's own found-by-testing value). `App.tsx` feeds the chunk this instead of the shared value; the Scene panel's "Light elevation" slider rebinds between the two by `activeViewContext`, the same established pattern already used for Radius/Size and Resolution. Every other light setting (ambient, intensity, X/Y position, specular, shininess) stays genuinely shared, only elevation doesn't.
-- **Also added, same turn — Half Lambert for the chunk's own diffuse term** (`shaders/chunk.frag.glsl`, Mitchell, "Shading in Valve's Source Engine," SIGGRAPH 2006, see `REFERENCES.md`): softens the falloff instead of hard-clamping to 0 at a 90° angle, so the chunk doesn't go fully flat/unlit on its "back" side the way plain Lambert can. Complements the elevation split above rather than replacing it, a safety margin for whatever elevation gets picked, not the fix for the structural problem itself.
+- **Still dark after that, 2026-10-20: the real structural fix.** The sign flip wasn't enough: a grazing elevation (small vertical component relative to the horizontal ones) is reasonable *on the planet*, where a sphere always has some point facing closer to the light, but the chunk's fixed flat `+Y` can never get that, any sufficiently grazing shared elevation dims it, sign aside. Dana: "they can share all light settings, beside the elevation."
+  - Fixed by actually splitting that one value: `scene/sceneControls.ts` gained `chunkLightDirZ`/`setChunkLightDirZ`, independent of the planet's own `lightDirZ`, defaulted to `0.7` (Dana's own found-by-testing value). `App.tsx` feeds the chunk this instead of the shared value; the Scene panel's "Light elevation" slider rebinds between the two by `activeViewContext`, the same established pattern already used for Radius/Size and Resolution.
+  - Every other light setting (ambient, intensity, X/Y position, specular, shininess) stays genuinely shared, only elevation doesn't.
+- **Also added, same turn, Half Lambert for the chunk's own diffuse term** (`shaders/chunk.frag.glsl`, Mitchell, "Shading in Valve's Source Engine," SIGGRAPH 2006, see `REFERENCES.md`): softens the falloff instead of hard-clamping to 0 at a 90° angle, so the chunk doesn't go fully flat/unlit on its "back" side the way plain Lambert can. Complements the elevation split above rather than replacing it, a safety margin for whatever elevation gets picked, not the fix for the structural problem itself.
 - **Default specular lowered, 2026-10-20** (Dana: "too harsh"): `scene/sceneControls.ts`'s `specularStrength` default, `0.3` → `0`. Shared by both views, still a live, adjustable slider either way.
 - **Changed, 2026-10-19:** the Scene panel's stored default lighting values (`scene/sceneControls.ts`) were visibly too dark against real terrain. Updated after the fix above landed, so judged against a chunk that actually agrees with the planet: `ambientLight` 0.12→0.26, `lightDirX` 1→1.6, `lightDirY` 1→-1, `lightDirZ` 1→-4.3.
-- **Fixed, 2026-10-19 — choppy loading:** `PlanetPatchRenderer.updatePatches` built and baked every newly-visible patch synchronously (a real GPU bake plus a `ShaderMaterial` compile each), so a burst of patches becoming visible at once (first load, especially) was a real spike in one frame. Fixed with a pending-build queue (`pendingBuilds`) drained at most `MAX_NEW_PATCHES_PER_FRAME` (4) patches per call, regardless of the camera-movement reselect throttle, so a burst spreads across several frames instead. Matches Unigine's own terrain-streaming docs, which cap tiles loaded per frame the same way (see `REFERENCES.md`).
+- **Fixed, 2026-10-19: choppy loading:** `PlanetPatchRenderer.updatePatches` built and baked every newly-visible patch synchronously (a real GPU bake plus a `ShaderMaterial` compile each), so a burst of patches becoming visible at once (first load, especially) was a real spike in one frame. Fixed with a pending-build queue (`pendingBuilds`) drained at most `MAX_NEW_PATCHES_PER_FRAME` (4) patches per call, regardless of the camera-movement reselect throttle, so a burst spreads across several frames instead. Matches Unigine's own terrain-streaming docs, which cap tiles loaded per frame the same way (see `REFERENCES.md`).
 - **The patch seams**, "the main issue" per Dana: dark gaps between patches, appearing mid-face (not at an actual cube-face boundary), so distinct from the already-known, already-logged cross-face seam gap below. A fork traced this to two separate, real, confirmed causes, not one:
-  - **Fixed, 2026-10-19 — a half-texel edge misalignment.** Each patch bakes its own heightmap independently, and a GPU samples a texture at each texel's own center, not its edge, so a patch's edge texel actually held the height for a point slightly inside the patch, not the true boundary. Two neighbors each inset in opposite directions around what's meant to be one shared line, so even matching-resolution neighbors could disagree slightly right at the seam. Fixed the standard way GeoTIFF/DEM tiling handles this exact "pixel is area vs. pixel is point" mismatch (see `REFERENCES.md`): `shaders/heightmap.frag.glsl` now remaps its region-bake `vUv` to land exactly on the true boundary at the first/last texel, via a new `uRegionSamples` uniform (the bake target's own resolution, set in `map/heightmap.ts`'s `bakeRegionInto()`).
-  - **In progress, the bigger one — different vertex counts across an LOD boundary.** Every patch always uses a fixed 65 vertices per edge regardless of its own physical size, so where one patch is subdivided one level further than its neighbor, the neighbor's single edge spans the same physical distance the two finer patches cover with twice as many points. Every other one of those extra points exists on the finer side with its own real height and simply isn't represented on the coarser side at all, a classic T-junction crack, and neither side's skirt (which only extends its own existing edge points straight down) bridges it. The established fix (de Boer's geomipmapping, see `REFERENCES.md`) is a triangle fan stitching the extra points down to the coarser edge. Broken into testable stages, built one at a time so Dana can confirm each before the next builds on it:
+  - **Fixed, 2026-10-19: a half-texel edge misalignment.** Each patch bakes its own heightmap independently, and a GPU samples a texture at each texel's own center, not its edge, so a patch's edge texel actually held the height for a point slightly inside the patch, not the true boundary.
+    - Two neighbors each inset in opposite directions around what's meant to be one shared line, so even matching-resolution neighbors could disagree slightly right at the seam.
+    - Fixed the standard way GeoTIFF/DEM tiling handles this exact "pixel is area vs. pixel is point" mismatch (see `REFERENCES.md`): `shaders/heightmap.frag.glsl` now remaps its region-bake `vUv` to land exactly on the true boundary at the first/last texel, via a new `uRegionSamples` uniform (the bake target's own resolution, set in `map/heightmap.ts`'s `bakeRegionInto()`).
+  - **In progress, the bigger one, different vertex counts across an LOD boundary.** Every patch always uses a fixed 65 vertices per edge regardless of its own physical size, so where one patch is subdivided one level further than its neighbor, the neighbor's single edge spans the same physical distance the two finer patches cover with twice as many points. Every other one of those extra points exists on the finer side with its own real height and simply isn't represented on the coarser side at all, a classic T-junction crack, and neither side's skirt (which only extends its own existing edge points straight down) bridges it.
+    - The established fix (de Boer's geomipmapping, see `REFERENCES.md`) is a triangle fan stitching the extra points down to the coarser edge. Broken into testable stages, built one at a time so Dana can confirm each before the next builds on it:
     - **Stage 1, landed 2026-10-20:** `planet/planetPatches.ts` gained `computeStitchFlags()` (new `EdgeStitchFlags` type), flagging, per patch, which of its four edges border two same-face neighbors one level finer. `planet/planetPatchMesh.ts`'s `buildPatchGeometry` gained a `stitchFlags` parameter, but only actually stitched the **top** edge that stage, on purpose, as the smallest first testable piece.
-    - **Stages 2+3, landed 2026-10-20/21:** generalized to all four edges, plus the corner case (a patch with two adjacent edges both needing stitching at once), which de Boer's own technique doesn't cover on its own (it bridges one edge's 2:1 density change, not two meeting at a point). `buildPatchGeometry` rebuilt around a corner-aware architecture: the four corners are now single shared vertices (not owned by either adjacent edge), each edge is its own strip between its two corners (plain or doubled density per its own flag), the interior stays a plain fixed grid one ring smaller than the full patch, and each corner's own small unit cell is triangulated as a fan from the corner vertex across however many points its two adjacent edges actually have there (4, 5, or 6, depending on 0/1/2 of them being doubled) — reasoned through directly via worked examples for each case, then confirmed with an automated topology check (every edge in the combined surface+skirt mesh shared by exactly 2 triangles, except real free boundaries), run across 11 representative stitch-flag combinations including every pair of adjacent edges and all four at once: identical result in every case, 0 new topological defects relative to the unstitched baseline.
-    - **Open scope question, not yet decided:** a patch's geometry is only built once, when first selected. If a neighbor's depth changes later while this patch stays selected, nothing today triggers a rebuild for this patch, so a seam could reappear without this patch itself changing. Fix now or log as a known, accepted gap (same way the cross-face gap above is) is Dana's call, not resolved here.
-- **Fixed, 2026-10-20 — the planet's own Resolution slider silently stopped doing anything.** `meshSegments` only ever controlled the old single whole-globe mesh, which patches now hide in every display mode except Wireframe (patches don't have their own wireframe overlay yet, a known, separate gap, see `ROADMAP.md`). Dana: "the res slider isnt doing anything." Fixed in `ui/Panel.tsx`: the slider now disables itself for the planet outside Wireframe mode, with a description explaining why, instead of silently doing nothing.
+    - **Stages 2+3, landed 2026-10-20/21:** generalized to all four edges, plus the corner case (a patch with two adjacent edges both needing stitching at once), which de Boer's own technique doesn't cover on its own (it bridges one edge's 2:1 density change, not two meeting at a point).
+      - `buildPatchGeometry` rebuilt around a corner-aware architecture: the four corners are now single shared vertices (not owned by either adjacent edge), each edge is its own strip between its two corners (plain or doubled density per its own flag), the interior stays a plain fixed grid one ring smaller than the full patch, and each corner's own small unit cell is triangulated as a fan from the corner vertex across however many points its two adjacent edges actually have there (4, 5, or 6, depending on 0/1/2 of them being doubled), reasoned through directly via worked examples for each case, then confirmed with an automated topology check (every edge in the combined surface+skirt mesh shared by exactly 2 triangles, except real free boundaries), run across 11 representative stitch-flag combinations including every pair of adjacent edges and all four at once: identical result in every case, 0 new topological defects relative to the unstitched baseline.
+    - **Resolved, 2026-10-21:** a kept patch now rebuilds its geometry when a neighbor's depth changes (`[B39]`). Built, awaiting Dana's on-screen test.
+- **Fixed, 2026-10-20: the planet's own Resolution slider silently stopped doing anything.** `meshSegments` only ever controlled the old single whole-globe mesh, which patches now hide in every display mode except Wireframe (patches don't have their own wireframe overlay yet, a known, separate gap, see `ROADMAP.md`). Dana: "the res slider isnt doing anything." Fixed in `ui/Panel.tsx`: the slider now disables itself for the planet outside Wireframe mode, with a description explaining why, instead of silently doing nothing.
 
 ### [B05] 📋 GPU compute for voxel meshing
 **📋 Tracked, not scheduled** · **Raised:** 2026-09-23

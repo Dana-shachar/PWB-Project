@@ -1,9 +1,22 @@
 import { useRef, useState, type RefObject } from 'react';
 import { Slider, Select, Toggle, Accordion, EditableText } from './UIElements';
+import { LayerMaskButton } from './MaskControls';
 import { MapView } from '../map/MapView';
-import { NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, type NoiseLayer, type NoiseType, type BlendMode, type StrokeRecord } from '../map/heightmap';
+import {
+  NOISE_TYPE_OPTIONS,
+  BLEND_MODE_OPTIONS,
+  VORONOI_DISTANCE_OPTIONS,
+  FRACTAL_TYPE_OPTIONS,
+  type NoiseLayer,
+  type NoiseType,
+  type BlendMode,
+  type VoronoiDistance,
+  type FractalType,
+  type StrokeRecord,
+} from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 import { DiceIcon, EyeIcon } from './icons';
+import { sliderRange } from '../map/noiseRanges';
 
 // One contained tab per modifier (ui/NoisePanel.tsx's Modifiers section) —
 // Gaea's fixed order: Domain warp → generator/Octaves → Ridged → Terrace.
@@ -50,6 +63,7 @@ interface NoisePanelProps {
   onReorderLayer: (draggedId: string, targetId: string) => void;
   // Applies to every selected layer at once, not just the primary one.
   onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
+  onUpdateLayers: (ids: string[], patch: Partial<NoiseLayer>) => void;
   onRandomizeTerrain: () => void;
   brushRadiusPx: number;
   onBrushRadiusPxChange: (value: number) => void;
@@ -92,6 +106,7 @@ export function NoisePanel({
   onRenameLayer,
   onReorderLayer,
   onUpdateSelectedLayer,
+  onUpdateLayers,
   onRandomizeTerrain,
   brushRadiusPx,
   onBrushRadiusPxChange,
@@ -310,15 +325,18 @@ export function NoisePanel({
                   preview, the 3D planet, and the land chunk instantly, same
                   as any other layer edit. The whole row (not just this icon)
                   dims when hidden — see .noise-layer-row--hidden. */}
-              <button
-                type="button"
-                className="panel-text-btn noise-layer-row-visibility ui-tooltip-anchor"
-                onMouseDown={(event) => event.stopPropagation()}
-                onClick={() => onToggleLayerVisible(layer.id)}
-              >
-                <EyeIcon />
-                <span className="ui-tooltip">Show/hide this layer</span>
-              </button>
+              <span className="noise-layer-row-actions">
+                <LayerMaskButton layer={layer} selectedLayerIds={selectedLayerIds} onUpdateLayers={onUpdateLayers} />
+                <button
+                  type="button"
+                  className="panel-text-btn noise-layer-row-visibility ui-tooltip-anchor"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  onClick={() => onToggleLayerVisible(layer.id)}
+                >
+                  <EyeIcon />
+                  <span className="ui-tooltip">Show/hide this layer</span>
+                </button>
+              </span>
             </div>
           ))}
         <div className="panel-btn-row">
@@ -347,13 +365,31 @@ export function NoisePanel({
           options={NOISE_TYPE_OPTIONS}
           description="The base generator this layer builds on. Random is pure static; Perlin and Simplex are smooth rolling noise; Voronoi gives cell-like, sharp-edged patterns."
         />
+        {/* Voronoi only: its cell points and how distance to them is measured
+            (Blender's Randomness and Distance, Gaea's Jitter and Function). */}
+        {selectedLayer.noiseType === 'voronoi' && (
+          <>
+            <Select
+              label="Distance"
+              value={selectedLayer.voronoiDistance ?? 'euclidean'}
+              onChange={(value) => onUpdateSelectedLayer({ voronoiDistance: value as VoronoiDistance })}
+              options={VORONOI_DISTANCE_OPTIONS}
+              description="How the distance to the nearest cell point is measured. Euclidean gives round cells, Manhattan diamond-shaped ones, Chebychev square ones."
+            />
+            <Slider
+              label="Jitter"
+              value={selectedLayer.voronoiJitter ?? 1}
+              onChange={(value) => onUpdateSelectedLayer({ voronoiJitter: value })}
+              {...sliderRange('voronoiJitter')}
+              description="How far each cell's point strays from its cell's center. 0 gives a regular grid of cells, 1 is fully random."
+            />
+          </>
+        )}
         <Slider
           label="Seed"
           value={selectedLayer.seed}
           onChange={(value) => onUpdateSelectedLayer({ seed: value })}
-          min={0}
-          max={1000}
-          step={1}
+          {...sliderRange('seed')}
           precision={0}
           description="Which random variation of this noise type to generate. Same noise type and frequency, different seed, a different world — see Randomize below for all layers at once."
         />
@@ -361,18 +397,60 @@ export function NoisePanel({
           label="Frequency"
           value={selectedLayer.frequency}
           onChange={(value) => onUpdateSelectedLayer({ frequency: value })}
-          min={0.5}
-          max={20}
-          step={0.1}
+          {...sliderRange('frequency')}
           description="How many noise features fit across the surface. Low values are broad, continent-scale shapes; high values are small, dense detail."
         />
+        {/* Translate and per-axis stretch, as Unity, Blender, Gaea and
+            Terragen offer them; closed by default to keep the section short. */}
+        <Accordion title="Transform" nested defaultOpen={false}>
+          <Slider
+            label="Offset X"
+            value={selectedLayer.offsetX ?? 0}
+            onChange={(value) => onUpdateSelectedLayer({ offsetX: value })}
+            {...sliderRange('offset')}
+            description="Slides the noise along the X axis, in noise cells. A different way to get a new pattern than Seed, since the same shapes just move."
+          />
+          <Slider
+            label="Offset Y"
+            value={selectedLayer.offsetY ?? 0}
+            onChange={(value) => onUpdateSelectedLayer({ offsetY: value })}
+            {...sliderRange('offset')}
+            description="Slides the noise along the Y axis, in noise cells."
+          />
+          <Slider
+            label="Offset Z"
+            value={selectedLayer.offsetZ ?? 0}
+            onChange={(value) => onUpdateSelectedLayer({ offsetZ: value })}
+            {...sliderRange('offset')}
+            description="Slides the noise along the Z axis, in noise cells."
+          />
+          <Slider
+            label="Stretch X"
+            value={selectedLayer.stretchX ?? 1}
+            onChange={(value) => onUpdateSelectedLayer({ stretchX: value })}
+            {...sliderRange('stretch')}
+            description="Scales the noise's frequency along the X axis. Above 1 squeezes features thinner along X, below 1 stretches them out."
+          />
+          <Slider
+            label="Stretch Y"
+            value={selectedLayer.stretchY ?? 1}
+            onChange={(value) => onUpdateSelectedLayer({ stretchY: value })}
+            {...sliderRange('stretch')}
+            description="Scales the noise's frequency along the Y axis."
+          />
+          <Slider
+            label="Stretch Z"
+            value={selectedLayer.stretchZ ?? 1}
+            onChange={(value) => onUpdateSelectedLayer({ stretchZ: value })}
+            {...sliderRange('stretch')}
+            description="Scales the noise's frequency along the Z axis."
+          />
+        </Accordion>
         <Slider
           label="Opacity"
           value={selectedLayer.opacity}
           onChange={(value) => onUpdateSelectedLayer({ opacity: value })}
-          min={0}
-          max={1}
-          step={0.01}
+          {...sliderRange('opacity')}
           description="How much this layer shows in the 2D shape/paint composite. Independent of Height below — a layer at 0 opacity still affects real elevation."
         />
         {/* Amplitude/strength, same concept as a height layer in Blender/
@@ -386,9 +464,7 @@ export function NoisePanel({
           label="Height"
           value={selectedLayer.heightScale ?? 1}
           onChange={(value) => onUpdateSelectedLayer({ heightScale: value })}
-          min={0}
-          max={10}
-          step={0.1}
+          {...sliderRange('layerHeight')}
           description="How much this layer contributes to real elevation, additive with every other layer and scaled again by the Terrain Height slider above. Unrelated to Opacity — this drives actual relief, not the 2D preview."
         />
         <Select
@@ -458,10 +534,23 @@ export function NoisePanel({
                     label="Warp strength"
                     value={selectedLayer.warpStrength}
                     onChange={(value) => onUpdateSelectedLayer({ warpStrength: value })}
-                    min={0}
-                    max={4}
-                    step={0.1}
+                    {...sliderRange('warpStrength')}
                     description="How far the coordinates are pushed before evaluating the noise. Higher values bend features into stronger swirls."
+                  />
+                  <Slider
+                    label="Warp scale"
+                    value={selectedLayer.warpScale ?? 1}
+                    onChange={(value) => onUpdateSelectedLayer({ warpScale: value })}
+                    {...sliderRange('warpScale')}
+                    description="How fine the warp's own pattern is. Low values give broad, slow bends; high values give tight, choppy ones."
+                  />
+                  <Slider
+                    label="Warp octaves"
+                    value={selectedLayer.warpOctaves ?? 1}
+                    onChange={(value) => onUpdateSelectedLayer({ warpOctaves: value })}
+                    {...sliderRange('warpOctaves')}
+                    precision={0}
+                    description="How many layered copies the warp is built from. More octaves roughen the bends with finer detail, at a higher cost to compute."
                   />
                 </div>
               )}
@@ -477,28 +566,48 @@ export function NoisePanel({
                     label="Octaves"
                     value={selectedLayer.octaves}
                     onChange={(value) => onUpdateSelectedLayer({ octaves: value })}
-                    min={1}
-                    max={8}
-                    step={1}
+                    {...sliderRange('octaves')}
                     precision={0}
-                    description="How many layered copies to sum. More octaves add finer detail at a higher cost to compute."
+                    description="How many layered copies to sum. More octaves add finer detail at a higher cost to compute. Zooming in on the planet adds finer octaves automatically."
                   />
+                  <Select
+                    label="Fractal type"
+                    value={selectedLayer.fractalType ?? 'fbm'}
+                    onChange={(value) => onUpdateSelectedLayer({ fractalType: value as FractalType })}
+                    options={FRACTAL_TYPE_OPTIONS}
+                    description="How the octaves combine. fBm adds them evenly. Multifractal and Hybrid vary the roughness by place. Hetero terrain keeps low ground smooth and high ground rough. Ridged multifractal makes sharp ridges with detail only on them."
+                  />
+                  {/* Offset applies to every type but fBm and multifractal; Gain only to hybrid and ridged. */}
+                  {['hybrid', 'hetero', 'ridgedMulti'].includes(selectedLayer.fractalType ?? 'fbm') && (
+                    <Slider
+                      label="Fractal offset"
+                      value={selectedLayer.fractalOffset ?? 0}
+                      onChange={(value) => onUpdateSelectedLayer({ fractalOffset: value })}
+                      {...sliderRange('fractalOffset')}
+                      description="Shifts the noise before the octaves combine (Blender's Offset). It sets the base height the rougher octaves build on, and how much of the ground stays smooth."
+                    />
+                  )}
+                  {['hybrid', 'ridgedMulti'].includes(selectedLayer.fractalType ?? 'fbm') && (
+                    <Slider
+                      label="Fractal gain"
+                      value={selectedLayer.fractalGain ?? 1}
+                      onChange={(value) => onUpdateSelectedLayer({ fractalGain: value })}
+                      {...sliderRange('fractalGain')}
+                      description="How strongly each octave lets the next, finer one show (Blender's Gain). Higher values make rough areas rougher and leave smooth areas smoother."
+                    />
+                  )}
                   <Slider
                     label="Persistence"
                     value={selectedLayer.persistence}
                     onChange={(value) => onUpdateSelectedLayer({ persistence: value })}
-                    min={0}
-                    max={1}
-                    step={0.05}
+                    {...sliderRange('persistence')}
                     description="How much each added octave is scaled down from the last. Higher values keep fine detail loud relative to the broad shape."
                   />
                   <Slider
                     label="Lacunarity"
                     value={selectedLayer.lacunarity}
                     onChange={(value) => onUpdateSelectedLayer({ lacunarity: value })}
-                    min={1}
-                    max={4}
-                    step={0.1}
+                    {...sliderRange('lacunarity')}
                     description="How much each added octave's frequency increases from the last. Higher values pack detail in tighter."
                   />
                 </div>
@@ -520,10 +629,22 @@ export function NoisePanel({
                     label="Ridge amount"
                     value={selectedLayer.ridgeAmount ?? 1}
                     onChange={(value) => onUpdateSelectedLayer({ ridgeAmount: value })}
-                    min={0}
-                    max={1}
-                    step={0.01}
+                    {...sliderRange('ridgeAmount')}
                     description="Blends between the plain noise and the fully ridged version. 0 is unridged, 1 is fully folded into peaks."
+                  />
+                  <Slider
+                    label="Ridge offset"
+                    value={selectedLayer.ridgeOffset ?? 1}
+                    onChange={(value) => onUpdateSelectedLayer({ ridgeOffset: value })}
+                    {...sliderRange('ridgeOffset')}
+                    description="Where the fold sits (Blender's Offset). Lower values push the ridges down, higher values raise them."
+                  />
+                  <Slider
+                    label="Ridge gain"
+                    value={selectedLayer.ridgeGain ?? 1}
+                    onChange={(value) => onUpdateSelectedLayer({ ridgeGain: value })}
+                    {...sliderRange('ridgeGain')}
+                    description="How strongly a ridge lets the next, finer octave show (Blender's Gain). Higher values give sharper, busier ridges."
                   />
                 </div>
               )}
@@ -539,9 +660,7 @@ export function NoisePanel({
                     label="Terrace steps"
                     value={selectedLayer.terraceSteps}
                     onChange={(value) => onUpdateSelectedLayer({ terraceSteps: value })}
-                    min={2}
-                    max={20}
-                    step={1}
+                    {...sliderRange('terraceSteps')}
                     precision={0}
                     description="How many flat steps the full height range is divided into. Fewer steps make each terrace taller and more pronounced."
                   />

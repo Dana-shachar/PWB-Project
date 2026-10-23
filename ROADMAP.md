@@ -8,7 +8,23 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Pick up here (2026-10-21):** Stage 07.4 below, "To do." Next task is real elevation numbers on the color-ramp picker's position column — not started, needs the live elevation range plumbed from `scene/SceneCanvas.tsx` up to the UI panel, see that section for the full note. Planet-side cast shadows are the other open item there. Everything else from the 2026-10-20/21 session (planet patch seams, the gradient ramp picker, land chunk lighting) is done, committed, and pushed to `main`.
+> **Start from here (2026-10-21):** *a fresh session reads this block, then `CLAUDE.md`, then `CODE-INDEX.md` before searching the code.*
+>
+> **State.** Everything built this session is **uncommitted and untested on screen** (about 40 modified files). Typecheck passes. Shaders compiled with no console errors in Dana's test, but most new features were never exercised. The last build, the planet Resolution in pixels, is finished in code: a reversed log slider (lower is sharper, default 8 px), saves migrate to `detailVersion` 4, bakes up to 1025 samples within a texel budget, mesh tiers 64, 128 and 256, depth cap 11 (limited by float precision). The old Node harness in the scratchpad no longer builds against the new patch code and needs updating.
+>
+> **Next step.** Dana tests the batch (noise controls and new fractal types, masks, planet zoom and Resolution, tooltips, lighting and ramp), then fixes, then docs, then a commit with no attribution.
+>
+> **Loose threads, in build order**
+> - **Modifier fade, second pass.** Ridged, Terrace, warp and Voronoi shimmer when features are smaller than the grid. Approved: fade before the non-linear step and soften step edges only as wide as the grid spacing, constants tunable. Partly inferred, flagged in `REFERENCES.md`.
+> - **Bounded heights.** A smooth limit on total elevation. Layer Height shown as a percent of the maximum elevation (-100 to 100), negative allowed. Output clamp lives here.
+> - **Plateau shaping** (Gaea Clamp style), then **Height in meters plus Exaggeration** (replaces `[S15]`).
+> - **Undo/redo last** (`[S30]`): settings and the paint log only, Randomize and Shuffle one step each.
+> - **Planet cast shadows**, per patch, after the patch work is accepted.
+> - **Later:** Erosion slider audit, group masks, a generic preview component, Billow and Strata (no formulas found).
+>
+> **Known risks.** Octave cost is not counted in the per-frame build budget. Cracks or content mismatches between neighbors at different depths (skirts only). Frustum culling not built. The Hoskins hash constants were typed from memory and unverified. Voronoi Jitter defaults to its maximum, so the slider only goes down.
+>
+> **Rules in force.** No forks, and no agent without Dana's yes and a cost estimate (memory `no-expensive-agents`). Read `CODE-INDEX.md` first and read narrowly, edit docs directly (the index too), plan before acting, design-system components only, no attribution anywhere. Research first: no improvised methods, cite sources and say what is unverified.
 
 **Overall** ▓▓▓▓▓▓░░░░ 61%
 
@@ -24,19 +40,31 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 *The scaffold, the 3D scene, and the control panel everything else hangs off.*
 
 #### 01.1 · Project scaffold · 100%
+
+*The project the rest of the app is built in.*
+
 > **✅ Done**
 > - Vite, React, TypeScript and Three.js, following `active-geometry-project`'s conventions rather than the class repo's OOP pattern (2026-09-09).
 > - `App.tsx` is a composition root only. Each feature owns its state in its own hook (2026-09-22).
 
 #### 01.2 · 3D scene, camera, controls, grid · 100%
+
+*The 3D scene, its camera and controls, and the reference grid.*
+
 > **✅ Done**
 > - Scene, camera, orbit controls, and a shader-based infinite grid with spacing and visibility controls (2026-09-09 to 09-16).
 
 #### 01.3 · Gumball navigation widget · 100%
+
+*The on-screen widget for orienting and zooming the view.*
+
 > **✅ Done**
 > - Orientation widget with axis indicator, zoom, view presets and reset, scoped to the viewport (2026-09-09 to 09-14).
 
 #### 01.4 · Control panel UI system · 95%
+
+*The panel system every control sits in, and the stage menu.*
+
 > **✅ Done**
 > - Component set: `Slider`, `ColorPicker`, `Toggle`, `Select`. Sections are accordions throughout (2026-09-09 to 09-30).
 >
@@ -57,10 +85,16 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 *The planet itself: its geometry, its scale, and how its surface is divided.*
 
 #### 02.1 · Sphere geometry & radius control · 100%
+
+*The base sphere and the control for its size.*
+
 > **✅ Done**
 > - Geometry rebuilds on radius change alone, stays centered at the origin, range 1,000 to 100,000 km (2026-09-14 to 09-16).
 
 #### 02.2 · Base color, ambient light, display mode · 80%
+
+*The planet's flat color, the ambient light and the display mode.*
+
 > **✅ Done**
 > - Base color, ambient and light direction controls, and a Shaded/Wireframe/Voxel display mode (2026-09-09).
 >
@@ -68,6 +102,9 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 > - **❓ Color-picker theming.** Still native browser chrome. Keep native, use `react-colorful`, or hand-build.
 
 #### 02.3 · Cube sphere · 70%
+
+*The sphere built from six flat grids, one per cube face.*
+
 🧭 The planet is six flat grids pushed onto a sphere rather than a longitude/latitude grid, because a lat/long grid converges at two fixed points and cannot be subdivided locally. Groundwork for detail that follows the camera. Reasoning and rejected alternatives in `ISSUES.md`.
 
 > **✅ Done**
@@ -89,16 +126,25 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 *Generating terrain: noise types, the layer stack, and composable modifiers.*
 
 #### 03.1 · Base noise types · 100%
+
+*The base noise generators the terrain starts from.*
+
 > **✅ Done**
 > - Random, Perlin, Simplex and Voronoi, plus None. All verified against canonical sources rather than reproduced from memory, which caught a wrong constant (2026-09-14).
 
 #### 03.2 · Multi-layer stack & blend modes · 100%
+
+*Stacking noise layers and blending them.*
+
 > **✅ Done**
 > - Photoshop-style stack up to 16 layers: add, delete, drag to reorder, rename, per-layer visibility (2026-09-16 to 09-30).
 > - Seven blend modes, verified against Gaea's Combine node docs (2026-09-16).
 > - Multi-select with batch edit. Editing a control applies to every selected layer (2026-09-23).
 
 #### 03.3 · Modifier architecture · 100%
+
+*Optional modifiers that layer onto any generator.*
+
 > **✅ Done**
 > - **🧭 Modifiers are toggles, not types.** Domain warp, Octaves, Ridged and Terrace are independent toggles layered onto any base generator in Gaea's fixed order, rather than mutually exclusive types each secretly hardcoded to Perlin. Old saved layers migrate on load (2026-09-30).
 > - **🧭 Per-layer Height is its own channel**, separate from Opacity and Blend Mode. Opacity governs the 2D composite; Height contributes to real elevation. See `ISSUES.md` for why they collapsed into one number at first.
@@ -112,6 +158,9 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 *Authoring terrain by hand: the 2D canvas, the brush, and how strokes persist.*
 
 #### 04.1 · 2D heightmap canvas · 95%
+
+*The flat 2D map terrain is painted on.*
+
 > **✅ Done**
 > - Flat preview canvas that captures paint input, collapsible, and fills the panel width at the texture's real 2:1 proportions (2026-09-14 to 09-30).
 > - Expand replaces the 3D viewport's content rather than overlaying the whole window (2026-09-24).
@@ -123,6 +172,9 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 > - **Expand shows a black preview.** 🔴 open, 2026-10-13. Not yet diagnosed.
 
 #### 04.2 · Brush system · 90%
+
+*The brush used to paint on that map.*
+
 > **✅ Done**
 > - Absolute brush with a strength slider, Photoshop-style hardness feather, correct radius scaling, whole-stroke polyline rendering, and correct wrapping across the seam (2026-09-16 to 09-22).
 >
@@ -130,6 +182,9 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 > - **Terrain still jagged, feather subtle.** 🟡 open, tabled by Dana until after erosion. Likely the sphere's mesh resolution. See `ISSUES.md`, 2026-09-22.
 
 #### 04.3 · Paint persistence pipeline · 95%
+
+*Saving and replaying paint so it survives a reload.*
+
 > **✅ Done**
 > - Per-layer ping-pong paint textures with Porter-Duff compositing, pole-snapped sampling, and full stroke history saved and replayed to reconstruct exactly (2026-09-16 to 09-22).
 >
@@ -144,12 +199,18 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 *Turning the heightmap into visible relief, and lighting it.*
 
 #### 05.1 · GPU heightmap → displacement pipeline · 100%
+
+*Turning the heightmap into real surface displacement on the GPU.*
+
 > **✅ Done**
 > - Noise renders to a texture that the planet's vertex shader samples for displacement, with CPU readback available on demand (2026-09-14).
 > - **🧭 Shape and elevation are separate channels.** Shape drives the 2D canvas and painting; elevation is a purely additive per-layer sum that drives real height. Stored as float so elevation can go negative (2026-09-24).
 > - **🧭 Height is a percentage of its context**, not absolute scene units, so one value reads sensibly against both the planet's radius and the chunk's much smaller footprint (2026-09-24).
 
 #### 05.2 · Surface normal / lighting · 90%
+
+*How the surface is lit and shaded.*
+
 > **✅ Done**
 > - Analytic tangent basis, so the normal is smooth and independent of mesh resolution, perturbed by the heightmap's own gradient for fine detail (2026-09-16).
 >
@@ -166,10 +227,16 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 🧭 Firebase (Auth and Firestore) rather than browser-only storage, anonymous now with real sign-in later. Painting is saved as a chronological stroke log rather than a baked image, which is what makes it retraceable and makes undo fall out almost free. Full reasoning in `ISSUES.md`.
 
 #### 06.1 · Firebase setup & anonymous identity · 100%
+
+*Connecting to Firebase and identifying each visitor without a login.*
+
 > **✅ Done**
 > - Project, SDK wiring and anonymous sign-in, verified against the Firebase console (2026-09-22).
 
 #### 06.2 · Save/load, multi-project · 95%
+
+*Saving and loading several named projects.*
+
 > **✅ Done**
 > - Named planets as a subcollection per user, with security rules, so several versions can be saved and switched between (2026-09-22).
 > - Project Settings panel: inline-editable name, a list of saved planets to load or delete, new project, and a manual save (2026-09-23).
@@ -180,6 +247,9 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 > - **Live-test the multi-project flow** end to end.
 
 #### 06.3 · Save/load, paint stroke logs · 90%
+
+*Saving paint as a log of strokes.*
+
 > **✅ Done**
 > - Strokes recorded and replayed through the same path live painting uses, rather than a separate load-time renderer (2026-09-22).
 > - **Fixed: replayed strokes didn't show until clicked.** A real ordering bug, fixed by reordering rather than adding a refresh signal. See `ISSUES.md`.
@@ -188,6 +258,9 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 > - **Live-test**: paint, reload, confirm it reconstructs identically.
 
 #### 06.4 · Undo/Redo · 100%
+
+*Stepping back and forward through paint strokes.*
+
 > **✅ Done**
 > - Cmd+Z and Cmd+Shift+Z plus Edit-panel buttons, rebuilding from the stroke log. Covers paint strokes only (2026-09-22 to 09-23).
 
@@ -201,21 +274,27 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 A detail view into one piece of the planet, shown beside the globe, with a blocky or smooth render style. Syllabus-required, sequenced before Erosion at Dana's call.
 
 #### 07.1 · Terrain patches · 95%
+
+*Terrain split into patches, the unit both views are built from.*
+
 🧭 The chunk is a terrain patch drawn flat: the same unit the planet is made of, not a separate pipeline sampling a shared map. A patch is a cube face, a rectangle on it, and a depth, with its own heightmap. Follows how globe renderers work, where the whole surface is tiles and detail comes from descending rather than from bigger textures. Sources in `REFERENCES.md`.
 
 > **✅ Done**
 > - The chunk reads its own patch, so its Resolution reaches real detail instead of enlarging a small window of a shared map (2026-10-13).
 > - **🧭 Resolution and footprint are separate.** Resolution is how finely a patch's ground is measured; depth is which ground it covers (2026-10-13).
 > - **Picking.** Double-clicking the planet chooses which piece the chunk shows, replacing a hardcoded spot (2026-10-13).
-> - **The planet itself now renders as patches too** (`[B28]` in `ISSUES.md`), not just the chunk: camera-distance-based subdivision (CDLOD-style), per-patch baking, same-face seam balancing plus edge skirts. Built 2026-10-17, not yet visually verified by Dana. Cross-face seam balancing and a patches-aware Wireframe mode are known, flagged gaps, not done this pass.
+> - **The planet itself now renders as patches too** (`[B28]` in `ISSUES.md`), not just the chunk: camera-distance-based subdivision (CDLOD-style), per-patch baking, same-face seam balancing plus edge skirts. Built 2026-10-17, not yet visually verified by Dana. Cross-face seam balancing was built 2026-10-21 (untested). A patches-aware Wireframe mode is a known, deferred gap.
 >
 > **📋 To do**
 > - **❓ Footprint control.** How much ground the chunk covers has no control in the panel yet. Naming and placement are Dana's call. Not the same as the gumball's zoom, which moves the camera.
-> - **Cross-face seam balancing** for the planet's own patches, and a patches-aware Wireframe overlay, see `[B28]`.
-> - **`USE_PLANET_PATCHES` is back on** (2026-10-19) — the near-black-render/freeze regression didn't reproduce once actually tested; see `[B28]`'s own notes. Fixed along the way: the chunk/planet light-direction mismatch, the Scene panel's too-dark defaults, and choppy loading (patch bakes now budgeted per frame).
-> - **The patch seams** (`[B28]`): both causes fixed. A half-texel edge misalignment, and different vertex counts across an LOD boundary — the latter built in testable stages (Stage 1, the top edge alone, 2026-10-20; Stages 2+3, all four edges plus the corner case, 2026-10-20/21), verified watertight by an automated topology check across representative stitch-flag combinations. Still open: whether a patch should rebuild when a *neighbor's* depth changes later, not just on its own first build, Dana's call. See `[B28]` for the full technical detail.
+> - **A patches-aware Wireframe overlay**, deferred, see `[B28]`. Cross-face seam balancing is built, awaiting Dana's test.
+> - **`USE_PLANET_PATCHES` is back on** (2026-10-19), the near-black-render/freeze regression didn't reproduce once actually tested; see `[B28]`'s own notes. Fixed along the way: the chunk/planet light-direction mismatch, the Scene panel's too-dark defaults, and choppy loading (patch bakes now budgeted per frame).
+> - **The patch seams** (`[B28]`): both causes fixed. A half-texel edge misalignment, and different vertex counts across an LOD boundary, the latter built in testable stages (Stage 1, the top edge alone, 2026-10-20; Stages 2+3, all four edges plus the corner case, 2026-10-20/21), verified watertight by an automated topology check across representative stitch-flag combinations. Still open: whether a patch should rebuild when a *neighbor's* depth changes later, not just on its own first build, Dana's call. See `[B28]` for the full technical detail.
 
 #### 07.2 · Voxel meshing pipeline · 90%
+
+*Turning terrain into blocky cube geometry for the land chunk.*
+
 > **✅ Done**
 > - **🧭 Cube/culled-face meshing, not Marching Cubes**, since the goal is a blocky look and Marching Cubes produces the opposite.
 > - **🧭 Meshed on the CPU in a Worker**, so the main thread stays responsive. GPU compute deferred, as it would mean migrating the whole app's renderer.
@@ -226,40 +305,85 @@ A detail view into one piece of the planet, shown beside the globe, with a block
 > - **⏸️ Greedy meshing**, deferred until performance calls for it.
 
 #### 07.3 · Smooth render style · 100%
+
+*Drawing the land chunk as a smooth surface.*
+
 > **✅ Done**
 > - **🧭 Voxel is a display style, not the chunk's only way to render**, so Shaded and Wireframe give a smooth continuously-displaced surface (2026-09-23).
 > - Extruded into a solid slab rather than a floating sheet, with a base below zero so the surface does not z-fight against it (2026-09-23, 2026-10-13).
 
 #### 07.4 · Viewport & lighting · 90%
+
+*The planet and chunk views, the lighting, and the color ramp.*
+
 > **✅ Done**
 > - Side-by-side panes with a draggable split and a Planet/Chunk/Split control. Both stay mounted, so switching never rebuilds either scene (2026-09-23).
 > - Radius and Size are one contextual slider that rebinds to whichever pane is in view (2026-09-24).
 > - **🧭 The chunk shades through the planet's lighting model** rather than Three.js's standard material, so the Scene controls mean the same thing in both views and the intensity-rescaling hacks are gone (2026-10-13).
-> - **Gradient color-ramp picker** (2026-10-20): a real multi-stop editor for the elevation ramp (`ui/panels/ColorRampEditor.tsx`), replacing the old fixed low/mid/high three-stop control — the Blender Color Ramp convention (drag a stop, click the bar to add one, delete the selected one), up to 8 stops total. Shared by the planet (old mesh and patches) and the land chunk alike, one ramp, same as before. See `ISSUES.md`.
+> - **Gradient color-ramp picker** (2026-10-20): a real multi-stop editor for the elevation ramp (`ui/panels/ColorRampEditor.tsx`), replacing the old fixed low/mid/high three-stop control, the Blender Color Ramp convention (drag a stop, click the bar to add one, delete the selected one), up to 8 stops total. Shared by the planet (old mesh and patches) and the land chunk alike, one ramp, same as before. See `ISSUES.md`.
 > - **Delete UX fixed the same day** (Dana: "deleting needs to be by hitting delete (backspace) or dragging that color away"): the delete button alone wasn't enough. Added Backspace/Delete (a document-level listener, not the handle's own focus, since a click doesn't reliably focus a button in every browser) and drag-the-handle-away-from-the-bar (`DELETE_DRAG_DISTANCE`, the same convention Blender/After Effects use for removing a stop/keyframe), with a faded/shrunk handle while a drag is far enough to delete on release. The delete button itself stays too, not replaced.
 > - **Pin-style handles, 2026-10-21**: the circular handles became Figma-style pins sitting above the bar, filled with each stop's own real color, doubling as the drag handle; clicking one (not dragging it) opens a native color picker for that stop directly.
 > - **Five fixes from testing, same day:**
->   - The drag-away-to-delete pin used to dim and shrink mid-drag, then vanish abruptly on release — Dana: "would be better if it just disappeared (fade)." Now it tints with a warning-colored ring during the drag (no dimming, the real color stays visible) and only fades on the actual release-triggered removal, same fade applied everywhere a stop is deleted (drag-away, the list's delete button, Backspace).
->   - The color-code list's text didn't follow this design system's own font convention at all (`font: <weight> var(--font-size-sm) var(--font-ui)`, used without exception everywhere else) — it used a monospace font with no explicit size, falling back to the browser default. Fixed to match exactly.
+>   - The drag-away-to-delete pin used to dim and shrink mid-drag, then vanish abruptly on release, Dana: "would be better if it just disappeared (fade)." Now it tints with a warning-colored ring during the drag (no dimming, the real color stays visible) and only fades on the actual release-triggered removal, same fade applied everywhere a stop is deleted (drag-away, the list's delete button, Backspace).
+>   - The color-code list's text didn't follow this design system's own font convention at all (`font: <weight> var(--font-size-sm) var(--font-ui)`, used without exception everywhere else), it used a monospace font with no explicit size, falling back to the browser default. Fixed to match exactly.
 >   - The code format selector and color list now sit above the gradient bar, not below it.
 >   - Clicking a row in the color list now opens that stop's own color picker directly, not just selects it.
->   - Switching the code format to RGB/HSL no longer repeats the format name in the code itself (e.g. `91, 159, 101`, not `rgb(91, 159, 101)`) — the dropdown already says which format it is.
+>   - Switching the code format to RGB/HSL no longer repeats the format name in the code itself (e.g. `91, 159, 101`, not `rgb(91, 159, 101)`), the dropdown already says which format it is.
 > - **Reorganized again, same day** (Dana: "it doesnt make sense for the base color to be separate from the rest... when ramp is active all colors should show as a part of it"): base color is no longer a standalone preview control above the list, it's just the list's own first row (position 0%), same template, same click-to-open-picker, as every stop. When "Color by elevation" is off, the ramp doesn't apply at all, so `ColorRampEditor` now takes a `rampActive` prop and renders *only* a plain base-color picker in that case, not the ramp machinery. The whole control (toggle, editor, randomize button) now lives in its own nested "Color" accordion inside Planet, not loose in Planet's own body.
 > - **Two more from the same pass:**
 >   - The format selector's own displayed value rendered in the browser's native text color instead of this design system's white, a real cross-browser `<select>` quirk affecting *every* dropdown in the app, not just this one, fixed at the shared `.ui-select` rule (`appearance: none` plus an explicit custom dropdown arrow, since that property removes the native one too), not patched locally.
->   - The position column had no label at all — Dana: "i'm also missing an indication for the elevation of the color." Added a small "Elevation" header above it.
+>   - The position column had no label at all, Dana: "i'm also missing an indication for the elevation of the color." Added a small "Elevation" header above it.
 > - **A column list of every color, plus pin-style indicators** (2026-10-21, Dana: "i would want to see all picked colors in a column with their color code," then, from a reference screenshot, "turn the color circles into ramp indicators, so they double as a color and adjusting the ramp... clicking on them the color picker should pop up"):
 >   - New `.ui-ramp-list` below the bar: one row per color (base + every stop, ascending by position), each showing a swatch, its code (hex/RGB/HSL, picked via a shared format selector, `formatColorCode()`), and its position. Clicking a row selects that stop, same selection the bar's own pins use.
 >   - The old plain circular handles are now Figma-style pins: a rounded-square head (filled with that stop's real color, not a generic indicator) with a small pointed tail touching the bar, sitting above it instead of hanging below. Selected pin gets an accent ring plus a light inset square.
->   - A plain click on a pin (distinguished from a drag by total pointer movement, `CLICK_MOVEMENT_THRESHOLD`) now opens that stop's own native color picker directly, via one shared hidden `<input type="color">` triggered programmatically — not a custom popup, the same real `<input>` `ui/UIElements.tsx`'s own `ColorPicker` already uses elsewhere. The earlier single "currently selected" `ColorPicker` above the bar stays too, now a secondary, always-available way to edit the same selection, not the only one.
+>   - A plain click on a pin (distinguished from a drag by total pointer movement, `CLICK_MOVEMENT_THRESHOLD`) now opens that stop's own native color picker directly, via one shared hidden `<input type="color">` triggered programmatically, not a custom popup, the same real `<input>` `ui/UIElements.tsx`'s own `ColorPicker` already uses elsewhere. The earlier single "currently selected" `ColorPicker` above the bar stays too, now a secondary, always-available way to edit the same selection, not the only one.
 >   - Also fixed in passing: `.ui-ramp-list-row`'s hover/selected background referenced an undefined `--color-input-bg` token (silently did nothing), corrected to the real `--color-input-fill`.
 >
 > **📋 To do**
-> - **Cast shadows for the planet.** Land chunk side already built (`terrain.glsl`'s `heightmapShadow`, now soft, see `[B35]`, fixed); the planet itself still has none.
+> - **🧭 Build order, approved 2026-10-21.** Each step is tested by Dana before the next starts. Every new feature gets its controls in design-system components, and the noise menu gets new nested sections: Mask inside each layer next to Modifiers, Plateau at the Terrain level.
+>   1. 🟡 **Finish the planet patches**: cross-face balancing, and screen-space-error detail with a Resolution bias and a triangle budget (`[B38]`, `[B39]`, `[S32]`). Built, awaiting Dana's on-screen test.
+>   2. 🟡 **Layer masks** (in progress): grayscale mask with Source, Invert, Coverage %, Softness and a Shuffle button (built, untested), one mechanism for calm zones and merged terrain types (`[S31]`).
+>   3. ⚪ **Bounded heights:** a smooth soft limit on total elevation, Randomize sets Height from frequency, a broad base layer plus a mask layer, and detail added by zoom depth against a fixed normalization total. Shape shifting a little with zoom is acceptable (Dana).
+>   4. ⚪ **Plateau shaping**, modeled on Gaea's Clamp: Max level, Operation (Clamp or Clip) and Falloff, as a final step in its own Terrain-level section. Flat areas sit at a steady height so water later makes continents.
+>   5. ⚪ **Real height scale:** Height as a percent of radius plus a separate Exaggeration dial, ramp meters use true relief.
+>   6. ⚪ **Undo/redo last**, so every control is wired (`[S30]`). It tracks settings and the paint stroke log only, never baked heights or results, the way erosion data is handled.
+>   7. ⚪ **Planet cast shadows last.**
+> - **⚪ Cast shadows for the planet.** Land chunk side already built (`terrain.glsl`'s `heightmapShadow`, see `[B35]`). 🧭 Planned, not built, last in the build order above: reuse that march per patch, with the light converted into the patch's own flat frame (📚 Snyder and Nowrouzezahrai 2008). ⚠️ Shadows would stop at patch borders and ignore the planet's curvature, which could read as new seams, so judge by eye before considering a horizon map.
 > - **⏸️ Camera auto-framing.** Not a priority, since the gumball's zoom compensates.
-> - **❓ The ramp's position shows as a bare 0-100%, not a real elevation number** (Dana, 2026-10-21: "how's % reflect elevation? i need actual numbers"). That percentage is a fraction of the planet's real elevation range, but that range (`sharedUniformsRef.current.elevationMin/Max`) currently only exists inside `scene/SceneCanvas.tsx`, it was never plumbed up to the React UI layer (`ui/Panel.tsx`/`ui/panels/ColorRampEditor.tsx`) at all. Real next step: expose the live range up to the panel (the existing `getElevationRange()` imperative-handle method already returns it, the gap is wiring it into UI state, not computing it fresh), then decide the actual open question, Dana's call: show the raw dimensionless elevation value, or convert it into a real physical unit (height is already tracked as a % of context elsewhere in this app, `heightScale`/`radius`/`effectiveHeightScale`, see `voxel/landChunk.ts` and `scene/SceneCanvas.tsx` for the existing conversion). Not started.
+> - **🟡 Base color is now an ordinary ramp stop** (Dana, 2026-10-21: starts at 0 but can be dragged, "pretty standard"). The ramp is one list of equal stops (2 to 8, one color if just one is wanted via Base color). Base color is only the flat color used when Color by elevation is off. Old saves convert on load via `rampHasBase`. Built, not yet tested. Also: swatches have a minimum width and the elevation field hugs its number.
+> - **🟡 From Dana's 2026-10-21 testing, all built, untested**, logged in `ISSUES.md`: Resolution seems fake past about 1024 (`[B45]`), the Frequency cap of 20 (`[B46]`), Resolution changes rebuilding the whole planet (`[B47]`), the mask problems (`[B48]`, redesigned) and tooltips (`[B49]`).
+> - **🧭 Undo/redo for every action, not just paint strokes** (Dana, 2026-10-21: Cmd+Z must not leave a deleted ramp color gone). Agreed, not built: one shared snapshot history, see `[S30]` in `SPEC.md`. Actions that change the planet's look come first. Randomize and Shuffle are each one undo step. Last in the build order above, tracking settings and the stroke log only.
+> - **🟡 Tooltips built** (2026-10-21, untested, `[B49]`): black through a new design-system token, wrapped, and kept inside the window by one shared placement function.
+> - **🟡 Noise slider ranges widened, built** (Dana approved 2026-10-21, untested). Frequency 0.1 to 500 on a log scale, Octaves 1 to 12, Persistence 0 to 1.5, Lacunarity 1 to 6, Warp 0 to 10, Terrace 2 to 64, layer Height -10 to 10, seed unchanged at 0 to 1000. Rule from Dana: Randomize follows these ranges and is never hardcoded (`[S35]`). The Slider has a log scale option. Layer Height -10 to 10 is an unsourced audit recommendation, to revisit after the total is normalized. 🧭 Unit decision (Dana fine with it): a layer's Height has no unit today, so when the bounded-heights step is built it is shown as a percent of the planet's maximum elevation, -100 to 100.
+> - **🟡 Noise engine built** (Dana, 2026-10-21, `[S36]`, untested): Hoskins' float-only hash replaces the sin-based one (constants typed from memory, to verify), octaves fade by sample spacing (`NYQUIST_FADE_MIN` 0.25 and `NYQUIST_FADE_MAX` 0.95 as tunable values, applied before the Ridged fold), and the sum is normalized by the full series so coarse octaves stay identical at every depth. The seed is now a whole-cell lattice shift, which fixed a float loss that may have caused some stair-stepping. No local origin per patch is needed at depth 8. Saved planets look different, accepted.
+>   - ⚪ Second pass, approved: fade Ridged, Terrace, domain warp and Voronoi. Amplitude fade alone is not enough after a nonlinear step, so the plan fades the octave before it and softens step edges only as wide as the sample spacing (Terrace best supported, warp and Voronoi inferred, all tunable). Dana: no change to the intended hard look.
+>   - Build order now: Dana tests this batch, then fixes, docs and a commit, then the second pass, the fractal type selector, bounded heights, plateau shaping, height in meters, undo/redo and planet shadows.
+> - **🟡 Missing standard noise controls built** (Dana, 2026-10-21, untested): noise Offset, Stretch X, Y and Z, Voronoi Jitter and Distance, warp scale, warp octaves, and ridged Offset and Gain, each in the shared ranges table with tooltips. Rotation is skipped. A clamp on a layer's output belongs to the bounded-heights step.
+> - **❓ Fractal type selector** (awaiting Dana's go; a setting inside the Octaves modifier, not a separate modifier: Octaves sets how many stacked copies there are, the type sets how they combine): Blender's Multifractal, Hybrid, Hetero terrain and Ridged multifractal recurrences are documented, and Hybrid and Hetero give smooth valleys and rough peaks, a regional variation from one control. Billow and Strata formulas are not documented, so they are left out. These types are unbounded and need renormalizing, which ties into the bounded-heights step.
+> - **⚪ Audit the Erosion sliders' ranges** after this round (Dana, 2026-10-21). Not started.
+> - **🟡 Mask redesign built** (Dana, 2026-10-21, untested, `[S31]`, `[B48]`): each layer owns its mask pattern (type, seed, frequency, with Coverage, Softness, Invert and Shuffle), there is no layer picker, and the Mask section left the noise menu. Several selected layers are edited together with the same values. Coverage is a percentile of the pattern on a 64 by 64 grid per cube face. Old masks migrate, taking the old source's type, seed and frequency but not its modifiers. ⚠️ The mask pattern has no octave fade, so a high mask frequency may shimmer at a distance.
+> - **🟡 Design-system additions built** (2026-10-21, untested): a reusable popup, accordion tooltips and a mask icon. ⚪ A generic preview thumbnail is not built, since there is no per-layer picture to show and it needs its own render. ❓ Dana: do you want it as a later design-system item?
+> - **🟡 Mask editing on the layer row built** (decided 2026-10-21, untested): a mask icon beside the eye, lit in the accent color when the layer has a mask, opens a popup (`ui/MaskControls.tsx`) with the mask pattern, Seed, Frequency, Invert, Coverage, Softness and Shuffle. The title names the layer, or says how many layers are being edited. The old source guard is gone, see `[B41]`. A group mask or mask layer may come later, see the ideas section.
+> - **🧭 Height becomes meters** (decided 2026-10-21, `[S33]`): a max elevation in meters plus a display-only Exaggeration, replacing `[S15]` when the height scale step is built.
+> - **🟡 Patch cache and refinement built** (`[B44]`, 2026-10-21, untested): hidden patches are cached, not discarded, a replaced patch stays drawn until its replacements are built, and merging back happens farther out than splitting. ⚠️ Risks: neighbors can differ by up to 3 depth levels while old patches are retiring (skirts should hide it, unseen), and at Resolution 2048 the working set exceeds the cache, so rotating still rebuilds. The over-budget distance lowering has no hysteresis.
+> - **🟡 Planet plumbing built** (`[B45]`, `[B47]`, 2026-10-21, untested): every patch bake already passed its sample spacing, so the octave fade takes effect. A Resolution change refines or coarsens patches in place and a radius change still flushes. A patch bakes 65 samples until depth 5, then 129, then 257, within a texel cap (`PATCH_BAKE_SAMPLES_MIN`, `PATCH_BAKE_SAMPLES_MAX`, `PATCH_BAKE_GROW_FROM_DEPTH` of 6, cache cap 4 million texels), Dana's unsourced inference, so all tunable. Verified in a Node harness: no holes, 66 of 66 patches held on refine, nothing baked on coarsening. ⚠️ Risks: brief cracks mid-change and between neighbors at different depths (skirts only), and Resolution 2048 memory is bounded only by the triangle budget.
+> - **🟡 Higher-resolution baking by depth** is built as part of the planet plumbing above. The mesh grid stays at most 64 vertices, so the extra samples sharpen lighting, color and bump, not geometry.
+> - **⚪ Frustum culling for planet patches.** Only horizon culling is built, so patches outside the camera's view still build at full detail.
+> - **⏸️ Patch-aware Wireframe** stays deferred (Dana, 2026-10-21: "we're doing shaded for now").
+> - **🟡 Planet detail follows screen-space error, Resolution is a detail bias** (Dana, 2026-10-21), `[B38]`, `[B45]`, `[B47]`, `[S32]`: zoom sharpens automatically, the slider (0.25x to 8x, default 1x) pushes further where pixels warrant it, and zoomed out costs nothing. Replaced the uniform minimum floor, which forced up to 384 patches at startup. Built, untested. First in the build order above.
+> - **🟡 Stale stitching fixed, awaiting test** (`[B39]`): a kept patch now rebuilds its geometry when its neighbors' detail changes (`planet/PlanetPatchRenderer.ts`). Cross-face balancing is still to build, not conditional.
+> - **🟡 Ramp elevation in meters** (2026-10-21), built, not yet approved. Stops now show and accept elevation in m, calibrated to the terrain's real range times Height % of Radius/Size. ❓ Open, Dana's call: the result reads as hundreds of km because the terrain is drawn about 100× Earth's proportions. Either keep it literal, or adopt vertical exaggeration (📚 CesiumJS's convention: real elevations, visual stretch only) with a new max-elevation setting. Also blocked on `[B36]`/`[B37]` in `ISSUES.md`.
+> - **🧭 Realistic planetary height scale** (Dana, 2026-10-21: the scale is too much to reflect a planet, so the noise must match). Direction: normalize all height noise to a planet scale to tame extremes (it looks like a virus), and give the planet large-scale variance with masks, plateaus and merged terrain types. Folded into build order steps 2 to 5 above. The terrain is drawn at about 100× Earth's relief ratio. 📚 Earth is about 0.14% and Mars about 0.6%. Sources in `REFERENCES.md`.
+> - **🟡 Planet and Terrain merged into "Planet Terrain"** (Dana, 2026-10-21: "all terrain does is trigger the contextual left menu for noise gen terrain"). Built, not yet tested. The Terrain stage row is gone, and any click on the Planet Terrain header shows the noise controls and highlights it as the active stage. ❓ Terrain's Enabled toggle went away with its row. Whether it should come back, and where, is unconfirmed.
+> - **~~❓ The ramp's position shows as a bare 0-100%, not a real elevation number~~** (superseded by the line above) (Dana, 2026-10-21: "how's % reflect elevation? i need actual numbers").
+>   - That percentage is a fraction of the planet's real elevation range, but that range (`sharedUniformsRef.current.elevationMin/Max`) currently only exists inside `scene/SceneCanvas.tsx`, it was never plumbed up to the React UI layer (`ui/Panel.tsx`/`ui/panels/ColorRampEditor.tsx`) at all.
+>     - Real next step: expose the live range up to the panel (the existing `getElevationRange()` imperative-handle method already returns it, the gap is wiring it into UI state, not computing it fresh), then decide the actual open question, Dana's call: show the raw dimensionless elevation value, or convert it into a real physical unit (height is already tracked as a % of context elsewhere in this app, `heightScale`/`radius`/`effectiveHeightScale`, see `voxel/landChunk.ts` and `scene/SceneCanvas.tsx` for the existing conversion).
+>   - Not started.
 
 #### 07.5 · Shared gumball · 95%
+
+*One navigation widget that drives one or two views.*
+
 > **✅ Done**
 > - One instance driving one or two cameras. Click a pane to target it, shift-click to drive both. Each target carries its own reference distance, so zoom scales correctly for either scale (2026-09-23).
 
@@ -302,7 +426,7 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 
 *Classifying each point of the terrain into a biome from its own conditions.*
 
-🧭 Biome classification from elevation, slope and climate, the way Minecraft's multi-noise source or a Whittaker diagram does. Split from the old combined Color/Biome stage once colour turned out to need its own shader.
+🧭 Biome classification from elevation, slope and climate, the way Minecraft's multi-noise source or a Whittaker diagram does. Split from the old combined Color/Biome stage once color turned out to need its own shader.
 
 > **📋 To do**
 > - Everything.
@@ -312,9 +436,9 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 ## Stage 11 · Color Texturing
 ░░░░░░░░░░ 0%
 
-*Terrain colour as a shader reading height, climate and biome.*
+*Terrain color as a shader reading height, climate and biome.*
 
-🧭 Terrain colour as a shader reading height, climate and biome, not a flat painted value. Surfaces as a general setting rather than a pipeline row, alongside lighting and planet controls. The planet's flat base colour is the placeholder for it.
+🧭 Terrain color as a shader reading height, climate and biome, not a flat painted value. Surfaces as a general setting rather than a pipeline row, alongside lighting and planet controls. The planet's flat base color is the placeholder for it.
 
 > **📋 To do**
 > - Everything.
@@ -351,18 +475,30 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 *Tokenizing the scattered placeholder values, and the interface polish pass.*
 
 #### 14.1 · Design-system / config tokenization · 0%
+
+*Moving scattered design values into named tokens.*
+
 > **📋 To do**
 > - **Centralize placeholder values.** Colors, lighting, camera distance and the rest are scattered inline, each flagged `TODO(DS)`. Tracked since 2026-09-09, not urgent.
 
 #### 14.2 · Adjustable control panel · 100%
+
+*Side panels whose width the user controls.*
+
 > **✅ Done**
 > - Both panels resize by dragging their inner edge, and width only ever changes on an explicit drag rather than with content (2026-09-30).
 
 #### 14.3 · Wireframe overlay accuracy · 0%
+
+*Making the wireframe overlay follow the displaced surface.*
+
 > **📋 To do**
 > - **Overlay doesn't track displacement.** It is built from undisplaced geometry, so it does not follow the real terrain. Fix is to give it its own shader sampling the same heightmap.
 
 #### 14.4 · Icons and typography · 50%
+
+*Real icons in place of emoji, and the type scale.*
+
 > **✅ Done**
 > - **Emoji icons replaced** (🎲 Randomize, 🎨 Randomize colors, 👁 visibility) with real flat SVG icons, no library (2026-10-14).
 
@@ -379,6 +515,7 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 - **Heightmap resolution as a user control.** Currently one fixed size for the whole shared pipeline.
 - **Topography-line overlay**, contour lines on the surface as a guide. Standard in this category of tool.
 - **❌ No node-based UI.** Explicit decision. The panel structure is correct; not building a node graph like World Machine or Gaea.
+- **Group mask.** Layers would gain groups: a folder row in the layer list that layers can be dragged into. The group row gets its own mask icon, opening the same mask popup, and the mask applies to everything inside the group. 📚 Photoshop's convention, with sources in `REFERENCES.md`. Not scheduled.
 - **From World Machine's feature set**, kept as reference: richer selectors for masking by elevation, slope, wetness and curvature; weightmaps for material distribution; side-by-side and wipe comparison of two states; camera slots for rechecking the same vantage points; tiled builds for worlds larger than memory.
 
 ---
@@ -395,11 +532,13 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 - The pipeline and its stage list: Terrain, Erosion, Climate, Biome, Color, Population, Events. Matching convention in real tools rather than invented.
 - The left panel became that pipeline, with the right panel showing the selected stage.
 - Erosion is built as one reusable engine so disasters are parameter values rather than separate effects.
-- Colour became its own shader-driven stage.
+- Color became its own shader-driven stage.
 - A Timeline, playing whichever stages are enabled.
 
 **❓ Still open**
 - **Theme generation from continuous axes.** Wetness, tectonic activity, temperature and erosion age mapped to parameter ranges by one formula, so desert or volcano are labelled regions of one space rather than hand-authored presets. The axis set and the formulas are not designed.
+- **📌 Research other coloring techniques and methods for 3D world building** (Dana, 2026-10-21), so there are more interesting options than one elevation ramp. Research first, from real tools and papers, before proposing any. Not started.
+- **⚪ Saved planet setups** (Dana, 2026-10-21: "desert planet, jungle planet, gas planet... procedurally created"). A setup is one saved bundle of settings (noise layers, height, color) that can be loaded in one click, and the generated ones come from the same "continuous axes" idea in the line below, not hand-authored. ❓ Whether to save color palettes as their own thing first: a palette is just a named ramp (the same stop list the ramp editor already edits), so a setup would point at one. Recommended yes, small and independent, once the ramp has settled. Not designed.
 - **Rule-driven placement** of water and vegetation, once Biome exists.
 - **Gating**, disabling a stage until its input exists.
 
@@ -411,3 +550,9 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 
 - **Population growth.** Place population, choose a starting development level, let it progress along the timeline.
 - **Apocalyptic scenarios**: nuclear strike with configurable radius and fallout, meteor impact, climate change as slow degradation, ice age, volcanic eruption.
+
+---
+
+# 🧭 Code index
+
+*The code map moved to `CODE-INDEX.md`, which is updated with every milestone and before every handover.*

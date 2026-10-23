@@ -33,3 +33,23 @@ export function cubeFacePoint(face: CubeFace, u: number, v: number): THREE.Vecto
       return new THREE.Vector3(-u, v, -1);
   }
 }
+
+// The inverse of cubeFacePoint: a point lying on `face`'s plane back to that
+// face's own (u, v). Used to carry a point across a cube edge into the
+// neighboring face's frame.
+export function cubeFaceCoord(face: CubeFace, point: THREE.Vector3): THREE.Vector2 {
+  switch (face) {
+    case '+X':
+      return new THREE.Vector2(-point.z, point.y);
+    case '-X':
+      return new THREE.Vector2(point.z, point.y);
+    case '+Y':
+      return new THREE.Vector2(point.x, -point.z);
+    case '-Y':
+      return new THREE.Vector2(point.x, point.z);
+    case '+Z':
+      return new THREE.Vector2(point.x, point.y);
+    case '-Z':
+      return new THREE.Vector2(-point.x, point.y);
+  }
+}

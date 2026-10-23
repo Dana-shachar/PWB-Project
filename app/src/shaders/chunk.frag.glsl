@@ -50,6 +50,7 @@ uniform float uHeightMapTexelSize;
 // texture, elevation in red) — see chunk.vert.glsl's matching uniform and
 // landChunk.ts, ISSUES.md [B32].
 uniform float uHeightMapGreenChannel;
+uniform float uDiffuseWrap;
 
 float sampleHeight(vec2 uv) {
   vec4 texel = texture2D(uHeightMap, uv);
@@ -81,37 +82,25 @@ void main() {
     // resolution, independent of this mesh's own (now much coarser) vertex
     // density, which is the actual point of this fix: perceived detail
     // scales with the heightmap, not the triangle count.
-    // 32 texels, matching fragment.glsl's own validated sampleOffset — a
-    // 1-texel gradient read this terrain's own noise as the slope itself.
-    float step = uHeightMapTexelSize * 32.0;
-    float hL = sampleHeight(vUv - vec2(step, 0.0));
-    float hR = sampleHeight(vUv + vec2(step, 0.0));
-    float hD = sampleHeight(vUv - vec2(0.0, step));
-    float hU = sampleHeight(vUv + vec2(0.0, step));
-    float dHdu = (hR - hL) / (2.0 * step);
-    float dHdv = (hU - hD) / (2.0 * step);
-    // uv spans the whole patch (0..1 over uChunkSize), and raw elevation
-    // maps to world height via uMaxHeight — the same two conversions
-    // chunk.vert.glsl's own displacement already applies, so the slope this
-    // gradient describes agrees with the surface the vertex shader actually
-    // draws.
-    vec3 localNormal = vec3(-dHdu * uMaxHeight / uChunkSize, 1.0, -dHdv * uMaxHeight / uChunkSize);
+    // A fixed 3% of the chunk (32 of 1024 texels, the validated value from
+    // [B34]), never under 2 texels, so it doesn't change with Resolution.
+    float stepUv = max(32.0 / 1024.0, uHeightMapTexelSize * 2.0);
+    // The chunk's tangents: u runs along x and v along z, each spanning
+    // uChunkSize; raw elevation maps to world height via uMaxHeight, the same
+    // conversion chunk.vert.glsl's displacement applies.
+    vec3 localNormal = heightfieldNormal(
+      uHeightMap, vUv, stepUv, uHeightMapGreenChannel,
+      vec3(uChunkSize, 0.0, 0.0), vec3(0.0, 0.0, uChunkSize), vec3(0.0, 1.0, 0.0), uMaxHeight
+    );
     normal = normalize(normalMatrix * localNormal);
   }
 
   vec3 lightDir = normalize(uLightDirection);
 
-  // Half Lambert (Mitchell, "Shading in Valve's Source Engine," SIGGRAPH
-  // 2006, see REFERENCES.md), not a plain clamped Lambert term like
-  // fragment.glsl's: the chunk is always a flat patch facing one fixed
-  // direction, so a grazing light (legitimate on the sphere, where some
-  // point always faces it) can leave the whole chunk close to unlit, with
-  // no bright side to compensate. Half Lambert softens the falloff instead
-  // of hard-clamping to 0, so there's no fully flat, lightless side. Dana:
-  // "the chunk should always have light on it, but i should be able to
-  // tweak the lighting settings" — ambient/intensity/specular/shininess/
-  // direction still all apply normally on top of this.
-  float diffuse = pow(dot(normal, lightDir) * 0.5 + 0.5, 2.0) * uLightIntensity;
+  // The same wrap lighting as the planet (terrain.glsl's softDiffuse), so the
+  // Wrap control means the same in both views. The chunk keeps its own light
+  // elevation, since a shared one left it in the dark.
+  float diffuse = softDiffuse(normal, lightDir, uDiffuseWrap) * uLightIntensity;
 
   vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
   vec3 halfVector = normalize(lightDir + viewDir);
@@ -140,13 +129,7 @@ void main() {
     float effectiveElevationRaw = vIsTopSurface > 0.5 ? elevationRaw : sideElevationRaw;
     float elevationFraction = (effectiveElevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
-    // Contrast fades in with real relief — see fragment.glsl's matching
-    // comment. uMaxHeight/uChunkSize recovers the same Height (%) the
-    // slider shows, the chunk's own version of uDisplacementAmplitude/uRadius.
-    const float REFERENCE_HEIGHT_FRACTION = 0.1;
-    float heightFraction = uMaxHeight / max(0.0001, uChunkSize);
-    float colorContrast = clamp(heightFraction / REFERENCE_HEIGHT_FRACTION, 0.0, 1.0);
-    surfaceColor = mix(uBaseColor, ramp, colorContrast);
+    surfaceColor = ramp;
   }
 
   gl_FragColor = vec4(surfaceColor * (ambient + diffuse) + specular, 1.0);

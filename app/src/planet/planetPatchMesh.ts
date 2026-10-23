@@ -10,12 +10,10 @@ import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from './color
 const patchFragmentShader = terrainGlsl + patchFragmentShaderBody;
 
 // How far inward (as a fraction of radius) a patch's outer edge drops to
-// form its skirt — a thin wall hiding any crack where this patch meets a
-// neighbor baked at a different depth (same technique real chunked-LOD
-// terrain engines use instead of true vertex-welding across every possible
-// neighbor combination; see planet/planetPatches.ts's own comment on why
-// full cross-face seam-matching is out of scope for this pass). Deliberately
-// small: big enough to cover a plausible height/depth mismatch at the
+// form its skirt — a thin wall hiding any sliver left where this patch meets
+// a neighbor (stitching and cross-face balancing, planet/planetPatches.ts,
+// do the actual joining; this is the safety cover at grazing angles).
+// Deliberately small: big enough to cover a plausible height/depth mismatch at the
 // resolutions this project actually reaches, not an arbitrary guess at the
 // scale of the whole radius.
 const SKIRT_DEPTH_FRACTION = 0.01;
@@ -75,7 +73,7 @@ export function buildPatchGeometry(
   const cornerBR = pushGridVertex(1, 1, radius);
 
   // One edge's own points strictly between its two corners — doubled
-  // density (2n-1 points) when stitched to a same-face neighbor one level
+  // density (2n-1 points) when stitched to a neighbor (same face or across a cube edge) one level
   // finer, the plain fixed density (n-1 points) this always used otherwise.
   // Returns both the vertex indices and the parametric position each was
   // built at (needed for the skirt's own matching UVs below).
@@ -252,28 +250,40 @@ export interface PlanetSharedUniforms {
   shininess: number;
   cameraPosition: THREE.Vector3;
   colorByElevation: number;
-  // The ramp's stops after position 0 (always baseColor above) — see
+  // The ramp's stops — see
   // planet/colorRamp.ts. Generalizes the old fixed colorMid/colorHigh pair.
   colorStops: ColorStop[];
   elevationMin: number;
   elevationMax: number;
   displacementAmplitude: number;
   radius: number;
-  // Each patch's own display-mesh resolution, driven by the planet's
-  // Resolution slider (planet/patch.ts's clampPatchGridResolution) — not a
-  // material uniform, read directly by PlanetPatchRenderer when building
-  // patch geometry, kept here so it travels alongside every other shared
-  // value instead of as a separate parameter.
-  gridResolution: number;
+  // Wrap lighting amount, shared with the land chunk (Scene > Wrap).
+  diffuseWrap: number;
+  // What the screen-space-error selection reads (planet/planetPatches.ts),
+  // not material uniforms: the Resolution slider as a maximum error in
+  // pixels (lower is sharper), and the view's height in pixels and vertical
+  // field of view.
+  maxErrorPixels: number;
+  viewHeightPixels: number;
+  fieldOfViewRadians: number;
+  // The camera's frustum and forward direction, so selection builds only what
+  // is in view and notices a turn.
+  frustum?: THREE.Frustum;
+  viewDirection?: THREE.Vector3;
 }
+
+// Ground distance the bump gradient reads across, as a share of the radius,
+// so lighting looks alike at every patch depth (the shader clamps it to 2-8
+// of a patch's own texels).
+const GRADIENT_STEP_RADIUS_FRACTION = 0.02;
 
 export function createPatchMaterial(
   patch: TerrainPatch,
   heightMap: THREE.Texture,
-  sampleOffset: number,
+  bakeSamples: number, // this patch's baked texture width, which sets the gradient step's texel clamp
   shared: PlanetSharedUniforms,
 ): THREE.ShaderMaterial {
-  const ramp = buildRampUniformArrays(shared.baseColor, shared.colorStops);
+  const ramp = buildRampUniformArrays(shared.colorStops);
   return new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader: patchFragmentShader,
@@ -305,7 +315,9 @@ export function createPatchMaterial(
       uPatchMin: { value: new THREE.Vector2(patch.min.x, patch.min.y) },
       uPatchMax: { value: new THREE.Vector2(patch.max.x, patch.max.y) },
       uFace: { value: faceIndex(patch.face) },
-      uSampleOffset: { value: sampleOffset },
+      uGradientStepWorld: { value: shared.radius * GRADIENT_STEP_RADIUS_FRACTION },
+      uBakeSamples: { value: bakeSamples },
+      uDiffuseWrap: { value: shared.diffuseWrap },
     },
   });
 }
@@ -324,7 +336,7 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   u.uShininess.value = shared.shininess;
   (u.uCameraPosition.value as THREE.Vector3).copy(shared.cameraPosition);
   u.uColorByElevation.value = shared.colorByElevation;
-  const ramp = buildRampUniformArrays(shared.baseColor, shared.colorStops);
+  const ramp = buildRampUniformArrays(shared.colorStops);
   const rampColors = u.uRampColors.value as THREE.Color[];
   for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
   (u.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
@@ -333,4 +345,6 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   u.uElevationMax.value = shared.elevationMax;
   u.uDisplacementAmplitude.value = shared.displacementAmplitude;
   u.uRadius.value = shared.radius;
+  u.uGradientStepWorld.value = shared.radius * GRADIENT_STEP_RADIUS_FRACTION;
+  u.uDiffuseWrap.value = shared.diffuseWrap;
 }

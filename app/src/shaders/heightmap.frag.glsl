@@ -27,6 +27,31 @@ uniform float uLayerTerraceSteps[MAX_LAYERS];
 uniform float uLayerOpacity[MAX_LAYERS];
 uniform float uLayerHeightScale[MAX_LAYERS]; // amplitude, distinct from opacity — see map/heightmap.ts's NoiseLayer.heightScale
 uniform float uLayerBlendMode[MAX_LAYERS]; // 0=normal, 1=add, 2=subtract, 3=multiply, 4=max, 5=min, 6=screen
+// Transform and detail extras, per layer (see NoiseLayer in map/heightmap.ts).
+uniform vec3 uLayerOffset[MAX_LAYERS]; // noise translation, in lattice units, separate from seed
+uniform vec3 uLayerStretch[MAX_LAYERS]; // per-axis frequency multiplier (Gaea Scale X/Y, Terragen stretch)
+uniform float uLayerWarpScale[MAX_LAYERS];
+uniform float uLayerWarpOctaves[MAX_LAYERS];
+uniform float uLayerVoronoiJitter[MAX_LAYERS];
+uniform float uLayerVoronoiDistance[MAX_LAYERS]; // 0=Euclidean, 1=Manhattan, 2=Chebychev
+uniform float uLayerRidgeOffset[MAX_LAYERS];
+uniform float uLayerRidgeGain[MAX_LAYERS];
+// Fractal type inside the Octaves modifier: 0=fBm, 1=multifractal, 2=hybrid,
+// 3=hetero terrain, 4=ridged multifractal, with its own Offset and Gain.
+uniform float uLayerFractalType[MAX_LAYERS];
+uniform float uLayerFractalOffset[MAX_LAYERS];
+uniform float uLayerFractalGain[MAX_LAYERS];
+// Distance between baked samples in face coordinates, 0 = no octave fade
+// (the whole-globe bake and the noise canvas). Set per patch bake.
+uniform float uSampleSpacing;
+// Each layer's own mask pattern: a base generator type (-1 = unmasked), its
+// seed and frequency, then the brightness band that lets the layer through.
+uniform float uLayerMaskType[MAX_LAYERS];
+uniform float uLayerMaskSeed[MAX_LAYERS];
+uniform float uLayerMaskFrequency[MAX_LAYERS];
+uniform float uLayerMaskInvert[MAX_LAYERS];
+uniform float uLayerMaskMin[MAX_LAYERS];
+uniform float uLayerMaskMax[MAX_LAYERS];
 // GLSL ES 1.00 (this material's default) requires constant indices for
 // sampler arrays, so each layer gets its own named uniform instead of a
 // true array — see samplePaintTexture() below.
@@ -69,7 +94,11 @@ vec2 samplePaintTexture(int index, vec2 uv) {
   return texture2D(uLayerPaintTexture15, uv).rg;
 }
 
-const int MAX_OCTAVES = 8; // loop upper bound — actual count is octaves, via the break below
+const int MAX_OCTAVES = 12; // loop upper bound — actual count is octaves, via the break below
+// Patch bakes may continue a layer's octave series past its Octaves setting,
+// as far as the sample spacing can still show each one (see fbm3D). This caps
+// that, and the cost, for the deepest patches.
+const int MAX_DEEP_OCTAVES = 24;
 
 // The base generator, selected once per layer — random/perlin/simplex/
 // voronoi only; 'none' is handled separately (see isNoneType in main()
@@ -85,24 +114,76 @@ float evalBaseGenerator(vec3 p, float seed, float baseType) {
   else return voronoiNoise3D(p, seed);
 }
 
+// Octave fade by sample spacing (Lagae and Drettakis, "Filtering Solid Gabor
+// Noise", supplementary: Nyquist is 1/(2*spacing) and the weight is
+// smoothstep(fmin, fmax, nyquist); Quilez, "bandlimiting", for the idea).
+// 0.25 and 0.95 are the paper's Perlin values, found experimentally for
+// pixel shading, so treat them as tunable here. Mapping the paper's pixel
+// spacing onto a baked vertex grid is this project's own inference.
+const float NYQUIST_FADE_MIN = 0.25;
+const float NYQUIST_FADE_MAX = 0.95;
+
+// Extras set per layer in main(): the spacing between baked samples measured
+// in the layer's own lattice cells (0 = no fade), and the ridged controls.
+float gLatticeSpacing = 0.0;
+float gRidgeOffset = 1.0;
+float gRidgeGain = 1.0;
+float gFractalType = 0.0;
+float gFractalOffset = 0.0;
+float gFractalGain = 1.0;
+
+// 1 while an octave's lattice is well resolved by the sample grid, 0 once its
+// features are smaller than the grid can show.
+float octaveFade(float latticeSpacing) {
+  if (latticeSpacing <= 0.0) return 1.0;
+  return smoothstep(NYQUIST_FADE_MIN, NYQUIST_FADE_MAX, 0.5 / latticeSpacing);
+}
+
+// The amplitude total of the whole series, independent of how many octaves
+// are faded, so coarse octaves carry the same weight at every patch depth
+// (the noise is a pure function of position, as in Cesium's write-up).
+float fullSeriesAmplitude(float octaves, float persistence) {
+  float total = 0.0;
+  float amplitude = 1.0;
+  for (int i = 0; i < MAX_OCTAVES; i++) {
+    if (i >= int(octaves)) break;
+    total += amplitude;
+    amplitude *= persistence;
+  }
+  return max(total, 0.0001);
+}
+
 // fBm (fractal Brownian motion): sums several octaves of the base generator
 // at increasing frequency (lacunarity) and decreasing amplitude
 // (persistence). Standard formula — verified against
 // thebookofshaders.com/13, 2026-09-14 — generalized 2026-09-30 to any base
-// generator via evalBaseGenerator, not hardcoded to Perlin.
-float fbm3D(vec3 p, float seed, float baseType, float octaves, float persistence, float lacunarity) {
+// generator via evalBaseGenerator, not hardcoded to Perlin. Each octave is
+// faded out once the sample grid can no longer show it (octaveFade above).
+// A patch bake (latticeSpacing > 0) with allowDeep set keeps adding octaves
+// past `octaves` while the grid can still show them, the same persistence
+// and lacunarity series, so the coarse shape is the same at every depth and
+// deeper patches only gain finer detail ("the closer the camera, the greater
+// the number of octaves", Cesium's procedural terrain write-up). It needs
+// persistence < 1 (or the extra octaves would outgrow the ones before them)
+// and lacunarity > 1 (or they would repeat the same frequency).
+// The sum stays divided by the configured series' total, not the extended
+// one, so existing layers keep their look.
+float fbm3D(vec3 p, float seed, float baseType, float octaves, float persistence, float lacunarity, float latticeSpacing, bool allowDeep) {
   float value = 0.0;
   float amplitude = 1.0;
-  float maxAmplitude = 0.0;
+  float spacing = latticeSpacing;
   vec3 samplePoint = p;
-  for (int i = 0; i < MAX_OCTAVES; i++) {
-    if (i >= int(octaves)) break;
-    value += amplitude * evalBaseGenerator(samplePoint, seed, baseType);
-    maxAmplitude += amplitude;
+  bool deepOn = allowDeep && latticeSpacing > 0.0 && persistence < 1.0 && lacunarity > 1.0;
+  for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
+    if (i >= int(octaves) && !deepOn) break;
+    float fade = octaveFade(spacing);
+    if (fade <= 0.0) break; // every finer octave is faded out too
+    value += amplitude * fade * evalBaseGenerator(samplePoint, seed, baseType);
     samplePoint *= lacunarity;
     amplitude *= persistence;
+    spacing *= lacunarity;
   }
-  return value / maxAmplitude; // normalize back to roughly -1..1
+  return value / fullSeriesAmplitude(octaves, persistence); // roughly -1..1
 }
 
 // Ridged-multifractal fBm (Musgrave's method, adapted to this project's own
@@ -113,30 +194,101 @@ float fbm3D(vec3 p, float seed, float baseType, float octaves, float persistence
 // combined signal into an isolated spike (dense and isotropic at high
 // frequency); folding per octave is what keeps ridges continuous and
 // hierarchical across scales instead. See REFERENCES.md and [B31] in
-// ISSUES.md. Deliberately reuses this project's existing ridge() and
-// ridgeAmount (no new gain/offset uniforms, unlike libnoise's RidgedMulti —
-// that would be new UI surface, out of scope for this fix) — weight is the
-// previous octave's own folded magnitude, clamped to [0,1] so it can only
-// ever damp the next octave, never amplify it unboundedly. ridge()'s own
-// output is symmetric about 0 (this file's own convention, see noise.glsl),
-// so the feedback weight uses abs() to read magnitude regardless of sign.
-float ridgedFbm3D(vec3 p, float seed, float baseType, float octaves, float persistence, float lacunarity, float ridgeAmount) {
+// ISSUES.md. Offset and Gain follow Blender's Ridged Multifractal (offset
+// inside the fold, gain scaling the feedback weight); at 1 and 1 this is the
+// fold used before they existed. ridge()'s own output is symmetric about 0
+// (this file's own convention, see noise.glsl), so the feedback weight uses
+// abs() to read magnitude regardless of sign, clamped to [0,1] so it can only
+// ever damp the next octave, never amplify it unboundedly.
+// The octave is faded before the fold (the only hint found, a forum thread,
+// says to fade inside a non-linear function); a faded octave then reads as
+// ridge(0), a constant, which keeps the sum continuous across depths. That
+// choice is unsourced and shifts a ridged layer's mean slightly with depth.
+float ridgedFbm3D(vec3 p, float seed, float baseType, float octaves, float persistence, float lacunarity, float ridgeAmount, float latticeSpacing) {
   float value = 0.0;
   float amplitude = 1.0;
-  float maxAmplitude = 0.0;
   float weight = 1.0;
+  float spacing = latticeSpacing;
   vec3 samplePoint = p;
-  for (int i = 0; i < MAX_OCTAVES; i++) {
-    if (i >= int(octaves)) break;
-    float raw = evalBaseGenerator(samplePoint, seed, baseType);
-    float folded = mix(raw, ridge(raw), ridgeAmount) * weight;
+  bool deepOn = latticeSpacing > 0.0 && persistence < 1.0 && lacunarity > 1.0; // extra octaves for deep patches, see fbm3D
+  for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
+    if (i >= int(octaves) && !deepOn) break;
+    float fade = octaveFade(spacing);
+    if (i >= int(octaves) && fade <= 0.0) break; // no finer octave can show either
+    float raw = fade > 0.0 ? fade * evalBaseGenerator(samplePoint, seed, baseType) : 0.0; // skips the noise call once faded out
+    float folded = mix(raw, ridge(raw, gRidgeOffset), ridgeAmount) * weight;
     value += amplitude * folded;
-    maxAmplitude += amplitude;
-    weight = clamp(abs(folded), 0.0, 1.0);
+    weight = clamp(abs(folded) * gRidgeGain, 0.0, 1.0);
     samplePoint *= lacunarity;
     amplitude *= persistence;
+    spacing *= lacunarity;
   }
-  return value / maxAmplitude; // normalize back to roughly -1..1, same convention as fbm3D
+  return value / fullSeriesAmplitude(octaves, persistence); // roughly -1..1, same convention as fbm3D
+}
+
+// Musgrave's other fractal types (multifractal, hybrid multifractal, hetero
+// terrain, ridged multifractal), as Blender's open-source Musgrave shader
+// implements them (blender v3.6.0, gpu_shader_material_tex_musgrave.glsl;
+// the recurrences below follow a read of that file whose fetch omitted some
+// loop bodies). They set how a layer's octaves combine, so valleys and peaks
+// can differ in roughness, which plain fBm cannot. n is the signed base noise
+// (-1..1), pwr the octave's amplitude (persistence^i, which is Blender's
+// pow(lacunarity, -H)).
+// Inferred here, not documented anywhere: n is faded by octaveFade before it
+// enters each recurrence AND hybrid/hetero/ridged contributions are scaled by
+// the fade, so a fully faded octave adds nothing; and each result is recentred
+// and rescaled into about -1..1 by fixed estimates (these types are unbounded
+// and can go negative), then clamped. All tunable; bounded heights later
+// replaces the clamp.
+float fractalNoise3D(vec3 p, float seed, float baseType, float fractalType, float octaves, float persistence, float lacunarity, float latticeSpacing) {
+  float offset = gFractalOffset;
+  float gain = gFractalGain;
+  float value = fractalType < 1.5 ? 1.0 : 0.0; // multifractal is a running product
+  float pwr = 1.0;
+  float weight = 1.0;
+  float signal = 0.0;
+  float spacing = latticeSpacing;
+  vec3 samplePoint = p;
+  bool deepOn = latticeSpacing > 0.0 && persistence < 1.0 && lacunarity > 1.0; // extra octaves for deep patches, see fbm3D
+  for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
+    if (i >= int(octaves) && !deepOn) break;
+    float fade = octaveFade(spacing);
+    if (fade <= 0.0) break; // every finer octave is faded out too
+    float n = fade * evalBaseGenerator(samplePoint, seed, baseType);
+    if (fractalType < 1.5) {
+      value *= pwr * n + 1.0; // multifractal
+    } else if (fractalType < 2.5) {
+      signal = (n + offset) * pwr * fade; // hybrid multifractal
+      value += weight * signal;
+      weight = clamp(weight * gain * signal, 0.0, 1.0);
+      if (weight <= 0.001) break; // Blender stops here: valleys stay smooth
+    } else if (fractalType < 3.5) {
+      if (i == 0) value = offset + n; // hetero terrain: each octave scales with the height so far
+      else value += (n + offset) * pwr * value * fade;
+    } else {
+      if (i > 0) weight = clamp(signal * gain, 0.0, 1.0); // ridged multifractal
+      signal = offset - abs(n);
+      signal *= signal;
+      if (i > 0) signal *= weight;
+      value += signal * pwr * fade;
+    }
+    samplePoint *= lacunarity;
+    pwr *= persistence;
+    spacing *= lacunarity;
+  }
+  float total = fullSeriesAmplitude(octaves, persistence);
+  float result;
+  if (fractalType < 1.5) {
+    result = (value - 1.0) / total; // the product centers on 1
+  } else if (fractalType < 3.5) {
+    result = (value - offset) / total; // hybrid and hetero start about offset high
+  } else {
+    // The first octave's mean and half range for a noise value in -1..1.
+    float mean = (offset * offset * offset - (offset - 1.0) * (offset - 1.0) * (offset - 1.0)) / 3.0;
+    float halfRange = max(max(mean, max(offset * offset, (offset - 1.0) * (offset - 1.0)) - mean), 0.0001);
+    result = (value / total - mean) / halfRange;
+  }
+  return clamp(result, -1.0, 1.0);
 }
 
 // Domain warp: f(p + h(p)) — displaces the sample coordinate by a noise-
@@ -147,10 +299,17 @@ float ridgedFbm3D(vec3 p, float seed, float baseType, float octaves, float persi
 // are decorrelated by sampling the base generator at three different fixed
 // offsets from p, since there's no vector-valued noise function here.
 // Generalized 2026-09-30 to any base generator, same reasoning as fbm3D.
-vec3 domainWarpOffset(vec3 p, float seed, float baseType) {
-  float x = evalBaseGenerator(p + vec3(5.2, 1.3, 2.8), seed, baseType);
-  float y = evalBaseGenerator(p + vec3(1.7, 9.2, 4.1), seed, baseType);
-  float z = evalBaseGenerator(p + vec3(8.3, 2.8, 6.5), seed, baseType);
+// Warp scale multiplies the frequency the warp noise is read at, and Warp
+// octaves layers it as fBm (Unity's warp Offset/Iterations, World Creator's
+// and Gaea's warp Frequency/Octaves); 1 and 1 give the single sample used
+// before they existed. The octave persistence (0.5) and lacunarity (2) are
+// the standard fBm defaults, not values from those tools.
+vec3 domainWarpOffset(vec3 p, float seed, float baseType, float warpScale, float warpOctaves) {
+  float spacing = gLatticeSpacing * warpScale;
+  vec3 q = p * warpScale;
+  float x = fbm3D(q + vec3(5.2, 1.3, 2.8), seed, baseType, warpOctaves, 0.5, 2.0, spacing, false);
+  float y = fbm3D(q + vec3(1.7, 9.2, 4.1), seed, baseType, warpOctaves, 0.5, 2.0, spacing, false);
+  float z = fbm3D(q + vec3(8.3, 2.8, 6.5), seed, baseType, warpOctaves, 0.5, 2.0, spacing, false);
   return vec3(x, y, z);
 }
 
@@ -160,8 +319,8 @@ vec3 domainWarpOffset(vec3 p, float seed, float baseType) {
 // receive a pre-computed scalar. poleFalloff tapers the warp to 0 at the
 // poles (where vertices are packed closest together) so it doesn't pinch
 // the geometry — see ISSUES.md, 2026-09-15.
-vec3 domainWarpedPosition(vec3 p, float seed, float baseType, float poleFalloff, float warpStrength) {
-  return p + warpStrength * poleFalloff * domainWarpOffset(p, seed, baseType);
+vec3 domainWarpedPosition(vec3 p, float seed, float baseType, float poleFalloff, float warpStrength, float warpScale, float warpOctaves) {
+  return p + warpStrength * poleFalloff * domainWarpOffset(p, seed, baseType, warpScale, warpOctaves);
 }
 
 // Converts an equirectangular UV coordinate to its position on the unit
@@ -226,21 +385,27 @@ float evalLayerNoise(
   vec3 p, float seed, float noiseType,
   bool domainWarpOn, bool octavesOn, bool ridgedOn, bool terraceOn,
   float octaves, float persistence, float lacunarity,
-  float terraceSteps, float warpStrength, float ridgeAmount, float poleFalloff
+  float terraceSteps, float warpStrength, float ridgeAmount, float poleFalloff,
+  float warpScale, float warpOctaves
 ) {
-  vec3 samplePoint = domainWarpOn ? domainWarpedPosition(p, seed, noiseType, poleFalloff, warpStrength) : p;
+  vec3 samplePoint = domainWarpOn ? domainWarpedPosition(p, seed, noiseType, poleFalloff, warpStrength, warpScale, warpOctaves) : p;
 
   // Ridging several octaves needs its own accumulation (ridgedFbm3D folds
   // each octave before summing, see its own comment above) — folding a
   // single sample has nothing "per-octave" to fix, that path is unchanged.
+  // A fractal type other than fBm replaces the octave sum; the Ridged modifier,
+  // if on, then folds its result once like any other single sample.
   float value;
-  if (octavesOn && ridgedOn) {
-    value = ridgedFbm3D(samplePoint, seed, noiseType, octaves, persistence, lacunarity, ridgeAmount);
+  if (octavesOn && gFractalType > 0.5) {
+    value = fractalNoise3D(samplePoint, seed, noiseType, gFractalType, octaves, persistence, lacunarity, gLatticeSpacing);
+    if (ridgedOn) value = mix(value, ridge(value, gRidgeOffset), ridgeAmount);
+  } else if (octavesOn && ridgedOn) {
+    value = ridgedFbm3D(samplePoint, seed, noiseType, octaves, persistence, lacunarity, ridgeAmount, gLatticeSpacing);
   } else {
     value = octavesOn
-      ? fbm3D(samplePoint, seed, noiseType, octaves, persistence, lacunarity)
+      ? fbm3D(samplePoint, seed, noiseType, octaves, persistence, lacunarity, gLatticeSpacing, true)
       : evalBaseGenerator(samplePoint, seed, noiseType);
-    if (ridgedOn) value = mix(value, ridge(value), ridgeAmount);
+    if (ridgedOn) value = mix(value, ridge(value, gRidgeOffset), ridgeAmount);
   }
   if (terraceOn) value = terrace(value, terraceSteps);
 
@@ -275,6 +440,9 @@ void main() {
   // paint for it. Everything below is identical either way.
   vec3 basePosition;
   vec2 paintUV;
+  // Distance between neighboring samples on the unit sphere, 0 when the
+  // whole globe is baked (no octave fade there).
+  float sampleSpacing = 0.0;
   if (uRegionMode > 0.5) {
     // vUv is sampled at each texel's own center ("pixel is area"), so a raw
     // mix() put the edge texel's data slightly inside the region, not on
@@ -285,7 +453,10 @@ void main() {
     // exactly on uRegionMin and the last texel exactly on uRegionMax.
     vec2 edgeAlignedUV = (vUv * uRegionSamples - 0.5) / (uRegionSamples - 1.0);
     vec2 faceCoord = mix(uRegionMin, uRegionMax, edgeAlignedUV);
-    basePosition = normalize(cubeFacePoint(uRegionFace, faceCoord.x, faceCoord.y));
+    vec3 cubePoint = cubeFacePoint(uRegionFace, faceCoord.x, faceCoord.y);
+    basePosition = normalize(cubePoint);
+    // A step across the cube face is shorter on the sphere by about 1/|cubePoint|.
+    sampleSpacing = uSampleSpacing / length(cubePoint);
     paintUV = spherePositionToPaintUv(basePosition);
   } else {
     basePosition = uvToSpherePosition(vUv);
@@ -313,11 +484,31 @@ void main() {
   // material's uniforms are ever set (see map/heightmap.ts's render()) —
   // uLayerCount only counts visible ones, so a hidden layer's noise is
   // never evaluated here at all, not just zero-weighted.
+  // Pass 1: every packed layer's own height, coverage and mask value. Indexed
+  // only by the loop counter, never by a uniform (GLSL ES 1.00 limit on
+  // dynamic indexing).
+  float layerHeights[MAX_LAYERS];
+  float layerCoverages[MAX_LAYERS];
+  float layerMaskValues[MAX_LAYERS];
   for (int i = 0; i < MAX_LAYERS; i++) {
+    layerHeights[i] = 0.0;
+    layerCoverages[i] = 0.0;
+    layerMaskValues[i] = 0.0;
     if (i >= int(uLayerCount)) break;
     // noiseType 4 = none — matches map/heightmap.ts's NOISE_TYPE_INDEX.
     bool isNoneType = uLayerNoiseType[i] > 3.5;
-    vec3 p = basePosition * uLayerFrequency[i];
+    vec3 stretch = uLayerStretch[i];
+    vec3 p = basePosition * uLayerFrequency[i] * stretch + uLayerOffset[i];
+    // The sample spacing in this layer's lattice cells, using its widest
+    // axis so a stretched layer is faded conservatively.
+    gLatticeSpacing = sampleSpacing * uLayerFrequency[i] * max(stretch.x, max(stretch.y, stretch.z));
+    gVoronoiJitter = uLayerVoronoiJitter[i];
+    gVoronoiDistance = uLayerVoronoiDistance[i];
+    gRidgeOffset = uLayerRidgeOffset[i];
+    gRidgeGain = uLayerRidgeGain[i];
+    gFractalType = uLayerFractalType[i];
+    gFractalOffset = uLayerFractalOffset[i];
+    gFractalGain = uLayerFractalGain[i];
     // 'none' has no generator content of its own — skip evaluating it
     // entirely (raw is unused below for isNoneType anyway), same reasoning
     // as hidden layers being filtered out before this loop runs at all.
@@ -325,7 +516,8 @@ void main() {
       p, uLayerSeed[i], uLayerNoiseType[i],
       uLayerDomainWarpOn[i] > 0.5, uLayerOctavesOn[i] > 0.5, uLayerRidgedOn[i] > 0.5, uLayerTerraceOn[i] > 0.5,
       uLayerOctaves[i], uLayerPersistence[i], uLayerLacunarity[i],
-      uLayerTerraceSteps[i], uLayerWarpStrength[i], uLayerRidgeAmount[i], poleFalloff
+      uLayerTerraceSteps[i], uLayerWarpStrength[i], uLayerRidgeAmount[i], poleFalloff,
+      uLayerWarpScale[i], uLayerWarpOctaves[i]
     );
     vec2 paint = samplePaintTexture(i, paintUV); // (value, mask)
     // A 'none' layer has no content of its own — true "no fill" — so its
@@ -335,8 +527,29 @@ void main() {
     // caused a compounded/ridged edge at soft stroke boundaries). A noise
     // layer keeps the old per-pixel paint-overrides-noise blend and always
     // has full coverage. See ISSUES.md, 2026-09-22.
-    float layerHeight = isNoneType ? paint.x : mix(raw * 0.5 + 0.5, paint.x, paint.y);
-    float coverage = isNoneType ? paint.y : 1.0;
+    layerHeights[i] = isNoneType ? paint.x : mix(raw * 0.5 + 0.5, paint.x, paint.y);
+    layerCoverages[i] = isNoneType ? paint.y : 1.0;
+    // The layer's own mask pattern: a plain base generator with default
+    // Voronoi settings, 0..1, the same pattern map/heightmap.ts measures.
+    if (uLayerMaskType[i] > -0.5) {
+      gVoronoiJitter = 1.0;
+      gVoronoiDistance = 0.0;
+      layerMaskValues[i] = evalBaseGenerator(basePosition * uLayerMaskFrequency[i], uLayerMaskSeed[i], uLayerMaskType[i]) * 0.5 + 0.5;
+    }
+  }
+
+  // Pass 2: composite bottom-to-top, each layer's coverage scaled by its
+  // mask (Gaea's convention: the layer's effect, blended in by the mask).
+  for (int i = 0; i < MAX_LAYERS; i++) {
+    if (i >= int(uLayerCount)) break;
+    float layerHeight = layerHeights[i];
+    float coverage = layerCoverages[i];
+
+    if (uLayerMaskType[i] > -0.5) {
+      float maskAmount = smoothstep(uLayerMaskMin[i], max(uLayerMaskMin[i] + 0.0001, uLayerMaskMax[i]), layerMaskValues[i]);
+      coverage *= uLayerMaskInvert[i] > 0.5 ? 1.0 - maskAmount : maskAmount;
+    }
+
     float blended = applyBlendMode(composite, layerHeight, uLayerBlendMode[i]);
     composite = mix(composite, blended, uLayerOpacity[i] * coverage);
 

@@ -122,22 +122,7 @@ void main() {
     float elevationRaw = texture2D(uHeightMap, vUv).g;
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
-    // The stretch above always fills the full ramp, however small the real
-    // relief is — it normalizes against whatever variation currently
-    // exists, never an absolute scale, so a paint stroke at Height 0% still
-    // showed as solid white (Dana, 2026-10-13: "height is almost nothing,
-    // why am I seeing the white streak"). Contrast fades in with the same
-    // Height (%) the slider already shows — uDisplacementAmplitude/uRadius
-    // recovers that percentage exactly, no new uniform needed — the real
-    // absolute scale [S15] established, not a per-dataset relative one.
-    // The standard GIS split is "stretched" (always full contrast, what the
-    // ramp above does alone) vs "classed/fixed breaks" (an absolute scale);
-    // this blends toward the latter as relief actually grows. TODO(DS):
-    // REFERENCE_HEIGHT_FRACTION chosen by eye, not derived. See REFERENCES.md.
-    const float REFERENCE_HEIGHT_FRACTION = 0.1;
-    float heightFraction = uDisplacementAmplitude / max(0.0001, uRadius);
-    float colorContrast = clamp(heightFraction / REFERENCE_HEIGHT_FRACTION, 0.0, 1.0);
-    surfaceColor = mix(uBaseColor, ramp, colorContrast);
+    surfaceColor = ramp;
   }
 
   gl_FragColor = vec4(surfaceColor * (ambient + diffuse) + specular, 1.0);

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import * as THREE from 'three';
 import { DEFAULT_COLOR_STOPS, type ColorStop } from './colorRamp';
+import { AUTO_MAX_ERROR_PIXELS, CURRENT_DETAIL_VERSION, migrateResolution } from './patch';
 
 // Generates a Low/Mid/High palette that reads as one lit terrain ramp
 // rather than three unrelated colors. What makes them "make sense together"
@@ -68,12 +69,21 @@ export interface PlanetSettings {
   baseColor: string;
   displayMode: string;
   heightScale: number;
-  meshSegments: number;
+  // The Resolution slider: the largest screen-space error in pixels a patch
+  // may have (planet/planetPatches.ts); lower is sharper, 8 is automatic.
+  maxErrorPixels: number;
+  // 4 once maxErrorPixels is in pixels. Older saves stored a multiplier (3) or the legacy fields below,
+  // see migrateResolution in planet/patch.ts.
+  detailVersion: number;
+  meshSegments?: number;
+  detailPerFace?: boolean;
   colorByElevation: boolean;
-  // The ramp's stops after position 0 (always baseColor) — see
-  // planet/colorRamp.ts. Replaces the old fixed colorMid/colorHigh pair
-  // (2026-10-20, the gradient ramp picker, ROADMAP.md Stage 07.4).
+  // The whole ramp, every stop equal — see planet/colorRamp.ts. Replaces the
+  // old fixed colorMid/colorHigh pair (2026-10-20, ROADMAP.md Stage 07.4).
   colorStops: ColorStop[];
+  // True once colorStops holds the whole ramp. Saves from before that left
+  // the lowest stop out (it was always baseColor), see migrateColorStops.
+  rampHasBase: boolean;
   shadowsEnabled: boolean;
 }
 
@@ -82,9 +92,11 @@ export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
   baseColor: '#c9dbea', // TODO(DS): lighter placeholder, per Dana's 2026-09-16 request
   displayMode: 'shaded', // 'shaded' | 'wireframe' | 'voxel'
   heightScale: 15,
-  meshSegments: 32,
+  maxErrorPixels: AUTO_MAX_ERROR_PIXELS,
+  detailVersion: CURRENT_DETAIL_VERSION,
   colorByElevation: false,
   colorStops: DEFAULT_COLOR_STOPS,
+  rampHasBase: true,
   shadowsEnabled: false,
 };
 
@@ -96,14 +108,16 @@ export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
 // loose/untyped here on purpose — they're migration input, not part of the
 // shape this project writes going forward.
 function migrateColorStops(settings: PlanetSettings & { colorMid?: string; colorHigh?: string }): ColorStop[] {
-  if (Array.isArray(settings.colorStops) && settings.colorStops.length > 0) return settings.colorStops;
-  if (settings.colorMid || settings.colorHigh) {
-    return [
-      { position: 0.5, color: settings.colorMid ?? DEFAULT_COLOR_STOPS[0].color },
-      { position: 1.0, color: settings.colorHigh ?? DEFAULT_COLOR_STOPS[1].color },
+  let stops: ColorStop[];
+  if (Array.isArray(settings.colorStops) && settings.colorStops.length > 0) stops = settings.colorStops;
+  else if (settings.colorMid || settings.colorHigh) {
+    stops = [
+      { position: 0.5, color: settings.colorMid ?? DEFAULT_COLOR_STOPS[1].color },
+      { position: 1.0, color: settings.colorHigh ?? DEFAULT_COLOR_STOPS[2].color },
     ];
-  }
-  return DEFAULT_COLOR_STOPS;
+  } else return DEFAULT_COLOR_STOPS;
+  // An older ramp left out its first stop, which was always the base color at 0.
+  return settings.rampHasBase ? stops : [{ position: 0, color: settings.baseColor }, ...stops];
 }
 
 // Owns the planet-specific appearance controls — radius, base color, and
@@ -126,14 +140,8 @@ export function usePlanetControls() {
   // radius*0.15 auto-derivation at any radius now, not just the default
   // one. See ISSUES.md, 2026-09-24.
   const [heightScale, setHeightScale] = useState(DEFAULT_PLANET_SETTINGS.heightScale);
-  // How finely the base cube-sphere is subdivided, per face. Was hardcoded
-  // at 32 in planet/mesh.ts with no control reaching it at all, which is
-  // what gave the planet its faceted, low-poly silhouette once displacement
-  // pushed those few vertices out a long way — visible directly in the
-  // sphere's outline, not just its shading (Dana, 2026-10-13: "this isn't
-  // related to voxel", the chunk's own Resolution slider is a separate
-  // thing). 32 stays the default; this only exposes the ceiling.
-  const [meshSegments, setMeshSegments] = useState(DEFAULT_PLANET_SETTINGS.meshSegments);
+  // The Resolution slider, see PlanetSettings.maxErrorPixels.
+  const [maxErrorPixels, setMaxErrorPixels] = useState(DEFAULT_PLANET_SETTINGS.maxErrorPixels);
   // Elevation color ramp (shaders/terrain.glsl) — off by default so nothing
   // changes until turned on. A labelled placeholder for Stage 11's real
   // height+climate+biome shader, not that shader itself (Dana, 2026-10-13:
@@ -146,11 +154,15 @@ export function usePlanetControls() {
   // Heightmap self-shadowing — land chunk only for now, see shaders/
   // terrain.glsl for why the planet's curved surface is a separate step.
   const [shadowsEnabled, setShadowsEnabled] = useState(DEFAULT_PLANET_SETTINGS.shadowsEnabled);
+  // The planet terrain's real elevation range, as SceneCanvas last computed
+  // it. Read-only here (not saved), it's what the ramp's meters calibrate to.
+  const [elevationRange, setElevationRange] = useState({ min: -0.5, max: 0.5 });
 
   function randomizeColors() {
     const palette = randomTerrainPalette();
     setBaseColor(palette.low);
     setColorStops([
+      { position: 0, color: palette.low },
       { position: 0.5, color: palette.mid },
       { position: 1.0, color: palette.high },
     ]);
@@ -159,7 +171,7 @@ export function usePlanetControls() {
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, meshSegments, colorByElevation, colorStops, shadowsEnabled };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -170,7 +182,7 @@ export function usePlanetControls() {
     setBaseColor(settings.baseColor);
     setDisplayMode(settings.displayMode);
     setHeightScale(settings.heightScale);
-    setMeshSegments(settings.meshSegments);
+    setMaxErrorPixels(migrateResolution(settings));
     setColorByElevation(settings.colorByElevation);
     setColorStops(migrateColorStops(settings));
     setShadowsEnabled(settings.shadowsEnabled);
@@ -193,14 +205,16 @@ export function usePlanetControls() {
     setDisplayMode,
     heightScale,
     setHeightScale,
-    meshSegments,
-    setMeshSegments,
+    maxErrorPixels,
+    setMaxErrorPixels,
     colorByElevation,
     setColorByElevation,
     colorStops,
     setColorStops,
     shadowsEnabled,
     setShadowsEnabled,
+    elevationRange,
+    setElevationRange,
     randomizeColors,
     currentSettings,
     applySettings,

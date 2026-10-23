@@ -33,6 +33,9 @@ export function useSceneControls() {
   // shininess how tight.
   const [specularStrength, setSpecularStrength] = useState(0);
   const [shininess, setShininess] = useState(24);
+  // How far the diffuse light wraps past the terminator: 0 is plain Lambert,
+  // 1 the soft half-Lambert the chunk used alone. Shared by planet and chunk.
+  const [diffuseWrap, setDiffuseWrap] = useState(0.5);
   const [gridSpacing, setGridSpacing] = useState(10);
   const [gridVisible, setGridVisible] = useState(true);
 
@@ -53,6 +56,8 @@ export function useSceneControls() {
     setSpecularStrength,
     shininess,
     setShininess,
+    diffuseWrap,
+    setDiffuseWrap,
     gridSpacing,
     setGridSpacing,
     gridVisible,

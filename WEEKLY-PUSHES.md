@@ -1,26 +1,41 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-10-19`
+`Last updated: 2026-10-21`
 
-*The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first.*
+*The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
+
+> [!NOTE]
+> **How the entries are numbered.** By the syllabus's own sessions (`Syllabus-FA26-DESIGN6197-SEM130-DRAFT.pdf`, in the course folder): the class meets on Wednesdays, and each weekly report is committed by the start of that Wednesday's class (10:10 am). Work stays in the earlier session's entry until it is committed: the first commit after a class starts the next session's entry. Two entries in one session are marked "part 1 of 2". Sessions 1 and 2 (Aug 26, Sep 2) are left empty, before the project started. The next sessions are pre-built at the end of this file: fill one in, then move it to the top.
 
 ---
 
-## Week 07 · 2026-10-19
+## Session 9 · Wed 2026-10-21
 
-*Unified the planet and chunk under one renderer, and chased the chunk's color and shadow bugs down to their real causes.*
+*Unified the planet and chunk under one renderer, chased the chunk's color and shadow bugs to their real causes, then rebuilt how the planet picks its detail and how terrain noise is made. The week ran Monday 2026-10-19 to 2026-10-21 so far.*
+
+![The planet with the pixel Resolution slider, the meters ramp, per-layer mask icons and the new Voronoi controls.](Screenshots/2026-10-21-ramp-masks-and-resolution.png)
+
+> [!NOTE]
+> Screenshots are kept in the course folder, `Cornell/Fall 26/PWB/Screenshots/`, outside this repo. The copies in `Screenshots/` here are the ones the docs link to.
 
 ### 🛠️ Done
 - One shared `WebGLRenderer`/canvas for both viewports (planet and chunk), replacing two independent ones, the base that lets a baked patch texture hand off straight to the GPU with no CPU readback.
-- Both the planet and the chunk now render as terrain patches (a quadtree, each with its own baked heightmap) instead of one mesh sampling a shared map. Planet side is built but gated behind a flag, pending one known render/freeze regression.
+- Both the planet and the chunk now render as terrain patches (a quadtree, each with its own baked heightmap) instead of one mesh sampling a shared map. Planet side was gated behind a flag at first, pending a render/freeze regression that did not reproduce when tested (2026-10-20).
 - Land chunk: the material is built once and reused instead of rebuilt on every Resolution change (fixed a flash-to-flat flicker while dragging), resolution changes are debounced, and the texture ceiling was raised to the real WebGL2 floor (2048).
 - Land chunk shading: the top surface and the cut walls/bottom cap now get two separate, non-bleeding elevation sources for color, lighting, and shadow, via a new per-triangle flag, fixing a hard seam that only showed up at certain light angles.
 - Widened the normal-reconstruction gradient step, removing harsh, faceted-looking lighting on dense terrain.
 - The elevation color ramp now reads the planet's own global range rather than computing one per patch, a whole-dataset color stretch, the standard GIS convention for this.
 - Hydraulic erosion simulation (grid-based, GPU), with checkpointing and a scrub timeline.
 - Real SVG icons replacing emoji button glyphs.
+- **2026-10-20/21, the planet's patches:** seams between patches fixed at their cause (a half-texel edge offset, then different vertex counts across a detail boundary), then cross-face stitching, a patch cache so hidden patches are not rebuilt, and detail chosen by on-screen error in pixels (the 3D Tiles and Cesium convention) with the Resolution slider as a pixel threshold.
+- **Color ramp:** a multi-stop gradient editor where every stop, including the base color, is equal and movable; elevations shown and editable in meters; planet and chunk share one lighting model with a shared normal function.
+- **Terrain noise:** per-layer masks with their own pattern (Coverage, Softness, Invert, Shuffle), a better hash, octaves that fade out when finer than the grid, new controls (offset, stretch, warp scale, Voronoi jitter and distance, ridge offset and gain), fractal types (multifractal, hybrid, hetero, ridged) and extra octaves at deeper patches, all with ranges from one table so Randomize never hardcodes a range.
+- **Interface:** Planet and Terrain merged into one panel, icon buttons, black wrapped tooltips, a reusable popup, and a `CODE-INDEX.md` so reads can be narrow.
 
 ### 🤖 AI process
+- **2026-10-21:** blamed a stale browser tab for a missing base-color row that was a real bug; parked a requested zoom-detail feature as optional; built a uniform minimum Resolution that contradicted how the user expected zoom to work. Each was corrected, the last by confirming screen-space error against the Cesium and 3D Tiles docs.
+- Held methods to sourced documentation: Gaea, Blender's Musgrave source, Quilez, Cesium, a peer-reviewed hash paper. Anything unsourced was flagged and left tunable.
+- **A cost failure:** about 30 forked agents, 250,000 to 600,000 tokens each and many for small doc edits, used up the session limit. New binding rules: no forks, agents only with approval and a cost estimate, docs edited directly, narrow reads through the code index.
 - Traced a wall-coloring "bleed" to its exact mechanism twice over: first an interpolating vertex attribute used as a material switch, then the same mistake found again in a second code block (normals, shadows) missed the first time.
 - Corrected twice: once for treating a real, undecided design tradeoff as already settled, once for floating a dev-tooling explanation (stale hot-reload) ahead of the actual code-level bug.
 - Checked a claim about dev-tooling behavior (Vite's hot reload, React's Fast Refresh) against real documentation before relying on it, then dropped it once a concrete, provable code cause was found instead.
@@ -28,11 +43,13 @@
 ### 📊 Worked / didn't / next
 - ✅ Tracing a visual bug to the exact line and explaining the mechanism, instead of proposing a fix from a plausible-sounding theory.
 - ❌ Two earlier wall-color fixes each solved the stated complaint but reintroduced a seam somewhere else. The durable fix needed a true non-interpolated flag, not a branch on an attribute already doing another job.
-- ⏭️ Re-enable the planet's own per-patch rendering (fix its black-render regression), build the gradient color-ramp picker, then research soft shadows for the land chunk.
+- ✅ Checking a method against its source before building it, which caught a wrong channel read in the planet's lighting and a hash that bands.
+- ❌ Forking agents that inherit the whole conversation. It was the most expensive mistake of the week.
+- ⏭️ Dana tests the batch, then the second fade pass for ridged, terrace, warp and Voronoi, bounded heights, plateaus, height in meters, undo/redo, and planet shadows.
 
 ---
 
-## Week 06 · 2026-10-13
+## Session 8 · Wed 2026-10-14
 
 *Rebuilt the planet on a cube sphere, and made the chunk a real piece of it.*
 
@@ -60,7 +77,7 @@
 
 ---
 
-## Week 05 · 2026-10-07
+## Session 7 · Wed 2026-10-07
 
 *Answered the procedural-system feedback with a pipeline, not a UI tweak.*
 
@@ -83,7 +100,7 @@
 
 ---
 
-## Week 04 · 2026-09-30
+## Session 6 · Wed 2026-09-30 · part 2 of 2
 
 *Separated height from opacity, and made the modifiers composable.*
 
@@ -109,7 +126,7 @@
 
 ---
 
-## Week 03 · 2026-09-24
+## Session 6 · Wed 2026-09-30 · part 1 of 2
 
 *Found the real resolution ceiling and rearchitected around it.*
 
@@ -128,7 +145,7 @@
 
 ---
 
-## Week 03 · 2026-09-23
+## Session 5 · Wed 2026-09-23 · part 2 of 2
 
 *Built the land chunk and the side-by-side view.*
 
@@ -150,7 +167,7 @@
 
 ---
 
-## Week 02 · 2026-09-22
+## Session 5 · Wed 2026-09-23 · part 1 of 2
 
 *Real persistence, and two compositing bugs that needed the maths.*
 
@@ -175,7 +192,7 @@
 
 ---
 
-## Week 01 · 2026-09-16
+## Session 4 · Wed 2026-09-16
 
 *The layer stack, the brush, and lighting that finally showed relief.*
 
@@ -201,7 +218,7 @@
 
 ---
 
-## Week 00 · 2026-09-09
+## Session 3 · Wed 2026-09-09
 
 *Scaffolded the project and the base scene.*
 
@@ -218,3 +235,132 @@
 - ✅ Going back to the actual source rather than memory. Once real font files and exact values were used, the UI matched.
 - ⚠️ Several first passes drifted from the source without being flagged, caught by side-by-side comparison rather than by memory.
 - ⏭️ Colour-picker decision, terrain generation, design-system tokenization.
+
+---
+
+## Session 2 · Wed 2026-09-02
+
+`Covers 2026-08-26 to 2026-09-02 · Class topic: AI tools tutorial, context engineering, React and Three.js · Due: start of class, 10:10 am`
+
+*No project work recorded this session.*
+
+### 🛠️ Done
+
+### 🤖 AI process
+
+### 📊 Worked / didn't / next
+
+---
+
+## Session 1 · Wed 2026-08-26
+
+`Covers up to 2026-08-26 · Class topic: Intro to the syllabus and lecture · Due: start of class, 10:10 am`
+
+*No project work recorded this session.*
+
+### 🛠️ Done
+
+### 🤖 AI process
+
+### 📊 Worked / didn't / next
+
+---
+
+## 🗓️ Pre-built sessions
+
+*Skeletons for the rest of the semester. Fill one in, rename nothing, then move it above Session 9. The final deliverable is due Dec 18 and is a separate package, not a weekly entry.*
+
+### Session 10 · Wed 2026-10-28
+
+`Covers 2026-10-21 to 2026-10-28 · Class topic: Agents and behavior: state machines and schedules · Due: start of class, 10:10 am`
+
+*⚪ One-line summary of the week.*
+
+🖼️ `![caption](Screenshots/2026-10-28-name.png)`
+
+#### 🛠️ Done
+- ⚪
+
+#### 🤖 AI process
+- ⚪
+
+#### 📊 Worked / didn't / next
+- ✅
+- ❌
+- ⏭️
+
+### Session 11 · Wed 2026-11-04
+
+`Covers 2026-10-28 to 2026-11-04 · Class topic: Procedural cultures · Due: start of class, 10:10 am`
+
+*⚪ One-line summary of the week.*
+
+🖼️ `![caption](Screenshots/2026-11-04-name.png)`
+
+#### 🛠️ Done
+- ⚪
+
+#### 🤖 AI process
+- ⚪
+
+#### 📊 Worked / didn't / next
+- ✅
+- ❌
+- ⏭️
+
+### Session 12 · Wed 2026-11-11
+
+`Covers 2026-11-04 to 2026-11-11 · Class topic: Optimization and performance · Due: start of class, 10:10 am`
+
+*⚪ One-line summary of the week.*
+
+🖼️ `![caption](Screenshots/2026-11-11-name.png)`
+
+#### 🛠️ Done
+- ⚪
+
+#### 🤖 AI process
+- ⚪
+
+#### 📊 Worked / didn't / next
+- ✅
+- ❌
+- ⏭️
+
+### Session 13 · Wed 2026-11-18
+
+`Covers 2026-11-11 to 2026-11-18 · Class topic: Optimization and performance · Due: start of class, 10:10 am`
+
+*⚪ One-line summary of the week.*
+
+🖼️ `![caption](Screenshots/2026-11-18-name.png)`
+
+#### 🛠️ Done
+- ⚪
+
+#### 🤖 AI process
+- ⚪
+
+#### 📊 Worked / didn't / next
+- ✅
+- ❌
+- ⏭️
+
+### Session 14 · Wed 2026-12-02
+
+`Covers 2026-11-18 to 2026-12-02 · Class topic: Final review (no class on Nov 25, Thanksgiving break) · Due: start of class, 10:10 am`
+
+*⚪ One-line summary of the week.*
+
+🖼️ `![caption](Screenshots/2026-12-02-name.png)`
+
+#### 🛠️ Done
+- ⚪
+
+#### 🤖 AI process
+- ⚪
+
+#### 📊 Worked / didn't / next
+- ✅
+- ❌
+- ⏭️

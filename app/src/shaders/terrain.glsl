@@ -10,11 +10,9 @@
 // this takes a fixed-size array plus how many of its entries are actually
 // in use (planet/colorRamp.ts's MAX_COLOR_STOPS, matched exactly by the
 // callers' own uRampColors/uRampPositions/uRampCount uniforms). `positions`
-// must be ascending (the editor keeps it sorted) and `colors[0]`/
-// `positions[0]` is always the surface's own uBaseColor at position 0, not
-// a separate control — same reasoning as the old "low" stop (Dana,
-// 2026-10-13: "the base color should just serve as the low elevation
-// color... no need for low elevation color").
+// must be ascending (buildRampUniformArrays sorts it). Below the first and
+// above the last stop the ramp holds that stop's color; uBaseColor is only
+// the flat color used when Color by elevation is off (Dana, 2026-10-21).
 const int MAX_COLOR_STOPS = 8;
 vec3 terrainRampColor(float elevationFraction, vec3 colors[MAX_COLOR_STOPS], float positions[MAX_COLOR_STOPS], int count) {
   float t = clamp(elevationFraction, 0.0, 1.0);
@@ -29,6 +27,48 @@ vec3 terrainRampColor(float elevationFraction, vec3 colors[MAX_COLOR_STOPS], flo
     }
   }
   return colors[count - 1];
+}
+
+// One surface normal from a baked heightmap, shared by the planet's patches
+// and the land chunk so both light the same way. Central differences of the
+// ELEVATION channel (green for the GPU bake, red for voxel's CPU texture, as
+// greenChannel selects), `stepUv` apart, crossed with the surface's own
+// tangents (dPdu/dPdv, world units per uv) after lifting them by the real
+// displacement `amplitude`. Returns a local-space normal; callers apply their
+// own normalMatrix. The step is set by the caller as a fixed world length,
+// since a step tied to patch size read finer noise as slope ([B34]).
+vec3 heightfieldNormal(
+  sampler2D heightMap,
+  vec2 uv,
+  float stepUv,
+  float greenChannel,
+  vec3 dPdu,
+  vec3 dPdv,
+  vec3 surfaceNormal,
+  float amplitude
+) {
+  vec4 texelL = texture2D(heightMap, uv - vec2(stepUv, 0.0));
+  vec4 texelR = texture2D(heightMap, uv + vec2(stepUv, 0.0));
+  vec4 texelD = texture2D(heightMap, uv - vec2(0.0, stepUv));
+  vec4 texelU = texture2D(heightMap, uv + vec2(0.0, stepUv));
+  float hL = mix(texelL.r, texelL.g, greenChannel);
+  float hR = mix(texelR.r, texelR.g, greenChannel);
+  float hD = mix(texelD.r, texelD.g, greenChannel);
+  float hU = mix(texelU.r, texelU.g, greenChannel);
+  float dHdu = (hR - hL) / (2.0 * stepUv);
+  float dHdv = (hU - hD) / (2.0 * stepUv);
+  vec3 tangentU = dPdu + surfaceNormal * dHdu * amplitude;
+  vec3 tangentV = dPdv + surfaceNormal * dHdv * amplitude;
+  return normalize(cross(tangentV, tangentU));
+}
+
+// Wrap lighting: wrap 0 is plain clamped Lambert, wrap 1 is Valve's squared
+// half-Lambert (Mitchell, SIGGRAPH 2006, see REFERENCES.md), so one control
+// spans both looks. The exponent of 1 + wrap is this project's own blend
+// between the two, not a documented formula. Shared by planet and chunk.
+float softDiffuse(vec3 normal, vec3 lightDir, float wrap) {
+  float wrapped = clamp((dot(normal, lightDir) + wrap) / (1.0 + wrap), 0.0, 1.0);
+  return pow(wrapped, 1.0 + wrap);
 }
 
 // Heightmap self-shadowing over a flat XZ patch: steps toward the light in

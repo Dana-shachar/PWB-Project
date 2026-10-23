@@ -146,6 +146,8 @@ function App() {
         onSpecularStrengthChange={sceneControls.setSpecularStrength}
         shininess={sceneControls.shininess}
         onShininessChange={sceneControls.setShininess}
+        diffuseWrap={sceneControls.diffuseWrap}
+        onDiffuseWrapChange={sceneControls.setDiffuseWrap}
         gridSpacing={sceneControls.gridSpacing}
         onGridSpacingChange={sceneControls.setGridSpacing}
         gridVisible={sceneControls.gridVisible}
@@ -180,10 +182,13 @@ function App() {
         onDeleteProject={project.handleDeleteProject}
         chunkResolution={landChunk.resolution}
         onChunkResolutionChange={landChunk.setResolution}
-        meshSegments={planetControls.meshSegments}
-        onMeshSegmentsChange={planetControls.setMeshSegments}
+        maxErrorPixels={planetControls.maxErrorPixels}
+        onMaxErrorPixelsChange={planetControls.setMaxErrorPixels}
         chunkSize={landChunk.chunkSize}
         onChunkSizeChange={landChunk.setChunkSize}
+        heightScale={planetControls.heightScale}
+        planetElevationRange={planetControls.elevationRange}
+        chunkElevationRange={{ min: landChunk.elevationMin, max: landChunk.elevationMax }}
         activeStage={activeStage}
         onStageChange={setActiveStage}
         stageEnabled={stageEnabled}
@@ -244,7 +249,7 @@ function App() {
                 viewportRef={planetViewportRef}
                 sharedRenderer={sharedViewportRenderer}
                 radius={planetControls.radiusScene}
-                meshSegments={planetControls.meshSegments}
+                maxErrorPixels={planetControls.maxErrorPixels}
                 baseColor={planetControls.baseColor}
                 ambientLight={sceneControls.ambientLight}
                 lightDirX={sceneControls.lightDirX}
@@ -253,6 +258,7 @@ function App() {
                 lightIntensity={sceneControls.lightIntensity}
                 specularStrength={sceneControls.specularStrength}
                 shininess={sceneControls.shininess}
+                diffuseWrap={sceneControls.diffuseWrap}
                 displayMode={planetControls.displayMode}
                 gridSpacing={sceneControls.gridSpacing}
                 gridVisible={sceneControls.gridVisible}
@@ -260,6 +266,7 @@ function App() {
                 heightScale={planetControls.heightScale}
                 colorByElevation={planetControls.colorByElevation}
                 colorStops={planetControls.colorStops}
+                onElevationRangeChange={planetControls.setElevationRange}
               />
             </div>
             {landChunk.viewMode === 'split' && <div className="viewport-divider" onMouseDown={landChunk.startResize} />}
@@ -284,6 +291,7 @@ function App() {
                 lightIntensity={sceneControls.lightIntensity}
                 specularStrength={sceneControls.specularStrength}
                 shininess={sceneControls.shininess}
+                diffuseWrap={sceneControls.diffuseWrap}
                 gridSpacing={sceneControls.gridSpacing}
                 gridVisible={sceneControls.gridVisible}
                 baseColor={planetControls.baseColor}
@@ -315,6 +323,7 @@ function App() {
         onRenameLayer={noiseLayers.renameLayer}
         onReorderLayer={noiseLayers.reorderLayer}
         onUpdateSelectedLayer={noiseLayers.updateSelectedLayer}
+        onUpdateLayers={noiseLayers.updateLayers}
         onRandomizeTerrain={noiseLayers.randomizeTerrain}
         brushRadiusPx={brush.brushRadiusPx}
         onBrushRadiusPxChange={brush.setBrushRadiusPx}

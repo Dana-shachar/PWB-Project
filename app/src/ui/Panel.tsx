@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton } from './UIElements';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
-import { DiceIcon, PaletteIcon } from './icons';
+import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
 import { ColorRampEditor } from './panels/ColorRampEditor';
 import type { ColorStop } from '../planet/colorRamp';
+import { MAX_MAX_ERROR_PIXELS, MIN_MAX_ERROR_PIXELS } from '../planet/patch';
 
 // 'voxel' only affects the land-chunk view for now — a display style, not a
 // chunk-only feature (Dana, 2026-09-23), but the planet doesn't render
@@ -36,6 +37,8 @@ interface PanelProps {
   onSpecularStrengthChange: (value: number) => void;
   shininess: number;
   onShininessChange: (value: number) => void;
+  diffuseWrap: number;
+  onDiffuseWrapChange: (value: number) => void;
   gridSpacing: number;
   onGridSpacingChange: (value: number) => void;
   gridVisible: boolean;
@@ -88,10 +91,14 @@ interface PanelProps {
   onChunkResolutionChange: (value: number) => void;
   chunkSize: number;
   onChunkSizeChange: (value: number) => void;
-  // Planet mesh — segments per cube face, previously hardcoded with nothing
-  // able to reach it (Dana, 2026-10-13).
-  meshSegments: number;
-  onMeshSegmentsChange: (value: number) => void;
+  // What the color ramp's meters calibrate to: each view's real elevation
+  // range, scaled by the same Height % the terrain is displaced with.
+  heightScale: number;
+  planetElevationRange: { min: number; max: number };
+  chunkElevationRange: { min: number; max: number };
+  // Planet Resolution: a detail bias, 1 is automatic (planet/planetPatches.ts).
+  maxErrorPixels: number;
+  onMaxErrorPixelsChange: (value: number) => void;
   // Pipeline-stage menu — the structural response to "reads as 3D software,
   // not a procedural system" feedback (Dana, 2026-09-30/2026-10-07; see
   // ROADMAP.md's Procedural System Feedback section). activeStage/
@@ -186,6 +193,8 @@ export function Panel({
   onSpecularStrengthChange,
   shininess,
   onShininessChange,
+  diffuseWrap,
+  onDiffuseWrapChange,
   gridSpacing,
   onGridSpacingChange,
   gridVisible,
@@ -222,8 +231,11 @@ export function Panel({
   onChunkResolutionChange,
   chunkSize,
   onChunkSizeChange,
-  meshSegments,
-  onMeshSegmentsChange,
+  heightScale,
+  planetElevationRange,
+  chunkElevationRange,
+  maxErrorPixels,
+  onMaxErrorPixelsChange,
   activeStage,
   onStageChange,
   stageEnabled,
@@ -289,7 +301,7 @@ export function Panel({
                 + New Project
               </button>
             </Accordion>
-            <button type="button" className="noise-add-layer-btn" onClick={onSaveProject}>
+            <button type="button" className="noise-add-layer-btn panel-btn-hug" onClick={onSaveProject}>
               Save
             </button>
           </Accordion>
@@ -303,20 +315,14 @@ export function Panel({
               {/* Mirrors the Cmd+Z/Ctrl+Z shortcut (see map/2Dbrush.ts) —
                   undoes the single most recent paint stroke, regardless of
                   which layer it's on. */}
-              <button type="button" className="noise-add-layer-btn" onClick={onUndo} disabled={!canUndo}>
-                Undo
-              </button>
+              <IconButton icon={<UndoIcon />} label="Undo" onClick={onUndo} disabled={!canUndo} />
               {/* Mirrors Cmd+Shift+Z/Ctrl+Shift+Z — replays the most recently
                   undone stroke. */}
-              <button type="button" className="noise-add-layer-btn" onClick={onRedo} disabled={!canRedo}>
-                Redo
-              </button>
+              <IconButton icon={<RedoIcon />} label="Redo" onClick={onRedo} disabled={!canRedo} />
               {/* Clears the current planet back to blank without switching
                   which saved planet is open — different from "+ New Project"
                   above. */}
-              <button type="button" className="noise-add-layer-btn" onClick={onReset}>
-                Reset
-              </button>
+              <IconButton icon={<ResetIcon />} label="Reset" onClick={onReset} />
             </div>
           </Accordion>
         </div>
@@ -396,6 +402,15 @@ export function Panel({
               precision={0}
               description="How tight the highlight is. Low values spread it into a soft sheen; high values pull it into a small, sharp glint."
             />
+            <Slider
+              label="Wrap"
+              value={diffuseWrap}
+              onChange={onDiffuseWrapChange}
+              min={0}
+              max={1}
+              step={0.01}
+              description="How far the light wraps around the surface past the lit edge. 0 is hard, plain lighting; 1 is soft, with no fully dark side. Same in the planet and the chunk."
+            />
             {/* A lighting feature (terrain blocking light from reaching
                 terrain behind it), not a terrain-generation one, so it sits
                 here rather than with the elevation color ramp, which moved
@@ -427,7 +442,9 @@ export function Panel({
           {/* Chunk folded in here, not its own section (Dana, 2026-10-07:
               "planet - size, resolution (sphere/ land chunk), color") — one
               Planet accordion, not a separate always-open "Chunk" section. */}
-          <Accordion title="Planet">
+          {/* Also the Terrain pipeline stage, its old row merged in here
+              (Dana, 2026-10-21): any header click shows the noise controls. */}
+          <Accordion title="Planet Terrain" onHeaderClick={() => onStageChange('terrain')} active={activeStage === 'terrain'}>
             {/* Same action as the Layers section's own Randomize (Dana,
                 2026-10-13: "add a random seed button at the top of the
                 planet section") — reseeds every layer at once, so it's
@@ -470,49 +487,41 @@ export function Panel({
             />
             {/* Contextual, the same pattern as the Radius/Size slider above:
                 rebinds to whichever pane is in view rather than showing two
-                separate controls (Dana, 2026-10-13 — this is the same kind
-                of control in both places, how finely that pane's own mesh
-                is divided). The planet's own segment count was hardcoded at
-                32 with nothing able to reach it until now, which is what
-                gave the planet its faceted silhouette once displacement
-                pushed those few vertices out a long way.
-                Detail only — doesn't affect either pane's physical size,
-                which lives in the Radius/Size slider above (Dana,
-                2026-09-23: it used to, incidentally, for the chunk). The
-                chunk's own max is 2048, matching MAX_PATCH_TEXTURE_RESOLUTION
-                (planet/patch.ts) — the real guaranteed WebGL2 texture-size
-                floor, a hardware-grounded ceiling now, not a round number,
-                for the GPU-only texture smooth/shaded mode bakes into. Past
-                2026-09-23's original
-                triangle-count worry: smooth mode's own mesh density is now
-                fixed regardless of this slider (voxel/landChunk.ts), so
-                that risk no longer applies there, only voxel mode's own
-                mesh still scales with resolution, bounded separately by
-                clampPatchSamples' own lower cap. See ISSUES.md, [B32]. The
-                planet's own max is 128, matching MAX_PATCH_GRID_RESOLUTION
-                (planet/patch.ts) — now a per-patch mesh resolution, not the
-                old single whole-globe mesh's segment count (patches render
-                the planet now, each with its own grid, see [B28]); 128 is a
-                deliberate, conservative ceiling since a patch already
-                covers far less area than a whole cube face did. */}
+                separate controls. The chunk's is how finely its own ground is
+                measured (max 2048, MAX_PATCH_TEXTURE_RESOLUTION in
+                planet/patch.ts, see ISSUES.md [B32]). The planet's is a
+                maximum screen-space error in pixels (planet/planetPatches.ts, Cesium's
+                maximumScreenSpaceError convention): detail is automatic by
+                zoom, a smaller number pushes it further, on a reversed log
+                track so right is sharper. */}
             <Slider
               label="Resolution"
-              value={activeViewContext === 'landChunk' ? chunkResolution : meshSegments}
-              onChange={activeViewContext === 'landChunk' ? onChunkResolutionChange : onMeshSegmentsChange}
-              min={activeViewContext === 'landChunk' ? 8 : 8}
-              max={activeViewContext === 'landChunk' ? 2048 : 128}
-              step={activeViewContext === 'landChunk' ? 8 : 4}
-              precision={0}
+              unit={activeViewContext === 'landChunk' ? undefined : 'px'}
+              value={activeViewContext === 'landChunk' ? chunkResolution : maxErrorPixels}
+              onChange={activeViewContext === 'landChunk' ? onChunkResolutionChange : onMaxErrorPixelsChange}
+              min={activeViewContext === 'landChunk' ? 8 : MIN_MAX_ERROR_PIXELS}
+              max={activeViewContext === 'landChunk' ? 2048 : MAX_MAX_ERROR_PIXELS}
+              step={activeViewContext === 'landChunk' ? 8 : 0.1}
+              precision={activeViewContext === 'landChunk' ? 0 : 1}
+              scale={activeViewContext === 'landChunk' ? 'linear' : 'log'}
+              reversed={activeViewContext !== 'landChunk'}
               disabled={activeViewContext === null}
               description={
                 activeViewContext === 'landChunk'
                   ? "How finely the land chunk's own ground is measured. Independent of Size above — you can zoom into a low-resolution patch and still see it as low-resolution."
-                  : "How finely each visible patch's own ground is measured — every patch you see rebuilds at this resolution, same control as before, now reaching what's actually on screen."
+                  : 'How many pixels of error the planet may show before it adds detail. Smaller is sharper (slide right). The planet still sharpens by itself as you zoom in, and when few patches are in view it goes a little finer on its own. Zoomed far out, a smaller number changes nothing you can see, so it costs nothing there.'
               }
             />
             {/* Every color control grouped under its own named subsection
                 (Dana, 2026-10-21), not loose in Planet's own body. */}
             <Accordion title="Color" nested>
+              {/* Rotates a hue, it doesn't pick three independent random RGB
+                  values — see planetControls.ts's randomTerrainPalette() for
+                  the conventions this follows. At the top (Dana, 2026-10-21). */}
+              <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={onRandomizeColors}>
+                <PaletteIcon /> Randomize colors
+                <span className="ui-tooltip">Rotates a related hue for Base/Mid/High, not independent colors</span>
+              </button>
               {/* Gates the whole group below (Dana, 2026-10-14) — a
                   labelled placeholder for Stage 11's real height+climate+
                   biome color shader (ROADMAP.md), not that shader itself. */}
@@ -528,14 +537,11 @@ export function Panel({
                 stops={colorStops}
                 onStopsChange={onColorStopsChange}
                 rampActive={colorByElevation}
+                /* Same view branching as Radius/Size: the chunk's own range and
+                   footprint when it's in view, otherwise the planet's. */
+                elevationRange={activeViewContext === 'landChunk' ? chunkElevationRange : planetElevationRange}
+                elevationScaleMeters={(heightScale / 100) * (activeViewContext === 'landChunk' ? chunkSize : radiusKm) * 1000}
               />
-              {/* Rotates a hue, it doesn't pick three independent random RGB
-                  values — see planetControls.ts's randomTerrainPalette() for
-                  the conventions this follows. */}
-              <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={onRandomizeColors}>
-                <PaletteIcon /> Randomize colors
-                <span className="ui-tooltip">Rotates a related hue for Base/Mid/High, not independent colors</span>
-              </button>
             </Accordion>
           </Accordion>
         </div>
@@ -543,7 +549,8 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          {PIPELINE_STAGES.map((stage) => (
+          {/* Terrain is selected from Planet Terrain above, not its own row. */}
+          {PIPELINE_STAGES.filter((stage) => stage.key !== 'terrain').map((stage) => (
             <PipelineStageRow
               key={stage.key}
               label={stage.label}
