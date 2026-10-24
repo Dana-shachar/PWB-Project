@@ -2,3 +2,6 @@
 
 # Local working rules, not part of the project
 .claude/CLAUDE.md
+
+# Licensed fonts, not redistributable
+app/public/fonts/

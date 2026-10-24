@@ -49,7 +49,7 @@ For every function and the chains between files, open [`CODE-INDEX.md`](docs/COD
 ├── .obsidian/                vault config; any .md in the repo is part of the vault
 ├── firebase.json, .firebaserc, firestore.rules   Firebase config and security rules
 └── app/                      the Vite, React, TypeScript and Three.js project
-    ├── public/               fonts and icons
+    ├── public/               icons (the licensed fonts are not included)
     └── src/
         ├── App.tsx           composition root: wires each feature's hook into the layout
         ├── design.css        design tokens and every component's styles
@@ -106,7 +106,7 @@ It never holds a feature's own state or handlers. When a feature gains state, it
 
 *`app/src/design.css` is the single source of truth, imported once.*
 
-Tokens, layout and every component's rules live there. No per-component stylesheets. It also depends on the licensed Helvetica files in `app/public/fonts/`; without them the interface silently falls back to a system sans-serif and nothing matches.
+Tokens, layout and every component's rules live there. No per-component stylesheets. It expects licensed Helvetica files in `app/public/fonts/`, which are not in this repo for licensing reasons; without them the interface falls back to a system sans-serif.
 
 ### 🧮 Shaders
 
