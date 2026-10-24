@@ -271,5 +271,5 @@
 - Key names: `useSaveProject`, `createFreshProject`, `handleReset`.
 
 **firebase/storage.ts**, **client.ts**, **currentUser.ts**
-- What it is: Firestore access and the anonymous user.
+- What it is: Firestore access and the anonymous user. `client.ts` reads its config from the `VITE_FIREBASE_*` env vars (`app/.env.local`), with a placeholder key when they're missing so the app still loads.
 - Key names: `saveProject`, `loadProject`, `listProjects`, `useCurrentUser`.

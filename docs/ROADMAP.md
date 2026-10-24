@@ -8,18 +8,22 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-23):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README now lives in `docs/`.*
+> **Start from here (2026-10-23):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`.*
 >
-> **State.** History rewritten and force-pushed on 2026-10-23: every commit carries the GitHub no-reply address, and no commit contains the real email or the Firebase key. The Firebase config now comes from `VITE_FIREBASE_*` env vars in `app/.env.local` (git-ignored), with `app/.env.example` as the template; the app loads without them, minus sign-in and saving. The README has a new architecture diagram (`docs/diagrams/architecture.svg`). The code is **untested on screen** apart from the Firebase check. A backup bundle of the old history (still holding the email and key) sat in the session scratchpad, which is temporary.
+> **State.** Everything is committed and pushed as `bc80b0a`, and the repo `Dana-shachar/PWB-Project` is **public**. The whole history was rewritten twice on 2026-10-23: every commit carries the GitHub no-reply address, and no commit holds the real email, the Firebase key or the licensed fonts. The Firebase config comes from `VITE_FIREBASE_*` env vars in `app/.env.local` (git-ignored, template in `app/.env.example`); without them the app loads with sign-in and saving off. The code is **untested on screen** apart from Firebase still working. Only `.obsidian/workspace.json` is uncommitted, on purpose (internal).
 >
-> **Next step, 1: make the repo public.** ✅ Public as of 2026-10-23. Items 3 and 4 below are still open.
-> 1. ✅ **Licensed fonts removed** from every commit on 2026-10-23 and git-ignored; the local copies in `app/public/fonts/` still work.
-> 2. ✅ Dana made the repo public.
-> 3. Dana restricts or regenerates the Firebase key in Google Cloud Console (APIs & Services, Credentials), since GitHub may keep the old commits reachable by ID for a while. If regenerated, update `app/.env.local`.
-> 4. Any deploy host needs the six `VITE_FIREBASE_*` values set.
-> 5. The professor (GitHub `jomasan`) will not have Firebase sign-in or saving. Dana chose public over adding him as a collaborator.
+> **Open threads for Dana (not code)**
+> - 📌 **Firebase key:** restrict or regenerate it in Google Cloud Console (APIs & Services, Credentials), since GitHub may keep the old commits reachable by ID for a while. If regenerated, update `app/.env.local`.
+> - 📌 **Deploy host,** if there is one: set the six `VITE_FIREBASE_*` values there.
+> - 📌 **Backup bundles** of the old history (`pwb-backup.bundle`, `pwb-backup-fonts.bundle`) were in the 2026-10-23 session scratchpad. They hold the email, key and fonts; delete them if they still exist.
+> - 📌 **Weekly push, Session 10** is not written yet. It should cover this week's publishing work (env vars, history cleanup, going public), the `docs/` reorganization and the architecture diagram.
+> - The professor (GitHub `jomasan`) has no Firebase sign-in or saving. Dana chose a public repo over adding him as a collaborator.
+> - 📌 **README screenshot alt text** was written from the filename (`2026-10-21-ramp-masks-and-resolution.png`), not from looking at the image. Check that it describes the shot.
+> - 📌 **Before submitting for class:** add a copy of the user-scoped `ui-design` skill to the repo, placement Dana's call (memory `submission-include-ui-skill`).
+> - ⏸️ **Run instructions** (install, `.env.local`, `npm run dev`) were left out of the README on purpose; they belong in the final README the syllabus requires.
+> - Anyone cloning gets the system sans-serif instead of Helvetica, since the licensed fonts are no longer in the repo (noted in the README).
 >
-> **Next step, 2: Dana's test list.** Hard-refresh first and keep the console open (any red error matters).
+> **Next step: Dana's test list.** Hard-refresh first and keep the console open (any red error matters).
 > - **Planet detail:** load speed; zoom in slowly (does detail sharpen by itself, is the close-up still blocky or stair-stepped, is it sharp enough); Resolution (px) slider right = sharper (little change when zoomed out, adds detail in place when close); rotate (no rebuild); watch for cracks, black slivers and hitches while zooming.
 > - **Noise:** Frequency 0.1 to 500 (log), shimmer at high values; Octaves to 12; Persistence, Lacunarity, Warp, Terrace ranges; Fractal type (Multifractal, Hybrid, Hetero, Ridged; Hetero should give smooth lowlands and rough highlands); Offset, Stretch, Warp scale and octaves, Voronoi Jitter and Distance, Ridge offset and gain; Randomize (about half of layers carve, since Height can be negative).
 > - **Masks:** the row icon popup (pattern, seed, frequency, Invert, Coverage, Softness, Shuffle) changes the planet and the noise canvas; two selected layers say "editing 2 layers"; an older project still loads.
@@ -27,6 +31,13 @@
 > - **Lighting:** the Scene panel Wrap slider; the chunk stays lit (light elevation is separate).
 > - **Panels:** the Planet Terrain header, the icon buttons, black wrapped tooltips on screen.
 > - **Known gaps, do not report:** Cmd+Z covers only paint strokes (`[B42]`), planet cast shadows not built, the Ridged/Terrace/warp/Voronoi fade not built, layer Height has no units yet. Then fixes, docs, a commit.
+>
+> **Open issues in `ISSUES.md`**
+> - 🔴 **Open:** `[B27]` Expand shows a black preview.
+> - 🟡 **Built, waiting on this test:** `[B36]` to `[B41]`, `[B43]` to `[B49]` (ramp colors and rows, seams, Resolution, patch rebuilds, lighting, masks, noise frequency, tooltips), plus `[B28]` (planet detail no longer capped by the map). Close each after the test passes.
+> - 🟡 **Likely resolved, confirm on screen:** `[B26]` soft blur at the poles.
+> - 🟡 **Tabled by Dana until after erosion:** `[B14]` terrain jagged, feather subtle.
+> - ❓ **Dana's call:** lower the Voronoi Jitter default to about 0.7, so the slider can go both ways (note under `[B46]`).
 >
 > **Loose threads, in build order**
 > - **Modifier fade, second pass.** Ridged, Terrace, warp and Voronoi shimmer when features are smaller than the grid. Approved: fade before the non-linear step and soften step edges only as wide as the grid spacing, constants tunable. Partly inferred, flagged in `REFERENCES.md`.
@@ -38,7 +49,13 @@
 >
 > **Known risks.** Octave cost is not counted in the per-frame build budget. Cracks or content mismatches between neighbors at different depths (skirts only). Frustum culling not built. The Hoskins hash constants were typed from memory and unverified. Voronoi Jitter defaults to its maximum, so the slider only goes down.
 >
-> **Rules in force.** No forks, and no agent without Dana's yes and a cost estimate (memory `no-expensive-agents`). Read `CODE-INDEX.md` first and read narrowly, edit docs directly (the index too), plan before acting, design-system components only, no attribution anywhere. Research first: no improvised methods, cite sources and say what is unverified.
+> **Rules in force.** No forks, and no agent without Dana's yes and a cost estimate (memory `no-expensive-agents`). Read `CODE-INDEX.md` first and read narrowly, edit docs directly (the index too), plan before acting, design-system components only, no attribution anywhere. Research first: no improvised methods, cite sources and say what is unverified. Only look something up when the answer changes the plan.
+>
+> **New context from 2026-10-23**
+> - **Layout:** docs in `docs/`, images in `docs/screenshots/` and `docs/diagrams/`, working rules in `.claude/CLAUDE.md` (git-ignored). The README stays at the root.
+> - **Design system scope:** the `ui-design` skill governs the app's UI. Presentational assets like the architecture diagram are bolder and accent-led, inferred from Dana's own reference diagrams. One rule covers both: black text only on the full accent, white text on any lower-opacity accent fill.
+> - **The architecture diagram** (`docs/diagrams/architecture.svg`) was generated by a script that stayed outside the repo and may be gone; edit the SVG directly. Update it whenever the module structure changes.
+> - **Permissions:** the permission check blocks Claude from `git push --force`. Dana runs force-pushes herself.
 
 **Overall** ▓▓▓▓▓▓░░░░ 61%
 
