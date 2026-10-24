@@ -12,9 +12,9 @@
 >
 > **State.** History rewritten and force-pushed on 2026-10-23: every commit carries the GitHub no-reply address, and no commit contains the real email or the Firebase key. The Firebase config now comes from `VITE_FIREBASE_*` env vars in `app/.env.local` (git-ignored), with `app/.env.example` as the template; the app loads without them, minus sign-in and saving. The README has a new architecture diagram (`docs/diagrams/architecture.svg`). The code is **untested on screen** apart from the Firebase check. A backup bundle of the old history (still holding the email and key) sat in the session scratchpad, which is temporary.
 >
-> **Next step, 1: make the repo public.** 🟡 Everything but the switch itself is done.
+> **Next step, 1: make the repo public.** ✅ Public as of 2026-10-23. Items 3 and 4 below are still open.
 > 1. ✅ **Licensed fonts removed** from every commit on 2026-10-23 and git-ignored; the local copies in `app/public/fonts/` still work.
-> 2. Dana flips the visibility (GitHub, Settings, Danger Zone). The permission check blocks Claude from force-pushing and likely from `gh repo edit` too.
+> 2. ✅ Dana made the repo public.
 > 3. Dana restricts or regenerates the Firebase key in Google Cloud Console (APIs & Services, Credentials), since GitHub may keep the old commits reachable by ID for a while. If regenerated, update `app/.env.local`.
 > 4. Any deploy host needs the six `VITE_FIREBASE_*` values set.
 > 5. The professor (GitHub `jomasan`) will not have Firebase sign-in or saving. Dana chose public over adding him as a collaborator.
