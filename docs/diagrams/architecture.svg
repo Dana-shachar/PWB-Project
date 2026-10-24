@@ -1,0 +1,206 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1010" viewBox="0 0 1440 1010" font-family="'Helvetica Neue', Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M1,1 L7,4 L1,7" fill="none" stroke="#f3e7b3" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <marker id="arrowAccent" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="16" markerHeight="16" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M1,1 L7,4 L1,7" fill="none" stroke="#e5c11f" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <style>
+      .band { fill: none; }
+      .rule { stroke: #e5c11f; stroke-opacity: 0.35; stroke-width: 1; }
+      .sticky rect { fill: #e5c11f; fill-opacity: 0.85; }
+      .sticky text { font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace; font-size: 10px; font-weight: 700; fill: #000000; }
+      .bandHub { fill: #e5c11f; fill-opacity: 0.05; stroke: #e5c11f; stroke-opacity: 0.7; stroke-width: 1; stroke-dasharray: 6 4; }
+      .tag { fill: none; stroke: #e5c11f; stroke-width: 1.5; }
+      .tagText { font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace; font-size: 13px; font-weight: 700; fill: #e5c11f; letter-spacing: 0.5px; }
+      .node rect { fill: #e5c11f; fill-opacity: 0.62; }
+      .hot rect { fill: #e5c11f; }
+      .out rect { fill: none; stroke: #e5c11f; stroke-width: 1.2; stroke-dasharray: 5 4; }
+      .title { font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace; font-size: 13px; font-weight: 700; fill: #ffffff; }
+      .sub { font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace; font-size: 9.5px; font-weight: 400; fill: #f3e7b3; }
+      .desc { font-size: 9.5px; font-weight: 300; fill: #ffffff; fill-opacity: 0.85; }
+      .hot .title, .hot .sub, .hot .desc, .descDark { fill: #000000; }
+      .node .title, .node .sub, .node .desc { fill: #ffffff; }
+      .hot .desc, .node .desc, .descDark { font-size: 9.5px; font-weight: 400; fill-opacity: 1; }
+      .titleAccent { font-family: 'SF Mono', Menlo, Consolas, 'Courier New', monospace; font-size: 12px; font-weight: 700; fill: #e5c11f; }
+      .note { font-size: 10.5px; font-weight: 300; fill: #ffffff; }
+      .subNote { font-size: 10.5px; fill: #e5c11f; }
+      .flow { fill: none; stroke: #f3e7b3; stroke-opacity: 0.8; stroke-width: 1.6; stroke-linecap: round; marker-end: url(#arrow); }
+      .flowBoth { marker-start: url(#arrow); }
+      .flowPath { fill: none; stroke: #e5c11f; stroke-width: 3; stroke-linecap: round; fill: none; marker-end: url(#arrowAccent); }
+    </style>
+  </defs>
+  <rect width="1440" height="1010" fill="#000000"/>
+  <rect x="16" y="24" width="222" height="40" rx="3" class="tag"/>
+  <text x="30" y="51" class="tagText" style="font-size:20px">HOW IT WORKS</text>
+  <text x="16" y="96" class="note" style="font-size:13px">Every control takes the same route down these five layers. <tspan fill="#e5c11f" font-weight="700">The yellow path</tspan> is one example of that route: a noise slider reaching the 3D planet.</text>
+    <rect x="16" y="120" width="1176" height="112" rx="4" class="band"/>
+  <line x1="16" y1="120" x2="1192" y2="120" class="rule"/>
+  <rect x="32" y="136" width="118" height="28" rx="3" class="tag"/>
+  <text x="43" y="155" class="tagText">1  INTERFACE</text>
+  <text x="32" y="186" class="note">what you click and drag</text>
+  <text x="32" y="201" class="subNote">ui/</text>
+  <g class="node"><rect x="216" y="136" width="182" height="80"/>
+  <text x="307.0" y="171.5" class="title" text-anchor="middle">Left panel <tspan class="sub">(Panel.tsx)</tspan></text>
+  <text x="307.0" y="187.5" class="desc" text-anchor="middle">project, scene, planet</text>
+  </g>
+  <g class="hot"><rect x="410" y="136" width="182" height="80"/>
+  <text x="501.0" y="165.0" class="title" text-anchor="middle">Layer controls</text>
+  <text x="501.0" y="180.0" class="sub" text-anchor="middle">(NoisePanel, MaskControls)</text>
+  <text x="501.0" y="196.0" class="desc" text-anchor="middle">noise sliders, masks</text>
+  </g>
+  <g class="node"><rect x="604" y="136" width="182" height="80"/>
+  <text x="695.0" y="165.0" class="title" text-anchor="middle">Color ramp</text>
+  <text x="695.0" y="180.0" class="sub" text-anchor="middle">(ColorRampEditor)</text>
+  <text x="695.0" y="196.0" class="desc" text-anchor="middle">colors by elevation</text>
+  </g>
+  <g class="node"><rect x="798" y="136" width="182" height="80"/>
+  <text x="889.0" y="165.0" class="title" text-anchor="middle">Erosion controls</text>
+  <text x="889.0" y="180.0" class="sub" text-anchor="middle">(ErosionPanel, Timeline)</text>
+  <text x="889.0" y="196.0" class="desc" text-anchor="middle">run and scrub erosion</text>
+  </g>
+  <g class="node"><rect x="992" y="136" width="182" height="80"/>
+  <text x="1083.0" y="165.0" class="title" text-anchor="middle">Camera</text>
+  <text x="1083.0" y="180.0" class="sub" text-anchor="middle">(Gumball, orbit controls)</text>
+  <text x="1083.0" y="196.0" class="desc" text-anchor="middle">move and zoom the view</text>
+  </g>
+  <rect x="16" y="268" width="1176" height="84" rx="4" class="band"/>
+  <line x1="16" y1="268" x2="1192" y2="268" class="rule"/>
+  <rect x="32" y="284" width="94" height="28" rx="3" class="tag"/>
+  <text x="43" y="303" class="tagText">2  WIRING</text>
+  <text x="32" y="334" class="note">one file connects it all</text>
+  <g class="hot"><rect x="216" y="282" width="960" height="56"/>
+  <text x="696.0" y="305.5" class="title" text-anchor="middle">Connects everything <tspan class="sub">(App.tsx)</tspan></text>
+  <text x="696.0" y="321.5" class="desc" text-anchor="middle">calls each feature's hook and hands the results to the panels and views; holds no state of its own</text>
+  </g>
+  <rect x="16" y="388" width="1176" height="116" rx="4" class="band"/>
+  <line x1="16" y1="388" x2="1192" y2="388" class="rule"/>
+  <rect x="32" y="404" width="150" height="28" rx="3" class="tag"/>
+  <text x="43" y="423" class="tagText">3  FEATURE STATE</text>
+  <text x="32" y="454" class="note">one hook per feature,</text>
+  <text x="32" y="469" class="note">each in its own folder</text>
+  <g class="hot"><rect x="216" y="404" width="126" height="84"/>
+  <text x="279.0" y="435.0" class="title" text-anchor="middle">Noise layers</text>
+  <text x="279.0" y="450.0" class="sub" text-anchor="middle">(noiseLayers.ts)</text>
+  <text x="279.0" y="466.0" class="desc" text-anchor="middle">the layer list</text>
+  </g>
+  <g class="node"><rect x="354" y="404" width="126" height="84"/>
+  <text x="417.0" y="435.0" class="title" text-anchor="middle">Paint strokes</text>
+  <text x="417.0" y="450.0" class="sub" text-anchor="middle">(2Dbrush.ts)</text>
+  <text x="417.0" y="466.0" class="desc" text-anchor="middle">brush log, undo</text>
+  </g>
+  <g class="node"><rect x="492" y="404" width="126" height="84"/>
+  <text x="555.0" y="435.0" class="title" text-anchor="middle">Planet</text>
+  <text x="555.0" y="450.0" class="sub" text-anchor="middle">(planetControls.ts)</text>
+  <text x="555.0" y="466.0" class="desc" text-anchor="middle">color ramp, detail</text>
+  </g>
+  <g class="node"><rect x="630" y="404" width="126" height="84"/>
+  <text x="693.0" y="435.0" class="title" text-anchor="middle">Lighting</text>
+  <text x="693.0" y="450.0" class="sub" text-anchor="middle">(sceneControls.ts)</text>
+  <text x="693.0" y="466.0" class="desc" text-anchor="middle">light, grid</text>
+  </g>
+  <g class="node"><rect x="768" y="404" width="126" height="84"/>
+  <text x="831.0" y="435.0" class="title" text-anchor="middle">Chunk</text>
+  <text x="831.0" y="450.0" class="sub" text-anchor="middle">(landChunk.ts)</text>
+  <text x="831.0" y="466.0" class="desc" text-anchor="middle">spot, view mode</text>
+  </g>
+  <g class="node"><rect x="906" y="404" width="126" height="84"/>
+  <text x="969.0" y="435.0" class="title" text-anchor="middle">Erosion</text>
+  <text x="969.0" y="450.0" class="sub" text-anchor="middle">(erosionControls.ts)</text>
+  <text x="969.0" y="466.0" class="desc" text-anchor="middle">rates, run, scrub</text>
+  </g>
+  <g class="node"><rect x="1044" y="404" width="126" height="84"/>
+  <text x="1107.0" y="435.0" class="title" text-anchor="middle">Saving</text>
+  <text x="1107.0" y="450.0" class="sub" text-anchor="middle">(saveProject.ts)</text>
+  <text x="1107.0" y="466.0" class="desc" text-anchor="middle">autosave, load</text>
+  </g>
+  <g class="out"><rect x="1216" y="398" width="208" height="96" rx="4"/></g>
+  <text x="1228" y="424" class="titleAccent">Cloud storage</text>
+  <text x="1228" y="442" class="sub">firebase/ to Firestore</text>
+  <text x="1228" y="460" class="desc">saved projects and</text>
+  <text x="1228" y="474" class="desc">erosion runs</text>
+  <g class="sticky"><rect x="1216" y="502" width="78" height="20" rx="2"/><text x="1224" y="516">save, load</text></g>
+  <rect x="16" y="540" width="1176" height="176" rx="4" class="bandHub"/>
+  <rect x="32" y="556" width="134" height="28" rx="3" class="tag"/>
+  <text x="43" y="575" class="tagText">4  PLANET VIEW</text>
+  <text x="32" y="606" class="note">the hub: owns the heavy work,</text>
+  <text x="32" y="621" class="note">mostly on the graphics card</text>
+  <text x="32" y="636" class="subNote">SceneCanvas.tsx</text>
+  <g class="sticky"><rect x="32" y="660" width="115" height="20" rx="2"/><text x="40" y="674">others reach the</text></g>
+  <g class="sticky"><rect x="32" y="682" width="128" height="20" rx="2"/><text x="40" y="696">engines through it</text></g>
+  <g class="hot"><rect x="216" y="560" width="290" height="112"/>
+  <text x="361.0" y="598.5" class="title" text-anchor="middle">Heightmap bake</text>
+  <text x="361.0" y="613.5" class="sub" text-anchor="middle">(heightmap.ts, heightmap.frag.glsl)</text>
+  <text x="361.0" y="629.5" class="desc" text-anchor="middle">turns layers and paint strokes into</text>
+  <text x="361.0" y="642.5" class="desc" text-anchor="middle">heights on the graphics card</text>
+  </g>
+  <g class="hot"><rect x="566" y="560" width="290" height="112"/>
+  <text x="711.0" y="598.5" class="title" text-anchor="middle">Planet patches</text>
+  <text x="711.0" y="613.5" class="sub" text-anchor="middle">(PlanetPatchRenderer and helpers)</text>
+  <text x="711.0" y="629.5" class="desc" text-anchor="middle">checks the camera every frame, splits</text>
+  <text x="711.0" y="642.5" class="desc" text-anchor="middle">close areas finer, caches the rest</text>
+  </g>
+  <g class="node"><rect x="916" y="560" width="260" height="112"/>
+  <text x="1046.0" y="598.5" class="title" text-anchor="middle">Erosion solver</text>
+  <text x="1046.0" y="613.5" class="sub" text-anchor="middle">(erosionEngine, shaders/erosion)</text>
+  <text x="1046.0" y="629.5" class="desc" text-anchor="middle">simulates rain and flowing water</text>
+  <text x="1046.0" y="642.5" class="desc" text-anchor="middle">wearing down the land</text>
+  </g>
+  <rect x="16" y="752" width="1176" height="184" rx="4" class="band"/>
+  <line x1="16" y1="752" x2="1192" y2="752" class="rule"/>
+  <rect x="32" y="768" width="118" height="28" rx="3" class="tag"/>
+  <text x="43" y="787" class="tagText">5  ON SCREEN</text>
+  <text x="32" y="818" class="note">what you see</text>
+  <g class="node"><rect x="216" y="772" width="290" height="100"/>
+  <text x="361.0" y="804.5" class="title" text-anchor="middle">2D noise map</text>
+  <text x="361.0" y="819.5" class="sub" text-anchor="middle">(MapView.tsx, a plain 2D canvas)</text>
+  <text x="361.0" y="835.5" class="desc" text-anchor="middle">shows the baked heights flat;</text>
+  <text x="361.0" y="848.5" class="desc" text-anchor="middle">paint here and strokes go back</text>
+  </g>
+  <g class="hot"><rect x="566" y="772" width="290" height="100"/>
+  <text x="711.0" y="817.5" class="title" text-anchor="middle">3D planet <tspan class="sub">(drawn by SceneCanvas.tsx)</tspan></text>
+  <text x="711.0" y="833.5" class="desc" text-anchor="middle">what you orbit and zoom</text>
+  </g>
+  <g class="node"><rect x="916" y="772" width="260" height="100"/>
+  <text x="1046.0" y="804.5" class="title" text-anchor="middle">Close-up chunk</text>
+  <text x="1046.0" y="819.5" class="sub" text-anchor="middle">(LandChunkCanvas, meshWorker)</text>
+  <text x="1046.0" y="835.5" class="desc" text-anchor="middle">one spot's heights, built into</text>
+  <text x="1046.0" y="848.5" class="desc" text-anchor="middle">a mesh in a background worker</text>
+  </g>
+  <g class="node"><rect x="566" y="886" width="610" height="30"/>
+  <text x="871.0" y="903.0" class="title" text-anchor="middle">One shared renderer draws both 3D views <tspan class="sub">(sharedViewportRenderer.ts)</tspan></text>
+  </g>
+  <g class="sticky"><rect x="431" y="724" width="171" height="20" rx="2"/><text x="439" y="738">picture out, strokes back</text></g>
+    <path d="M1172,446 H1212" class="flow flowBoth"/>
+  <path d="M307,216 V278" class="flow"/>
+  <path d="M695,216 V278" class="flow"/>
+  <path d="M889,216 V278" class="flow"/>
+  <path d="M1083,216 V278" class="flow"/>
+  <path d="M417,338 V400" class="flow"/>
+  <path d="M555,338 V400" class="flow"/>
+  <path d="M693,338 V400" class="flow"/>
+  <path d="M831,338 V400" class="flow"/>
+  <path d="M969,338 V400" class="flow"/>
+  <path d="M1107,338 V400" class="flow"/>
+  <path d="M417,488 V556" class="flow"/>
+  <path d="M555.0,488.0 L555.0,540.0 Q555.0,548.0 563.0,548.0 L592.0,548.0 Q600.0,548.0 600.0,552.0 L600.0,556.0" class="flow"/>
+  <path d="M693,488 V556" class="flow"/>
+  <path d="M969,488 V556" class="flow"/>
+  <path d="M831.0,488.0 L831.0,540.0 Q831.0,548.0 839.0,548.0 L878.0,548.0 Q886.0,548.0 886.0,556.0 L886.0,814.0 Q886.0,822.0 894.0,822.0 L912.0,822.0" class="flow"/>
+  <path d="M421,676 V768" class="flow flowBoth"/>
+    <path d="M501,216 V278" class="flowPath"/>
+  <path d="M279,338 V400" class="flowPath"/>
+  <path d="M279,488 V556" class="flowPath"/>
+  <path d="M506,616 H560" class="flowPath"/>
+  <path d="M711,672 V768" class="flowPath"/>
+    <line x1="16" y1="980" x2="60" y2="980" stroke="#e5c11f" stroke-width="3"/>
+  <text x="70" y="984" class="note">the route of one control (example: a noise slider)</text>
+  <g class="hot"><rect x="390" y="971" width="28" height="18" rx="3"/></g>
+  <text x="426" y="984" class="note">on that route</text>
+  <g class="node"><rect x="540" y="971" width="28" height="18" rx="3"/></g>
+  <text x="576" y="984" class="note">part of the app</text>
+  <g class="out"><rect x="700" y="971" width="28" height="18" rx="3"/></g>
+  <text x="736" y="984" class="note">outside the app</text>
+  <text x="880" y="984" class="note">Each box: what it does, then <tspan class="subNote">the file it lives in</tspan>. Every function is in CODE-INDEX.md.</text>
+</svg>

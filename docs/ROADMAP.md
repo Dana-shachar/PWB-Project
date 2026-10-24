@@ -8,17 +8,16 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-21):** *a fresh session reads this block, then `CLAUDE.md`, then `CODE-INDEX.md` before searching the code.*
+> **Start from here (2026-10-23):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README now lives in `docs/`.*
 >
-> **State.** Everything is committed and pushed as `88b689a` (private repo `Dana-shachar/PWB-Project`, the working tree is clean). The commit email for this repo is set locally to the GitHub no-reply address, so new commits no longer carry the real one. The code is **untested on screen** apart from a console check (no errors). The planet Resolution in pixels is finished in code. The old Node harness in the scratchpad no longer builds against the new patch code.
+> **State.** History rewritten and force-pushed on 2026-10-23: every commit carries the GitHub no-reply address, and no commit contains the real email or the Firebase key. The Firebase config now comes from `VITE_FIREBASE_*` env vars in `app/.env.local` (git-ignored), with `app/.env.example` as the template; the app loads without them, minus sign-in and saving. The README has a new architecture diagram (`docs/diagrams/architecture.svg`). The code is **untested on screen** apart from the Firebase check. A backup bundle of the old history (still holding the email and key) sat in the session scratchpad, which is temporary.
 >
-> **Next step, 1: publish the repo to the professor (Dana's decision: make it public).** Not started. Approach decided (in place); confirm with Dana, then do it.
-> 1. Move the Firebase config out of `app/src/firebase/client.ts` into `VITE_FIREBASE_*` env vars (`app/.env.local`, already git-ignored by `*.local`, plus a new `app/.env.example`). Check the app still loads without the config, and add a small guard if it crashes.
-> 2. Back up the repo as a `git bundle`, then rewrite the whole history: every author and committer becomes the no-reply address `229999390+Dana-shachar@users.noreply.github.com`, and every historical `client.ts` gets the env-var version. `git-filter-repo` is not installed, `git filter-branch` is. Verify no commit contains the real email or the Firebase API key.
-> 3. **Dana decided 2026-10-21: rewrite in place** and force-push over the existing repo, since the residual risk (GitHub may keep force-pushed commits reachable by ID until support purges them; unverified, from memory of its docs) is small. No new repo. Then make it public.
-> 4. Dana prefers one live repo, not dual commits (two histories would have different IDs and drift). Unpushed commits stay local until Dana chooses to push.
-> 5. The professor will not have Firebase sign-in or saving unless Dana gives another way. Adding him as a collaborator needs his write access (personal repos have no read-only role) and was blocked by the permission check; his GitHub user is `jomasan` (Jose Sanchez, Associate Professor Cornell Tech). Dana decided on public instead.
-> 6. **Before sharing or submitting, check:** the commit email, committed config, what a public repo shows (history, issues, docs paths), and that `CLAUDE.md` stays ignored.
+> **Next step, 1: make the repo public.** 🟡 Everything but the switch itself is done.
+> 1. ⚠️ **Licensed fonts are committed.** `app/public/fonts/` holds three Helvetica LT Std files, so a public repo would redistribute them, which their license likely forbids. ❓ Dana to decide before going public: remove them from history (another rewrite) or keep the repo private.
+> 2. Dana flips the visibility (GitHub, Settings, Danger Zone). The permission check blocks Claude from force-pushing and likely from `gh repo edit` too.
+> 3. Dana restricts or regenerates the Firebase key in Google Cloud Console (APIs & Services, Credentials), since GitHub may keep the old commits reachable by ID for a while. If regenerated, update `app/.env.local`.
+> 4. Any deploy host needs the six `VITE_FIREBASE_*` values set.
+> 5. The professor (GitHub `jomasan`) will not have Firebase sign-in or saving. Dana chose public over adding him as a collaborator.
 >
 > **Next step, 2: Dana's test list.** Hard-refresh first and keep the console open (any red error matters).
 > - **Planet detail:** load speed; zoom in slowly (does detail sharpen by itself, is the close-up still blocky or stair-stepped, is it sharp enough); Resolution (px) slider right = sharper (little change when zoomed out, adds detail in place when close); rotate (no rebuild); watch for cracks, black slivers and hitches while zooming.

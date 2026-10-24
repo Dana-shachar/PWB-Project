@@ -13,10 +13,10 @@
 
 *Unified the planet and chunk under one renderer, chased the chunk's color and shadow bugs to their real causes, then rebuilt how the planet picks its detail and how terrain noise is made. The week ran Monday 2026-10-19 to 2026-10-21 so far.*
 
-![The planet with the pixel Resolution slider, the meters ramp, per-layer mask icons and the new Voronoi controls.](Screenshots/2026-10-21-ramp-masks-and-resolution.png)
+![The planet with the pixel Resolution slider, the meters ramp, per-layer mask icons and the new Voronoi controls.](screenshots/2026-10-21-ramp-masks-and-resolution.png)
 
 > [!NOTE]
-> Screenshots are kept in the course folder, `Cornell/Fall 26/PWB/Screenshots/`, outside this repo. The copies in `Screenshots/` here are the ones the docs link to.
+> Screenshots are kept in the course folder, `Cornell/Fall 26/PWB/Screenshots/`, outside this repo. The copies in `docs/screenshots/` here are the ones the docs link to.
 
 ### 🛠️ Done
 - One shared `WebGLRenderer`/canvas for both viewports (planet and chunk), replacing two independent ones, the base that lets a baked patch texture hand off straight to the GPU with no CPU readback.
@@ -53,7 +53,7 @@
 
 *Rebuilt the planet on a cube sphere, and made the chunk a real piece of it.*
 
-![The planet on the cube sphere, with the pipeline-stage menu down the left panel.](Screenshots/2026-10-13-cube-sphere-terrain.png)
+![The planet on the cube sphere, with the pipeline-stage menu down the left panel.](screenshots/2026-10-13-cube-sphere-terrain.png)
 
 ### 🛠️ Done
 - Replaced the planet's longitude/latitude sphere with a cube sphere. A lat/long grid converges at two fixed points and cannot be subdivided locally, so it cannot support detail that follows the camera.
@@ -104,7 +104,7 @@
 
 *Separated height from opacity, and made the modifiers composable.*
 
-![Modifiers as composable toggles, and the resizable panels.](Screenshots/2026-09-30-modifiers-and-panels.png)
+![Modifiers as composable toggles, and the resizable panels.](screenshots/2026-09-30-modifiers-and-panels.png)
 
 ### 🛠️ Done
 - Split terrain Height from the opacity composite into its own additive elevation channel, after the first pass turned out mathematically indistinguishable from Opacity.
@@ -171,7 +171,7 @@
 
 *Real persistence, and two compositing bugs that needed the maths.*
 
-![The layer stack with per-layer visibility, and project persistence.](Screenshots/2026-09-22-layers-and-persistence.png)
+![The layer stack with per-layer visibility, and project persistence.](screenshots/2026-09-22-layers-and-persistence.png)
 
 ### 🛠️ Done
 - Set up real persistence: Firebase Auth and Firestore, anonymous sign-in, deployed security rules, and the layer stack saving per user.
@@ -196,9 +196,9 @@
 
 *The layer stack, the brush, and lighting that finally showed relief.*
 
-![Noise generation on the sphere, earlier the same week.](Screenshots/2026-09-14-noise-and-sphere.png)
+![Noise generation on the sphere, earlier the same week.](screenshots/2026-09-14-noise-and-sphere.png)
 
-![Painting onto the heightmap, driving real displacement.](Screenshots/2026-09-16-painting-and-displacement.png)
+![Painting onto the heightmap, driving real displacement.](screenshots/2026-09-16-painting-and-displacement.png)
 
 ### 🛠️ Done
 - Built the multi-layer noise system: a Photoshop-style stack up to 16 layers, each with its own type, parameters, opacity and blend mode.
@@ -276,7 +276,7 @@
 
 *⚪ One-line summary of the week.*
 
-🖼️ `![caption](Screenshots/2026-10-28-name.png)`
+🖼️ `![caption](screenshots/2026-10-28-name.png)`
 
 #### 🛠️ Done
 - ⚪
@@ -295,7 +295,7 @@
 
 *⚪ One-line summary of the week.*
 
-🖼️ `![caption](Screenshots/2026-11-04-name.png)`
+🖼️ `![caption](screenshots/2026-11-04-name.png)`
 
 #### 🛠️ Done
 - ⚪
@@ -314,7 +314,7 @@
 
 *⚪ One-line summary of the week.*
 
-🖼️ `![caption](Screenshots/2026-11-11-name.png)`
+🖼️ `![caption](screenshots/2026-11-11-name.png)`
 
 #### 🛠️ Done
 - ⚪
@@ -333,7 +333,7 @@
 
 *⚪ One-line summary of the week.*
 
-🖼️ `![caption](Screenshots/2026-11-18-name.png)`
+🖼️ `![caption](screenshots/2026-11-18-name.png)`
 
 #### 🛠️ Done
 - ⚪
@@ -352,7 +352,7 @@
 
 *⚪ One-line summary of the week.*
 
-🖼️ `![caption](Screenshots/2026-12-02-name.png)`
+🖼️ `![caption](screenshots/2026-12-02-name.png)`
 
 #### 🛠️ Done
 - ⚪

@@ -1,42 +1,68 @@
 # Procedural World Building
 
-`Last updated: 2026-10-21`
+`Last updated: 2026-10-23`
 
 Cornell Tech, DESIGN 6197/4197, a procedural planet-building tool: paint and generate terrain on a sphere, built with Three.js + GLSL. This README is written for anyone with zero context on the project, what it is, and where everything lives. Kept up to date as the project changes, not a dated log.
 
 This will eventually grow into the fuller README the course's final deliverable requires (conceptual premise, procedural systems/algorithms used, AI-assisted process, run instructions, credits), for now, at build stage, it covers what actually exists.
 
-![The planet on the cube sphere, with the pipeline-stage menu down the left panel.](Screenshots/2026-10-13-cube-sphere-terrain.png)
-*Current state, 2026-10-13.*
+![The planet with the color ramp editor, layer masks and the pixel Resolution control.](docs/screenshots/2026-10-21-ramp-masks-and-resolution.png)
+*Current state, 2026-10-21.*
 
-**The other docs, and when to open them:**
-> 🗺️ **`ROADMAP.md`**, current build status, organized by stage/feature. Start here to see what's done and what's next.
+**The other docs, all in `docs/`, and when to open them:**
+> 🗺️ **[`ROADMAP.md`](docs/ROADMAP.md)**, current build status, organized by stage/feature. Start here to see what's done and what's next.
 >
-> 📐 **`SPEC.md`**, what the system is: architecture and the decisions that define it.
+> 📐 **[`SPEC.md`](docs/SPEC.md)**, what the system is: architecture and the decisions that define it.
 >
-> 🐛 **`ISSUES.md`**, what is broken, what was broken and why.
+> 🐛 **[`ISSUES.md`](docs/ISSUES.md)**, what is broken, what was broken and why.
 >
-> 📅 **`WEEKLY-PUSHES.md`**, the syllabus's graded weekly report, chronological.
+> 📅 **[`WEEKLY-PUSHES.md`](docs/WEEKLY-PUSHES.md)**, the syllabus's graded weekly report, chronological.
 >
-> 🧭 **`CODE-INDEX.md`**, where every part of the code lives, by file and function name.
+> 🧭 **[`CODE-INDEX.md`](docs/CODE-INDEX.md)**, where every part of the code lives, by file and function name.
 >
-> 📚 **`REFERENCES.md`**, every outside source the project relies on, grouped as conceptual, visual and computational.
->
-> ⚙️ **`CLAUDE.md`**, working rules for how Dana and Claude collaborate on this repo (not project content).
+> 📚 **[`REFERENCES.md`](docs/REFERENCES.md)**, every outside source the project relies on, grouped as conceptual, visual and computational.
+
+---
+
+## 🏛️ How it works
+
+*Five layers, and every control travels down them in the same order.*
+
+You move a control in the interface. `App.tsx` passes it to that feature's own hook, which holds the new value. The planet view then recomputes the terrain on the graphics card, and the views redraw. The yellow path traces one example, a noise slider, all the way to the 3D planet.
+
+![Architecture: the interface, the wiring in App.tsx, one hook per feature, the planet view that owns the heavy work, and the views on screen.](docs/diagrams/architecture.svg)
+
+For every function and the chains between files, open [`CODE-INDEX.md`](docs/CODE-INDEX.md).
 
 ---
 
 ## 📦 Repo structure
 
-*Everything lives at the root, since this repo doubles as an Obsidian vault.*
+*The README sits at the root; every other doc lives in `docs/`. The whole repo doubles as an Obsidian vault.*
 
-| path | holds |
-|---|---|
-| `app/` | the Vite, React, TypeScript and Three.js project |
-| `Screenshots/` | copies of the shots linked from the docs, named by date; the originals live outside the repo, in the course folder `Cornell/Fall 26/PWB/Screenshots/` |
-| `.obsidian/` | vault config. Any `.md` anywhere in the repo is part of it, with no sync step |
-| `firebase.json`, `.firebaserc`, `firestore.rules` | Firebase config and security rules, deployed via its CLI |
-| the `.md` files | see the doc map above |
+```
+.
+├── README.md                 this file
+├── docs/                     ROADMAP, SPEC, ISSUES, CODE-INDEX, REFERENCES, WEEKLY-PUSHES
+│   ├── screenshots/          shots linked from the docs, named by date
+│   └── diagrams/             the architecture diagram
+├── .obsidian/                vault config; any .md in the repo is part of the vault
+├── firebase.json, .firebaserc, firestore.rules   Firebase config and security rules
+└── app/                      the Vite, React, TypeScript and Three.js project
+    ├── public/               fonts and icons
+    └── src/
+        ├── App.tsx           composition root: wires each feature's hook into the layout
+        ├── design.css        design tokens and every component's styles
+        ├── map/              layer model, the GPU heightmap bake, the 2D map and brush
+        ├── planet/           planet patches, their lifecycle, and planet settings
+        ├── scene/            planet view, shared renderer, camera, grid, gumball, lighting
+        ├── voxel/            close-up chunk: meshing in a background worker, its own view
+        ├── erosion/          GPU erosion solver and the scrub timeline
+        ├── ui/               panels, design-system components, icons
+        ├── shaders/          GLSL, loaded as text
+        ├── firebase/         client, anonymous sign-in, reads and writes
+        └── projectSettings/  saving, loading and naming projects
+```
 
 ---
 
@@ -59,6 +85,7 @@ Related small pieces are grouped by the feature they serve, so one file can hold
 | `planet/` | the planet's geometry and shader, terrain patches and their lifecycle |
 | `map/` | the heightmap pipeline, the shared noise ranges table, and its 2D preview, including the brush |
 | `voxel/` | the land chunk: its two render styles and its own viewport |
+| `erosion/` | the grid-based erosion solver, its state hook and the scrub timeline |
 | `shaders/` | GLSL, loaded as text |
 | `firebase/` | the client, anonymous auth, and reads and writes |
 | `projectSettings/` | saving, loading and naming projects, built on `firebase/` |
