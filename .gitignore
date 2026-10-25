@@ -5,3 +5,6 @@
 
 # Licensed fonts, not redistributable
 app/public/fonts/
+
+# Internal: the script that generates the architecture diagram
+docs/diagrams/build_architecture.py
