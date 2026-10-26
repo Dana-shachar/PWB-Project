@@ -8,9 +8,13 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-26, second handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-10-26, third handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
 > **State.** Everything below is committed. Marked items are untested on screen. The PWB dev server runs on **localhost:5173** (`app/vite.config.ts`, `strictPort`); run it in the background from `app/` with `npx vite`.
+>
+> **Right now: walk mode stalling (`[B58]`), open.** The code is at commit `ba432f0` (pushed, working tree clean apart from docs). Measured: the blocking height read costs 9 to 11 ms a frame. An asynchronous read was tried and reverted (Dana: no improvement, and it broke click-to-walk). The next option is a finer CPU height copy that follows the walker (see `[B58]`); it needs Dana's go. Ask her what the stalling looks like first (freezes, bobbing or choppiness). Click distance is also an open ❓ (see `[B58]`).
+>
+> **Working rules this session (Dana):** a numbered plan and her go before any file edit, including bug fixes; temporary `console.log` diagnostics can be added without asking (marked `TEMP`, removed when done); no attribution anywhere; no agents without her yes and a cost estimate.
 >
 > **Since the second handover (2026-10-26, later)**
 > - ✅ `[B56]` fixed and confirmed: the zoom slider and Reset View pivot to the ground (`pivotToGround`), and chunk patches get real height bounds (`fitBounds`) so near tiles are no longer culled. No further voxel work (Dana).
