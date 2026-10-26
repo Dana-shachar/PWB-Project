@@ -10,7 +10,7 @@
 > [!IMPORTANT]
 > **Start from here (2026-10-26):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Last commit `6a41759`. Everything below is committed with this handover; marked items are untested on screen. The PWB dev server runs on a fixed port, **localhost:5173** (`app/vite.config.ts`, `strictPort`), because anonymous sign-in and saved projects are tied to the address. Dana's other project (PCC, `F26_Dana_TBD`) was moved to 5174 the same way. Run the server in the background from `app/` with `npx vite`.
+> **State.** Last code commit `3225cfb`, pushed. Everything below is committed; marked items are untested on screen. The PWB dev server runs on a fixed port, **localhost:5173** (`app/vite.config.ts`, `strictPort`), because anonymous sign-in and saved projects are tied to the address. Dana's other project (PCC, `F26_Dana_TBD`) was moved to 5174 the same way. Run the server in the background from `app/` with `npx vite`.
 >
 > **Built this session**
 > - ✅ **Resolution slider shown as 128 to 8192, higher is sharper** (`ui/Panel.tsx`, `maxErrorPixelsToResolution` in `planet/patch.ts`). Still stored as pixels, so saves are unchanged. Dana confirmed it reads better.
