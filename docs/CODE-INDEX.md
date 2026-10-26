@@ -28,7 +28,7 @@
 | Change erosion | `erosion/erosionEngine.ts`, `shaders/erosion/`, `ui/panels/ErosionPanel.tsx` |
 | Change the land chunk | `voxel/landChunk.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`, `shaders/chunk.vert.glsl`, `shaders/chunk.frag.glsl` |
 | Change which patches the chunk shows | `voxel/chunkPatches.ts` (`selectChunkPatches`), `voxel/ChunkPatchRenderer.ts`, `voxel/chunkPatchMesh.ts` |
-| Change the chunk camera's ground picking or collision | `voxel/chunkGround.ts` (`groundHeightAt`, `raycastGround`), `keepAboveFlatGround` in `scene/controls.ts`, the setup effect of `voxel/LandChunkCanvas.tsx` |
+| Change the chunk camera's ground picking or collision | `voxel/chunkGround.ts` (`groundHeightAt`, `raycastGround`), `keepAboveFlatGround` in `scene/controls.ts`, `pivotAtScreenPoint` and the setup effect of `voxel/LandChunkCanvas.tsx`, `pivotToGround` in `scene/Gumball.tsx` |
 | Change patch texture borders or slope reading | `PATCH_BORDER_TEXELS`, `createPatchTarget` in `planet/patch.ts`, `borderTexels` in `map/heightmap.ts`, `borderedTextureUv` and `texelStepUv` in `shaders/terrain.glsl` |
 | Change how the camera moves or zooms | `scene/controls.ts` (`applyAltitudeRates`), `scene/camera.ts` (`MIN_CAMERA_ALTITUDE`), `scene/Gumball.tsx` (`levelToDistance`, `distanceToLevel`) |
 | Change the planet-wide fine detail | `planetDetail` in `shaders/heightmap.frag.glsl`, `HeightmapPipeline.setDetailAmount`, `detailAmount` in `planet/planetControls.ts` |
@@ -172,7 +172,7 @@
 
 **scene/camera.ts**, **controls.ts**
 - What it is: the camera and its orbit controls. Every frame the planet view scales rotate, pan and zoom speed, and the near and far planes, by height above the surface.
-- Key names: `camera`, `defaultCameraPosition`, `DEFAULT_CAMERA_DISTANCE`, `MIN_CAMERA_ALTITUDE`, `DEFAULT_NEAR`, `DEFAULT_FAR`, `controls`, `applyAltitudeRates`, `keepAboveFlatGround` (the chunk).
+- Key names: `camera`, `defaultCameraPosition`, `DEFAULT_CAMERA_DISTANCE`, `MIN_CAMERA_ALTITUDE`, `DEFAULT_NEAR`, `DEFAULT_FAR`, `controls`, `applyAltitudeRates`, `keepAboveFlatGround` (the chunk). The gumball's zoom slider and Reset View call the target's `pivotToGround` first (`scene/Gumball.tsx`).
 
 **scene/grid.ts**, **renderer.ts**, **scene.ts**
 - What it is: small Three.js setup modules.
@@ -193,7 +193,7 @@
 
 **voxel/ChunkPatchRenderer.ts**
 - What it is: bakes, builds and swaps the chunk's patches; each patch material shares the chunk material's uniforms.
-- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`), `BakeChunkPatch`.
+- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`, `fitBounds`), `BakeChunkPatch`.
 - Talks to: `bakePatchInto` on `SceneCanvasHandle`, `chunkPatchMesh.ts`.
 
 **voxel/chunkPatchMesh.ts**
@@ -206,7 +206,7 @@
 
 **voxel/LandChunkCanvas.tsx**
 - What it is: the chunk view, its chunk material (shared by the voxel mesh and every patch), map-style orbit (`zoomToCursor`, pivot on the ground under the cursor) and the patch renderer.
-- Key names: `LandChunkCanvas`, `LandChunkCanvasHandle`, `pivotOnGround`, `currentGround`.
+- Key names: `LandChunkCanvas`, `LandChunkCanvasHandle`, `pivotAtScreenPoint` (screen point to ground pivot), `pivotOnGround` (mouse handler), `currentGround`.
 
 **voxel/smoothMesh.ts**, **meshWorker.ts**, **density.ts**, **chunkGrid.ts**
 - What it is: smooth and blocky meshing, and the chunk's grid constants.

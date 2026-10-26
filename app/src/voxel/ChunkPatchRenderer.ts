@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildLeafIndex, computeStitchFlags, coveringLeaves, patchKey, type EdgeStitchFlags } from '../planet/planetPatches';
 import { bakeSamplesCap, bakeSamplesForPixelWidth, createPatchTarget, PATCH_BAKE_SAMPLES_MIN, PATCH_BORDER_TEXELS, type TerrainPatch } from '../planet/patch';
-import { chunkPatchInView, chunkPatchPixelWidth, chunkPatchWorldSize, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
+import { chunkPatchBox, chunkPatchInView,chunkPatchPixelWidth, chunkPatchWorldSize, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
 import { buildChunkBaseGeometry, buildFlatPatchGeometry } from './chunkPatchMesh';
 
 // Bakes one patch's heightmap into a target; false if the planet view isn't ready.
@@ -44,6 +44,7 @@ export class ChunkPatchRenderer {
   private lastCameraPosition = new THREE.Vector3(Infinity, 0, 0);
   private lastCameraQuaternion = new THREE.Quaternion();
   private lastErrorPixels = 0;
+  private boundsMaxHeight = 0;
 
   private template: THREE.ShaderMaterial;
 
@@ -81,6 +82,10 @@ export class ChunkPatchRenderer {
       this.wanted = selectChunkPatches(root, camera.position, detail, this.wanted.length ? this.wanted : undefined);
       this.stitchFlags = computeStitchFlags(this.wanted);
     }
+    if (this.boundsMaxHeight !== detail.maxHeight) {
+      this.boundsMaxHeight = detail.maxHeight;
+      for (const entry of this.entries.values()) this.fitBounds(entry.mesh.geometry, entry.patch, detail);
+    }
     this.build(camera, detail, bake, maxTextureSize);
     this.swap();
   }
@@ -88,6 +93,13 @@ export class ChunkPatchRenderer {
   private wantedSamples(patch: TerrainPatch, camera: THREE.PerspectiveCamera, detail: ChunkDetail, cap: number): number {
     if (!chunkPatchInView(this.root!, patch, detail)) return PATCH_BAKE_SAMPLES_MIN;
     return bakeSamplesForPixelWidth(chunkPatchPixelWidth(this.root!, patch, camera.position, detail), cap);
+  }
+
+  // The shader lifts each flat patch, which three.js can't see, so it would cull
+  // by the flat shape; the bounds cover the real height range instead ([B56]).
+  private fitBounds(geometry: THREE.BufferGeometry, patch: TerrainPatch, detail: ChunkDetail): void {
+    geometry.boundingBox = chunkPatchBox(this.root!, patch, detail, new THREE.Box3());
+    geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
   }
 
   private build(camera: THREE.PerspectiveCamera, detail: ChunkDetail, bake: BakeChunkPatch, maxTextureSize: number): void {
@@ -105,6 +117,7 @@ export class ChunkPatchRenderer {
         if (!flagsEqual(entry.flags, flags)) {
           entry.mesh.geometry.dispose();
           entry.mesh.geometry = buildFlatPatchGeometry(root, patch, this.chunkSize, this.baseDepth, flags);
+          this.fitBounds(entry.mesh.geometry, patch, detail);
           entry.flags = flags;
         }
         // A patch grown on screen gets a bigger bake; one that shrank keeps its own.
@@ -126,6 +139,7 @@ export class ChunkPatchRenderer {
       }
       const material = this.createMaterial(patch, target, samples);
       const mesh = new THREE.Mesh(buildFlatPatchGeometry(root, patch, this.chunkSize, this.baseDepth, flags), material);
+      this.fitBounds(mesh.geometry, patch, detail);
       mesh.visible = false;
       this.group.add(mesh);
       this.entries.set(key, { patch, mesh, material, target, bakeSamples: samples, flags });

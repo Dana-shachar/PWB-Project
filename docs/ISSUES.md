@@ -410,10 +410,20 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - One shared placement function (`placeTooltip` in `ui/UIElements.tsx`) and one delegated listener cover every tooltip.
 
 ### [B56] The land chunk can't zoom in past 10 km, so its edges always show · `wrong but workable`
-**🟡 Fixed 2026-10-26, untested** · **Found:** 2026-10-26 · **Where:** `scene/Gumball.tsx`, `scene/controls.ts`
+**✅ Fixed 2026-10-26** (Dana confirmed) · **Found:** 2026-10-26 · **Where:** `scene/Gumball.tsx`, `scene/controls.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`
 
 **What happened**
 - Dana: however far she zooms in, the chunk's edges and walls stay in view (screenshot, zoom slider at its maximum).
+- Retest of the second fix (2026-10-26): still there, and zooming past a certain point does nothing (screenshot, slider near its top, front wall in view).
+
+**Cause of the failed retest (from the code, not yet confirmed on screen)**
+- The zoom slider (`handleZoomInput`) moves the camera toward the orbit target without moving the target to the ground. Reset puts that target at (0, 0, 0), but the ground there is above 0 (`groundHeightAt` is never below 0), so the target is buried.
+- Zooming toward a buried point drives the camera into the terrain, `keepAboveFlatGround` lifts it back out each frame, and it stalls where the line enters the chunk, in front of its wall.
+- Confirmed by a console log (2026-10-26): after Reset the pivot sat at 0 with the ground at 0.72. The slider and Reset now move it to the ground (`pivotToGround`), but Dana's retest still stalls with the pivot on the ground, so a second cause remains, under investigation.
+- Also seen in the log: a pivot set from an off-center cursor sits on the view line, up to 1.3 units above the ground, not on it.
+- Second log (2026-10-26): zoom does keep going (the camera reached 145 m from the pivot, mid-chunk), so the stripes are not the chunk's outer walls. They are inner patch skirts, showing because the patches in front of the camera were not drawn.
+- 📚 Cause: three.js culls each mesh by bounds computed from its CPU positions. Chunk patches are built flat and lifted in the shader, so up close the near patches looked off screen and were skipped. A known three.js pitfall (three.js forum, "Update geometries' boundingBox taking shader displacement into account").
+- Fix (Dana confirmed): each patch's bounds now cover its real height range, the same box used to choose detail (`fitBounds` in `voxel/ChunkPatchRenderer.ts`, refit when the max height changes). The planet's patches are lifted the same way and may share this; to check after the chunk.
 
 **Cause (from the code)**
 - The chunk's zoom uses the plain percent rule (`levelToDistance` without a `surface`): 40 x 100 / 400 = 10 units, 10 km from the center of a 16 km chunk. The planet got a height-above-ground zoom in `[B51]`; the chunk never did. The orbit also always zooms toward the chunk's center.
@@ -424,14 +434,17 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Map-style navigation: `zoomToCursor` with `screenSpacePanning = false`, which keeps the orbit target on the ground plane (checked in three.js r185's OrbitControls source; with screen-space panning, zoom-to-cursor pulls the target off the ground). Panning now slides along the ground, as in `MapControls`.
 
 ### [B55] Lighting seams along the land chunk's patch edges · `wrong but workable`
-**🟡 Fixed 2026-10-26, untested** · **Opened:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `shaders/chunk.frag.glsl`, `voxel/ChunkPatchRenderer.ts`
+**🔴 Open, retest failed 2026-10-26** · **Opened:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `shaders/chunk.frag.glsl`, `voxel/ChunkPatchRenderer.ts`
 
 **What happened**
 - Dana: after the chunk moved onto patches (`[B53]`), straight lighting lines show where patches meet; the surface itself lines up (screenshot, 2026-10-26).
+- Retest (2026-10-26): a thin, dark, dead-straight line still shows up close, under some noise settings only (screenshot: Voronoi, Manhattan distance, Jitter 0.12, Frequency 1.30). Dana: too precise to be the noise. Not yet known whether it is a lighting seam or a height step between patches.
 
 **Cause (from the code)**
 - Each patch computes its slope from its own texture only, so at an edge the slope reads one-sided, and neighbors measure it over different distances.
 - The planet's patches use the same slope code, so they likely share this.
+- Retest cause, first guess (2026-10-26, WRONG): the remaining seams were height steps from each bake fading octaves by its own sample spacing. The depth-based fade built for it did not help and was removed.
+- Evidence (2026-10-26): with each patch tinted its own color, the jagged wall runs straight across a patch boundary and is not on any boundary (screenshot). So it is in the height data, not the patches. It is a long, straight, diagonal cliff with a sawtooth top (one tooth per texel). Seen only under some noise settings (Voronoi, Manhattan, Jitter 0.12). Dana: the wall disappears when Layer 277 is hidden, so it is layer specific; she is generating a new planet to recheck. The cause is not yet found: `voronoiNoise3D`'s nearest-point distance is continuous, so a cliff has to come from another step (a layer's transform, fractal type or mask, or modifiers).
 
 **Fix**
 - 📚 Known fix: bake each tile with a border of extra texels so edge slopes read real neighbor ground (Unity's terrain normals, see `REFERENCES.md` once added).

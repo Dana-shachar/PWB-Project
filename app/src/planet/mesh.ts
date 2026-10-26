@@ -150,13 +150,6 @@ export function planetGeometry(
   return cubeSphereGeometry(radius, segmentsPerFace);
 }
 
-// TEMPORARY — flip to draw the height value the planet actually reads, as
-// grayscale on an undisplaced sphere, instead of the real shaded planet.
-// A smooth field reads as a smooth gradient; anywhere the value jumps between
-// neighboring points shows as a hard edge. Diagnosing the streaks at the
-// poles (ISSUES.md, "Planet mesh and adaptive resolution"). Remove once done.
-const DEBUG_HEIGHT_FIELD = false;
-
 // A flat mid-gray 1x1 texture — "no displacement" per vertex.glsl's
 // (height - 0.5) centering — used until a real heightmap texture is
 // assigned, so the sphere isn't broken/black before that happens.
@@ -170,43 +163,6 @@ function flatHeightmapPlaceholder(): THREE.DataTexture {
 // basic diffuse lighting
 export function planet(radius = 20, segmentsPerFace = 32): THREE.Mesh {
   const geometry = planetGeometry(radius, segmentsPerFace);
-  if (DEBUG_HEIGHT_FIELD) {
-    // TEMPORARY — reads uHeightMap exactly the way vertex.glsl does, but
-    // draws the value instead of displacing by it, on an undisplaced sphere.
-    // Kept as a ShaderMaterial with the same uniform keys as the real
-    // material so SceneCanvas's effects, which reach into
-    // material.uniforms.X directly, don't throw against it.
-    const debugMaterial = new THREE.ShaderMaterial({
-      vertexShader: `
-        varying vec2 vDebugUv;
-        void main() {
-          vDebugUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      // Same sample vertex.glsl takes (.g, the elevation channel), recentred
-      // into a visible range. Smooth gradient = smooth height field. A hard
-      // edge = the value jumping between neighboring points, which is what
-      // would tear the mesh once it drives displacement.
-      fragmentShader: `
-        uniform sampler2D uHeightMap;
-        varying vec2 vDebugUv;
-        void main() {
-          float elevation = texture2D(uHeightMap, vDebugUv).g;
-          gl_FragColor = vec4(vec3(elevation * 0.5 + 0.5), 1.0);
-        }
-      `,
-      uniforms: {
-        uBaseColor: { value: new THREE.Color(0xffffff) },
-        uLightDirection: { value: new THREE.Vector3(1, 1, 1) },
-        uAmbient: { value: 0.15 },
-        uHeightMap: { value: flatHeightmapPlaceholder() },
-        uDisplacementAmplitude: { value: 0 },
-        uRadius: { value: radius },
-      },
-    });
-    return new THREE.Mesh(geometry, debugMaterial);
-  }
   const material = new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader,

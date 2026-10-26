@@ -12,6 +12,12 @@
 >
 > **State.** Everything below is committed. Marked items are untested on screen. The PWB dev server runs on **localhost:5173** (`app/vite.config.ts`, `strictPort`); run it in the background from `app/` with `npx vite`.
 >
+> **Since the second handover (2026-10-26, later)**
+> - ✅ `[B56]` fixed and confirmed: the zoom slider and Reset View pivot to the ground (`pivotToGround`), and chunk patches get real height bounds (`fitBounds`) so near tiles are no longer culled. No further voxel work (Dana).
+> - 🔴 `[B55]` reopened: a straight, diagonal cliff with a sawtooth top (and a thin dark line from afar) appears under some noise settings (Voronoi, Manhattan, Jitter 0.12). A per-patch color test showed it is in the height data, not at patch edges. Dana: it disappears when Layer 277 is hidden, so it is layer specific; she is checking on a new planet. Cause not found; `voronoiNoise3D` itself is continuous, so look at that layer's Terrace, Domain warp, Ridged or fractal settings. A depth-based octave fade tried for it was removed.
+> - Walk mode is still not started. Open sources: walking speed (1.4 m/s has only a blog behind it), a run multiplier (none found) and Unity's field of view slider range.
+> - Layer names are an ever-increasing counter, never reused (by design, 2026-09-22), so "Layer 277" only means 277 layers were created.
+>
 > **Built this session, all untested unless marked**
 > - 🟡 **Mask Jitter fix** (`[B52]`) and **Detail: Auto** in Scene with Roughness renamed (from the first handover's items 1 and 2).
 > - 🟡 **Land chunk on patches** (`[B53]`): `selectChunkPatches` (`voxel/chunkPatches.ts`), `ChunkPatchRenderer`, `buildFlatPatchGeometry` (`voxel/chunkPatchMesh.ts`), `bakePatchInto` on `SceneCanvasHandle`. Shadows still read one whole-chunk texture. Dana saw it sharpen.
@@ -26,7 +32,7 @@
 > - 🧭 Walk mode is for the chunk only; the chunk is meant for finer, closer detail.
 >
 > **Next, in this order**
-> 1. Dana tests the batch above, then close `[B50]` to `[B53]`, `[B55]`, `[B56]` as she confirms.
+> 1. Dana tests the batch above, then close `[B50]` to `[B53]`, `[B55]` as she confirms. Find the `[B55]` cliff first.
 > 2. **Walk mode** (plan below, Dana approved its shape).
 > 3. 🧭 **A discussion of the project's direction** (Dana, 2026-10-26): the work has been too technically focused, with not enough concept and story. Discuss before more technical features.
 > 4. **Smooth chunk shows erosion runs** (`[B54]`), unless the discussion reorders things.
@@ -41,7 +47,7 @@
 >   4. Field of view: a "Field of view" slider in Scene while walking (`ui/Panel.tsx`, `scene/sceneControls.ts`), default 60°.
 >   5. Near plane from the eye height; log its value and check a ground-level screenshot for depth flicker.
 > - ✅ **Design system:** `.gumball-btn` now has focus (accent border), active (`.gumball-btn--active`, accent at 70% on the fill) and disabled (35% opacity) states, also in the `ui-design` skill (Dana approved, 2026-10-26). The square icon variant and the shared View row are still to build in step 1.
-> - ❓ The field of view slider's range (30 to 100° was inferred).
+> - 🧭 Field of view follows Unity's conventions (Dana, 2026-10-26): 60° vertical default. 📌 Unity's own slider range is still unconfirmed: the docs give no limits, and their sample slider runs 20 to 150°. Check Unity's camera Inspector source when building step 4.
 >
 > **Open issues in `ISSUES.md`**
 > - 🔴 `[B54]` smooth chunk never shows an erosion run. `[B27]` Expand shows a black preview.

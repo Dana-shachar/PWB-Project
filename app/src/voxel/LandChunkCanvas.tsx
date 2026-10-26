@@ -170,6 +170,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       referenceDistance: CHUNK_CAMERA_DISTANCE,
       // Zoom by log distance from the ground pivot, down to a share of the chunk's size.
       surface: () => ({ planetRadius: patchSettingsRef.current.chunkSize, surfaceRadius: 0 }),
+      pivotToGround: () => pivotAtScreenPoint(0, 0),
     };
 
     function currentGround(): ChunkGround | null {
@@ -181,16 +182,20 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     const pickRay = new THREE.Raycaster();
     const pickPointer = new THREE.Vector2();
     const viewDirection = new THREE.Vector3();
-    function pivotOnGround(event: PointerEvent | WheelEvent) {
+    // The screen point is in -1..1 view coordinates; (0, 0) is the view's center.
+    function pivotAtScreenPoint(screenX: number, screenY: number) {
       const ground = currentGround();
       if (!ground) return;
-      const rect = viewportElement!.getBoundingClientRect();
-      pickPointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      pickPointer.set(screenX, screenY);
       pickRay.setFromCamera(pickPointer, perspectiveCamera);
       const hit = raycastGround(ground, pickRay.ray, ground.chunkSize * 4);
       if (!hit) return;
       perspectiveCamera.getWorldDirection(viewDirection);
       orbitControls.target.copy(perspectiveCamera.position).addScaledVector(viewDirection, perspectiveCamera.position.distanceTo(hit));
+    }
+    function pivotOnGround(event: PointerEvent | WheelEvent) {
+      const rect = viewportElement!.getBoundingClientRect();
+      pivotAtScreenPoint(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     }
     viewportElement.addEventListener('pointerdown', pivotOnGround, { capture: true });
     viewportElement.addEventListener('wheel', pivotOnGround, { capture: true });

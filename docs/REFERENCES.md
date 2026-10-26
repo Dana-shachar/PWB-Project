@@ -314,6 +314,13 @@
 - where the patch cache plan comes from. ⚠️ Keeping a parent drawn until its children are ready, and evicting least recently used tiles, are common practice but no source confirmed them
 - *[CS354R lecture](https://www.cs.utexas.edu/~theshark/courses/cs354r/lectures/cs354r-23.pdf) · [Pulsegeek, terrain stitching and chunking](https://pulsegeek.com/articles/terrain-stitching-and-chunking-seamless-streaming/) · [Cesium3DTileRefine](https://ci-builds.cesium.com/cesium/main/Build/Coverage/Firefox%20145.0%20(Linux%200.0.0)/engine/Source/Scene/Cesium3DTileRefine.js.html). Read 2026-10-21*
 
+### Culling displaced meshes
+
+**Bounds for shader-displaced meshes** · three.js forum · `method used`
+- three.js culls a mesh by bounds computed from its CPU positions, so a mesh lifted in the vertex shader is skipped when its flat shape leaves the view. The fix is to give the geometry bounds that cover the displaced range (turning culling off also works, at the cost of drawing everything)
+- where the chunk patches' `fitBounds` comes from. ⚠️ Forum level, no official three.js statement found
+- *[Update geometries' boundingBox taking shader displacement into account](https://discourse.threejs.org/t/update-geometries-boundingbox-taking-shader-displacement-into-account/5729) · [Zooming in camera makes some meshes not visible](https://discourse.threejs.org/t/zooming-in-camera-make-some-meshes-not-visible/3872). Read 2026-10-26*
+
 ### Lighting a heightfield across detail levels
 
 **Normals from heightfields** · Khronos forum, gamedev.net, NVIDIA · `method used`

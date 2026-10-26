@@ -21,6 +21,9 @@ export interface GumballTarget {
   // A planet target's radius and radius plus highest terrain: its zoom then
   // runs on height above the surface, log-scaled ([B51]).
   surface?: () => { planetRadius: number; surfaceRadius: number };
+  // Moves the orbit target to the ground at the view's center, so the slider
+  // and reset zoom toward the ground, not a buried point ([B56]).
+  pivotToGround?: () => void;
 }
 
 const MIN_ZOOM_LEVEL = 10;
@@ -234,6 +237,7 @@ export class Gumball {
     this.zoomLevel = parseFloat(this.zoomInput.value);
     for (const target of this.targets) {
       const { camera, cameraControls } = target;
+      target.pivotToGround?.();
       const targetDistance = levelToDistance(target, this.zoomLevel);
       const orbitDirection = camera.position.clone().sub(cameraControls.target).normalize();
       camera.position.copy(cameraControls.target).addScaledVector(orbitDirection, targetDistance);
@@ -241,11 +245,13 @@ export class Gumball {
   };
 
   resetScene(): void {
-    for (const { camera, cameraControls, referenceDistance } of this.targets) {
+    for (const target of this.targets) {
+      const { camera, cameraControls, referenceDistance } = target;
       camera.position.copy(defaultCameraPosition(referenceDistance));
       camera.up.set(0, 1, 0);
       cameraControls.target.set(0, 0, 0);
       cameraControls.update();
+      target.pivotToGround?.();
     }
   }
 

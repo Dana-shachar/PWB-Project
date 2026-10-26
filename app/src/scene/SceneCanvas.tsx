@@ -149,13 +149,6 @@ function buildWireframeOverlay(geometry: THREE.BufferGeometry): THREE.LineSegmen
 // wireframe overlay in this pass, so selecting Wireframe falls back to
 // showing the old single mesh regardless of this flag (see the displayMode
 // effect below).
-// TEMPORARY DIAGNOSTIC FLIP (2026-10-19): set true to get real browser
-// console output for [B28]'s regression (see ISSUES.md) — a 2026-10-18
-// fork ruled out three real candidates (scissor/viewport bleed, float-
-// texture mipmap filtering, an LOD explosion at the default camera
-// distance) by checking actual engine source, but couldn't confirm the
-// actual cause without live console access. Revert to false once that's
-// captured, this isn't the real fix.
 const USE_PLANET_PATCHES = true;
 
 // Scratch objects for the planet patches' per-frame view of the camera.
