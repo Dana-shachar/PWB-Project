@@ -47,11 +47,9 @@ uniform float uFace;
 // codes this against the shared map's fixed 1024 width; a patch's own baked
 // texture is a different, per-patch resolution (planet/patch.ts's
 // clampPatchSamples), so this has to be a uniform instead of a constant.
-// How far apart (in world units) the bump gradient reads, a fixed ground
-// distance so lighting doesn't change with patch depth. See the clamp below.
-uniform float uGradientStepWorld;
-// The baked texture's width in texels, which varies with the patch's depth.
+// The bake's samples edge to edge, and the border texels past each edge.
 uniform float uBakeSamples;
+uniform float uBorderTexels;
 uniform float uDiffuseWrap;
 uniform mat3 normalMatrix;
 
@@ -108,10 +106,11 @@ void main() {
   vec3 dPdu = ((rawDPdu - localNormal * dot(localNormal, rawDPdu)) / cubeRadius) * uRadius * (uPatchMax.x - uPatchMin.x);
   vec3 dPdv = ((rawDPdv - localNormal * dot(localNormal, rawDPdv)) / cubeRadius) * uRadius * (uPatchMax.y - uPatchMin.y);
 
-  // The step is a fixed world length turned into uv for this patch, kept
-  // between 2 and 8 of its own baked texels (under 2 reads noise as slope).
-  float stepUv = clamp(uGradientStepWorld / max(0.0001, length(dPdu)), 2.0 / uBakeSamples, 8.0 / uBakeSamples);
-  vec3 normal = normalize(normalMatrix * heightfieldNormal(uHeightMap, vUv, stepUv, 1.0, dPdu, dPdv, localNormal, uDisplacementAmplitude));
+  // Stepped in texture uv; the tangents shrink by the same scale so the slope stays per patch uv.
+  float stepUv = texelStepUv(uBakeSamples);
+  float textureScale = (uBakeSamples - 1.0) / (uBakeSamples + 2.0 * uBorderTexels);
+  vec2 textureUv = borderedTextureUv(vUv, uBakeSamples, uBorderTexels);
+  vec3 normal = normalize(normalMatrix * heightfieldNormal(uHeightMap, textureUv, stepUv * textureScale, 1.0, dPdu / textureScale, dPdv / textureScale, localNormal, uDisplacementAmplitude));
 
   vec3 lightDir = normalize(uLightDirection);
   float diffuse = softDiffuse(normal, lightDir, uDiffuseWrap) * uLightIntensity;
@@ -124,7 +123,7 @@ void main() {
   vec3 surfaceColor = uBaseColor;
   float ambient = uAmbient;
   if (uColorByElevation > 0.5) {
-    float elevationRaw = texture2D(uHeightMap, vUv).g;
+    float elevationRaw = texture2D(uHeightMap, textureUv).g;
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
     surfaceColor = ramp;

@@ -34,7 +34,19 @@ uniform float uRampCount;
 uniform float uElevationMin;
 uniform float uElevationMax;
 uniform float uShadowsEnabled;
-uniform float uChunkSize; // world units the patch spans
+uniform float uChunkSize; // world units the whole chunk spans
+// One patch of the chunk: its width, and where its uv sits on the whole chunk.
+// The single mesh (voxel) uses the whole chunk, uv min 0 and max 1.
+uniform float uPatchWorldSize;
+uniform vec2 uPatchUvMin;
+uniform vec2 uPatchUvMax;
+// The whole chunk's texture, so shadows march across patch borders without seams.
+uniform sampler2D uChunkHeightMap;
+// The voxel mesh's gradient step in uv (patches use texelStepUv instead).
+uniform float uGradientStepUv;
+// A patch's bake size and border; 0 samples means the voxel mesh's plain uv.
+uniform float uBakeSamples;
+uniform float uBorderTexels;
 uniform float uMaxHeight; // world-unit height a raw value of 0.5 displaces to (effectiveHeightScale in landChunk.ts)
 // Three.js built-in, auto-set but not auto-declared in the fragment stage —
 // same reason fragment.glsl (the planet) declares it, needed here to turn a
@@ -73,7 +85,10 @@ varying float vIsTopSurface;
 void main() {
   // Renormalized because interpolating across a triangle shortens it.
   vec3 normal = normalize(vNormal);
-  float elevationRaw = sampleHeight(vUv);
+  bool isPatch = uBakeSamples > 0.5;
+  vec2 textureUv = isPatch ? borderedTextureUv(vUv, uBakeSamples, uBorderTexels) : vUv;
+  float textureScale = isPatch ? (uBakeSamples - 1.0) / (uBakeSamples + 2.0 * uBorderTexels) : 1.0;
+  float elevationRaw = sampleHeight(textureUv);
 
   if (vIsTopSurface > 0.5) {
     // Central-difference gradient, the same technique fragment.glsl (the
@@ -82,15 +97,14 @@ void main() {
     // resolution, independent of this mesh's own (now much coarser) vertex
     // density, which is the actual point of this fix: perceived detail
     // scales with the heightmap, not the triangle count.
-    // A fixed 3% of the chunk (32 of 1024 texels, the validated value from
-    // [B34]), never under 2 texels, so it doesn't change with Resolution.
-    float stepUv = max(32.0 / 1024.0, uHeightMapTexelSize * 2.0);
+    // Patches: one of their own texels ([B55]). Voxel: 32 of 1024 texels ([B34]), at least 2.
+    float stepUv = isPatch ? texelStepUv(uBakeSamples) : max(uGradientStepUv, uHeightMapTexelSize * 2.0);
     // The chunk's tangents: u runs along x and v along z, each spanning
-    // uChunkSize; raw elevation maps to world height via uMaxHeight, the same
+    // uPatchWorldSize; raw elevation maps to world height via uMaxHeight, the same
     // conversion chunk.vert.glsl's displacement applies.
     vec3 localNormal = heightfieldNormal(
-      uHeightMap, vUv, stepUv, uHeightMapGreenChannel,
-      vec3(uChunkSize, 0.0, 0.0), vec3(0.0, 0.0, uChunkSize), vec3(0.0, 1.0, 0.0), uMaxHeight
+      uHeightMap, textureUv, stepUv * textureScale, uHeightMapGreenChannel,
+      vec3(uPatchWorldSize / textureScale, 0.0, 0.0), vec3(0.0, 0.0, uPatchWorldSize / textureScale), vec3(0.0, 1.0, 0.0), uMaxHeight
     );
     normal = normalize(normalMatrix * localNormal);
   }
@@ -113,7 +127,11 @@ void main() {
   // reason: the heightmap shadow march assumes a real top-down uv, which
   // only the top surface has.
   if (uShadowsEnabled > 0.5 && vIsTopSurface > 0.5) {
-    float shadow = heightmapShadow(uHeightMap, vUv, lightDir, elevationRaw, 0.01, uChunkSize, uMaxHeight, uHeightMapGreenChannel);
+    // Starts from the chunk texture's own height, so a finer patch can't shadow itself.
+    vec2 chunkUv = mix(uPatchUvMin, uPatchUvMax, vUv);
+    vec4 chunkTexel = texture2D(uChunkHeightMap, chunkUv);
+    float chunkElevationRaw = mix(chunkTexel.r, chunkTexel.g, uHeightMapGreenChannel);
+    float shadow = heightmapShadow(uChunkHeightMap, chunkUv, lightDir, chunkElevationRaw, 0.01, uChunkSize, uMaxHeight, uHeightMapGreenChannel);
     diffuse *= shadow;
     specular *= shadow;
   }

@@ -17,7 +17,7 @@ interface ErosionPanelProps {
   patch: TerrainPatch;
   // How finely the chunk is drawn, which caps how much of a run can be seen
   // however finely it was computed.
-  meshResolution: number;
+  meshResolution: number | null;
   onRun: (patch: TerrainPatch) => void;
   onClear: () => void;
   result: ErosionResult | null;
@@ -50,7 +50,7 @@ export function ErosionPanel({
   // A run computed far finer than the chunk is drawn is real but mostly
   // invisible, which is indistinguishable from a run that did nothing. Say
   // so rather than letting it read as a failure.
-  const outrunsMesh = result !== null && meshResolution < result.outcome.gridResolution / 2;
+  const outrunsMesh = result !== null && meshResolution !== null && meshResolution < result.outcome.gridResolution / 2;
 
   return (
     <div className="panel-section">

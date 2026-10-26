@@ -164,9 +164,9 @@
   </g>
   <g class="node"><rect x="916" y="772" width="260" height="100"/>
   <text x="1046.0" y="804.5" class="title" text-anchor="middle">Close-up chunk</text>
-  <text x="1046.0" y="819.5" class="sub" text-anchor="middle">(LandChunkCanvas, meshWorker)</text>
-  <text x="1046.0" y="835.5" class="desc" text-anchor="middle">one spot's heights, built into</text>
-  <text x="1046.0" y="848.5" class="desc" text-anchor="middle">a mesh in a background worker</text>
+  <text x="1046.0" y="819.5" class="sub" text-anchor="middle">(LandChunkCanvas, ChunkPatchRenderer)</text>
+  <text x="1046.0" y="835.5" class="desc" text-anchor="middle">one spot, split into patches</text>
+  <text x="1046.0" y="848.5" class="desc" text-anchor="middle">that sharpen as you zoom</text>
   </g>
   <g class="node"><rect x="566" y="886" width="610" height="30"/>
   <text x="871.0" y="903.0" class="title" text-anchor="middle">One shared renderer draws both 3D views <tspan class="sub">(sharedViewportRenderer.ts)</tspan></text>

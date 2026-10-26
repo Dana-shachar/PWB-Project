@@ -38,6 +38,9 @@ uniform float uMaxHeight; // world-unit height a raw value of 0.5 displaces to, 
 // for voxel mode's: a plain single-channel CPU texture, elevation in red,
 // its own separate, accepted ceiling. See landChunk.ts, ISSUES.md [B32].
 uniform float uHeightMapGreenChannel;
+// A patch's bake size and border; 0 samples (the voxel mesh) reads uv as is.
+uniform float uBakeSamples;
+uniform float uBorderTexels;
 
 void main() {
   vNormal = normalMatrix * normal;
@@ -50,7 +53,10 @@ void main() {
     // Clamped at 0 (not just scaled), matching smoothMesh.ts's old CPU
     // formula exactly — the skirt walls below assume the top surface never
     // dips below the slab's own base.
-    vec4 heightTexel = texture2D(uHeightMap, uv);
+    vec2 textureUv = uBakeSamples > 0.5
+      ? (vec2(uBorderTexels + 0.5) + uv * (uBakeSamples - 1.0)) / (uBakeSamples + 2.0 * uBorderTexels)
+      : uv;
+    vec4 heightTexel = texture2D(uHeightMap, textureUv);
     float elevationRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
     float heightNormalized = max(0.0, elevationRaw + 0.5);
     displacedPosition.y = heightNormalized * uMaxHeight;

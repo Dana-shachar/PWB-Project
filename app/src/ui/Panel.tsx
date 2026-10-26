@@ -517,8 +517,8 @@ export function Panel({
                   : "The planet's physical radius, in kilometers. Select the planet or chunk pane to control that view's own scale."
               }
             />
-            {/* The chunk's own Resolution; the planet's lives in Scene as Auto detail. */}
-            {activeViewContext === 'landChunk' && (
+            {/* The voxel chunk's mesh Resolution; smooth detail follows Scene's Auto detail. */}
+            {activeViewContext === 'landChunk' && displayMode === 'voxel' && (
               <Slider
                 label="Resolution"
                 value={chunkResolution}
@@ -535,7 +535,7 @@ export function Panel({
               value={detailAmount}
               onChange={onDetailAmountChange}
               min={0}
-              max={0.2}
+              max={1}
               step={0.005}
               precision={3}
               disabled={activeViewContext === null}

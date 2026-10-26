@@ -57,3 +57,26 @@ export function applyAltitudeRates(
     perspectiveCamera.updateProjectionMatrix();
   }
 }
+
+// The flat land chunk's version ([B56]), run after the controls update: the
+// camera stays above the ground under it (Cesium's terrain collision), and the
+// near plane follows that height. The closest height scales with the chunk.
+export function keepAboveFlatGround(
+  orbitControls: OrbitControls,
+  perspectiveCamera: THREE.PerspectiveCamera,
+  groundHeight: number,
+  chunkSize: number,
+): void {
+  const minAltitude = chunkSize * MIN_CAMERA_ALTITUDE;
+  orbitControls.minDistance = minAltitude;
+  if (perspectiveCamera.position.y < groundHeight + minAltitude) {
+    perspectiveCamera.position.y = groundHeight + minAltitude;
+    perspectiveCamera.lookAt(orbitControls.target);
+  }
+  const altitude = Math.max(minAltitude, perspectiveCamera.position.y - groundHeight);
+  const near = Math.min(DEFAULT_NEAR, altitude * 0.25);
+  if (perspectiveCamera.near !== near) {
+    perspectiveCamera.near = near;
+    perspectiveCamera.updateProjectionMatrix();
+  }
+}

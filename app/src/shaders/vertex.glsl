@@ -10,6 +10,9 @@ varying vec3 vWorldPosition;
 
 uniform sampler2D uHeightMap;
 uniform float uDisplacementAmplitude;
+// A patch's bake size and border; 0 samples (the whole-globe mesh) reads uv as is.
+uniform float uBakeSamples;
+uniform float uBorderTexels;
 
 void main() {
   vUv = uv;
@@ -19,7 +22,10 @@ void main() {
   // G, not R — real elevation (each layer's own Height, additive, already
   // centered on 0), not the R shape/paint composite (0..1, centered on 0.5)
   // the 2D canvas shows. See heightmap.frag.glsl and ISSUES.md, 2026-09-24.
-  float elevation = texture2D(uHeightMap, uv).g;
+  vec2 textureUv = uBakeSamples > 0.5
+    ? (vec2(uBorderTexels + 0.5) + uv * (uBakeSamples - 1.0)) / (uBakeSamples + 2.0 * uBorderTexels)
+    : uv;
+  float elevation = texture2D(uHeightMap, textureUv).g;
   vec3 displaced = position + normal * elevation * uDisplacementAmplitude;
 
   vWorldPosition = (modelMatrix * vec4(displaced, 1.0)).xyz;

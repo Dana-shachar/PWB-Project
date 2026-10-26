@@ -10,7 +10,7 @@ import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 import { computeElevationRange } from '../map/elevationRange';
 import type { ElevationData } from '../voxel/chunkGrid';
-import { clampPatchSamples, clampPatchTextureResolution, faceIndex, patchContaining, type TerrainPatch } from '../planet/patch';
+import { clampPatchSamples, clampPatchTextureResolution, faceIndex, PATCH_BORDER_TEXELS, patchContaining, type TerrainPatch } from '../planet/patch';
 import { PlanetPatchRenderer } from '../planet/PlanetPatchRenderer';
 import type { PlanetSharedUniforms } from '../planet/planetPatchMesh';
 import { buildRampUniformArrays, DEFAULT_COLOR_STOPS, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
@@ -98,6 +98,9 @@ export interface SceneCanvasHandle {
   // applies — this is the fix that was reverted to a CPU readback that
   // night, now reinstated for real. See ISSUES.md, [B32].
   getPatchRegionTexture(patch: TerrainPatch, resolution: number): { texture: THREE.Texture; resolution: number } | null;
+  // Bakes a patch into a target the caller owns, for the chunk's patches
+  // (voxel/ChunkPatchRenderer.ts). False if the pipeline isn't ready.
+  bakePatchInto(patch: TerrainPatch, target: THREE.WebGLRenderTarget): boolean;
   // Bakes one patch, runs the erosion simulation over it, and hands back the
   // eroded heights in the same shape getPatchElevationData returns, so
   // whatever shows terrain cannot tell which of the two it was given, plus
@@ -428,6 +431,20 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
       },
       getElevationRange() {
         return { min: sharedUniformsRef.current.elevationMin, max: sharedUniformsRef.current.elevationMax };
+      },
+      bakePatchInto(patch, target) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return false;
+        heightmapPipeline.bakeRegionToTarget(webglRenderer, {
+          layers: layersRef.current,
+          face: faceIndex(patch.face),
+          min: patch.min,
+          max: patch.max,
+          resolution: target.width,
+          borderTexels: PATCH_BORDER_TEXELS,
+        }, target);
+        return true;
       },
       getPatchRegionTexture(patch, resolution) {
         const webglRenderer = webglRendererRef.current;

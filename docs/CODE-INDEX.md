@@ -26,7 +26,10 @@
 | Add a design-system component | `ui/UIElements.tsx`, `design.css`, `ui/icons.tsx` |
 | Add a panel control | `ui/Panel.tsx` (left) or `ui/NoisePanel.tsx` (right), then `App.tsx` for wiring |
 | Change erosion | `erosion/erosionEngine.ts`, `shaders/erosion/`, `ui/panels/ErosionPanel.tsx` |
-| Change the land chunk | `voxel/landChunk.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/smoothMesh.ts`, `shaders/chunk.vert.glsl`, `shaders/chunk.frag.glsl` |
+| Change the land chunk | `voxel/landChunk.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`, `shaders/chunk.vert.glsl`, `shaders/chunk.frag.glsl` |
+| Change which patches the chunk shows | `voxel/chunkPatches.ts` (`selectChunkPatches`), `voxel/ChunkPatchRenderer.ts`, `voxel/chunkPatchMesh.ts` |
+| Change the chunk camera's ground picking or collision | `voxel/chunkGround.ts` (`groundHeightAt`, `raycastGround`), `keepAboveFlatGround` in `scene/controls.ts`, the setup effect of `voxel/LandChunkCanvas.tsx` |
+| Change patch texture borders or slope reading | `PATCH_BORDER_TEXELS`, `createPatchTarget` in `planet/patch.ts`, `borderTexels` in `map/heightmap.ts`, `borderedTextureUv` and `texelStepUv` in `shaders/terrain.glsl` |
 | Change how the camera moves or zooms | `scene/controls.ts` (`applyAltitudeRates`), `scene/camera.ts` (`MIN_CAMERA_ALTITUDE`), `scene/Gumball.tsx` (`levelToDistance`, `distanceToLevel`) |
 | Change the planet-wide fine detail | `planetDetail` in `shaders/heightmap.frag.glsl`, `HeightmapPipeline.setDetailAmount`, `detailAmount` in `planet/planetControls.ts` |
 
@@ -114,7 +117,7 @@
 
 **planet/patch.ts**
 - What it is: patch math, bake sizes, the Resolution conversion and migration, the depth cap, the fixed mesh grid.
-- Key names: `TerrainPatch`, `rootPatch`, `subdivide`, `crossFaceNeighbors`, `neighborProbe`, `bakeSamplesCap`, `bakeSamplesForPixelWidth`, `migrateResolution`, `resolutionToMaxErrorPixels`, `maxErrorPixelsToResolution`, `MAX_PATCH_DEPTH`, `PATCH_GRID`, `MAX_PATCH_TEXTURE_RESOLUTION`, `clampPatchTextureResolution`.
+- Key names: `TerrainPatch`, `rootPatch`, `subdivide`, `crossFaceNeighbors`, `neighborProbe`, `bakeSamplesCap`, `bakeSamplesForPixelWidth`, `PATCH_BORDER_TEXELS`, `createPatchTarget`, `MAX_INDEX_DEPTH`, `migrateResolution`, `resolutionToMaxErrorPixels`, `maxErrorPixelsToResolution`, `MAX_PATCH_DEPTH`, `PATCH_GRID`, `MAX_PATCH_TEXTURE_RESOLUTION`, `clampPatchTextureResolution`.
 
 **planet/PlanetPatchRenderer.ts**
 - What it is: builds, upgrades and drops patch meshes.
@@ -152,7 +155,7 @@
 
 **scene/SceneCanvas.tsx**
 - What it is: the planet view and its imperative handle.
-- Key names: `SceneCanvas`, `SceneCanvasHandle`, `updateElevationRange`, `replayAndRecomposite`, `buildWireframeOverlay`.
+- Key names: `SceneCanvas`, `SceneCanvasHandle` (incl. `bakePatchInto`), `updateElevationRange`, `replayAndRecomposite`, `buildWireframeOverlay`.
 - Talks to: `heightmap.ts`, `PlanetPatchRenderer`, `sharedViewportRenderer`.
 
 **scene/sharedViewportRenderer.ts**
@@ -169,7 +172,7 @@
 
 **scene/camera.ts**, **controls.ts**
 - What it is: the camera and its orbit controls. Every frame the planet view scales rotate, pan and zoom speed, and the near and far planes, by height above the surface.
-- Key names: `camera`, `defaultCameraPosition`, `DEFAULT_CAMERA_DISTANCE`, `MIN_CAMERA_ALTITUDE`, `DEFAULT_NEAR`, `DEFAULT_FAR`, `controls`, `applyAltitudeRates`.
+- Key names: `camera`, `defaultCameraPosition`, `DEFAULT_CAMERA_DISTANCE`, `MIN_CAMERA_ALTITUDE`, `DEFAULT_NEAR`, `DEFAULT_FAR`, `controls`, `applyAltitudeRates`, `keepAboveFlatGround` (the chunk).
 
 **scene/grid.ts**, **renderer.ts**, **scene.ts**
 - What it is: small Three.js setup modules.
@@ -181,12 +184,29 @@
 *The flat detail view and its meshing.*
 
 **voxel/landChunk.ts**
-- What it is: chunk state, picking and the view mode. Its main effect bakes the chunk's one texture (`getPatchRegionTexture`) and builds one smooth mesh capped at `SMOOTH_MESH_VERTEX_CEILING`.
-- Key names: `useLandChunk`, `pickLocation`, `startResize`, `SMOOTH_MESH_VERTEX_CEILING`.
+- What it is: chunk state, picking and the view mode. In smooth style its main effect bakes one whole-chunk texture for shadows, a CPU copy of the heights for the camera, and bumps `bakeVersion` so the patches re-bake. Voxel style (being dropped) still builds one mesh.
+- Key names: `useLandChunk`, `pickLocation`, `startResize`, `CHUNK_SHADOW_SAMPLES`, `GROUND_SAMPLES`, `bakeVersion`, `groundHeights`.
+
+**voxel/chunkPatches.ts**
+- What it is: which patches the chunk shows, the planet's screen-space-error rule over one flat square.
+- Key names: `selectChunkPatches`, `ChunkDetail`, `rootFractions`, `chunkPatchWorldSize`, `chunkPatchBox`, `chunkPatchPixelWidth`, `chunkPatchInView`, `CHUNK_MAX_EXTRA_DEPTH`.
+
+**voxel/ChunkPatchRenderer.ts**
+- What it is: bakes, builds and swaps the chunk's patches; each patch material shares the chunk material's uniforms.
+- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`), `BakeChunkPatch`.
+- Talks to: `bakePatchInto` on `SceneCanvasHandle`, `chunkPatchMesh.ts`.
+
+**voxel/chunkPatchMesh.ts**
+- What it is: a flat patch from the planet's stitched grid (`buildPatchGeometry`), with walls on the chunk's border, and the chunk's base.
+- Key names: `buildFlatPatchGeometry`, `buildChunkBaseGeometry`, `chunkBaseDepth`.
+
+**voxel/chunkGround.ts**
+- What it is: ground height anywhere on the chunk, for camera picking and collision.
+- Key names: `ChunkGround`, `groundHeightAt`, `raycastGround`.
 
 **voxel/LandChunkCanvas.tsx**
-- What it is: the chunk view and its material.
-- Key names: `LandChunkCanvas`, `LandChunkCanvasHandle`.
+- What it is: the chunk view, its chunk material (shared by the voxel mesh and every patch), map-style orbit (`zoomToCursor`, pivot on the ground under the cursor) and the patch renderer.
+- Key names: `LandChunkCanvas`, `LandChunkCanvasHandle`, `pivotOnGround`, `currentGround`.
 
 **voxel/smoothMesh.ts**, **meshWorker.ts**, **density.ts**, **chunkGrid.ts**
 - What it is: smooth and blocky meshing, and the chunk's grid constants.
@@ -258,7 +278,7 @@
 
 **terrain.glsl**
 - What it is: pieces shared by the surface shaders.
-- Key names: `terrainRampColor`, `heightfieldNormal`, `softDiffuse`, `heightmapShadow`.
+- Key names: `terrainRampColor`, `borderedTextureUv`, `texelStepUv`, `heightfieldNormal`, `softDiffuse`, `heightmapShadow`.
 
 **planetPatch.frag.glsl**, **chunk.frag.glsl**, **fragment.glsl**
 - What it is: the three surface shaders (patches, chunk, old globe).

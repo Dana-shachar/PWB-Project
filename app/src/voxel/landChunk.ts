@@ -3,12 +3,16 @@ import * as THREE from 'three';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 import type { NoiseLayer } from '../map/heightmap';
 import { buildChunkHeights } from './density';
-import { buildSmoothChunkGeometry } from './smoothMesh';
-import { DEFAULT_CHUNK_RESOLUTION, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_DEPTH, CHUNK_FACE, CHUNK_TARGET } from './chunkGrid';
+import { DEFAULT_CHUNK_RESOLUTION, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_DEPTH, CHUNK_FACE, CHUNK_TARGET, type ElevationData } from './chunkGrid';
 import { clampPatchSamples, patchAtDepth, type TerrainPatch } from '../planet/patch';
 import type { ErosionResult } from '../erosion/erosionControls';
 
 export type ViewMode = 'planet' | 'landChunk' | 'split';
+
+// The whole-chunk texture's size, for the shadow march.
+const CHUNK_SHADOW_SAMPLES = 1025;
+// The CPU copy of the chunk's heights for camera picking and collision.
+const GROUND_SAMPLES = 257;
 
 // Test-chunk voxel pipeline: reads the existing heightmap, builds a density
 // grid, meshes it (cube/culled-face, in a Worker so the main thread/3D view
@@ -55,6 +59,9 @@ export function useLandChunk(
   // per-patch GPU render target, so it has to travel alongside the texture
   // itself rather than being assumed.
   const [heightMapResolution, setHeightMapResolution] = useState(1);
+  // Bumped whenever the smooth chunk's terrain changes, so its patches re-bake.
+  const [bakeVersion, setBakeVersion] = useState(0);
+  const [groundHeights, setGroundHeights] = useState<ElevationData | null>(null);
   // The world-unit height a raw elevation of 0.5 (this patch's maximum)
   // displaces to — the same `effectiveHeightScale` the geometry itself is
   // built with below, exposed so the shader's color ramp and shadow march
@@ -163,7 +170,9 @@ export function useLandChunk(
       // heightmap pipeline's own reused render-target slot, not this
       // component — never disposed here, unlike voxel's own locally-built
       // DataTexture below.
-      const region = sceneHandleRef.current?.getPatchRegionTexture(patch, debouncedResolution + 1);
+      // The whole chunk at one fixed size, now only for the shadow march; the
+      // patches (ChunkPatchRenderer.ts) carry the detail.
+      const region = sceneHandleRef.current?.getPatchRegionTexture(patch, CHUNK_SHADOW_SAMPLES);
       if (!region) return;
       setHeightMap((previous) => {
         // Only a voxel-built DataTexture is locally owned and needs
@@ -174,18 +183,13 @@ export function useLandChunk(
         return region.texture;
       });
       setHeightMapResolution(region.resolution);
-      // The mesh's own vertex count no longer carries real height detail at
-      // all now (the texture does, independently) — it only needs to be
-      // fine enough for the top surface to read as smoothly curved under
-      // lighting, not to resolve any actual terrain feature. A modest,
-      // fixed ceiling keeps the triangle count sane even at a very high
-      // Resolution slider value, instead of growing with it for no reason.
-      const SMOOTH_MESH_VERTEX_CEILING = 128;
-      const meshResolution = Math.min(debouncedResolution, SMOOTH_MESH_VERTEX_CEILING);
+      // No single mesh: the patches draw the surface, so they re-bake too.
       setGeometry((previous) => {
         previous?.dispose();
-        return buildSmoothChunkGeometry(meshResolution, chunkSize);
+        return null;
       });
+      setBakeVersion((version) => version + 1);
+      setGroundHeights(sceneHandleRef.current?.getPatchElevationData(patch, GROUND_SAMPLES) ?? null);
       return;
     }
 
@@ -314,6 +318,8 @@ export function useLandChunk(
     setPatch,
     heightMap,
     heightMapResolution,
+    bakeVersion,
+    groundHeights,
     maxHeight,
     elevationMin,
     elevationMax,

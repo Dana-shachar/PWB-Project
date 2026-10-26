@@ -83,6 +83,15 @@ export const PATCH_BAKE_TEXEL_BUDGET = 8_000_000;
 // A new patch bakes no larger than this at first (quick), then upgrades to
 // its full size in a later frame, so a close-up never stalls on one big bake.
 export const INITIAL_BAKE_SAMPLES = 257;
+// Extra texels baked past each patch edge, so slopes at an edge read the
+// neighbor's real ground ([B55]; Unity's terrain normals use a border the same way). Tunable.
+export const PATCH_BORDER_TEXELS = 4;
+
+// A patch's bake target: its samples edge to edge plus the border on both sides.
+export function createPatchTarget(samples: number): THREE.WebGLRenderTarget {
+  const size = samples + 2 * PATCH_BORDER_TEXELS;
+  return new THREE.WebGLRenderTarget(size, size, { type: THREE.FloatType });
+}
 
 // The largest bake width (2^k + 1) a patch may use given how many patches are
 // in view, the texel budget and the GPU's own texture limit.
@@ -159,6 +168,8 @@ export function clampPatchGridResolution(resolution: number): number {
 // (AGI, "Precisions, Precisions"; CESIUM_RTC), which means changing the
 // bake shader, so the cap stays here.
 export const MAX_PATCH_DEPTH = 11;
+// How deep a leaf lookup searches: the land chunk refines below the planet's cap.
+export const MAX_INDEX_DEPTH = 24;
 
 export function rootPatch(face: CubeFace): TerrainPatch {
   return { face, min: new THREE.Vector2(-1, -1), max: new THREE.Vector2(1, 1), depth: 0 };

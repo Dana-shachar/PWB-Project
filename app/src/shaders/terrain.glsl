@@ -37,6 +37,18 @@ vec3 terrainRampColor(float elevationFraction, vec3 colors[MAX_COLOR_STOPS], flo
 // displacement `amplitude`. Returns a local-space normal; callers apply their
 // own normalMatrix. The step is set by the caller as a fixed world length,
 // since a step tied to patch size read finer noise as slope ([B34]).
+// A patch's uv (0..1 edge to edge) to its bordered texture's uv: texel 0 of
+// the inner area sits on the edge, the border texels lie past it ([B55]).
+vec2 borderedTextureUv(vec2 uv, float samples, float border) {
+  return (vec2(border + 0.5) + uv * (samples - 1.0)) / (samples + 2.0 * border);
+}
+
+// The slope step in patch uv: one of the patch's own texels, the central
+// difference of adjacent heightmap samples, at each level's own spacing.
+float texelStepUv(float samples) {
+  return 1.0 / (samples - 1.0);
+}
+
 vec3 heightfieldNormal(
   sampler2D heightMap,
   vec2 uv,

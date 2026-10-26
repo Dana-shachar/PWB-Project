@@ -45,7 +45,8 @@ interface RightPanelProps {
   // Which piece of ground erosion runs on, and how finely the chunk draws
   // it. Both belong to the land chunk, which is where the piece is chosen.
   erosionPatch: TerrainPatch;
-  chunkMeshResolution: number;
+  // Null unless the chunk is voxel, the only style whose mesh limits what a run shows.
+  chunkMeshResolution: number | null;
   // User-resizable, not content-driven — see ui/panelResize.ts and App.tsx's
   // resize handle.
   width: number;

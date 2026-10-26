@@ -4,11 +4,16 @@ import chunkVertexGlsl from '../shaders/chunk.vert.glsl?raw';
 import chunkFragmentBody from '../shaders/chunk.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain.glsl
 import { camera, defaultCameraPosition } from '../scene/camera';
-import { controls } from '../scene/controls';
+import { controls, keepAboveFlatGround } from '../scene/controls';
 import { grid } from '../scene/grid';
 import type { GumballTarget } from '../scene/Gumball';
 import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
+import type { TerrainPatch } from '../planet/patch';
+import { ChunkPatchRenderer, type BakeChunkPatch } from './ChunkPatchRenderer';
+import { chunkBaseDepth } from './chunkPatchMesh';
+import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
+import type { ElevationData } from './chunkGrid';
 
 const chunkFragmentGlsl = terrainGlsl + chunkFragmentBody;
 
@@ -68,6 +73,14 @@ interface LandChunkCanvasProps {
   // SceneCanvas.tsx's identical viewportRef/sharedRenderer props for why.
   viewportRef: RefObject<HTMLDivElement | null>;
   sharedRenderer: SharedViewportRenderer;
+  // The smooth style's patches: which ground, when to re-bake, how sharp, and how to bake.
+  patch: TerrainPatch;
+  patchesEnabled: boolean;
+  bakeVersion: number;
+  maxErrorPixels: number;
+  bakePatch: BakeChunkPatch;
+  // The CPU copy of the chunk's heights, for picking the ground and staying above it.
+  groundHeights: ElevationData | null;
 }
 
 // TODO(DS): arbitrary — framing distance for a ~16-unit chunk, unrelated to
@@ -108,6 +121,12 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     heightMapGreenChannel,
     viewportRef,
     sharedRenderer,
+    patch,
+    patchesEnabled,
+    bakeVersion,
+    maxErrorPixels,
+    bakePatch,
+    groundHeights,
   },
   handleRef,
 ) {
@@ -116,6 +135,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const gumballTargetRef = useRef<GumballTarget | null>(null);
+  const patchRendererRef = useRef<ChunkPatchRenderer | null>(null);
+  // Read each frame by the patch renderer, so onFrame never goes stale.
+  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, chunkSize, bakePatch, groundHeights });
+  patchSettingsRef.current = { maxErrorPixels, maxHeight, chunkSize, bakePatch, groundHeights };
 
   useImperativeHandle(
     handleRef,
@@ -138,7 +161,39 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     // identical setup for why, scene/sharedViewportRenderer.ts owns the one
     // shared <canvas> now.
     const orbitControls = controls(perspectiveCamera, viewportElement);
-    gumballTargetRef.current = { camera: perspectiveCamera, cameraControls: orbitControls, referenceDistance: CHUNK_CAMERA_DISTANCE };
+    // Map-style navigation ([B56]): zoom toward the cursor, with the orbit target kept on the ground plane.
+    orbitControls.zoomToCursor = true;
+    orbitControls.screenSpacePanning = false;
+    gumballTargetRef.current = {
+      camera: perspectiveCamera,
+      cameraControls: orbitControls,
+      referenceDistance: CHUNK_CAMERA_DISTANCE,
+      // Zoom by log distance from the ground pivot, down to a share of the chunk's size.
+      surface: () => ({ planetRadius: patchSettingsRef.current.chunkSize, surfaceRadius: 0 }),
+    };
+
+    function currentGround(): ChunkGround | null {
+      const settings = patchSettingsRef.current;
+      return settings.groundHeights ? { heights: settings.groundHeights, chunkSize: settings.chunkSize, maxHeight: Math.max(0, settings.maxHeight) } : null;
+    }
+    // Before a drag or wheel zoom, the pivot moves to the ground under the cursor
+    // (Cesium picks the terrain), kept on the view line so the view doesn't jump.
+    const pickRay = new THREE.Raycaster();
+    const pickPointer = new THREE.Vector2();
+    const viewDirection = new THREE.Vector3();
+    function pivotOnGround(event: PointerEvent | WheelEvent) {
+      const ground = currentGround();
+      if (!ground) return;
+      const rect = viewportElement!.getBoundingClientRect();
+      pickPointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      pickRay.setFromCamera(pickPointer, perspectiveCamera);
+      const hit = raycastGround(ground, pickRay.ray, ground.chunkSize * 4);
+      if (!hit) return;
+      perspectiveCamera.getWorldDirection(viewDirection);
+      orbitControls.target.copy(perspectiveCamera.position).addScaledVector(viewDirection, perspectiveCamera.position.distanceTo(hit));
+    }
+    viewportElement.addEventListener('pointerdown', pivotOnGround, { capture: true });
+    viewportElement.addEventListener('wheel', pivotOnGround, { capture: true });
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
@@ -147,19 +202,89 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     scene.add(gridMesh);
     gridMeshRef.current = gridMesh;
 
+    // The chunk material: the voxel mesh draws with it, and every patch shares its uniforms.
+    const initialRamp = buildRampUniformArrays(colorStops);
+    const material = new THREE.ShaderMaterial({
+      vertexShader: chunkVertexGlsl,
+      fragmentShader: chunkFragmentGlsl,
+      side: THREE.DoubleSide,
+      uniforms: {
+        uBaseColor: { value: new THREE.Color(baseColor) },
+        uLightDirection: { value: new THREE.Vector3(lightDirX, lightDirY, lightDirZ) },
+        uAmbient: { value: ambientLight },
+        uLightIntensity: { value: lightIntensity },
+        uSpecularStrength: { value: specularStrength },
+        uShininess: { value: shininess },
+        uDiffuseWrap: { value: diffuseWrap },
+        uCameraPosition: { value: new THREE.Vector3() },
+        uHeightMap: { value: heightMap },
+        uHeightMapTexelSize: { value: 1 / Math.max(1, heightMapResolution) },
+        uChunkHeightMap: { value: heightMap },
+        uChunkSize: { value: chunkSize },
+        uPatchWorldSize: { value: chunkSize },
+        uPatchUvMin: { value: new THREE.Vector2(0, 0) },
+        uPatchUvMax: { value: new THREE.Vector2(1, 1) },
+        uGradientStepUv: { value: 32 / 1024 },
+        uBakeSamples: { value: 0 },
+        uBorderTexels: { value: 0 },
+        uMaxHeight: { value: maxHeight },
+        uColorByElevation: { value: colorByElevation ? 1 : 0 },
+        uRampColors: { value: initialRamp.colors },
+        uRampPositions: { value: initialRamp.positions },
+        uRampCount: { value: initialRamp.count },
+        uElevationMin: { value: elevationMin },
+        uElevationMax: { value: elevationMax },
+        uShadowsEnabled: { value: shadowsEnabled ? 1 : 0 },
+        uHeightMapGreenChannel: { value: heightMapGreenChannel ? 1 : 0 },
+      },
+    });
+    materialRef.current = material;
+    const patchRenderer = new ChunkPatchRenderer(material);
+    patchRenderer.group.visible = false;
+    scene.add(patchRenderer.group);
+    patchRendererRef.current = patchRenderer;
+    const patchFrustum = new THREE.Frustum();
+    const patchViewMatrix = new THREE.Matrix4();
+
     function onFrame() {
       orbitControls.update();
+      const ground = currentGround();
+      const groundHeight = ground ? groundHeightAt(ground, perspectiveCamera.position.x, perspectiveCamera.position.z) : null;
+      keepAboveFlatGround(orbitControls, perspectiveCamera, groundHeight ?? 0, patchSettingsRef.current.chunkSize);
       // Same reason as SceneCanvas's own onFrame: the specular term needs
       // the eye position, and the camera moves every frame under orbit
       // controls.
-      const material = materialRef.current;
-      if (material) material.uniforms.uCameraPosition.value.copy(perspectiveCamera.position);
+      material.uniforms.uCameraPosition.value.copy(perspectiveCamera.position);
+      if (!patchRenderer.group.visible) return;
+      const settings = patchSettingsRef.current;
+      perspectiveCamera.updateMatrixWorld();
+      patchViewMatrix.multiplyMatrices(perspectiveCamera.projectionMatrix, perspectiveCamera.matrixWorldInverse);
+      patchFrustum.setFromProjectionMatrix(patchViewMatrix);
+      patchRenderer.update(
+        perspectiveCamera,
+        {
+          maxErrorPixels: settings.maxErrorPixels,
+          viewHeightPixels: Math.max(1, viewportElement!.clientHeight),
+          fieldOfViewRadians: THREE.MathUtils.degToRad(perspectiveCamera.fov),
+          frustum: patchFrustum,
+          chunkSize: settings.chunkSize,
+          minHeight: chunkBaseDepth(settings.chunkSize),
+          maxHeight: Math.max(settings.maxHeight, 0),
+        },
+        settings.bakePatch,
+        sharedRenderer.renderer?.capabilities.maxTextureSize ?? 2048,
+      );
     }
     sharedRenderer.registerView('landChunk', { scene, camera: perspectiveCamera, elementRef: viewportRef, onFrame });
 
     return () => {
+      viewportElement.removeEventListener('pointerdown', pivotOnGround, { capture: true });
+      viewportElement.removeEventListener('wheel', pivotOnGround, { capture: true });
       sharedRenderer.unregisterView('landChunk');
       orbitControls.dispose();
+      patchRenderer.dispose();
+      material.dispose();
+      patchRendererRef.current = null;
       sceneRef.current = null;
       gridMeshRef.current = null;
       materialRef.current = null;
@@ -209,7 +334,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     if (!material) return;
     material.uniforms.uHeightMap.value = heightMap;
     material.uniforms.uHeightMapTexelSize.value = 1 / Math.max(1, heightMapResolution);
+    material.uniforms.uChunkHeightMap.value = heightMap;
     material.uniforms.uChunkSize.value = chunkSize;
+    material.uniforms.uPatchWorldSize.value = chunkSize;
     material.uniforms.uMaxHeight.value = maxHeight;
     material.uniforms.uColorByElevation.value = colorByElevation ? 1 : 0;
     const ramp = buildRampUniformArrays(colorStops);
@@ -258,53 +385,41 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   // every geometry change (every Resolution-slider tick) forced a shader
   // recompile each time, the real cause of the chunk's flash-to-flat while
   // dragging that slider — see ISSUES.md, [B32].
+  // The voxel style's single mesh; the smooth style passes no geometry.
   useEffect(() => {
     const scene = sceneRef.current;
-    if (!scene || !geometry) return;
-    if (materialRef.current && meshRef.current) {
-      meshRef.current.geometry.dispose();
+    const material = materialRef.current;
+    if (!scene || !material) return;
+    if (!geometry) {
+      if (meshRef.current) scene.remove(meshRef.current);
+      meshRef.current = null;
+      return;
+    }
+    if (meshRef.current) {
       meshRef.current.geometry = geometry;
       return;
     }
-    // DoubleSide as a safety net against any wall-winding mistakes — Three.js
-    // flips the lighting normal for back-facing polygons automatically, so
-    // this stays visually correct either way, not just a visibility patch.
-    const initialRamp = buildRampUniformArrays(colorStops);
-    const material = new THREE.ShaderMaterial({
-      vertexShader: chunkVertexGlsl,
-      fragmentShader: chunkFragmentGlsl,
-      side: THREE.DoubleSide,
-      uniforms: {
-        uBaseColor: { value: new THREE.Color(baseColor) },
-        uLightDirection: { value: new THREE.Vector3(lightDirX, lightDirY, lightDirZ) },
-        uAmbient: { value: ambientLight },
-        uLightIntensity: { value: lightIntensity },
-        uSpecularStrength: { value: specularStrength },
-        uShininess: { value: shininess },
-        uDiffuseWrap: { value: diffuseWrap },
-        uCameraPosition: { value: new THREE.Vector3() },
-        // Current values at creation time — the effect below keeps these in
-        // sync afterward without needing a whole new material.
-        uHeightMap: { value: heightMap },
-        uHeightMapTexelSize: { value: 1 / Math.max(1, heightMapResolution) },
-        uChunkSize: { value: chunkSize },
-        uMaxHeight: { value: maxHeight },
-        uColorByElevation: { value: colorByElevation ? 1 : 0 },
-        uRampColors: { value: initialRamp.colors },
-        uRampPositions: { value: initialRamp.positions },
-        uRampCount: { value: initialRamp.count },
-        uElevationMin: { value: elevationMin },
-        uElevationMax: { value: elevationMax },
-        uShadowsEnabled: { value: shadowsEnabled ? 1 : 0 },
-        uHeightMapGreenChannel: { value: heightMapGreenChannel ? 1 : 0 },
-      },
-    });
-    materialRef.current = material;
     const mesh = new THREE.Mesh(geometry, material);
     scene.add(mesh);
     meshRef.current = mesh;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- baseColor's own effect above keeps an existing material in sync; only geometry should recreate the mesh
   }, [geometry]);
+
+  // The smooth style's patches: rebuilt for a new spot or size, re-baked when the terrain changes.
+  useEffect(() => {
+    const patchRenderer = patchRendererRef.current;
+    if (!patchRenderer) return;
+    patchRenderer.group.visible = patchesEnabled;
+    if (!patchesEnabled) {
+      patchRenderer.clear();
+      return;
+    }
+    patchRenderer.configure(patch, chunkSize, chunkBaseDepth(chunkSize));
+  }, [patchesEnabled, patch, chunkSize]);
+
+  useEffect(() => {
+    if (patchesEnabled) patchRendererRef.current?.rebakeAll(bakePatch);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-bakes only when the terrain changes
+  }, [bakeVersion]);
 
   return null;
 });

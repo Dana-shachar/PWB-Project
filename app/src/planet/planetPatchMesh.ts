@@ -3,7 +3,7 @@ import vertexShader from '../shaders/vertex.glsl?raw';
 import patchFragmentShaderBody from '../shaders/planetPatch.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain.glsl?raw';
 import { cubeFacePoint } from './cubeFace';
-import { faceIndex, type TerrainPatch } from './patch';
+import { faceIndex, PATCH_BORDER_TEXELS, type TerrainPatch } from './patch';
 import type { EdgeStitchFlags } from './planetPatches';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from './colorRamp';
 
@@ -272,10 +272,6 @@ export interface PlanetSharedUniforms {
   viewDirection?: THREE.Vector3;
 }
 
-// Ground distance the bump gradient reads across, as a share of the radius,
-// so lighting looks alike at every patch depth (the shader clamps it to 2-8
-// of a patch's own texels).
-const GRADIENT_STEP_RADIUS_FRACTION = 0.02;
 
 export function createPatchMaterial(
   patch: TerrainPatch,
@@ -315,8 +311,8 @@ export function createPatchMaterial(
       uPatchMin: { value: new THREE.Vector2(patch.min.x, patch.min.y) },
       uPatchMax: { value: new THREE.Vector2(patch.max.x, patch.max.y) },
       uFace: { value: faceIndex(patch.face) },
-      uGradientStepWorld: { value: shared.radius * GRADIENT_STEP_RADIUS_FRACTION },
       uBakeSamples: { value: bakeSamples },
+      uBorderTexels: { value: PATCH_BORDER_TEXELS },
       uDiffuseWrap: { value: shared.diffuseWrap },
     },
   });
@@ -345,6 +341,5 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   u.uElevationMax.value = shared.elevationMax;
   u.uDisplacementAmplitude.value = shared.displacementAmplitude;
   u.uRadius.value = shared.radius;
-  u.uGradientStepWorld.value = shared.radius * GRADIENT_STEP_RADIUS_FRACTION;
   u.uDiffuseWrap.value = shared.diffuseWrap;
 }

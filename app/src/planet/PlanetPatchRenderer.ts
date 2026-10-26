@@ -7,6 +7,8 @@ import { PatchLifecycle } from './patchLifecycle';
 import {
   bakeSamplesCap,
   bakeSamplesForPixelWidth,
+  createPatchTarget,
+  PATCH_BORDER_TEXELS,
   faceIndex,
   INITIAL_BAKE_SAMPLES,
   PATCH_BAKE_SAMPLES_MIN,
@@ -119,7 +121,7 @@ export class PlanetPatchRenderer {
       if (this.lifecycle.entries.get(key)?.state === 'cached') continue;
       heightmapPipeline.bakeRegionToTarget(
         renderer,
-        { layers, face: faceIndex(entry.patch.face), min: entry.patch.min, max: entry.patch.max, resolution: entry.bakeSamples },
+        { layers, face: faceIndex(entry.patch.face), min: entry.patch.min, max: entry.patch.max, resolution: entry.bakeSamples, borderTexels: PATCH_BORDER_TEXELS },
         entry.target,
       );
       this.lifecycle.markRebaked(key);
@@ -300,10 +302,10 @@ export class PlanetPatchRenderer {
       this.pendingBuilds.shift();
 
       const geometry = buildPatchGeometry(patch, shared.radius, gridResolution, this.stitchFlags.get(key));
-      const target = new THREE.WebGLRenderTarget(bakeSamples, bakeSamples, { type: THREE.FloatType });
+      const target = createPatchTarget(bakeSamples);
       heightmapPipeline.bakeRegionToTarget(
         renderer,
-        { layers, face: faceIndex(patch.face), min: patch.min, max: patch.max, resolution: bakeSamples },
+        { layers, face: faceIndex(patch.face), min: patch.min, max: patch.max, resolution: bakeSamples, borderTexels: PATCH_BORDER_TEXELS },
         target,
       );
       const material = createPatchMaterial(patch, target.texture, bakeSamples, shared);
@@ -341,10 +343,10 @@ export class PlanetPatchRenderer {
         const entry = this.entries.get(nearestKey)!;
         const wantedSamples = this.wantedBakeSamples(entry.patch, cameraPosition, shared.radius, detail, maxTextureSize);
         if (wantedSamples > entry.bakeSamples) {
-          const target = new THREE.WebGLRenderTarget(wantedSamples, wantedSamples, { type: THREE.FloatType });
+          const target = createPatchTarget(wantedSamples);
           heightmapPipeline.bakeRegionToTarget(
             renderer,
-            { layers, face: faceIndex(entry.patch.face), min: entry.patch.min, max: entry.patch.max, resolution: wantedSamples },
+            { layers, face: faceIndex(entry.patch.face), min: entry.patch.min, max: entry.patch.max, resolution: wantedSamples, borderTexels: PATCH_BORDER_TEXELS },
             target,
           );
           entry.material.uniforms.uHeightMap.value = target.texture;

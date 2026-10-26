@@ -409,6 +409,43 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Built: black through a new design-system token (`--color-tooltip-bg`), text wraps at 240px, and the tooltip uses a fixed position clamped to the window.
 - One shared placement function (`placeTooltip` in `ui/UIElements.tsx`) and one delegated listener cover every tooltip.
 
+### [B56] The land chunk can't zoom in past 10 km, so its edges always show · `wrong but workable`
+**🟡 Fixed 2026-10-26, untested** · **Found:** 2026-10-26 · **Where:** `scene/Gumball.tsx`, `scene/controls.ts`
+
+**What happened**
+- Dana: however far she zooms in, the chunk's edges and walls stay in view (screenshot, zoom slider at its maximum).
+
+**Cause (from the code)**
+- The chunk's zoom uses the plain percent rule (`levelToDistance` without a `surface`): 40 x 100 / 400 = 10 units, 10 km from the center of a 16 km chunk. The planet got a height-above-ground zoom in `[B51]`; the chunk never did. The orbit also always zooms toward the chunk's center.
+
+**Fix**
+- First try (measured from a pivot under the terrain, stopping above the highest peak) failed Dana's test: the zoom stopped high and the walls stayed in view.
+- 📚 Now Cesium's convention (`minimumPickingTerrainHeight`, `enableCollisionDetection`): a CPU copy of the chunk's heights (`groundHeightAt`, `raycastGround` in `voxel/chunkGround.ts`); before a drag or wheel zoom the pivot moves to the ground under the cursor, and the camera stays `MIN_CAMERA_ALTITUDE` of the chunk's size above the ground under it (`keepAboveFlatGround`).
+- Map-style navigation: `zoomToCursor` with `screenSpacePanning = false`, which keeps the orbit target on the ground plane (checked in three.js r185's OrbitControls source; with screen-space panning, zoom-to-cursor pulls the target off the ground). Panning now slides along the ground, as in `MapControls`.
+
+### [B55] Lighting seams along the land chunk's patch edges · `wrong but workable`
+**🟡 Fixed 2026-10-26, untested** · **Opened:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `shaders/chunk.frag.glsl`, `voxel/ChunkPatchRenderer.ts`
+
+**What happened**
+- Dana: after the chunk moved onto patches (`[B53]`), straight lighting lines show where patches meet; the surface itself lines up (screenshot, 2026-10-26).
+
+**Cause (from the code)**
+- Each patch computes its slope from its own texture only, so at an edge the slope reads one-sided, and neighbors measure it over different distances.
+- The planet's patches use the same slope code, so they likely share this.
+
+**Fix**
+- 📚 Known fix: bake each tile with a border of extra texels so edge slopes read real neighbor ground (Unity's terrain normals, see `REFERENCES.md` once added).
+- Built for the chunk and the planet: every patch bakes 4 texels past each edge (`PATCH_BORDER_TEXELS`), the shaders read the inner area (which also fixes a half-texel offset), and the slope is the central difference of adjacent texels at each patch's own spacing (`texelStepUv`). An unsourced screen-pixel step was tried first and removed (no source found). The planet's lighting gets sharper, since its old step was 2% of the radius; Dana: lighting is not an issue.
+
+### [B54] The smooth land chunk never shows an erosion run · `wrong but workable`
+**🔴 Open:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `voxel/landChunk.ts`
+
+**What happened**
+- Found while reading the code for `[B53]`: the smooth branch of `useLandChunk` ignores `erodedElevation`, so only the voxel style shows a run. True before the patch change too.
+
+**Fix**
+- Not planned yet. An erosion run lives on one fixed grid, so the patches need a way to show it. Next after `[B55]`.
+
 ### [B53] The land chunk stays faceted when zoomed in, whatever the Resolution · `wrong but workable`
 **🔴 Open:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `voxel/landChunk.ts`
 
@@ -421,7 +458,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - The chunk is one fixed mesh with no detail by zoom, unlike the planet.
 
 **Fix**
-- Proposed, waiting on Dana.
+- 🟡 Built 2026-10-26, untested: the chunk splits into patches by screen-space error, like the planet (`voxel/ChunkPatchRenderer.ts`). Lighting seams at patch edges remain, see `[B55]`.
 
 ### [B52] Changing a layer's mask changes nothing on screen · `wrong but workable`
 **🟡 Fixed 2026-10-26, untested** · **Found:** 2026-10-26 · **Where:** `map/heightmap.ts`, `shaders/heightmap.frag.glsl`

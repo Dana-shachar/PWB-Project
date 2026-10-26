@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CUBE_FACES, cubeFacePoint, type CubeFace } from './cubeFace';
 import {
+  MAX_INDEX_DEPTH,
   MAX_PATCH_DEPTH,
   neighborProbe,
   patchCenterDirection,
@@ -233,7 +234,7 @@ export function buildLeafIndex(leaves: TerrainPatch[]): LeafIndex {
 }
 
 function leafContaining(index: LeafIndex, face: CubeFace, u: number, v: number): TerrainPatch | undefined {
-  for (let depth = 0; depth <= MAX_PATCH_DEPTH; depth++) {
+  for (let depth = 0; depth <= MAX_INDEX_DEPTH; depth++) {
     const cells = 2 ** depth;
     const column = Math.min(cells - 1, Math.max(0, Math.floor(((u + 1) / 2) * cells)));
     const row = Math.min(cells - 1, Math.max(0, Math.floor(((v + 1) / 2) * cells)));
@@ -258,7 +259,7 @@ function leafAcross(index: LeafIndex, patch: TerrainPatch, edge: PatchEdge, t: n
 // shallow next to a much deeper one is split, repeatedly, until none are. The
 // physical skirt per patch (planet/planetPatchMesh.ts) stays as a last-resort
 // cover, not the thing hiding cracks.
-function balance(leaves: TerrainPatch[]): TerrainPatch[] {
+export function balance(leaves: TerrainPatch[]): TerrainPatch[] {
   let current = leaves;
   for (let pass = 0; pass < MAX_PATCH_DEPTH * 2; pass++) {
     const index = buildLeafIndex(current);
@@ -299,7 +300,7 @@ function collectDescendantLeaves(index: LeafIndex, patch: TerrainPatch, out: Ter
     out.push(leaf);
     return;
   }
-  if (patch.depth >= MAX_PATCH_DEPTH) return;
+  if (patch.depth >= MAX_INDEX_DEPTH) return;
   for (const child of subdivide(patch)) collectDescendantLeaves(index, child, out);
 }
 

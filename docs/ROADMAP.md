@@ -8,58 +8,59 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-26):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-10-26, second handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Last code commit `3225cfb`, pushed. Everything below is committed; marked items are untested on screen. The PWB dev server runs on a fixed port, **localhost:5173** (`app/vite.config.ts`, `strictPort`), because anonymous sign-in and saved projects are tied to the address. Dana's other project (PCC, `F26_Dana_TBD`) was moved to 5174 the same way. Run the server in the background from `app/` with `npx vite`.
+> **State.** Everything below is committed. Marked items are untested on screen. The PWB dev server runs on **localhost:5173** (`app/vite.config.ts`, `strictPort`); run it in the background from `app/` with `npx vite`.
 >
-> **Built this session**
-> - ✅ **Resolution slider shown as 128 to 8192, higher is sharper** (`ui/Panel.tsx`, `maxErrorPixelsToResolution` in `planet/patch.ts`). Still stored as pixels, so saves are unchanged. Dana confirmed it reads better.
-> - ✅ **Fixed 64-cell patch mesh** (`PATCH_GRID` in `planet/patch.ts`): the 64/128/256 mesh tiers are gone. They made close-up patches 16 times as costly, so the triangle budget stopped splitting (measured with a probe, `[B50]`). The automatic sharpening bonus stays. Dana confirmed close-ups sharpen.
-> - ✅ **Altitude camera** (`applyAltitudeRates` in `scene/controls.ts`, `MIN_CAMERA_ALTITUDE` in `scene/camera.ts`, `levelToDistance` and `distanceToLevel` in `scene/Gumball.tsx`): rotate, pan and wheel zoom scale with height above the surface; near and far planes follow it; the zoom slider steps in log height down to 3 km. Dana: "looks better".
-> - ✅ **Planet-wide fine detail** (`planetDetail` in `shaders/heightmap.frag.glsl`, `setDetailAmount` in `map/heightmap.ts`, saved `detailAmount` in `planet/planetControls.ts`, the "Fine detail" slider in `ui/Panel.tsx`): fBm added under the layers in patch bakes, each octave fading in with zoom (Proland, Outerra). The chunk gets it too. Dana: works, a bit strong, keep it.
-> - 🟡 **Voronoi Jitter default 0.7** (`map/noiseRanges.ts`, `ui/NoisePanel.tsx`, `map/heightmap.ts`). It caused the mask Jitter mismatch below.
-> - 🟡 **Docs:** Session 10 weekly push drafted (`WEEKLY-PUSHES.md`); README screenshot alt text rewritten after looking at the image; `ISSUES.md` `[B50]` to `[B53]` added; this block and `CODE-INDEX.md` updated.
-> - **Still to do:** Dana's test of the batch on screen (Auto detail toggle and Resolution in Scene, Roughness, mask Coverage), then close `[B50]`, `[B51]`, `[B52]`.
+> **Built this session, all untested unless marked**
+> - 🟡 **Mask Jitter fix** (`[B52]`) and **Detail: Auto** in Scene with Roughness renamed (from the first handover's items 1 and 2).
+> - 🟡 **Land chunk on patches** (`[B53]`): `selectChunkPatches` (`voxel/chunkPatches.ts`), `ChunkPatchRenderer`, `buildFlatPatchGeometry` (`voxel/chunkPatchMesh.ts`), `bakePatchInto` on `SceneCanvasHandle`. Shadows still read one whole-chunk texture. Dana saw it sharpen.
+> - 🟡 **Patch edge seams** (`[B55]`): bordered bakes (`PATCH_BORDER_TEXELS`, `createPatchTarget`, `borderTexels`) and a one-texel slope (`texelStepUv`), planet and chunk both. Dana: remaining faint lines are likely the noise pattern; lighting is not an issue.
+> - 🟡 **Chunk zoom** (`[B56]`): a CPU copy of the chunk's heights (`voxel/chunkGround.ts`), the orbit pivot moves to the ground under the cursor, the camera stays above the ground (`keepAboveFlatGround`), `zoomToCursor` with map-style panning. The first try failed Dana's test; this second version is untested.
+> - 🟡 **Chunk Resolution slider** shows only in voxel style, as does the Erosion panel's "raise the chunk's Resolution" warning.
+> - 🟡 **Roughness max** raised from 0.2 to 1 (still a hand-set range).
 >
-> **Agreed, not built yet (do in this order)**
-> 1. ✅ **Built 2026-10-26, untested. Mask Jitter fix** (`[B52]`): the mask is drawn at Voronoi Jitter 1 (`gVoronoiJitter = 1.0` in the mask block of `main` in `shaders/heightmap.frag.glsl`), but Coverage is measured on a probe layer from `createDefaultLayer`, whose Jitter is now 0.7. Fix in `maskSortedValues` (`map/heightmap.ts`): set the probe's `voronoiJitter: 1` and `voronoiDistance: 'euclidean'`. Mask controls themselves work (Dana confirmed).
-> 2. ✅ **Built 2026-10-26, untested. Resolution and Roughness as display versus terrain** (`autoDetail`, `effectiveMaxErrorPixels`; the chunk's own Resolution stays in Planet Terrain, shown only in the chunk view, until `[B53]`): (a) `ui/Panel.tsx`: the planet's Resolution leaves Planet Terrain and goes to the Scene panel as a "Detail: Auto" Toggle, on by default, revealing the Resolution Slider when off; (b) `planet/planetControls.ts`: saved `autoDetail` (default true), and `effectiveMaxErrorPixels` sends `AUTO_MAX_ERROR_PIXELS` while Auto is on; (c) rename "Fine detail" to "Roughness" with a tooltip saying it is terrain shape, not display quality. Convention: Unity terrain "Pixel Error", Cesium `maximumScreenSpaceError`, games' Auto quality. Dana: "make sure it follows the display convention".
-> 3. **Next: land chunk on the patch system** (`[B53]`, the big one, plan below).
+> **Decisions this session**
+> - 🧭 One shared Resolution for planet and chunk (the Scene panel's Detail: Auto).
+> - 🧭 **Voxel style is being dropped:** no further work on it. `buildSmoothChunkGeometry` (`voxel/smoothMesh.ts`) is now unused; removing it was asked about, not decided.
+> - 🧭 Walk mode is for the chunk only; the chunk is meant for finer, closer detail.
 >
-> **Plan for `[B53]`: the land chunk sharpens as you zoom**
-> - **Cause, read in the code:** the smooth chunk is one mesh capped at 128 vertices across (`SMOOTH_MESH_VERTEX_CEILING` in the main effect of `useLandChunk`, `voxel/landChunk.ts`), so a 16 km chunk can't show shapes under about 125 m. Resolution only sizes the one heightmap texture (`getPatchRegionTexture` in `scene/SceneCanvas.tsx`, capped at `MAX_PATCH_TEXTURE_RESOLUTION` = 2048, which matches the slider). The chunk has no detail by zoom.
-> - **Goal:** the planet's convention (screen-space error, CDLOD, chunked LOD): the chunk splits into smaller patches as you zoom, each baked for its own size, so close-ups keep gaining detail including the fine detail noise. Dana: the chunk matters most for granular zoom.
-> - **Read first, narrowly (search the name, read only that range):**
->   1. `planet/planetPatches.ts`: `collectAllFaces`, `collectLeaves`, `shouldSplit`, `isVisible`, `patchIntersectsFrustum`, `screenSpaceError`, `distanceToPatch`, `patchWorldSize`, `selectPatchesIncremental`. These assume a sphere of `radius`; note every place the sphere enters (horizon angle, `patchCenterDirection`, world size from radius).
->   2. `planet/PlanetPatchRenderer.ts`: `updatePatches` (the selection call and the build loop after it), `wantedBakeSamples`, `rebakeAll`, and where it calls `buildPatchGeometry` and `createPatchMaterial`.
->   3. `planet/planetPatchMesh.ts`: `buildPatchGeometry` (vertex positions on the sphere, stitching, skirts) and `createPatchMaterial` (its uniforms), to see what a flat variant must replace.
->   4. `planet/patch.ts`: `subdivide`, `TerrainPatch`, `patchCenterDirection`; the chunk's own patch is one of these (the spot picked on the planet).
->   5. `voxel/landChunk.ts`: the main `useEffect` of `useLandChunk` (the smooth branch before `return;`, and the voxel branch after it, which stays as is), plus `pickLocation`.
->   6. `voxel/LandChunkCanvas.tsx`: the setup effect (`registerView`, `onFrame`, the camera and orbit controls), the material effect (`new THREE.ShaderMaterial`), and the effects that set `uHeightMap` and `uHeightMapTexelSize`.
->   7. `voxel/smoothMesh.ts`: `buildSmoothChunkGeometry`, especially the `displace` and `isTopSurface` attributes for the walls and bottom cap.
->   8. `shaders/chunk.vert.glsl` (the `displace` and `isTopSurface` attributes, `uHeightMap`, `uMaxHeight`) and the top of `shaders/chunk.frag.glsl` (how walls are colored, the `[B32]`-era non-bleeding flag).
-> - **Then propose to Dana, before editing:** how the selection runs over one flat region (likely a `flatRegion` option on the selection and renderer: the chunk's `TerrainPatch` as the only root, distance and size measured on a flat square of `chunkSize`, no horizon test); a flat variant of the patch geometry and material; how the cut walls and bottom cap follow the outer patches' edges (riskiest: the earlier wall-color bleeding bugs lived here, see the chunk walls items in `ISSUES.md`); the chunk's Resolution becoming the same auto plus manual setting as the planet's (ties into item 2); and what happens to `SMOOTH_MESH_VERTEX_CEILING` and the single texture. The voxel style is out of scope.
-> - **Cost:** plan with Opus, then Dana may switch to Sonnet (`/model`) to build an approved, exact plan.
+> **Next, in this order**
+> 1. Dana tests the batch above, then close `[B50]` to `[B53]`, `[B55]`, `[B56]` as she confirms.
+> 2. **Walk mode** (plan below, Dana approved its shape).
+> 3. 🧭 **A discussion of the project's direction** (Dana, 2026-10-26): the work has been too technically focused, with not enough concept and story. Discuss before more technical features.
+> 4. **Smooth chunk shows erosion runs** (`[B54]`), unless the discussion reorders things.
+>
+> **Plan: walk mode in the chunk view**
+> - **Decided by Dana:** eye height 1.7 m; standard game field of view, Unity's default (60° vertical); you can look up well past the horizon from the ground; a mouse click walks you to the clicked spot; holding the arrow keys (and WASD) walks; the near plane is checked with a real measurement while building.
+> - **Sources:** three.js `PointerLockControls` (mouse look, a hidden cursor, Esc to leave); Blender walk mode (WASD and mouse); ArcGIS first-person (the wheel sets travel speed); VU.CITY, KeyShot and Maya (a set eye height, ground following). Walking speed still needs a source (about 1.4 m/s is typical, to confirm).
+> - **Steps:**
+>   1. Gumball (`scene/Gumball.tsx`, `design.css`): the View select and a new square person button share one row, the select narrowing to fit. The button uses `.gumball-btn`'s black frame. The gumball is plain DOM, so `PersonIcon` is an SVG string kept with `ui/icons.tsx`. Enabled only when the chunk pane is the target.
+>   2. New `scene/walkMode.ts` (`WalkMode`): wraps `PointerLockControls`; arrows and WASD walk level, Shift runs; a click raycasts the ground (`raycastGround`) and walks there; each frame the height is `groundHeightAt` plus `EYE_HEIGHT_METERS` (1.7 m), smoothed; you stop at the chunk's edges. New constants `EYE_HEIGHT_METERS`, `WALK_SPEED`, `RUN_MULTIPLIER`.
+>   3. `voxel/LandChunkCanvas.tsx`: entering saves the orbit camera and turns orbit off; leaving restores it. The handle gets `enterWalkMode` and `exitWalkMode`.
+>   4. Field of view: a "Field of view" slider in Scene while walking (`ui/Panel.tsx`, `scene/sceneControls.ts`), default 60°.
+>   5. Near plane from the eye height; log its value and check a ground-level screenshot for depth flicker.
+> - ❓ **Open, Dana's to decide:** `.gumball-btn` has only default and hover. A button needs active (walk mode on), disabled (not the chunk pane) and focus too. Dana adds them, or approves adding them to the design system and the `ui-design` skill.
+> - ❓ The field of view slider's range (30 to 100° was inferred).
 >
 > **Open issues in `ISSUES.md`**
-> - 🔴 `[B53]` chunk faceted up close (plan above). `[B52]` mask Coverage Jitter mismatch (item 1). `[B27]` Expand shows a black preview.
-> - 🟡 `[B50]` Resolution slider and close-up detail, `[B51]` zoom and fine detail: built, waiting on the commit test.
-> - 🟡 From before, built and waiting on a test: `[B28]`, `[B36]` to `[B41]`, `[B43]` to `[B49]`; `[B26]` likely resolved; `[B14]` tabled until after erosion.
+> - 🔴 `[B54]` smooth chunk never shows an erosion run. `[B27]` Expand shows a black preview.
+> - 🟡 Built and waiting on a test: `[B50]` to `[B53]`, `[B55]`, `[B56]`; from before, `[B28]`, `[B36]` to `[B41]`, `[B43]` to `[B49]`; `[B26]` likely resolved; `[B14]` tabled until after erosion.
 >
-> **Loose threads, in build order (after the three items above)**
-> - **Measured fine detail strength** (Dana, 2026-10-26): match the detail's strength at each scale to real terrain statistics (geometry clipmaps), replacing the hand-set `detailAmount`.
-> - **Camera altitude above the actual ground:** the closest height is measured above the planet's highest peak, so over low ground the camera stops high. The fix is the ground height under the camera.
+> **Loose threads, after the items above**
+> - **Measured fine detail strength:** match the Roughness at each scale to real terrain statistics, replacing the hand-set `detailAmount` and its range.
+> - **Planet camera altitude above the actual ground:** the planet still measures height above its highest peak. The chunk now has the ground lookup (`groundHeightAt`); the planet needs its own.
 > - Modifier fade second pass; bounded heights; plateau shaping, then height in meters; undo/redo; planet cast shadows; later items as listed in the stages below.
 >
 > **Open threads for Dana (not code)**
-> - 📌 **Firebase key:** restrict it in Google Cloud Console (console.cloud.google.com/apis/credentials, the "Browser key (auto created by Firebase)": Application restrictions = Websites, add `http://localhost:*/*` and any hosted address; leave the API list as Firebase set it).
+> - 📌 **Firebase key:** restrict it in Google Cloud Console (console.cloud.google.com/apis/credentials, the "Browser key (auto created by Firebase)": Application restrictions = Websites, add `http://localhost:*/*` and any hosted address).
 > - 📌 **Deploy host,** if there is one: set the six `VITE_FIREBASE_*` values there.
 > - 📌 **Before submitting for class:** add a copy of the user-scoped `ui-design` skill to the repo, placement Dana's call.
 > - ⏸️ **Run instructions** belong in the final README the syllabus requires.
 >
-> **Known risks.** `MIN_CAMERA_ALTITUDE` (3 km), the fine detail default (0.03) and its starting scale (`DETAIL_BASE_FREQUENCY` 64) are inferred, tunable. The near and far plane rule in `applyAltitudeRates` is unsourced and untested for clipping. Octave cost is not counted in the build budget. Frustum culling for patches is partial. The Hoskins hash constants were typed from memory.
+> **Known risks.** `CHUNK_MAX_EXTRA_DEPTH` (10), `CHUNK_MAX_TRIANGLES`, `PATCH_BORDER_TEXELS` (4), `GROUND_SAMPLES` (257), `MIN_CAMERA_ALTITUDE` and the Roughness range are inferred and tunable. The chunk's ground copy is coarser (about 70 m on 18 km) than its finest patches, so the camera's floor can sit slightly off the drawn ground up close. No GLSL compiler on this machine: shader changes are only checked on screen. Frustum culling for planet patches is partial. The Hoskins hash constants were typed from memory.
 >
-> **Rules in force.** No forks; no agent without Dana's yes and a cost estimate. Read `CODE-INDEX.md` first and read narrowly. Plan as numbered steps naming files and new names, then wait for a go. Small decisions are Claude's (memory `skip-micro-decisions`); number every list. Research known methods across several tools, not just one, before proposing; measure before diagnosing (a probe beat two wrong theories this session). Design-system components only. No attribution anywhere.
+> **Rules in force.** No forks; no agent without Dana's yes and a cost estimate. Read `CODE-INDEX.md` first and read narrowly. Plan as numbered steps naming files and new names, then wait for a go. Sourced methods only: an unsourced add-on is a separate suggestion, never part of a plan (memory `no-improvised-methods`). Read the code before stating what it does (memory `verify-claims-about-code`). Design-system components only. No attribution anywhere.
 
 **Overall** ▓▓▓▓▓▓░░░░ 61%
 

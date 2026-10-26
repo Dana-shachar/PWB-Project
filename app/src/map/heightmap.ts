@@ -320,6 +320,8 @@ export interface RegionParams {
   min: THREE.Vector2;
   max: THREE.Vector2;
   resolution: number;
+  // Texels baked past each edge (a patch's border), default 0.
+  borderTexels?: number;
 }
 
 // Raw single-channel elevation, real unclamped height rather than a display
@@ -822,7 +824,14 @@ export class HeightmapPipeline {
   }
 
   private bakeRegionInto(renderer: THREE.WebGLRenderer, params: RegionParams, target: THREE.WebGLRenderTarget): void {
-    const { layers, face, min, max } = params;
+    const { layers, face } = params;
+    // A border widens the baked area by whole texels, keeping the inner spacing.
+    const border = params.borderTexels ?? 0;
+    const innerCells = Math.max(1, target.width - 2 * border - 1);
+    const spacingX = (params.max.x - params.min.x) / innerCells;
+    const spacingY = (params.max.y - params.min.y) / innerCells;
+    const min = new THREE.Vector2(params.min.x - border * spacingX, params.min.y - border * spacingY);
+    const max = new THREE.Vector2(params.max.x + border * spacingX, params.max.y + border * spacingY);
     this.syncPaintTargets(renderer, layers);
     this.syncLayerUniforms(renderer, layers);
 

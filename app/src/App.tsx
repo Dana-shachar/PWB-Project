@@ -1,3 +1,5 @@
+import type * as THREE from 'three';
+import type { TerrainPatch } from './planet/patch';
 import { useRef, useState } from 'react';
 import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { useSceneControls } from './scene/sceneControls';
@@ -54,6 +56,8 @@ function App() {
     erosion.result,
     planetControls.detailAmount,
   );
+  // The chunk's patches bake through the planet view's heightmap pipeline.
+  const bakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget) => sceneHandleRef.current?.bakePatchInto(patch, target) ?? false;
   // Declared after erosion/landChunk, which it persists alongside layers and
   // paint — see projectSettings/saveProject.ts.
   const project = useSaveProject({
@@ -311,6 +315,12 @@ function App() {
                 elevationMin={landChunk.elevationMin}
                 elevationMax={landChunk.elevationMax}
                 shadowsEnabled={planetControls.shadowsEnabled}
+                patch={landChunk.patch}
+                patchesEnabled={planetControls.displayMode !== 'voxel'}
+                bakeVersion={landChunk.bakeVersion}
+                maxErrorPixels={planetControls.effectiveMaxErrorPixels}
+                bakePatch={bakeChunkPatch}
+                groundHeights={landChunk.groundHeights}
               />
             </div>
             <ViewModeControl viewMode={landChunk.viewMode} onChange={landChunk.setViewMode} />
@@ -346,7 +356,7 @@ function App() {
         onMapExpandedChange={setIsMapExpanded}
         erosion={erosion}
         erosionPatch={landChunk.patch}
-        chunkMeshResolution={landChunk.resolution}
+        chunkMeshResolution={planetControls.displayMode === 'voxel' ? landChunk.resolution : null}
         width={rightPanel.width}
       />
     </div>
