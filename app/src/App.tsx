@@ -157,6 +157,8 @@ function App() {
         onGridSpacingChange={sceneControls.setGridSpacing}
         gridVisible={sceneControls.gridVisible}
         onGridVisibleChange={sceneControls.setGridVisible}
+        walkFieldOfView={sceneControls.walkFieldOfView}
+        onWalkFieldOfViewChange={sceneControls.setWalkFieldOfView}
         radiusKm={planetControls.radiusKm}
         onRadiusKmChange={planetControls.setRadiusKm}
         baseColor={planetControls.baseColor}
@@ -304,6 +306,7 @@ function App() {
                 diffuseWrap={sceneControls.diffuseWrap}
                 gridSpacing={sceneControls.gridSpacing}
                 gridVisible={sceneControls.gridVisible}
+                walkFieldOfView={sceneControls.walkFieldOfView}
                 baseColor={planetControls.baseColor}
                 heightMap={landChunk.heightMap}
                 heightMapResolution={landChunk.heightMapResolution}

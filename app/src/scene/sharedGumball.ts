@@ -36,6 +36,11 @@ export function useSharedGumball(
   // rendered (view mode switched away from it), so the gumball never tries
   // to target a camera that no longer exists.
   useEffect(() => {
+    // Chunk-only view: the chunk is the pane to drive, so tools like walk mode work without a click first.
+    if (viewMode === 'landChunk') {
+      setSelectedPanes(['landChunk']);
+      return;
+    }
     if (viewMode !== 'planet') return;
     setSelectedPanes((previous) => {
       const withoutChunk = previous.filter((pane) => pane !== 'landChunk');

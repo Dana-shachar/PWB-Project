@@ -14,8 +14,12 @@
 >
 > **Since the second handover (2026-10-26, later)**
 > - ✅ `[B56]` fixed and confirmed: the zoom slider and Reset View pivot to the ground (`pivotToGround`), and chunk patches get real height bounds (`fitBounds`) so near tiles are no longer culled. No further voxel work (Dana).
-> - 🔴 `[B55]` reopened: a straight, diagonal cliff with a sawtooth top (and a thin dark line from afar) appears under some noise settings (Voronoi, Manhattan, Jitter 0.12). A per-patch color test showed it is in the height data, not at patch edges. Dana: it disappears when Layer 277 is hidden, so it is layer specific; she is checking on a new planet. Cause not found; `voronoiNoise3D` itself is continuous, so look at that layer's Terrace, Domain warp, Ridged or fractal settings. A depth-based octave fade tried for it was removed.
-> - Walk mode is still not started. Open sources: walking speed (1.4 m/s has only a blog behind it), a run multiplier (none found) and Unity's field of view slider range.
+> - 🔴 `[B55]` reopened: a straight, diagonal cliff with a sawtooth top (and a thin dark line from afar) appears under some noise settings (Voronoi, Manhattan, Jitter 0.12). A per-patch color test showed it is in the height data, not at patch edges. Dana: it disappears when Layer 277 is hidden and looks fine on a new planet, so she treats it as that layer's settings (closed as not a code bug). Cause was not found; `voronoiNoise3D` itself is continuous, so look at that layer's Terrace, Domain warp, Ridged or fractal settings. A depth-based octave fade tried for it was removed.
+> - 🔴 `[B57]` Terrace (hard `floor` steps, enabled by Randomize half the time) is the likely cause of the cliffs and thin lines. Dana: it should not be randomized, and needs a more sophisticated use. ❓ Decision: stop Randomize enabling it, soften its edges, or both.
+> - 🟡 Walk mode (person view) is built and Dana found it good enough (`[B58]`): person button left of View, fly-in, drag to look, click to walk, keyboard-only controls, eye height read from the drawn ground. 🔴 Stalling open (likely the per-frame texture read). ❓ Speed readout not built.
+> - Open sources for walk mode defaults: walking speed (1.4 m/s has only a blog behind it), the run multiplier and Unity's field of view range.
+> - ❓ Randomize creates no new layers (it re-rolls the existing ones). Dana is weighing a layered recipe.
+> - 🧭 Voxel style is being dropped; patches need the smooth style for walk mode's height read.
 > - Layer names are an ever-increasing counter, never reused (by design, 2026-09-22), so "Layer 277" only means 277 layers were created.
 >
 > **Built this session, all untested unless marked**
@@ -32,7 +36,7 @@
 > - 🧭 Walk mode is for the chunk only; the chunk is meant for finer, closer detail.
 >
 > **Next, in this order**
-> 1. Dana tests the batch above, then close `[B50]` to `[B53]`, `[B55]` as she confirms. Find the `[B55]` cliff first.
+> 1. Look into the walk mode stalling (`[B58]`). Dana tests the batch above, then close `[B50]` to `[B53]`, `[B55]` as she confirms. Find the `[B55]` cliff first.
 > 2. **Walk mode** (plan below, Dana approved its shape).
 > 3. 🧭 **A discussion of the project's direction** (Dana, 2026-10-26): the work has been too technically focused, with not enough concept and story. Discuss before more technical features.
 > 4. **Smooth chunk shows erosion runs** (`[B54]`), unless the discussion reorders things.

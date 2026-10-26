@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { defaultCameraPosition, MIN_CAMERA_ALTITUDE } from './camera';
+import { PERSON_ICON_SVG } from '../ui/icons';
 
 type ViewPreset = 'top' | 'front' | 'side' | 'perspective';
 
@@ -24,6 +25,10 @@ export interface GumballTarget {
   // Moves the orbit target to the ground at the view's center, so the slider
   // and reset zoom toward the ground, not a buried point ([B56]).
   pivotToGround?: () => void;
+  // Switches this target's walk mode (person view) and returns whether it is now on.
+  toggleWalkMode?: () => boolean;
+  // Whether it is walking now, so Esc leaving walk mode also resets the button.
+  isWalking?: () => boolean;
 }
 
 const MIN_ZOOM_LEVEL = 10;
@@ -110,6 +115,8 @@ export class Gumball {
   private readonly snapSpeed = 0.08;
   private zoomLevel: number;
   private zoomInput: HTMLInputElement | null = null;
+  private walkBtn: HTMLButtonElement | null = null;
+  private walking = false;
   private container: HTMLDivElement;
   private svgElements: Record<string, { line: SVGLineElement; text: SVGTextElement }> = {};
 
@@ -132,11 +139,18 @@ export class Gumball {
   // abandoned and every previous target's controls are re-enabled, so
   // nothing is left stuck mid-snap or disabled after a retarget.
   setTargets(targets: GumballTarget[]): void {
+    // A click in the pane re-sets the same target; that must not end a walk.
+    const unchanged = targets.length === this.targets.length && targets.every((target, idx) => target === this.targets[idx]);
+    if (this.walking && unchanged) return;
+    // A walk in progress ends on its own target before the gumball moves on.
+    if (this.walking) this.targets[0]?.toggleWalkMode?.();
+    this.walking = false;
     for (const target of this.targets) {
       target.cameraControls.enabled = true;
     }
     this.targets = targets;
     this.snapTargets = targets.map(() => null);
+    this.refreshWalkButton();
   }
 
   private buildPanel(): HTMLDivElement {
@@ -220,7 +234,19 @@ export class Gumball {
     viewSelect.addEventListener('change', () => {
       this.snapToView(viewSelect.value as ViewPreset);
     });
-    container.appendChild(viewSelect);
+    // The walk mode button (person icon) sits left of the View select, in one row.
+    const viewRow = document.createElement('div');
+    viewRow.className = 'gumball-view-row';
+    this.walkBtn = document.createElement('button');
+    this.walkBtn.className = 'gumball-btn gumball-btn--square';
+    this.walkBtn.title = 'Walk mode';
+    this.walkBtn.setAttribute('aria-label', 'Walk mode');
+    this.walkBtn.innerHTML = PERSON_ICON_SVG;
+    this.walkBtn.addEventListener('click', this.handleWalkClick);
+    viewRow.appendChild(this.walkBtn);
+    viewRow.appendChild(viewSelect);
+    container.appendChild(viewRow);
+    this.refreshWalkButton();
 
     // Reset view button
     const resetBtn = document.createElement('button');
@@ -231,6 +257,20 @@ export class Gumball {
 
     return container;
   }
+
+  // Walk mode is for the chunk only: enabled when the chunk is the one target.
+  private refreshWalkButton(): void {
+    if (!this.walkBtn) return;
+    this.walkBtn.disabled = !(this.targets.length === 1 && this.targets[0].toggleWalkMode);
+    this.walkBtn.classList.toggle('gumball-btn--active', this.walking);
+  }
+
+  private handleWalkClick = () => {
+    const toggle = this.targets.length === 1 ? this.targets[0].toggleWalkMode : undefined;
+    if (!toggle) return;
+    this.walking = toggle();
+    this.refreshWalkButton();
+  };
 
   private handleZoomInput = () => {
     if (!this.zoomInput) return;
@@ -282,6 +322,13 @@ export class Gumball {
 
   update(): void {
     const primary = this.targets[0];
+
+    // Esc leaves walk mode without the button, so the button follows the target.
+    const isWalking = this.targets.length === 1 && !!primary?.isWalking?.();
+    if (isWalking !== this.walking) {
+      this.walking = isWalking;
+      this.refreshWalkButton();
+    }
 
     // Recompute zoomLevel from the primary target's actual current
     // distance every frame, so the slider stays in sync whether zoom

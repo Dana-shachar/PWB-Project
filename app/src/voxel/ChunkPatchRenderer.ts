@@ -45,6 +45,7 @@ export class ChunkPatchRenderer {
   private lastCameraQuaternion = new THREE.Quaternion();
   private lastErrorPixels = 0;
   private boundsMaxHeight = 0;
+  private readBuffer = new Float32Array(16); // a 2x2 block of RGBA floats for sampleHeight
 
   private template: THREE.ShaderMaterial;
 
@@ -150,6 +151,40 @@ export class ChunkPatchRenderer {
 
   // An old patch goes once every patch replacing it is built, and those show
   // together, so a spot is never empty or drawn twice.
+  // The drawn ground's height at chunk point (x, z), read from the deepest shown
+  // patch's bake, as Cesium reads terrain height from the most detailed loaded
+  // tile. Null off the chunk or before a patch shows. Same texel mapping as chunk.vert.glsl.
+  sampleHeight(renderer: THREE.WebGLRenderer, x: number, z: number, maxHeight: number): number | null {
+    const root = this.root;
+    if (!root) return null;
+    const chunkU = x / this.chunkSize + 0.5;
+    const chunkV = z / this.chunkSize + 0.5;
+    let best: ChunkPatchEntry | null = null;
+    for (const key of this.shown) {
+      const entry = this.entries.get(key);
+      if (!entry) continue;
+      const fractions = rootFractions(root, entry.patch);
+      if (chunkU < fractions.minU || chunkU > fractions.maxU || chunkV < fractions.minV || chunkV > fractions.maxV) continue;
+      if (!best || entry.patch.depth > best.patch.depth) best = entry;
+    }
+    if (!best) return null;
+    const fractions = rootFractions(root, best.patch);
+    const size = best.bakeSamples + 2 * PATCH_BORDER_TEXELS;
+    const texelAt = (fraction: number, min: number, max: number) =>
+      Math.min(size - 1, Math.max(0, PATCH_BORDER_TEXELS + ((fraction - min) / (max - min)) * (best!.bakeSamples - 1)));
+    const texelX = texelAt(chunkU, fractions.minU, fractions.maxU);
+    const texelY = texelAt(chunkV, fractions.minV, fractions.maxV);
+    const x0 = Math.min(Math.floor(texelX), size - 2);
+    const y0 = Math.min(Math.floor(texelY), size - 2);
+    renderer.readRenderTargetPixels(best.target, x0, y0, 2, 2, this.readBuffer);
+    const blendX = texelX - x0;
+    const blendY = texelY - y0;
+    const bottom = this.readBuffer[1] * (1 - blendX) + this.readBuffer[5] * blendX;
+    const top = this.readBuffer[9] * (1 - blendX) + this.readBuffer[13] * blendX;
+    const raw = bottom * (1 - blendY) + top * blendY;
+    return Math.max(0, raw + 0.5) * maxHeight;
+  }
+
   private swap(): void {
     const wantedIndex = buildLeafIndex(this.wanted);
     const wantedKeys = new Set(this.wanted.map(patchKey));

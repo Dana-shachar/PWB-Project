@@ -5,6 +5,7 @@ import chunkFragmentBody from '../shaders/chunk.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain.glsl
 import { camera, defaultCameraPosition } from '../scene/camera';
 import { controls, keepAboveFlatGround } from '../scene/controls';
+import { EYE_HEIGHT_METERS, WalkMode } from '../scene/walkMode';
 import { grid } from '../scene/grid';
 import type { GumballTarget } from '../scene/Gumball';
 import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
@@ -40,6 +41,7 @@ interface LandChunkCanvasProps {
   diffuseWrap: number;
   gridSpacing: number;
   gridVisible: boolean;
+  walkFieldOfView: number;
   // Shared with the planet's own "Base color" control (Dana, 2026-09-23 —
   // "there are color controls," this shouldn't have its own disconnected one).
   baseColor: string;
@@ -108,6 +110,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     diffuseWrap,
     gridSpacing,
     gridVisible,
+    walkFieldOfView,
     baseColor,
     heightMap,
     heightMapResolution,
@@ -134,7 +137,12 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   const meshRef = useRef<THREE.Mesh | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
+  // The setup effect below runs once, so it reads the shared renderer through a ref (the renderer
+  // is created after mount and arrives as new state).
+  const sharedRendererRef = useRef(sharedRenderer);
+  sharedRendererRef.current = sharedRenderer;
   const gumballTargetRef = useRef<GumballTarget | null>(null);
+  const walkFovRef = useRef(walkFieldOfView); // vertical field of view while walking, degrees
   const patchRendererRef = useRef<ChunkPatchRenderer | null>(null);
   // Read each frame by the patch renderer, so onFrame never goes stale.
   const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, chunkSize, bakePatch, groundHeights });
@@ -149,6 +157,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     }),
     [],
   );
+
+  useEffect(() => {
+    walkFovRef.current = walkFieldOfView;
+  }, [walkFieldOfView]);
 
   useEffect(() => {
     const viewportElement = viewportRef.current;
@@ -171,7 +183,49 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       // Zoom by log distance from the ground pivot, down to a share of the chunk's size.
       surface: () => ({ planetRadius: patchSettingsRef.current.chunkSize, surfaceRadius: 0 }),
       pivotToGround: () => pivotAtScreenPoint(0, 0),
+      toggleWalkMode: () => {
+        if (walkMode.active) {
+          walkMode.exit();
+          return false;
+        }
+        return enterWalk();
+      },
+      isWalking: () => walkMode.active,
     };
+
+    // Walk mode ([walkMode.ts]): entering saves the orbit camera and turns orbit off; leaving restores it.
+    const orbitSaved = { position: new THREE.Vector3(), target: new THREE.Vector3(), up: new THREE.Vector3(), fov: 60, near: 0.1, far: 1000 };
+    const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
+      const renderer = sharedRendererRef.current.renderer;
+      return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight)) : null;
+    }, () => {
+      perspectiveCamera.position.copy(orbitSaved.position);
+      perspectiveCamera.up.copy(orbitSaved.up);
+      orbitControls.target.copy(orbitSaved.target);
+      perspectiveCamera.lookAt(orbitSaved.target);
+      perspectiveCamera.fov = orbitSaved.fov;
+      perspectiveCamera.near = orbitSaved.near;
+      perspectiveCamera.far = orbitSaved.far;
+      perspectiveCamera.updateProjectionMatrix();
+      orbitControls.enabled = true;
+    });
+    function enterWalk(): boolean {
+      const ground = currentGround();
+      if (!ground) return false;
+      orbitSaved.position.copy(perspectiveCamera.position);
+      orbitSaved.target.copy(orbitControls.target);
+      orbitSaved.up.copy(perspectiveCamera.up);
+      orbitSaved.fov = perspectiveCamera.fov;
+      orbitSaved.near = perspectiveCamera.near;
+      orbitSaved.far = perspectiveCamera.far;
+      // Start on the ground under the orbit pivot, facing the way the orbit camera looked.
+      const lookX = orbitControls.target.x - perspectiveCamera.position.x;
+      const lookZ = orbitControls.target.z - perspectiveCamera.position.z;
+      orbitControls.enabled = false;
+      walkMode.enter(orbitControls.target.x, orbitControls.target.z, Math.atan2(-lookX, -lookZ));
+      if (!walkMode.active) orbitControls.enabled = true;
+      return walkMode.active;
+    }
 
     function currentGround(): ChunkGround | null {
       const settings = patchSettingsRef.current;
@@ -194,6 +248,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       orbitControls.target.copy(perspectiveCamera.position).addScaledVector(viewDirection, perspectiveCamera.position.distanceTo(hit));
     }
     function pivotOnGround(event: PointerEvent | WheelEvent) {
+      if (walkMode.active) return;
       const rect = viewportElement!.getBoundingClientRect();
       pivotAtScreenPoint(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     }
@@ -251,11 +306,32 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     const patchFrustum = new THREE.Frustum();
     const patchViewMatrix = new THREE.Matrix4();
 
+    let lastFrameTime = performance.now();
     function onFrame() {
-      orbitControls.update();
-      const ground = currentGround();
-      const groundHeight = ground ? groundHeightAt(ground, perspectiveCamera.position.x, perspectiveCamera.position.z) : null;
-      keepAboveFlatGround(orbitControls, perspectiveCamera, groundHeight ?? 0, patchSettingsRef.current.chunkSize);
+      const now = performance.now();
+      const deltaSeconds = Math.min(0.1, (now - lastFrameTime) / 1000);
+      lastFrameTime = now;
+      if (walkMode.active) {
+        // The lens eases with the fly-in: near follows the eye height (a quarter of it, as
+        // keepAboveFlatGround does) and far stops past the chunk, blended from the orbit values.
+        const walkNear = (EYE_HEIGHT_METERS / 1000) * 0.25;
+        const progress = walkMode.progress;
+        const fov = THREE.MathUtils.lerp(orbitSaved.fov, walkFovRef.current, progress);
+        const near = orbitSaved.near * (walkNear / orbitSaved.near) ** progress;
+        const far = THREE.MathUtils.lerp(orbitSaved.far, patchSettingsRef.current.chunkSize * 3, progress);
+        if (perspectiveCamera.fov !== fov || perspectiveCamera.near !== near || perspectiveCamera.far !== far) {
+          perspectiveCamera.fov = fov;
+          perspectiveCamera.near = near;
+          perspectiveCamera.far = far;
+          perspectiveCamera.updateProjectionMatrix();
+        }
+        walkMode.update(deltaSeconds);
+      } else {
+        orbitControls.update();
+        const ground = currentGround();
+        const groundHeight = ground ? groundHeightAt(ground, perspectiveCamera.position.x, perspectiveCamera.position.z) : null;
+        keepAboveFlatGround(orbitControls, perspectiveCamera, groundHeight ?? 0, patchSettingsRef.current.chunkSize);
+      }
       // Same reason as SceneCanvas's own onFrame: the specular term needs
       // the eye position, and the camera moves every frame under orbit
       // controls.
@@ -277,7 +353,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
           maxHeight: Math.max(settings.maxHeight, 0),
         },
         settings.bakePatch,
-        sharedRenderer.renderer?.capabilities.maxTextureSize ?? 2048,
+        sharedRendererRef.current.renderer?.capabilities.maxTextureSize ?? 2048,
       );
     }
     sharedRenderer.registerView('landChunk', { scene, camera: perspectiveCamera, elementRef: viewportRef, onFrame });
@@ -286,6 +362,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       viewportElement.removeEventListener('pointerdown', pivotOnGround, { capture: true });
       viewportElement.removeEventListener('wheel', pivotOnGround, { capture: true });
       sharedRenderer.unregisterView('landChunk');
+      walkMode.dispose();
       orbitControls.dispose();
       patchRenderer.dispose();
       material.dispose();

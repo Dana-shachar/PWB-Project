@@ -10,6 +10,13 @@ interface IconProps {
 
 const ICON_SIZE = 16;
 
+// The gumball is plain DOM, not React, so its icon is the same line art as a string.
+// A filled standing figure (head, shoulders and arms, legs), colored by currentColor.
+export const PERSON_ICON_SVG =
+  '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">' +
+  '<circle cx="8" cy="3" r="2"/>' +
+  '<path d="M4.6 7.4c0-.9.7-1.6 1.6-1.6h3.6c.9 0 1.6.7 1.6 1.6v3.1h-1.4V14.6H8.6v-3.2H7.4v3.2H6V10.5H4.6z"/></svg>';
+
 export function DiceIcon({ className }: IconProps) {
   return (
     <svg

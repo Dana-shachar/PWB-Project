@@ -409,6 +409,40 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Built: black through a new design-system token (`--color-tooltip-bg`), text wraps at 240px, and the tooltip uses a fixed position clamped to the window.
 - One shared placement function (`placeTooltip` in `ui/UIElements.tsx`) and one delegated listener cover every tooltip.
 
+### [B58] Walk mode (person view) test fixes, and stalling · `wrong but workable`
+**🟡 Built 2026-10-26, tested by Dana ("good enough"); 🔴 stalling open** · **Where:** `scene/walkMode.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`, `scene/Gumball.tsx`, `scene/sharedGumball.ts`
+
+**What happened, and the fix**
+- The eye was far above the drawn ground (the coarse CPU copy, about 70 m between samples, lacks the close-up detail). Fix: `sampleHeight` reads the height from the deepest shown patch's bake, as Cesium's most-detailed height sampling does. 📚 ArcGIS and Unity also follow the ground by height.
+- The setup effect read the shared renderer from a stale closure (always `null`), so the first height read failed. Now read through a ref. The same stale read had hidden the real texture limit in the patch build, which fell back to 2048.
+- Pointer lock made the view follow the cursor. Now drag to look, and a click without a drag walks to the clicked spot.
+- Click-to-walk hit "0 m away": the ray was tested against the coarse copy, 6.6 m above the new eye. Now it marches against the drawn ground.
+- Dragging in the pane ended the walk, because every pane click re-sets the gumball target. Now only a real target change ends it.
+- The person button was disabled after a refresh (the planet was the default target); chunk-only view now selects the chunk.
+- Entering jumped the camera; now a 1.5 s ease. Default speed raised to 10x (a quick pace), keyboard-only controls added.
+
+**Still open**
+- 🔴 Stalling reported by Dana (2026-10-26). Likely cause, not yet measured: `sampleHeight` reads a texture back to the CPU every frame, which makes the GPU wait, and the click march reads up to about 250 times. Fixes to weigh: read less often or smooth between reads, or keep a CPU copy of the patch under you.
+- ❓ A speed readout is not built (it would be a new design-system element).
+- ⚠️ Walk speed 1.4 m/s (typical pace, blog level source), run 2.7x (from Unity's third-person Starter Assets ratio), field of view range 20 to 150 degrees (Unity's sample slider) are all inferred and tunable.
+
+---
+
+### [B57] Terrace cuts sheer cliffs, and Randomize turns it on at random · `wrong but workable`
+**🔴 Open** · **Found:** 2026-10-26 · **Where:** `terrace()` in `shaders/noise.glsl`, `terraceEnabled` in `map/noiseLayers.ts`
+
+**What happened**
+- Dana: the jagged straight cliff and the thin dark lines at 0 Roughness (screenshots, 2026-10-26) are most likely Terrace. Dana: Terrace cannot be randomized like that, because it gets in the way of making a terrain, and it needs a more sophisticated use.
+
+**Cause (from the code, not yet confirmed on screen)**
+- `terrace()` is `floor(value * steps) / steps`: flat bands with a vertical jump between them. A gentle slope turns into a staircase whose risers are straight contour lines, which would read as the straight cliff (sawtooth at one tooth per texel) and as thin dark lines from afar.
+- Randomize sets `terraceEnabled` on half the time.
+
+**Decision needed** ❓ *(Dana's)*
+- Stop Randomize from enabling Terrace, soften the steps, or both. 📚 Houdini's Terrace node blends terraces with the original terrain (Fade) and has a Smooth Edges option (sidefx.com/docs/houdini/heightfields/terracing.html); the exact method still needs reading before building.
+
+---
+
 ### [B56] The land chunk can't zoom in past 10 km, so its edges always show · `wrong but workable`
 **✅ Fixed 2026-10-26** (Dana confirmed) · **Found:** 2026-10-26 · **Where:** `scene/Gumball.tsx`, `scene/controls.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`
 
@@ -444,7 +478,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Each patch computes its slope from its own texture only, so at an edge the slope reads one-sided, and neighbors measure it over different distances.
 - The planet's patches use the same slope code, so they likely share this.
 - Retest cause, first guess (2026-10-26, WRONG): the remaining seams were height steps from each bake fading octaves by its own sample spacing. The depth-based fade built for it did not help and was removed.
-- Evidence (2026-10-26): with each patch tinted its own color, the jagged wall runs straight across a patch boundary and is not on any boundary (screenshot). So it is in the height data, not the patches. It is a long, straight, diagonal cliff with a sawtooth top (one tooth per texel). Seen only under some noise settings (Voronoi, Manhattan, Jitter 0.12). Dana: the wall disappears when Layer 277 is hidden, so it is layer specific; she is generating a new planet to recheck. The cause is not yet found: `voronoiNoise3D`'s nearest-point distance is continuous, so a cliff has to come from another step (a layer's transform, fractal type or mask, or modifiers).
+- Evidence (2026-10-26): with each patch tinted its own color, the jagged wall runs straight across a patch boundary and is not on any boundary (screenshot). So it is in the height data, not the patches. It is a long, straight, diagonal cliff with a sawtooth top (one tooth per texel). Seen only under some noise settings (Voronoi, Manhattan, Jitter 0.12). Dana (2026-10-26, later): the wall disappears when Layer 277 is hidden and looks fine on a new planet, so she treats it as that layer's settings, not a code bug (the cliff part is closed; the patch-edge lighting seams above still wait on a test). The cause is not yet found: `voronoiNoise3D`'s nearest-point distance is continuous, so a cliff has to come from another step (a layer's transform, fractal type or mask, or modifiers).
 
 **Fix**
 - 📚 Known fix: bake each tile with a border of extra texels so edge slopes read real neighbor ground (Unity's terrain normals, see `REFERENCES.md` once added).

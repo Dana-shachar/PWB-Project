@@ -50,6 +50,7 @@
   --panel-radius: 4px;
   --panel-padding: 16px;
   --panel-max-width: 360px;
+  --gumball-row-height: 32px; /* TODO(DS): arbitrary placeholder, the View select and walk button height */
   --gumball-control-width: 180px; /* TODO(DS): arbitrary placeholder, adjust to taste */
   --color-tab-inactive: #3a3a3b; /* ported from active-geometry's --bg-tab-inactive */
   --tab-height: 32px; /* ported from active-geometry's --tab-height */
@@ -769,6 +770,37 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 }
 .gumball-view-select:hover {
   background: var(--color-btn-hover-bg);
+}
+/* The View select and the walk mode button share one row. */
+.gumball-view-row {
+  display: flex;
+  gap: var(--gap-sm);
+  width: var(--gumball-control-width);
+  height: var(--gumball-row-height);
+}
+.gumball-view-row .gumball-view-select {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
+}
+/* The square icon variant of .gumball-btn (same frame and states): accent-filled icon. */
+.gumball-btn--square {
+  flex: none;
+  width: var(--gumball-row-height);
+  height: var(--gumball-row-height);
+  box-sizing: border-box;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-accent);
+}
+/* On, the fill is accent, so the icon takes the text color to stay visible. */
+.gumball-btn--square.gumball-btn--active,
+.gumball-btn--square.gumball-btn--active:hover:not(:disabled) {
+  color: var(--color-text);
 }
 
 /* ── View mode control (voxel/ViewModeControl.tsx) ─────────── */

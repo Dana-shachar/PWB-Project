@@ -43,6 +43,8 @@ interface PanelProps {
   onGridSpacingChange: (value: number) => void;
   gridVisible: boolean;
   onGridVisibleChange: (value: boolean) => void;
+  walkFieldOfView: number;
+  onWalkFieldOfViewChange: (value: number) => void;
   // Planet controls
   radiusKm: number;
   onRadiusKmChange: (value: number) => void;
@@ -205,6 +207,8 @@ export function Panel({
   onGridSpacingChange,
   gridVisible,
   onGridVisibleChange,
+  walkFieldOfView,
+  onWalkFieldOfViewChange,
   radiusKm,
   onRadiusKmChange,
   baseColor,
@@ -443,6 +447,16 @@ export function Panel({
               precision={0}
             />
             <Toggle label="Grid lines" value={gridVisible} onChange={onGridVisibleChange} />
+            {/* Walk mode's vertical view angle; 20 to 150 is Unity's documented sample slider range. */}
+            <Slider
+              label="Walk field of view"
+              value={walkFieldOfView}
+              onChange={onWalkFieldOfViewChange}
+              min={20}
+              max={150}
+              step={1}
+              precision={0}
+            />
             {/* The planet's display quality, kept with the view settings and
                 automatic by default (Unity's Pixel Error, Cesium's
                 maximumScreenSpaceError), not with the terrain. */}

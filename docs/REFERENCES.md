@@ -314,6 +314,13 @@
 - where the patch cache plan comes from. ⚠️ Keeping a parent drawn until its children are ready, and evicting least recently used tiles, are common practice but no source confirmed them
 - *[CS354R lecture](https://www.cs.utexas.edu/~theshark/courses/cs354r/lectures/cs354r-23.pdf) · [Pulsegeek, terrain stitching and chunking](https://pulsegeek.com/articles/terrain-stitching-and-chunking-seamless-streaming/) · [Cesium3DTileRefine](https://ci-builds.cesium.com/cesium/main/Build/Coverage/Firefox%20145.0%20(Linux%200.0.0)/engine/Source/Scene/Cesium3DTileRefine.js.html). Read 2026-10-21*
 
+### Walking on terrain
+
+**Ground following and travel speed** · ArcGIS Pro, Unity, Cesium · `method used`
+- keep a set height above the ground by reading the ground height at your position each frame; speed can be changed with the mouse wheel and shown on screen; ArcGIS's first-person mode has no collision detection. Cesium reads terrain height from the most detailed data available, which can differ slightly from the drawn tiles
+- where walk mode's height following, wheel speed and `sampleHeight` come from. ⚠️ No source found for a collider that stops the camera entering terrain in this kind of viewer, or for the default speeds
+- *[ArcGIS Pro, first-person navigation](https://pro.arcgis.com/en/pro-app/3.2/help/mapping/navigation/first-person-navigation-mode.htm) · [Unity, Terrain.SampleHeight](https://docs.unity3d.com/cn/2022.1/ScriptReference/Terrain.SampleHeight.html) · [Cesium forum, sampleHeight vs sampleHeightMostDetailed](https://community.cesium.com/t/the-heights-returned-by-scene-sampleheight-and-scene-sampleheightmostdetailed-are-different/44570). Read 2026-10-26*
+
 ### Culling displaced meshes
 
 **Bounds for shader-displaced meshes** · three.js forum · `method used`

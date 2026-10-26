@@ -38,6 +38,8 @@ export function useSceneControls() {
   const [diffuseWrap, setDiffuseWrap] = useState(0.5);
   const [gridSpacing, setGridSpacing] = useState(10);
   const [gridVisible, setGridVisible] = useState(true);
+  // Vertical field of view of the chunk's walk mode, degrees (Unity's default is 60).
+  const [walkFieldOfView, setWalkFieldOfView] = useState(60);
 
   return {
     ambientLight,
@@ -62,5 +64,7 @@ export function useSceneControls() {
     setGridSpacing,
     gridVisible,
     setGridVisible,
+    walkFieldOfView,
+    setWalkFieldOfView,
   };
 }
