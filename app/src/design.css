@@ -737,8 +737,23 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   border-radius: 4px;
   white-space: nowrap;
 }
-.gumball-btn:hover {
+.gumball-btn:hover:not(:disabled) {
   background: var(--color-btn-hover-bg);
+}
+/* Focus as the toggle's: an accent border, no browser outline. */
+.gumball-btn:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+}
+/* On (e.g. walk mode): the toggle's on state, accent at 70% on the fill only. */
+.gumball-btn--active,
+.gumball-btn--active:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 70%, transparent);
+}
+/* Disabled as the text button's: an opacity dip, no hover. */
+.gumball-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .gumball-view-select {

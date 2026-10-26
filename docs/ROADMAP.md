@@ -40,7 +40,7 @@
 >   3. `voxel/LandChunkCanvas.tsx`: entering saves the orbit camera and turns orbit off; leaving restores it. The handle gets `enterWalkMode` and `exitWalkMode`.
 >   4. Field of view: a "Field of view" slider in Scene while walking (`ui/Panel.tsx`, `scene/sceneControls.ts`), default 60°.
 >   5. Near plane from the eye height; log its value and check a ground-level screenshot for depth flicker.
-> - ❓ **Open, Dana's to decide:** `.gumball-btn` has only default and hover. A button needs active (walk mode on), disabled (not the chunk pane) and focus too. Dana adds them, or approves adding them to the design system and the `ui-design` skill.
+> - ✅ **Design system:** `.gumball-btn` now has focus (accent border), active (`.gumball-btn--active`, accent at 70% on the fill) and disabled (35% opacity) states, also in the `ui-design` skill (Dana approved, 2026-10-26). The square icon variant and the shared View row are still to build in step 1.
 > - ❓ The field of view slider's range (30 to 100° was inferred).
 >
 > **Open issues in `ISSUES.md`**
