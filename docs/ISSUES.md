@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-10-23`
+`Last updated: 2026-10-26`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -40,6 +40,36 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ## 🪐 Planet mesh
 
 *The sphere itself, its seams, and the poles.*
+
+### [B51] Zooming in doesn't reveal more terrain, unlike the land chunk · `wrong but workable`
+**🔴 Open:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `scene/Gumball.tsx`, `shaders/heightmap.frag.glsl`
+
+**What happened**
+- Dana: up close the planet should look more and more like the land chunk, like zooming into Earth. It stays smooth color bands instead.
+
+**Cause**
+- The patch probe shows the mesh and texture now keep up (about 1 to 3 px per mesh cell, 1.5 px per texel), so the limit is no longer detail selection.
+- At full zoom, a depth-7 patch about 73 km across fills about 120 px, so one pixel is about 600 m. The zoom stops far above the ground, at a scale far larger than the land chunk's.
+- Extra octaves by depth only run on layers with the Octaves modifier on. A layer without it, like a lone Voronoi layer, is one frequency and gains nothing up close.
+
+**Fix**
+- Proposed, waiting on Dana.
+
+### [B50] Resolution slider barely controls the planet, and detail loads in patches · `wrong but workable`
+**🔴 Open:** 2026-10-25 · **Found:** 2026-10-25 · **Where:** `planet/planetPatches.ts`, `planet/patch.ts`
+
+**What happened**
+- Dana: the lowest Resolution setting still looks high, the planet loads high detail even from far away, and the detail "loads a bit patchy".
+
+**Cause**
+- When the triangle budget has room, which is mostly when zoomed out, an automatic bonus sharpens the threshold by up to six steps, toward 2 px. At the slider's coarsest end (32 px) that still lands near 8 px, the default.
+- Few patches in view also bumps each patch's mesh up to 256 cells, and bake texture size targets 2 screen pixels per texel. Neither one follows the slider.
+- The bonus steps in one per frame and each patch bakes small first, then upgrades. Both make detail arrive in visible waves.
+
+**Fix**
+- First attempt (2026-10-25) removed the bonus and the mesh tiers. Dana's test (2026-10-26): close-ups barely sharpen and stay stair-stepped, and the slider reads backwards. To be reverted, then the close-up measured before any new fix.
+- Dana wants the slider shown as before, 128 to 2048 or more, higher is sharper: detail sharpens automatically by zoom, and the slider adds more or less on top.
+- Reverted (2026-10-26). The slider shows Resolution 128 to 8192 again, higher is sharper, stored as pixels. A probe showed the close-up patch at depth 0 to 3 of 11 with 7 px mesh cells against a 0.5 px threshold: the triangle budget was blocking splits, because the 256-cell tier makes each patch 16 times as costly. The mesh is now fixed at 64 cells (Cesium's 65-sample tiles), untested.
 
 ### [B33] Planet near-froze when changing its Resolution · `wrong but workable`
 **✅ Fixed:** 2026-10-18 · **Found:** 2026-10-18 · **Where:** `scene/SceneCanvas.tsx`
@@ -379,6 +409,32 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Built: black through a new design-system token (`--color-tooltip-bg`), text wraps at 240px, and the tooltip uses a fixed position clamped to the window.
 - One shared placement function (`placeTooltip` in `ui/UIElements.tsx`) and one delegated listener cover every tooltip.
 
+### [B53] The land chunk stays faceted when zoomed in, whatever the Resolution · `wrong but workable`
+**🔴 Open:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `voxel/landChunk.ts`
+
+**What happened**
+- Dana: the chunk reacts to Resolution, but up close it is still not sharp. Large flat triangles show on the slopes (screenshot, 16 km chunk at Resolution 1496).
+
+**Cause (from the code)**
+- The smooth chunk's mesh is capped at 128 vertices across (`SMOOTH_MESH_VERTEX_CEILING`), whatever the Resolution. Heights move the mesh only at its vertices, so a 16 km chunk can't show a shape smaller than about 125 m. A higher Resolution only sharpens the color and lighting texture.
+- The texture's cap (`MAX_PATCH_TEXTURE_RESOLUTION`) is 2048, the same as the slider's maximum, so the slider is honest.
+- The chunk is one fixed mesh with no detail by zoom, unlike the planet.
+
+**Fix**
+- Proposed, waiting on Dana.
+
+### [B52] Changing a layer's mask changes nothing on screen · `wrong but workable`
+**🟡 Fixed 2026-10-26, untested** · **Found:** 2026-10-26 · **Where:** `map/heightmap.ts`, `shaders/heightmap.frag.glsl`
+
+**What happened**
+- Dana: adjusting Layer 01's mask (Voronoi pattern, Coverage, Softness, Invert) doesn't change the planet (screenshot).
+
+**Cause**
+- Not confirmed yet. One real mismatch found: the shader always draws a Voronoi mask at Jitter 1, but the pass that measures the mask for Coverage uses a default layer, whose Jitter is now 0.7. So Coverage is measured on a different pattern than the one drawn. That skews Coverage, but probably doesn't explain no change at all.
+- Dana's check (2026-10-26): hiding Layer 01 also changes nothing, so the layer itself has no visible effect, not just its mask. Fine detail at 0 removes the speckle but not this.
+- Confirmed: after Dana randomized Layer 01, the layer visibly changes the planet. Its old settings had almost no effect, so its mask had nothing to show. Not a code bug. Dana confirmed the mask controls work on a layer that has an effect.
+- Fixed: the Coverage measurement's probe layer now uses Jitter 1 and Euclidean distance, the settings the shader draws masks with (`maskSortedValues`).
+
 ### [B48] Mask controls: wrong layer, empty source list, and a duplicate section · `wrong but workable`
 **🟡 Redesign built 2026-10-21, untested** · **Found:** 2026-10-21 · **Where:** `ui/MaskControls.tsx`, `ui/NoisePanel.tsx`, `map/heightmap.ts`
 
@@ -420,7 +476,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 **Voronoi Jitter: works, no bug**
 - Dana confirmed that Jitter 0 changes the cells. At 0, each cell's seed point sits at the center of its cell, so the cells form an even, regular grid. As Jitter rises, the points scatter.
-- Between 0.5 and 1.0 the change is subtle, because points stay inside their own cells and the default is already the maximum. ❓ Optional, Dana's call: lower the default to about 0.7 so the slider has room both ways.
+- Between 0.5 and 1.0 the change is subtle, because points stay inside their own cells and the default is already the maximum. ✅ Default lowered to 0.7 (2026-10-25), so the slider has room both ways.
 
 **Next**
 - **Built, untested (2026-10-21):** a Fractal type selector inside the Octaves modifier (fBm, Multifractal, Hybrid, Hetero terrain, Ridged multifractal, with their own Offset and Gain, from Blender v3.6.0's shader; renormalizing the unbounded output is inferred and tunable), and octaves by depth (a patch's octave series continues past the layer's setting, up to 24, as far as its spacing can resolve; off for the noise canvas and warp).

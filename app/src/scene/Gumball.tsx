@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { defaultCameraPosition } from './camera';
+import { defaultCameraPosition, MIN_CAMERA_ALTITUDE } from './camera';
 
 type ViewPreset = 'top' | 'front' | 'side' | 'perspective';
 
@@ -18,6 +18,45 @@ export interface GumballTarget {
   camera: THREE.PerspectiveCamera;
   cameraControls: OrbitControls;
   referenceDistance: number;
+  // A planet target's radius and radius plus highest terrain: its zoom then
+  // runs on height above the surface, log-scaled ([B51]).
+  surface?: () => { planetRadius: number; surfaceRadius: number };
+}
+
+const MIN_ZOOM_LEVEL = 10;
+const MAX_ZOOM_LEVEL = 400;
+
+// Zoom level to distance. Without a surface it is a percent of the reference
+// distance; with one, height above the surface steps evenly on a log scale
+// from 10% (10x the reference) through 100% (the reference) to the closest
+// allowed height at 400%.
+function levelToDistance(target: GumballTarget, level: number): number {
+  if (!target.surface) return (target.referenceDistance * 100) / level;
+  const { planetRadius, surfaceRadius } = target.surface();
+  const anchors = zoomAnchors(target.referenceDistance, planetRadius, surfaceRadius);
+  const [fromLevel, toLevel, fromHeight, toHeight] =
+    level <= 100 ? [MIN_ZOOM_LEVEL, 100, anchors.far, anchors.reference] : [100, MAX_ZOOM_LEVEL, anchors.reference, anchors.closest];
+  const share = (level - fromLevel) / (toLevel - fromLevel);
+  return surfaceRadius + fromHeight * (toHeight / fromHeight) ** share;
+}
+
+function distanceToLevel(target: GumballTarget, distance: number): number {
+  if (!target.surface) return (target.referenceDistance * 100) / distance;
+  const { planetRadius, surfaceRadius } = target.surface();
+  const anchors = zoomAnchors(target.referenceDistance, planetRadius, surfaceRadius);
+  const height = Math.max(anchors.closest, distance - surfaceRadius);
+  const [fromLevel, toLevel, fromHeight, toHeight] =
+    height >= anchors.reference ? [MIN_ZOOM_LEVEL, 100, anchors.far, anchors.reference] : [100, MAX_ZOOM_LEVEL, anchors.reference, anchors.closest];
+  return fromLevel + (toLevel - fromLevel) * (Math.log(height / fromHeight) / Math.log(toHeight / fromHeight));
+}
+
+// Heights above the surface at zoom 10%, 100% and 400%.
+function zoomAnchors(referenceDistance: number, planetRadius: number, surfaceRadius: number) {
+  return {
+    far: referenceDistance * 10 - surfaceRadius,
+    reference: Math.max(referenceDistance - surfaceRadius, planetRadius * MIN_CAMERA_ALTITUDE * 2),
+    closest: planetRadius * MIN_CAMERA_ALTITUDE,
+  };
 }
 
 interface AxisConfig {
@@ -80,7 +119,7 @@ export class Gumball {
     this.snapTargets = targets.map(() => null);
     const primary = targets[0];
     const initialDistance = primary.camera.position.distanceTo(primary.cameraControls.target);
-    this.zoomLevel = Math.round((primary.referenceDistance * 100) / initialDistance);
+    this.zoomLevel = Math.round(distanceToLevel(primary, initialDistance));
     this.container = this.buildPanel();
     mountElement.appendChild(this.container);
   }
@@ -147,8 +186,8 @@ export class Gumball {
 
     this.zoomInput = document.createElement('input');
     this.zoomInput.type = 'range';
-    this.zoomInput.min = '10';
-    this.zoomInput.max = '400';
+    this.zoomInput.min = String(MIN_ZOOM_LEVEL);
+    this.zoomInput.max = String(MAX_ZOOM_LEVEL);
     this.zoomInput.step = '1';
     this.zoomInput.value = String(this.zoomLevel);
     this.zoomInput.className = 'gumball-zoom-input';
@@ -193,8 +232,9 @@ export class Gumball {
   private handleZoomInput = () => {
     if (!this.zoomInput) return;
     this.zoomLevel = parseFloat(this.zoomInput.value);
-    for (const { camera, cameraControls, referenceDistance } of this.targets) {
-      const targetDistance = (referenceDistance * 100) / this.zoomLevel;
+    for (const target of this.targets) {
+      const { camera, cameraControls } = target;
+      const targetDistance = levelToDistance(target, this.zoomLevel);
       const orbitDirection = camera.position.clone().sub(cameraControls.target).normalize();
       camera.position.copy(cameraControls.target).addScaledVector(orbitDirection, targetDistance);
     }
@@ -243,7 +283,7 @@ export class Gumball {
     // Only the primary target's state is ever displayed — the widget can't
     // show two distances/orientations at once even while driving both.
     const currentDistance = primary.camera.position.distanceTo(primary.cameraControls.target);
-    this.zoomLevel = Math.max(10, Math.min(400, Math.round((primary.referenceDistance * 100) / currentDistance)));
+    this.zoomLevel = Math.max(MIN_ZOOM_LEVEL, Math.min(MAX_ZOOM_LEVEL, Math.round(distanceToLevel(primary, currentDistance))));
 
     if (this.zoomInput && document.activeElement !== this.zoomInput) {
       const zoomStr = String(this.zoomLevel);

@@ -63,12 +63,10 @@ export function clampPatchTextureResolution(resolution: number): number {
 // triangle budget there.
 export const MAX_PATCH_GRID_RESOLUTION = 256;
 
-// Mesh grids a planet patch can use, in cells across. The selection picks the
-// largest one the visible patch count allows (planet/planetPatches.ts): few
-// patches in view means each can carry a denser mesh. PREFERRED_PATCH_GRID is
-// the smallest, used whenever many patches are visible.
-export const PATCH_GRID_TIERS = [64, 128, 256];
-export const PREFERRED_PATCH_GRID = PATCH_GRID_TIERS[0];
+// Cells across every planet patch's mesh, fixed like Cesium's 65-sample tiles:
+// denser meshes cost 4 to 16 times the triangles, so the budget stopped
+// splitting up close ([B50]). Close-up detail comes from splitting.
+export const PATCH_GRID = 64;
 
 // How many samples a planet patch bakes across, chosen from how wide the
 // patch is on screen so a texel stays near TARGET_BAKE_TEXEL_PIXELS pixels
@@ -121,6 +119,11 @@ export function clampMaxErrorPixels(pixels: number): number {
 // A legacy Resolution (vertices across one cube face) as a pixel threshold.
 export function resolutionToMaxErrorPixels(legacyResolution: number): number {
   return clampMaxErrorPixels((AUTO_MAX_ERROR_PIXELS * LEGACY_DEFAULT_RESOLUTION) / Math.max(1, legacyResolution));
+}
+
+// The pixel threshold as the Resolution the slider shows (higher is sharper).
+export function maxErrorPixelsToResolution(pixels: number): number {
+  return (AUTO_MAX_ERROR_PIXELS * LEGACY_DEFAULT_RESOLUTION) / pixels;
 }
 
 // The threshold a saved project should open with, by how it was saved:

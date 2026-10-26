@@ -11,12 +11,12 @@ import {
   INITIAL_BAKE_SAMPLES,
   PATCH_BAKE_SAMPLES_MIN,
   patchCenterDirection,
-  PREFERRED_PATCH_GRID,
+  PATCH_GRID,
   type TerrainPatch,
 } from './patch';
 
 // A patch's baked heightmap is sample data, a texture, distinct from the
-// *display mesh*'s own resolution (PREFERRED_PATCH_GRID, [B28]). Its size
+// *display mesh*'s own resolution (PATCH_GRID, [B28]). Its size
 // comes from how wide the patch is on screen (bakeSamplesForPixelWidth in
 // patch.ts). The sample spacing the noise fades by follows the target's own
 // width in HeightmapPipeline.bakeRegionInto.
@@ -59,9 +59,6 @@ interface PatchEntry {
   // The stitch flags this entry's mesh was actually built with, to notice
   // when a neighbor's detail level changes and its edges no longer match.
   builtFlags: EdgeStitchFlags;
-  // The grid size this entry's mesh was built at, to notice a Resolution
-  // change and rebuild the mesh in place.
-  builtGrid: number;
   // Its baked texture's width.
   bakeSamples: number;
   mesh: THREE.Mesh;
@@ -91,9 +88,8 @@ export class PlanetPatchRenderer {
   private lastCameraPosition: THREE.Vector3 | null = null;
   private lastRadius = 0;
   private lastViewDirection: THREE.Vector3 | null = null;
-  // The mesh grid tier in force, chosen by the selection, and how many
-  // patches were in view then (the bake budget is shared among them).
-  private currentGrid = PREFERRED_PATCH_GRID;
+  // How many patches were in view at the last selection (the bake budget is
+  // shared among them).
   private visibleCount = 0;
   // Built patches whose bake is smaller than the screen wants, upgraded one
   // per frame when nothing new is waiting.
@@ -112,9 +108,6 @@ export class PlanetPatchRenderer {
   // Built patches whose edges no longer match their neighbors' current
   // detail, waiting for a geometry-only rebuild. See [B39].
   private staleStitchKeys = new Set<string>();
-  // Built patches (any state) whose mesh grid is not the current Resolution's,
-  // rebuilt in place, geometry only, so a Resolution change keeps every bake.
-  private staleGridKeys = new Set<string>();
 
   // Rebuilds every drawn patch's bake, e.g. after a layer/paint change —
   // the same moment the single-mesh path re-renders its one shared map.
@@ -184,7 +177,7 @@ export class PlanetPatchRenderer {
   ): void {
     const detail = {
       maxErrorPixels: shared.maxErrorPixels,
-      gridResolution: this.currentGrid,
+      gridResolution: PATCH_GRID,
       viewHeightPixels: shared.viewHeightPixels,
       fieldOfViewRadians: shared.fieldOfViewRadians,
       frustum: shared.frustum,
@@ -200,7 +193,6 @@ export class PlanetPatchRenderer {
       for (const key of [...this.entries.keys()]) this.disposeEntry(key);
       this.pendingBuilds = [];
       this.staleStitchKeys.clear();
-      this.staleGridKeys.clear();
       this.upgradeKeys.clear();
       this.currentLeaves = []; // the next selection settles fully, so the budget holds from the start
     }
@@ -229,12 +221,11 @@ export class PlanetPatchRenderer {
         cameraPosition,
         shared.radius,
         detail,
-        this.currentLeaves.length > 0 ? { leaves: this.currentLeaves, pressure: this.pressure, gridResolution: this.currentGrid } : undefined,
+        this.currentLeaves.length > 0 ? { leaves: this.currentLeaves, pressure: this.pressure } : undefined,
       );
       const nextLeaves = selection.leaves;
       this.currentLeaves = nextLeaves;
       this.pressure = selection.pressure;
-      this.currentGrid = selection.gridResolution;
       this.visibleCount = selection.visibleCount;
       this.selectionUnsettled = !selection.settled;
       this.stitchFlags = computeStitchFlags(nextLeaves);
@@ -255,13 +246,6 @@ export class PlanetPatchRenderer {
         if (state === 'active' && !edgeStitchFlagsEqual(entry.builtFlags, this.stitchFlags.get(key))) this.staleStitchKeys.add(key);
       }
 
-      // Shown or retiring patches built at another grid size get a geometry-only
-      // rebuild; hidden cached ones wait until they are needed again.
-      for (const [key, entry] of this.entries) {
-        const state = this.lifecycle.entries.get(key)?.state;
-        if (state !== 'cached' && entry.builtGrid !== this.currentGrid) this.staleGridKeys.add(key);
-      }
-
       // A patch that has come into view (or into reach of the budget) with a
       // smaller bake than it now wants is queued for an upgrade.
       for (const [key, entry] of this.entries) {
@@ -274,26 +258,24 @@ export class PlanetPatchRenderer {
       this.pendingBuilds.sort((first, second) => distanceToCamera(first) - distanceToCamera(second));
     }
 
-    const gridResolution = this.currentGrid;
+    const gridResolution = PATCH_GRID;
     const gridVertices = gridResolution * gridResolution;
     const maxRestitches = Math.max(1, Math.floor(MAX_RESTITCH_VERTICES_PER_FRAME / gridVertices));
-    // Meshes rebuilt in place (neighbors changed detail, or Resolution moved
-    // the grid), drawn patches first so what you see stays consistent.
-    const geometryJobs = [...new Set([...this.staleGridKeys, ...this.staleStitchKeys])];
+    // Meshes rebuilt in place when neighbors changed detail, drawn patches
+    // first so what you see stays consistent.
+    const geometryJobs = [...this.staleStitchKeys];
     const isShown = (key: string) => (this.lifecycle.entries.get(key)?.shown ? 1 : 0);
     geometryJobs.sort((first, second) => isShown(second) - isShown(first));
     let restitched = 0;
     for (const key of geometryJobs) {
       if (restitched >= maxRestitches) break;
       this.staleStitchKeys.delete(key);
-      this.staleGridKeys.delete(key);
       const entry = this.entries.get(key);
       if (!entry) continue;
       const flags = this.stitchFlags.get(key);
       entry.mesh.geometry.dispose();
       entry.mesh.geometry = buildPatchGeometry(entry.patch, shared.radius, gridResolution, flags);
       entry.builtFlags = flags ?? NO_STITCH_FLAGS;
-      entry.builtGrid = gridResolution;
       this.lifecycle.setVertices(key, gridVertices);
       restitched++;
     }
@@ -330,7 +312,6 @@ export class PlanetPatchRenderer {
       this.entries.set(key, {
         patch,
         builtFlags: this.stitchFlags.get(key) ?? NO_STITCH_FLAGS,
-        builtGrid: gridResolution,
         bakeSamples,
         mesh,
         material,
@@ -409,7 +390,6 @@ export class PlanetPatchRenderer {
     this.pendingBuilds = [];
     this.stitchFlags.clear();
     this.staleStitchKeys.clear();
-    this.staleGridKeys.clear();
     this.upgradeKeys.clear();
   }
 }

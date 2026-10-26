@@ -53,7 +53,7 @@ export const NOISE_RANGES: Record<NoiseRangeKey, NoiseRange> = {
   stretch: { min: 0.1, max: 10, step: 0.01, default: 1, scale: 'log', randomize: false },
   warpScale: { min: 0.1, max: 10, step: 0.01, default: 1, scale: 'log' },
   warpOctaves: { min: 1, max: 8, step: 1, default: 1, scale: 'linear' },
-  voronoiJitter: { min: 0, max: 1, step: 0.01, default: 1, scale: 'linear' },
+  voronoiJitter: { min: 0, max: 1, step: 0.01, default: 0.7, scale: 'linear' },
   ridgeOffset: { min: 0, max: 2, step: 0.01, default: 1, scale: 'linear' },
   ridgeGain: { min: 0, max: 5, step: 0.1, default: 1, scale: 'linear' },
   // Fractal type's Offset and Gain: no tool documents these ranges either; the

@@ -378,7 +378,7 @@ export function NoisePanel({
             />
             <Slider
               label="Jitter"
-              value={selectedLayer.voronoiJitter ?? 1}
+              value={selectedLayer.voronoiJitter ?? 0.7}
               onChange={(value) => onUpdateSelectedLayer({ voronoiJitter: value })}
               {...sliderRange('voronoiJitter')}
               description="How far each cell's point strays from its cell's center. 0 gives a regular grid of cells, 1 is fully random."

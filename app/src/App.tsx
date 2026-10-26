@@ -52,6 +52,7 @@ function App() {
     planetControls.displayMode,
     planetControls.heightScale,
     erosion.result,
+    planetControls.detailAmount,
   );
   // Declared after erosion/landChunk, which it persists alongside layers and
   // paint — see projectSettings/saveProject.ts.
@@ -184,6 +185,10 @@ function App() {
         onChunkResolutionChange={landChunk.setResolution}
         maxErrorPixels={planetControls.maxErrorPixels}
         onMaxErrorPixelsChange={planetControls.setMaxErrorPixels}
+        autoDetail={planetControls.autoDetail}
+        onAutoDetailChange={planetControls.setAutoDetail}
+        detailAmount={planetControls.detailAmount}
+        onDetailAmountChange={planetControls.setDetailAmount}
         chunkSize={landChunk.chunkSize}
         onChunkSizeChange={landChunk.setChunkSize}
         heightScale={planetControls.heightScale}
@@ -249,7 +254,7 @@ function App() {
                 viewportRef={planetViewportRef}
                 sharedRenderer={sharedViewportRenderer}
                 radius={planetControls.radiusScene}
-                maxErrorPixels={planetControls.maxErrorPixels}
+                maxErrorPixels={planetControls.effectiveMaxErrorPixels}
                 baseColor={planetControls.baseColor}
                 ambientLight={sceneControls.ambientLight}
                 lightDirX={sceneControls.lightDirX}
@@ -264,6 +269,7 @@ function App() {
                 gridVisible={sceneControls.gridVisible}
                 layers={noiseLayers.layers}
                 heightScale={planetControls.heightScale}
+                detailAmount={planetControls.detailAmount}
                 colorByElevation={planetControls.colorByElevation}
                 colorStops={planetControls.colorStops}
                 onElevationRangeChange={planetControls.setElevationRange}

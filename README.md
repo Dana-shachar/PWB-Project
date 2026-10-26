@@ -6,7 +6,7 @@ Cornell Tech, DESIGN 6197/4197, a procedural planet-building tool: paint and gen
 
 This will eventually grow into the fuller README the course's final deliverable requires (conceptual premise, procedural systems/algorithms used, AI-assisted process, run instructions, credits), for now, at build stage, it covers what actually exists.
 
-![The planet with the color ramp editor, layer masks and the pixel Resolution control.](docs/screenshots/2026-10-21-ramp-masks-and-resolution.png)
+![A blue planet speckled with green and white Voronoi islands, with the color ramp stops and Resolution slider on the left and the layer, mask and Voronoi noise controls on the right.](docs/screenshots/2026-10-21-ramp-masks-and-resolution.png)
 *Current state, 2026-10-21.*
 
 **The other docs, all in `docs/`, and when to open them:**

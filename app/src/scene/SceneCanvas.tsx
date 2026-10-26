@@ -2,7 +2,7 @@ import { useEffect, useImperativeHandle, useRef, forwardRef, type RefObject } fr
 import * as THREE from 'three';
 import { scene } from './scene';
 import { camera, DEFAULT_CAMERA_DISTANCE } from './camera';
-import { controls } from './controls';
+import { applyAltitudeRates, controls } from './controls';
 import { grid } from './grid';
 import type { SharedViewportRenderer } from './sharedViewportRenderer';
 import { planet, planetGeometry } from '../planet/mesh';
@@ -185,6 +185,8 @@ interface SceneCanvasProps {
   // Shared directly with the land chunk's own height — see
   // planet/planetControls.ts and ISSUES.md, 2026-09-23.
   heightScale: number;
+  // Fine detail strength for patch bakes (planet/planetControls.ts).
+  detailAmount: number;
   // This pane's own element (App.tsx's .planet-viewport div) — its rect is
   // this view's viewport/scissor rectangle in the shared renderer, and the
   // DOM element OrbitControls listens on, since this component no longer
@@ -222,6 +224,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     gridVisible,
     layers,
     heightScale,
+    detailAmount,
     viewportRef,
     sharedRenderer,
     onElevationRangeChange,
@@ -611,7 +614,14 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // (scene/sharedGumball.ts) drives this camera/controls pair when the
     // planet pane is selected, rather than this component owning its own
     // Gumball instance. See ISSUES.md, 2026-09-23.
-    gumballTargetRef.current = { camera: perspectiveCamera, cameraControls: orbitControls, referenceDistance: DEFAULT_CAMERA_DISTANCE };
+    // The planet's radius and its radius plus the highest terrain, for the
+    // altitude-scaled camera ([B51]).
+    const planetSurface = () => {
+      const shared = sharedUniformsRef.current;
+      const margin = shared.displacementAmplitude * Math.max(Math.abs(shared.elevationMin), Math.abs(shared.elevationMax));
+      return { planetRadius: shared.radius, surfaceRadius: shared.radius + margin };
+    };
+    gumballTargetRef.current = { camera: perspectiveCamera, cameraControls: orbitControls, referenceDistance: DEFAULT_CAMERA_DISTANCE, surface: planetSurface };
 
     sharedUniformsRef.current.radius = radius;
     const planetPatches = new PlanetPatchRenderer();
@@ -635,6 +645,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // camera's aspect from this pane's own current rect every frame, so
     // neither is this effect's job anymore.
     function onFrame() {
+      const { planetRadius, surfaceRadius } = planetSurface();
+      applyAltitudeRates(orbitControls, perspectiveCamera, planetRadius, surfaceRadius);
       orbitControls.update(); // required every frame — damping is enabled, see controls.ts
       // The specular term needs the eye position and the camera moves every
       // frame via orbit controls, so this is read fresh rather than set once.
@@ -885,6 +897,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     const heightmapPipeline = heightmapPipelineRef.current;
     if (!planetMesh || !webglRenderer || !heightmapPipeline) return;
 
+    heightmapPipeline.setDetailAmount(detailAmount);
     const heightmapTexture = heightmapPipeline.render(webglRenderer, { layers });
     const material = planetMesh.material as THREE.ShaderMaterial;
     material.uniforms.uHeightMap.value = heightmapTexture;
@@ -898,7 +911,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // deps: on first mount the renderer doesn't exist yet (see the sync
     // effect above), so without this, the guard above would return once and
     // never automatically retry once it's actually ready.
-  }, [layers, sharedRenderer.renderer]);
+  }, [layers, detailAmount, sharedRenderer.renderer]);
 
   return null;
 });

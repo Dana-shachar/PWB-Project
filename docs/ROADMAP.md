@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-10-23`
+`Last updated: 2026-10-26`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,54 +8,58 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-23):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`.*
+> **Start from here (2026-10-26):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Everything is committed and pushed as `bc80b0a`, and the repo `Dana-shachar/PWB-Project` is **public**. The whole history was rewritten twice on 2026-10-23: every commit carries the GitHub no-reply address, and no commit holds the real email, the Firebase key or the licensed fonts. The Firebase config comes from `VITE_FIREBASE_*` env vars in `app/.env.local` (git-ignored, template in `app/.env.example`); without them the app loads with sign-in and saving off. The code is **untested on screen** apart from Firebase still working. Only `.obsidian/workspace.json` is uncommitted, on purpose (internal).
+> **State.** Last commit `6a41759`. Everything below is committed with this handover; marked items are untested on screen. The PWB dev server runs on a fixed port, **localhost:5173** (`app/vite.config.ts`, `strictPort`), because anonymous sign-in and saved projects are tied to the address. Dana's other project (PCC, `F26_Dana_TBD`) was moved to 5174 the same way. Run the server in the background from `app/` with `npx vite`.
 >
-> **Open threads for Dana (not code)**
-> - 📌 **Firebase key:** restrict or regenerate it in Google Cloud Console (APIs & Services, Credentials), since GitHub may keep the old commits reachable by ID for a while. If regenerated, update `app/.env.local`.
-> - 📌 **Deploy host,** if there is one: set the six `VITE_FIREBASE_*` values there.
-> - 📌 **Backup bundles** of the old history (`pwb-backup.bundle`, `pwb-backup-fonts.bundle`) were in the 2026-10-23 session scratchpad. They hold the email, key and fonts; delete them if they still exist.
-> - 📌 **Weekly push, Session 10** is not written yet. It should cover this week's publishing work (env vars, history cleanup, going public), the `docs/` reorganization and the architecture diagram.
-> - The professor (GitHub `jomasan`) has no Firebase sign-in or saving. Dana chose a public repo over adding him as a collaborator.
-> - 📌 **README screenshot alt text** was written from the filename (`2026-10-21-ramp-masks-and-resolution.png`), not from looking at the image. Check that it describes the shot.
-> - 📌 **Before submitting for class:** add a copy of the user-scoped `ui-design` skill to the repo, placement Dana's call (memory `submission-include-ui-skill`).
-> - ⏸️ **Run instructions** (install, `.env.local`, `npm run dev`) were left out of the README on purpose; they belong in the final README the syllabus requires.
-> - Anyone cloning gets the system sans-serif instead of Helvetica, since the licensed fonts are no longer in the repo (noted in the README).
+> **Built this session**
+> - ✅ **Resolution slider shown as 128 to 8192, higher is sharper** (`ui/Panel.tsx`, `maxErrorPixelsToResolution` in `planet/patch.ts`). Still stored as pixels, so saves are unchanged. Dana confirmed it reads better.
+> - ✅ **Fixed 64-cell patch mesh** (`PATCH_GRID` in `planet/patch.ts`): the 64/128/256 mesh tiers are gone. They made close-up patches 16 times as costly, so the triangle budget stopped splitting (measured with a probe, `[B50]`). The automatic sharpening bonus stays. Dana confirmed close-ups sharpen.
+> - ✅ **Altitude camera** (`applyAltitudeRates` in `scene/controls.ts`, `MIN_CAMERA_ALTITUDE` in `scene/camera.ts`, `levelToDistance` and `distanceToLevel` in `scene/Gumball.tsx`): rotate, pan and wheel zoom scale with height above the surface; near and far planes follow it; the zoom slider steps in log height down to 3 km. Dana: "looks better".
+> - ✅ **Planet-wide fine detail** (`planetDetail` in `shaders/heightmap.frag.glsl`, `setDetailAmount` in `map/heightmap.ts`, saved `detailAmount` in `planet/planetControls.ts`, the "Fine detail" slider in `ui/Panel.tsx`): fBm added under the layers in patch bakes, each octave fading in with zoom (Proland, Outerra). The chunk gets it too. Dana: works, a bit strong, keep it.
+> - 🟡 **Voronoi Jitter default 0.7** (`map/noiseRanges.ts`, `ui/NoisePanel.tsx`, `map/heightmap.ts`). It caused the mask Jitter mismatch below.
+> - 🟡 **Docs:** Session 10 weekly push drafted (`WEEKLY-PUSHES.md`); README screenshot alt text rewritten after looking at the image; `ISSUES.md` `[B50]` to `[B53]` added; this block and `CODE-INDEX.md` updated.
+> - **Still to do:** Dana's test of the batch on screen (Auto detail toggle and Resolution in Scene, Roughness, mask Coverage), then close `[B50]`, `[B51]`, `[B52]`.
 >
-> **Next step: Dana's test list.** Hard-refresh first and keep the console open (any red error matters).
-> - **Planet detail:** load speed; zoom in slowly (does detail sharpen by itself, is the close-up still blocky or stair-stepped, is it sharp enough); Resolution (px) slider right = sharper (little change when zoomed out, adds detail in place when close); rotate (no rebuild); watch for cracks, black slivers and hitches while zooming.
-> - **Noise:** Frequency 0.1 to 500 (log), shimmer at high values; Octaves to 12; Persistence, Lacunarity, Warp, Terrace ranges; Fractal type (Multifractal, Hybrid, Hetero, Ridged; Hetero should give smooth lowlands and rough highlands); Offset, Stretch, Warp scale and octaves, Voronoi Jitter and Distance, Ridge offset and gain; Randomize (about half of layers carve, since Height can be negative).
-> - **Masks:** the row icon popup (pattern, seed, frequency, Invert, Coverage, Softness, Shuffle) changes the planet and the noise canvas; two selected layers say "editing 2 layers"; an older project still loads.
-> - **Color ramp:** colors show fully as set; drag, type and scrub elevations; delete down to 2 stops; each row's picker opens at that row.
-> - **Lighting:** the Scene panel Wrap slider; the chunk stays lit (light elevation is separate).
-> - **Panels:** the Planet Terrain header, the icon buttons, black wrapped tooltips on screen.
-> - **Known gaps, do not report:** Cmd+Z covers only paint strokes (`[B42]`), planet cast shadows not built, the Ridged/Terrace/warp/Voronoi fade not built, layer Height has no units yet. Then fixes, docs, a commit.
+> **Agreed, not built yet (do in this order)**
+> 1. ✅ **Built 2026-10-26, untested. Mask Jitter fix** (`[B52]`): the mask is drawn at Voronoi Jitter 1 (`gVoronoiJitter = 1.0` in the mask block of `main` in `shaders/heightmap.frag.glsl`), but Coverage is measured on a probe layer from `createDefaultLayer`, whose Jitter is now 0.7. Fix in `maskSortedValues` (`map/heightmap.ts`): set the probe's `voronoiJitter: 1` and `voronoiDistance: 'euclidean'`. Mask controls themselves work (Dana confirmed).
+> 2. ✅ **Built 2026-10-26, untested. Resolution and Roughness as display versus terrain** (`autoDetail`, `effectiveMaxErrorPixels`; the chunk's own Resolution stays in Planet Terrain, shown only in the chunk view, until `[B53]`): (a) `ui/Panel.tsx`: the planet's Resolution leaves Planet Terrain and goes to the Scene panel as a "Detail: Auto" Toggle, on by default, revealing the Resolution Slider when off; (b) `planet/planetControls.ts`: saved `autoDetail` (default true), and `effectiveMaxErrorPixels` sends `AUTO_MAX_ERROR_PIXELS` while Auto is on; (c) rename "Fine detail" to "Roughness" with a tooltip saying it is terrain shape, not display quality. Convention: Unity terrain "Pixel Error", Cesium `maximumScreenSpaceError`, games' Auto quality. Dana: "make sure it follows the display convention".
+> 3. **Next: land chunk on the patch system** (`[B53]`, the big one, plan below).
+>
+> **Plan for `[B53]`: the land chunk sharpens as you zoom**
+> - **Cause, read in the code:** the smooth chunk is one mesh capped at 128 vertices across (`SMOOTH_MESH_VERTEX_CEILING` in the main effect of `useLandChunk`, `voxel/landChunk.ts`), so a 16 km chunk can't show shapes under about 125 m. Resolution only sizes the one heightmap texture (`getPatchRegionTexture` in `scene/SceneCanvas.tsx`, capped at `MAX_PATCH_TEXTURE_RESOLUTION` = 2048, which matches the slider). The chunk has no detail by zoom.
+> - **Goal:** the planet's convention (screen-space error, CDLOD, chunked LOD): the chunk splits into smaller patches as you zoom, each baked for its own size, so close-ups keep gaining detail including the fine detail noise. Dana: the chunk matters most for granular zoom.
+> - **Read first, narrowly (search the name, read only that range):**
+>   1. `planet/planetPatches.ts`: `collectAllFaces`, `collectLeaves`, `shouldSplit`, `isVisible`, `patchIntersectsFrustum`, `screenSpaceError`, `distanceToPatch`, `patchWorldSize`, `selectPatchesIncremental`. These assume a sphere of `radius`; note every place the sphere enters (horizon angle, `patchCenterDirection`, world size from radius).
+>   2. `planet/PlanetPatchRenderer.ts`: `updatePatches` (the selection call and the build loop after it), `wantedBakeSamples`, `rebakeAll`, and where it calls `buildPatchGeometry` and `createPatchMaterial`.
+>   3. `planet/planetPatchMesh.ts`: `buildPatchGeometry` (vertex positions on the sphere, stitching, skirts) and `createPatchMaterial` (its uniforms), to see what a flat variant must replace.
+>   4. `planet/patch.ts`: `subdivide`, `TerrainPatch`, `patchCenterDirection`; the chunk's own patch is one of these (the spot picked on the planet).
+>   5. `voxel/landChunk.ts`: the main `useEffect` of `useLandChunk` (the smooth branch before `return;`, and the voxel branch after it, which stays as is), plus `pickLocation`.
+>   6. `voxel/LandChunkCanvas.tsx`: the setup effect (`registerView`, `onFrame`, the camera and orbit controls), the material effect (`new THREE.ShaderMaterial`), and the effects that set `uHeightMap` and `uHeightMapTexelSize`.
+>   7. `voxel/smoothMesh.ts`: `buildSmoothChunkGeometry`, especially the `displace` and `isTopSurface` attributes for the walls and bottom cap.
+>   8. `shaders/chunk.vert.glsl` (the `displace` and `isTopSurface` attributes, `uHeightMap`, `uMaxHeight`) and the top of `shaders/chunk.frag.glsl` (how walls are colored, the `[B32]`-era non-bleeding flag).
+> - **Then propose to Dana, before editing:** how the selection runs over one flat region (likely a `flatRegion` option on the selection and renderer: the chunk's `TerrainPatch` as the only root, distance and size measured on a flat square of `chunkSize`, no horizon test); a flat variant of the patch geometry and material; how the cut walls and bottom cap follow the outer patches' edges (riskiest: the earlier wall-color bleeding bugs lived here, see the chunk walls items in `ISSUES.md`); the chunk's Resolution becoming the same auto plus manual setting as the planet's (ties into item 2); and what happens to `SMOOTH_MESH_VERTEX_CEILING` and the single texture. The voxel style is out of scope.
+> - **Cost:** plan with Opus, then Dana may switch to Sonnet (`/model`) to build an approved, exact plan.
 >
 > **Open issues in `ISSUES.md`**
-> - 🔴 **Open:** `[B27]` Expand shows a black preview.
-> - 🟡 **Built, waiting on this test:** `[B36]` to `[B41]`, `[B43]` to `[B49]` (ramp colors and rows, seams, Resolution, patch rebuilds, lighting, masks, noise frequency, tooltips), plus `[B28]` (planet detail no longer capped by the map). Close each after the test passes.
-> - 🟡 **Likely resolved, confirm on screen:** `[B26]` soft blur at the poles.
-> - 🟡 **Tabled by Dana until after erosion:** `[B14]` terrain jagged, feather subtle.
-> - ❓ **Dana's call:** lower the Voronoi Jitter default to about 0.7, so the slider can go both ways (note under `[B46]`).
+> - 🔴 `[B53]` chunk faceted up close (plan above). `[B52]` mask Coverage Jitter mismatch (item 1). `[B27]` Expand shows a black preview.
+> - 🟡 `[B50]` Resolution slider and close-up detail, `[B51]` zoom and fine detail: built, waiting on the commit test.
+> - 🟡 From before, built and waiting on a test: `[B28]`, `[B36]` to `[B41]`, `[B43]` to `[B49]`; `[B26]` likely resolved; `[B14]` tabled until after erosion.
 >
-> **Loose threads, in build order**
-> - **Modifier fade, second pass.** Ridged, Terrace, warp and Voronoi shimmer when features are smaller than the grid. Approved: fade before the non-linear step and soften step edges only as wide as the grid spacing, constants tunable. Partly inferred, flagged in `REFERENCES.md`.
-> - **Bounded heights.** A smooth limit on total elevation. Layer Height shown as a percent of the maximum elevation (-100 to 100), negative allowed. Output clamp lives here.
-> - **Plateau shaping** (Gaea Clamp style), then **Height in meters plus Exaggeration** (replaces `[S15]`).
-> - **Undo/redo last** (`[S30]`): settings and the paint log only, Randomize and Shuffle one step each.
-> - **Planet cast shadows**, per patch, after the patch work is accepted.
-> - **Later:** Erosion slider audit, group masks, a generic preview component, Billow and Strata (no formulas found).
+> **Loose threads, in build order (after the three items above)**
+> - **Measured fine detail strength** (Dana, 2026-10-26): match the detail's strength at each scale to real terrain statistics (geometry clipmaps), replacing the hand-set `detailAmount`.
+> - **Camera altitude above the actual ground:** the closest height is measured above the planet's highest peak, so over low ground the camera stops high. The fix is the ground height under the camera.
+> - Modifier fade second pass; bounded heights; plateau shaping, then height in meters; undo/redo; planet cast shadows; later items as listed in the stages below.
 >
-> **Known risks.** Octave cost is not counted in the per-frame build budget. Cracks or content mismatches between neighbors at different depths (skirts only). Frustum culling not built. The Hoskins hash constants were typed from memory and unverified. Voronoi Jitter defaults to its maximum, so the slider only goes down.
+> **Open threads for Dana (not code)**
+> - 📌 **Firebase key:** restrict it in Google Cloud Console (console.cloud.google.com/apis/credentials, the "Browser key (auto created by Firebase)": Application restrictions = Websites, add `http://localhost:*/*` and any hosted address; leave the API list as Firebase set it).
+> - 📌 **Deploy host,** if there is one: set the six `VITE_FIREBASE_*` values there.
+> - 📌 **Before submitting for class:** add a copy of the user-scoped `ui-design` skill to the repo, placement Dana's call.
+> - ⏸️ **Run instructions** belong in the final README the syllabus requires.
 >
-> **Rules in force.** No forks, and no agent without Dana's yes and a cost estimate (memory `no-expensive-agents`). Read `CODE-INDEX.md` first and read narrowly, edit docs directly (the index too), plan before acting, design-system components only, no attribution anywhere. Research first: no improvised methods, cite sources and say what is unverified. Only look something up when the answer changes the plan.
+> **Known risks.** `MIN_CAMERA_ALTITUDE` (3 km), the fine detail default (0.03) and its starting scale (`DETAIL_BASE_FREQUENCY` 64) are inferred, tunable. The near and far plane rule in `applyAltitudeRates` is unsourced and untested for clipping. Octave cost is not counted in the build budget. Frustum culling for patches is partial. The Hoskins hash constants were typed from memory.
 >
-> **New context from 2026-10-23**
-> - **Layout:** docs in `docs/`, images in `docs/screenshots/` and `docs/diagrams/`, working rules in `.claude/CLAUDE.md` (git-ignored). The README stays at the root.
-> - **Design system scope:** the `ui-design` skill governs the app's UI. Presentational assets like the architecture diagram are bolder and accent-led, inferred from Dana's own reference diagrams. One rule covers both: black text only on the full accent, white text on any lower-opacity accent fill.
-> - **The architecture diagram** stays in sync with the code structure: how to regenerate it is in the working rules, under "Keep the architecture diagram fresh".
-> - **Permissions:** the permission check blocks Claude from `git push --force`. Dana runs force-pushes herself.
+> **Rules in force.** No forks; no agent without Dana's yes and a cost estimate. Read `CODE-INDEX.md` first and read narrowly. Plan as numbered steps naming files and new names, then wait for a go. Small decisions are Claude's (memory `skip-micro-decisions`); number every list. Research known methods across several tools, not just one, before proposing; measure before diagnosing (a probe beat two wrong theories this session). Design-system components only. No attribution anywhere.
 
 **Overall** ▓▓▓▓▓▓░░░░ 61%
 

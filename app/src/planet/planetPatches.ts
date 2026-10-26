@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import { CUBE_FACES, cubeFacePoint, type CubeFace } from './cubeFace';
 import {
   MAX_PATCH_DEPTH,
-  PATCH_GRID_TIERS,
   neighborProbe,
   patchCenterDirection,
   PATCH_EDGES,
@@ -47,8 +46,7 @@ export interface PatchDetail {
   // The Resolution slider: the screen-space error, in pixels, a patch may
   // have before it splits. Lower is sharper.
   maxErrorPixels: number;
-  // Cells across a patch's mesh (the selection picks the tier, see
-  // PATCH_GRID_TIERS; this is the one in force).
+  // Cells across a patch's mesh (PATCH_GRID).
   gridResolution: number;
   // The viewport's height in pixels, and the camera's vertical field of view.
   viewHeightPixels: number;
@@ -310,31 +308,23 @@ export interface PatchSelection {
   // How many budget steps are in force (negative: the sharpening bonus),
   // passed back in as `previous` next time.
   pressure: number;
-  // The mesh grid tier in force.
-  gridResolution: number;
   // How many selected patches are actually in view, for the bake budget.
   visibleCount: number;
   // False when something moved this update, so one more pass is due.
   settled: boolean;
 }
 
-// A tier steps up when this few patches are in view and back down when this
-// many are, with a gap so the grid (and every mesh) doesn't flip.
-const TIER_UP_VISIBLE = 80;
-const TIER_DOWN_VISIBLE = 240;
-
 // This update's actual list of patches to bake and render, by screen-space
-// error, then balanced. Few patches in view get a denser mesh grid; if the
-// triangle budget is blown the pixel threshold is raised, and if there is
-// plenty of room it drops (the bonus). Given the previous selection, the grid
-// tier and the budget pressure each move by at most one step per update (so a
-// small camera move can't mass-rebuild) and splits use hysteresis; the first
-// selection has no previous one and settles fully.
+// error, then balanced. If the triangle budget is blown the pixel threshold
+// is raised, and if there is plenty of room it drops (the bonus). Given the
+// previous selection, the budget pressure moves by at most one step per update
+// (so a small camera move can't mass-rebuild) and splits use hysteresis; the
+// first selection has no previous one and settles fully.
 export function selectPatchesIncremental(
   cameraPosition: THREE.Vector3,
   radius: number,
   detail: PatchDetail,
-  previous?: { leaves: TerrainPatch[]; pressure: number; gridResolution: number },
+  previous?: { leaves: TerrainPatch[]; pressure: number },
 ): PatchSelection {
   const cameraDistance = Math.max(cameraPosition.length(), radius * 1.0001);
   const baseContext: SelectionContext = {
@@ -346,72 +336,49 @@ export function selectPatchesIncremental(
     pressure: previous ? Math.min(Math.max(previous.pressure, -MAX_BONUS_STEPS), MAX_PRESSURE) : 0,
     previousIndex: previous ? buildLeafIndex(previous.leaves) : undefined,
   };
-  let tier = Math.max(0, PATCH_GRID_TIERS.indexOf(previous?.gridResolution ?? PATCH_GRID_TIERS[0]));
-  const collectAt = (tierIndex: number, pressure: number): TerrainPatch[] =>
-    collectAllFaces({ ...baseContext, pressure, detail: { ...detail, gridResolution: PATCH_GRID_TIERS[tierIndex] } });
-  const visibleOf = (leaves: TerrainPatch[], tierIndex: number): number => {
-    const visibleContext = { ...baseContext, detail: { ...detail, gridResolution: PATCH_GRID_TIERS[tierIndex] } };
-    return leaves.filter((leaf) => isVisible(leaf, visibleContext)).length;
-  };
-  const triangles = (count: number, tierIndex: number) => count * 2 * PATCH_GRID_TIERS[tierIndex] ** 2 * BUDGET_HEADROOM;
-  const overBudget = (count: number, tierIndex: number, factor = 1) => triangles(count, tierIndex) > MAX_VISIBLE_TRIANGLES * factor;
+  const collectAt = (pressure: number): TerrainPatch[] => collectAllFaces({ ...baseContext, pressure });
+  const visibleOf = (leaves: TerrainPatch[]): number => leaves.filter((leaf) => isVisible(leaf, baseContext)).length;
+  const triangles = (count: number) => count * 2 * detail.gridResolution ** 2 * BUDGET_HEADROOM;
+  const overBudget = (count: number, factor = 1) => triangles(count) > MAX_VISIBLE_TRIANGLES * factor;
 
   let pressure = baseContext.pressure;
-  let leaves = collectAt(tier, pressure);
-  let visibleCount = visibleOf(leaves, tier);
+  let leaves = collectAt(pressure);
 
   if (!previous) {
-    while (tier < PATCH_GRID_TIERS.length - 1 && visibleCount <= TIER_UP_VISIBLE) {
-      tier++;
-      leaves = collectAt(tier, pressure);
-      visibleCount = visibleOf(leaves, tier);
-    }
-    while (overBudget(leaves.length, tier) && pressure < MAX_PRESSURE) {
+    while (overBudget(leaves.length) && pressure < MAX_PRESSURE) {
       pressure++;
-      leaves = collectAt(tier, pressure);
+      leaves = collectAt(pressure);
     }
-    visibleCount = visibleOf(leaves, tier);
-    return { leaves: balance(leaves), pressure, gridResolution: PATCH_GRID_TIERS[tier], visibleCount, settled: true };
+    return { leaves: balance(leaves), pressure, visibleCount: visibleOf(leaves), settled: true };
   }
 
   let settled = true;
-  if (visibleCount <= TIER_UP_VISIBLE && tier < PATCH_GRID_TIERS.length - 1) {
-    tier++;
-    settled = false;
-  } else if (visibleCount > TIER_DOWN_VISIBLE && tier > 0) {
-    tier--;
-    settled = false;
-  }
-  if (!settled) {
-    leaves = collectAt(tier, pressure);
-    visibleCount = visibleOf(leaves, tier);
-  } else if (overBudget(leaves.length, tier) && pressure < MAX_PRESSURE) {
+  if (overBudget(leaves.length) && pressure < MAX_PRESSURE) {
     pressure++;
-    leaves = collectAt(tier, pressure);
+    leaves = collectAt(pressure);
     settled = false;
   } else if (pressure > 0) {
-    const lowered = collectAt(tier, pressure - 1);
-    if (!overBudget(lowered.length, tier, BUDGET_RELAX)) {
+    const lowered = collectAt(pressure - 1);
+    if (!overBudget(lowered.length, BUDGET_RELAX)) {
       pressure--;
       leaves = lowered;
       settled = false;
     }
   } else if (pressure > -MAX_BONUS_STEPS) {
     // Room to spare: one step sharper while the result stays well in budget.
-    const sharper = collectAt(tier, pressure - 1);
-    if (!overBudget(sharper.length, tier, BONUS_FILL)) {
+    const sharper = collectAt(pressure - 1);
+    if (!overBudget(sharper.length, BONUS_FILL)) {
       pressure--;
       leaves = sharper;
       settled = false;
     }
   }
-  if (pressure < 0 && overBudget(leaves.length, tier, BONUS_FILL * 1.2)) {
+  if (pressure < 0 && overBudget(leaves.length, BONUS_FILL * 1.2)) {
     pressure++;
-    leaves = collectAt(tier, pressure);
+    leaves = collectAt(pressure);
     settled = false;
   }
-  visibleCount = visibleOf(leaves, tier);
-  return { leaves: balance(leaves), pressure, gridResolution: PATCH_GRID_TIERS[tier], visibleCount, settled };
+  return { leaves: balance(leaves), pressure, visibleCount: visibleOf(leaves), settled };
 }
 
 export function selectLeafPatches(cameraPosition: THREE.Vector3, radius: number, detail: PatchDetail): TerrainPatch[] {

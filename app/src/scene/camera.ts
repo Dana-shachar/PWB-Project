@@ -31,9 +31,17 @@ export function defaultCameraPosition(distance = DEFAULT_CAMERA_DISTANCE): THREE
   return new THREE.Vector3(x, y, z);
 }
 
+// The closest the planet camera may get above the highest terrain, as a
+// share of the radius (3 km at 6000 km). Inferred from the patch depth cap,
+// TUNABLE ([B51]).
+export const MIN_CAMERA_ALTITUDE = 0.0005;
+// The near and far planes used while far from the surface.
+export const DEFAULT_NEAR = 0.1;
+export const DEFAULT_FAR = 10000;
+
 // Builds the perspective camera, positioned per the default view above.
 export function camera(aspect: number): THREE.PerspectiveCamera {
-  const perspectiveCamera = new THREE.PerspectiveCamera(50, aspect, 0.1, 10000);
+  const perspectiveCamera = new THREE.PerspectiveCamera(50, aspect, DEFAULT_NEAR, DEFAULT_FAR);
   perspectiveCamera.position.copy(defaultCameraPosition());
   perspectiveCamera.lookAt(0, 0, 0);
   return perspectiveCamera;

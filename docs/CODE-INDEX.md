@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-10-23`
+`Last updated: 2026-10-26`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -26,7 +26,9 @@
 | Add a design-system component | `ui/UIElements.tsx`, `design.css`, `ui/icons.tsx` |
 | Add a panel control | `ui/Panel.tsx` (left) or `ui/NoisePanel.tsx` (right), then `App.tsx` for wiring |
 | Change erosion | `erosion/erosionEngine.ts`, `shaders/erosion/`, `ui/panels/ErosionPanel.tsx` |
-| Change the land chunk | `voxel/landChunk.ts`, `voxel/LandChunkCanvas.tsx`, `shaders/chunk.frag.glsl` |
+| Change the land chunk | `voxel/landChunk.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/smoothMesh.ts`, `shaders/chunk.vert.glsl`, `shaders/chunk.frag.glsl` |
+| Change how the camera moves or zooms | `scene/controls.ts` (`applyAltitudeRates`), `scene/camera.ts` (`MIN_CAMERA_ALTITUDE`), `scene/Gumball.tsx` (`levelToDistance`, `distanceToLevel`) |
+| Change the planet-wide fine detail | `planetDetail` in `shaders/heightmap.frag.glsl`, `HeightmapPipeline.setDetailAmount`, `detailAmount` in `planet/planetControls.ts` |
 
 ---
 
@@ -75,7 +77,7 @@
 
 **map/heightmap.ts**
 - What it is: the layer type, its migrations, and the pipeline that bakes layers into a heightmap on the GPU.
-- Key names: `NoiseLayer`, `NOISE_TYPE_OPTIONS`, `FRACTAL_TYPE_OPTIONS`, `VORONOI_DISTANCE_OPTIONS`, `BLEND_MODE_OPTIONS`, `hasMask`, `quantileOf`, `createDefaultLayer`, `migrateLegacyLayers`, `HeightmapPipeline` (`beginStroke`, `endStroke`, `replayLayerHistory`, `bakeRegionToTarget`, `getRegionElevationData`), `syncLayerUniforms`.
+- Key names: `NoiseLayer`, `NOISE_TYPE_OPTIONS`, `FRACTAL_TYPE_OPTIONS`, `VORONOI_DISTANCE_OPTIONS`, `BLEND_MODE_OPTIONS`, `hasMask`, `quantileOf`, `createDefaultLayer`, `migrateLegacyLayers`, `HeightmapPipeline` (`beginStroke`, `endStroke`, `replayLayerHistory`, `bakeRegionToTarget`, `getRegionElevationData`, `setDetailAmount`, `bakeRegionInto`, `maskSortedValues`, `resolveMaskBand`), `syncLayerUniforms`.
 - Talks to: `shaders/heightmap.frag.glsl`, `SceneCanvas`, the patch renderer.
 
 **map/noiseRanges.ts**
@@ -111,12 +113,12 @@
 - Talks to: `patch.ts`, `PlanetPatchRenderer.ts`.
 
 **planet/patch.ts**
-- What it is: patch math, bake sizes, the Resolution migration, the depth cap.
-- Key names: `TerrainPatch`, `rootPatch`, `subdivide`, `crossFaceNeighbors`, `neighborProbe`, `bakeSamplesCap`, `bakeSamplesForPixelWidth`, `migrateResolution`, `MAX_PATCH_DEPTH`, `PATCH_GRID_TIERS`.
+- What it is: patch math, bake sizes, the Resolution conversion and migration, the depth cap, the fixed mesh grid.
+- Key names: `TerrainPatch`, `rootPatch`, `subdivide`, `crossFaceNeighbors`, `neighborProbe`, `bakeSamplesCap`, `bakeSamplesForPixelWidth`, `migrateResolution`, `resolutionToMaxErrorPixels`, `maxErrorPixelsToResolution`, `MAX_PATCH_DEPTH`, `PATCH_GRID`, `MAX_PATCH_TEXTURE_RESOLUTION`, `clampPatchTextureResolution`.
 
 **planet/PlanetPatchRenderer.ts**
 - What it is: builds, upgrades and drops patch meshes.
-- Key names: `PlanetPatchRenderer` (`updatePatches`, `rebakeAll`, `applyShared`, `raycast`, `dispose`).
+- Key names: `PlanetPatchRenderer` (`updatePatches`, `rebakeAll`, `applyShared`, `wantedBakeSamples`, `syncVisibility`, `raycast`, `dispose`).
 - Talks to: `planetPatches.ts`, `patchLifecycle.ts`, `planetPatchMesh.ts`, `heightmap.ts`.
 
 **planet/patchLifecycle.ts**
@@ -129,7 +131,7 @@
 
 **planet/planetControls.ts**
 - What it is: the planet's settings state and their migrations.
-- Key names: `PlanetSettings`, `DEFAULT_PLANET_SETTINGS`, `usePlanetControls`, `applySettings`, `currentSettings`, `migrateColorStops`.
+- Key names: `PlanetSettings` (incl. `maxErrorPixels`, `detailAmount`, `autoDetail`), `effectiveMaxErrorPixels`, `DEFAULT_PLANET_SETTINGS`, `usePlanetControls`, `applySettings`, `currentSettings`, `migrateColorStops`.
 
 **planet/colorRamp.ts**
 - What it is: the ramp stops as shader arrays.
@@ -162,10 +164,14 @@
 - Key names: `useSceneControls`.
 
 **scene/Gumball.tsx**, **scene/sharedGumball.ts**
-- What it is: the navigation widget, and its shared control of one or two cameras.
-- Key names: `Gumball`, `useSharedGumball`.
+- What it is: the navigation widget, and its shared control of one or two cameras. A target with a `surface` zooms by log height above the ground.
+- Key names: `Gumball`, `GumballTarget` (`surface`), `levelToDistance`, `distanceToLevel`, `zoomAnchors`, `useSharedGumball`.
 
-**scene/camera.ts**, **controls.ts**, **grid.ts**, **renderer.ts**, **scene.ts**
+**scene/camera.ts**, **controls.ts**
+- What it is: the camera and its orbit controls. Every frame the planet view scales rotate, pan and zoom speed, and the near and far planes, by height above the surface.
+- Key names: `camera`, `defaultCameraPosition`, `DEFAULT_CAMERA_DISTANCE`, `MIN_CAMERA_ALTITUDE`, `DEFAULT_NEAR`, `DEFAULT_FAR`, `controls`, `applyAltitudeRates`.
+
+**scene/grid.ts**, **renderer.ts**, **scene.ts**
 - What it is: small Three.js setup modules.
 
 ---
@@ -175,8 +181,8 @@
 *The flat detail view and its meshing.*
 
 **voxel/landChunk.ts**
-- What it is: chunk state, picking and the view mode.
-- Key names: `useLandChunk`, `pickLocation`, `startResize`.
+- What it is: chunk state, picking and the view mode. Its main effect bakes the chunk's one texture (`getPatchRegionTexture`) and builds one smooth mesh capped at `SMOOTH_MESH_VERTEX_CEILING`.
+- Key names: `useLandChunk`, `pickLocation`, `startResize`, `SMOOTH_MESH_VERTEX_CEILING`.
 
 **voxel/LandChunkCanvas.tsx**
 - What it is: the chunk view and its material.
@@ -244,7 +250,7 @@
 
 **heightmap.frag.glsl**
 - What it is: composites every layer, masks and fractals into elevation.
-- Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `main`.
+- Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `planetDetail`, `DETAIL_BASE_FREQUENCY`, `main`.
 
 **noise.glsl**
 - What it is: the hash and the noise functions.

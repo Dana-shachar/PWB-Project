@@ -44,6 +44,8 @@ uniform float uLayerFractalGain[MAX_LAYERS];
 // Distance between baked samples in face coordinates, 0 = no octave fade
 // (the whole-globe bake and the noise canvas). Set per patch bake.
 uniform float uSampleSpacing;
+// Strength of the planet-wide fine detail added in patch bakes (planetDetail).
+uniform float uDetailAmount;
 // Each layer's own mask pattern: a base generator type (-1 = unmasked), its
 // seed and frequency, then the brightness band that lets the layer through.
 uniform float uLayerMaskType[MAX_LAYERS];
@@ -434,6 +436,27 @@ float applyBlendMode(float composite, float layerHeight, float blendMode) {
   }
 }
 
+// Planet-wide fine detail, the fractal refinement planet engines add under the
+// designed terrain as patches split (Proland's per-level noise, Outerra's
+// fractal refinement): fBm with persistence 0.5 and lacunarity 2, each octave
+// fading in only once the bake grid can show it, so it appears as you zoom.
+// The starting frequency and the amount are inferred, TUNABLE ([B51]).
+const float DETAIL_BASE_FREQUENCY = 64.0;
+const float DETAIL_SEED = 17.0;
+float planetDetail(vec3 position, float sampleSpacing) {
+  float value = 0.0;
+  float amplitude = 1.0;
+  float frequency = DETAIL_BASE_FREQUENCY;
+  for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
+    float fade = octaveFade(sampleSpacing * frequency);
+    if (fade <= 0.0) break; // every finer octave is faded out too
+    value += amplitude * fade * evalBaseGenerator(position * frequency, DETAIL_SEED, 1.0);
+    amplitude *= 0.5;
+    frequency *= 2.0;
+  }
+  return value;
+}
+
 void main() {
   // Only these two lines differ between a whole-globe bake and a region
   // bake: which surface point this pixel stands for, and where to read
@@ -571,5 +594,6 @@ void main() {
   // G = elevation (unclamped, can exceed 1 or go negative — real height,
   // read by the planet's displacement and the land chunk instead of R).
   // See map/heightmap.ts, ISSUES.md, 2026-09-24.
+  if (sampleSpacing > 0.0 && uDetailAmount > 0.0) elevation += uDetailAmount * planetDetail(basePosition, sampleSpacing);
   gl_FragColor = vec4(clamp(composite, 0.0, 1.0), elevation, 0.0, 1.0);
 }

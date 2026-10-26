@@ -393,6 +393,8 @@ export class HeightmapPipeline {
   private maskSampleTarget: THREE.WebGLRenderTarget | null = null;
   private maskSampleCache = new Map<string, Float32Array>();
   private paintActiveIndex = new Map<string, number>();
+  // The planet-wide fine detail strength patch bakes add (heightmap.frag.glsl planetDetail).
+  private detailAmount = 0;
   private paintPlaceholder: THREE.DataTexture;
   // The stroke currently being drawn, if any — its whole point path is kept
   // here (not GPU-accumulated) and re-rendered fresh each dab by
@@ -417,6 +419,10 @@ export class HeightmapPipeline {
   private histogramCamera: THREE.Camera;
   private histogramMaterial: THREE.ShaderMaterial;
   private readonly histogramSampleCount: number;
+
+  setDetailAmount(amount: number): void {
+    this.detailAmount = amount;
+  }
 
   constructor() {
     // FloatType, not the default byte texture — G now carries real,
@@ -464,7 +470,7 @@ export class HeightmapPipeline {
         uLayerStretch: { value: new Array(MAX_LAYERS).fill(null).map(() => new THREE.Vector3(1, 1, 1)) },
         uLayerWarpScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerWarpOctaves: { value: new Array(MAX_LAYERS).fill(1) },
-        uLayerVoronoiJitter: { value: new Array(MAX_LAYERS).fill(1) },
+        uLayerVoronoiJitter: { value: new Array(MAX_LAYERS).fill(0.7) },
         uLayerVoronoiDistance: { value: new Array(MAX_LAYERS).fill(0) },
         uLayerRidgeOffset: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerRidgeGain: { value: new Array(MAX_LAYERS).fill(1) },
@@ -474,6 +480,7 @@ export class HeightmapPipeline {
         // Spacing between baked samples in face coordinates, 0 = no octave
         // fade. Only a region (patch) bake sets it, see bakeRegionInto().
         uSampleSpacing: { value: 0 },
+        uDetailAmount: { value: 0 },
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerHeightScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
@@ -827,6 +834,7 @@ export class HeightmapPipeline {
     uniforms.uRegionSamples.value = target.width;
     // Octaves finer than this grid can show are faded out (heightmap.frag.glsl).
     uniforms.uSampleSpacing.value = (max.x - min.x) / Math.max(1, target.width - 1);
+    uniforms.uDetailAmount.value = this.detailAmount;
 
     renderer.setRenderTarget(target);
     renderer.render(this.scene, this.camera);
@@ -1172,6 +1180,9 @@ export class HeightmapPipeline {
       seed: layer.maskSeed,
       frequency: layer.maskFrequency,
       heightScale: 1,
+      // The shader draws masks at these Voronoi settings ([B52]).
+      voronoiJitter: 1,
+      voronoiDistance: 'euclidean',
     };
     const probeLayers = [...layers.map((other) => ({ ...other, visible: false, maskNoiseType: 'none' as NoiseType })), probe];
     const faceTexels = MASK_SAMPLE_SIZE * MASK_SAMPLE_SIZE;

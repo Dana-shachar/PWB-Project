@@ -5,7 +5,7 @@ import type { ProjectSummary } from '../firebase/storage';
 import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
 import { ColorRampEditor } from './panels/ColorRampEditor';
 import type { ColorStop } from '../planet/colorRamp';
-import { MAX_MAX_ERROR_PIXELS, MIN_MAX_ERROR_PIXELS } from '../planet/patch';
+import { MAX_MAX_ERROR_PIXELS, maxErrorPixelsToResolution, MIN_MAX_ERROR_PIXELS, resolutionToMaxErrorPixels } from '../planet/patch';
 
 // 'voxel' only affects the land-chunk view for now — a display style, not a
 // chunk-only feature (Dana, 2026-09-23), but the planet doesn't render
@@ -99,6 +99,12 @@ interface PanelProps {
   // Planet Resolution: a detail bias, 1 is automatic (planet/planetPatches.ts).
   maxErrorPixels: number;
   onMaxErrorPixelsChange: (value: number) => void;
+  // Planet fine detail, appears as you zoom in (planet/planetControls.ts).
+  detailAmount: number;
+  onDetailAmountChange: (value: number) => void;
+  // Planet display detail: automatic, or the Resolution slider when off.
+  autoDetail: boolean;
+  onAutoDetailChange: (value: boolean) => void;
   // Pipeline-stage menu — the structural response to "reads as 3D software,
   // not a procedural system" feedback (Dana, 2026-09-30/2026-10-07; see
   // ROADMAP.md's Procedural System Feedback section). activeStage/
@@ -236,6 +242,10 @@ export function Panel({
   chunkElevationRange,
   maxErrorPixels,
   onMaxErrorPixelsChange,
+  detailAmount,
+  onDetailAmountChange,
+  autoDetail,
+  onAutoDetailChange,
   activeStage,
   onStageChange,
   stageEnabled,
@@ -433,6 +443,28 @@ export function Panel({
               precision={0}
             />
             <Toggle label="Grid lines" value={gridVisible} onChange={onGridVisibleChange} />
+            {/* The planet's display quality, kept with the view settings and
+                automatic by default (Unity's Pixel Error, Cesium's
+                maximumScreenSpaceError), not with the terrain. */}
+            <Toggle
+              label="Auto detail"
+              value={autoDetail}
+              onChange={onAutoDetailChange}
+              description="Picks how sharply the planet is drawn for you, sharpening as you zoom in. Turn off to set the Resolution yourself."
+            />
+            {!autoDetail && (
+              <Slider
+                label="Resolution"
+                value={Math.round(maxErrorPixelsToResolution(maxErrorPixels))}
+                onChange={(value) => onMaxErrorPixelsChange(resolutionToMaxErrorPixels(value))}
+                min={maxErrorPixelsToResolution(MAX_MAX_ERROR_PIXELS)}
+                max={maxErrorPixelsToResolution(MIN_MAX_ERROR_PIXELS)}
+                step={1}
+                precision={0}
+                scale="log"
+                description="How sharply the planet is drawn. Higher is sharper. It still sharpens as you zoom in; this adds more on top, or less for a low-resolution look up close."
+              />
+            )}
           </Accordion>
         </div>
 
@@ -485,32 +517,29 @@ export function Panel({
                   : "The planet's physical radius, in kilometers. Select the planet or chunk pane to control that view's own scale."
               }
             />
-            {/* Contextual, the same pattern as the Radius/Size slider above:
-                rebinds to whichever pane is in view rather than showing two
-                separate controls. The chunk's is how finely its own ground is
-                measured (max 2048, MAX_PATCH_TEXTURE_RESOLUTION in
-                planet/patch.ts, see ISSUES.md [B32]). The planet's is a
-                maximum screen-space error in pixels (planet/planetPatches.ts, Cesium's
-                maximumScreenSpaceError convention): detail is automatic by
-                zoom, a smaller number pushes it further, on a reversed log
-                track so right is sharper. */}
+            {/* The chunk's own Resolution; the planet's lives in Scene as Auto detail. */}
+            {activeViewContext === 'landChunk' && (
+              <Slider
+                label="Resolution"
+                value={chunkResolution}
+                onChange={onChunkResolutionChange}
+                min={8}
+                max={2048}
+                step={8}
+                precision={0}
+                description="How finely the land chunk's own ground is measured. Independent of Size above, so you can zoom into a low-resolution patch and still see it as low-resolution."
+              />
+            )}
             <Slider
-              label="Resolution"
-              unit={activeViewContext === 'landChunk' ? undefined : 'px'}
-              value={activeViewContext === 'landChunk' ? chunkResolution : maxErrorPixels}
-              onChange={activeViewContext === 'landChunk' ? onChunkResolutionChange : onMaxErrorPixelsChange}
-              min={activeViewContext === 'landChunk' ? 8 : MIN_MAX_ERROR_PIXELS}
-              max={activeViewContext === 'landChunk' ? 2048 : MAX_MAX_ERROR_PIXELS}
-              step={activeViewContext === 'landChunk' ? 8 : 0.1}
-              precision={activeViewContext === 'landChunk' ? 0 : 1}
-              scale={activeViewContext === 'landChunk' ? 'linear' : 'log'}
-              reversed={activeViewContext !== 'landChunk'}
+              label="Roughness"
+              value={detailAmount}
+              onChange={onDetailAmountChange}
+              min={0}
+              max={0.2}
+              step={0.005}
+              precision={3}
               disabled={activeViewContext === null}
-              description={
-                activeViewContext === 'landChunk'
-                  ? "How finely the land chunk's own ground is measured. Independent of Size above — you can zoom into a low-resolution patch and still see it as low-resolution."
-                  : 'How many pixels of error the planet may show before it adds detail. Smaller is sharper (slide right). The planet still sharpens by itself as you zoom in, and when few patches are in view it goes a little finer on its own. Zoomed far out, a smaller number changes nothing you can see, so it costs nothing there.'
-              }
+              description="Small-scale bumps added to the terrain's shape under your layers. Part of the terrain itself, not display quality: it shows up as you zoom in close enough to see it. 0 turns it off."
             />
             {/* Every color control grouped under its own named subsection
                 (Dana, 2026-10-21), not loose in Planet's own body. */}

@@ -85,6 +85,11 @@ export interface PlanetSettings {
   // the lowest stop out (it was always baseColor), see migrateColorStops.
   rampHasBase: boolean;
   shadowsEnabled: boolean;
+  // Strength of the fine detail that appears as you zoom in ([B51]). Absent in older saves.
+  detailAmount?: number;
+  // Display detail picked automatically, the slider ignored, as Unity's Pixel
+  // Error and games' Auto quality default to. Absent in older saves.
+  autoDetail?: boolean;
 }
 
 export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
@@ -98,6 +103,8 @@ export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
   colorStops: DEFAULT_COLOR_STOPS,
   rampHasBase: true,
   shadowsEnabled: false,
+  detailAmount: 0.03, // inferred, TUNABLE
+  autoDetail: true,
 };
 
 // A saved project from before colorStops existed only has the old
@@ -154,6 +161,8 @@ export function usePlanetControls() {
   // Heightmap self-shadowing — land chunk only for now, see shaders/
   // terrain.glsl for why the planet's curved surface is a separate step.
   const [shadowsEnabled, setShadowsEnabled] = useState(DEFAULT_PLANET_SETTINGS.shadowsEnabled);
+  const [detailAmount, setDetailAmount] = useState(DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
+  const [autoDetail, setAutoDetail] = useState(DEFAULT_PLANET_SETTINGS.autoDetail ?? true);
   // The planet terrain's real elevation range, as SceneCanvas last computed
   // it. Read-only here (not saved), it's what the ramp's meters calibrate to.
   const [elevationRange, setElevationRange] = useState({ min: -0.5, max: 0.5 });
@@ -171,7 +180,7 @@ export function usePlanetControls() {
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -186,6 +195,8 @@ export function usePlanetControls() {
     setColorByElevation(settings.colorByElevation);
     setColorStops(migrateColorStops(settings));
     setShadowsEnabled(settings.shadowsEnabled);
+    setDetailAmount(settings.detailAmount ?? DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
+    setAutoDetail(settings.autoDetail ?? true);
   }
 
   // A project with nothing saved yet (new, or an old save from before this
@@ -207,12 +218,18 @@ export function usePlanetControls() {
     setHeightScale,
     maxErrorPixels,
     setMaxErrorPixels,
+    // What the planet actually draws with: automatic unless Auto detail is off.
+    effectiveMaxErrorPixels: autoDetail ? AUTO_MAX_ERROR_PIXELS : maxErrorPixels,
+    autoDetail,
+    setAutoDetail,
     colorByElevation,
     setColorByElevation,
     colorStops,
     setColorStops,
     shadowsEnabled,
     setShadowsEnabled,
+    detailAmount,
+    setDetailAmount,
     elevationRange,
     setElevationRange,
     randomizeColors,
