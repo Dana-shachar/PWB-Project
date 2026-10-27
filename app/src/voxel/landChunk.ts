@@ -41,6 +41,8 @@ export function useLandChunk(
   erosionResult: ErosionResult | null,
   // Re-bakes the chunk when the planet's fine detail changes.
   detailAmount: number,
+  // Re-bakes when the settled sea level Roughness fades toward changes (null with water off).
+  shoreSeaLevel: number | null,
 ) {
   const [viewMode, setViewMode] = useState<ViewMode>('planet'); // Dana, 2026-09-23 — planet is the default, not split
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
@@ -257,7 +259,7 @@ export function useLandChunk(
 
     return () => worker.terminate();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sceneHandleRef is a stable ref
-  }, [viewMode, layers, renderStyle, debouncedResolution, heightScale, chunkSize, patch, erosionResult, detailAmount]);
+  }, [viewMode, layers, renderStyle, debouncedResolution, heightScale, chunkSize, patch, erosionResult, detailAmount, shoreSeaLevel]);
 
   // Drag-to-resize the planet/land-chunk split — mirrors the Slider
   // scrubber's plain mousemove/mouseup pattern (ui/UIElements.tsx), against

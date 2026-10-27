@@ -15,6 +15,8 @@ import { ChunkPatchRenderer, type BakeChunkPatch } from './ChunkPatchRenderer';
 import { chunkBaseDepth } from './chunkPatchMesh';
 import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
 import type { ElevationData } from './chunkGrid';
+import { createChunkWater, setChunkWaterLight, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
+import type { WaterSettings } from '../planet/planetControls';
 
 const chunkFragmentGlsl = terrainGlsl + chunkFragmentBody;
 
@@ -83,6 +85,9 @@ interface LandChunkCanvasProps {
   bakePatch: BakeChunkPatch;
   // The CPU copy of the chunk's heights, for picking the ground and staying above it.
   groundHeights: ElevationData | null;
+  // Sea level and water look, shared with the planet, and the planet's lowest height for the depth scale.
+  water: WaterSettings;
+  waterDeepest: number;
 }
 
 // TODO(DS): arbitrary — framing distance for a ~16-unit chunk, unrelated to
@@ -130,12 +135,15 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     maxErrorPixels,
     bakePatch,
     groundHeights,
+    water,
+    waterDeepest,
   },
   handleRef,
 ) {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const waterRef = useRef<ChunkWater | null>(null);
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   // The setup effect below runs once, so it reads the shared renderer through a ref (the renderer
   // is created after mount and arrives as new state).
@@ -248,12 +256,43 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       orbitControls.target.copy(perspectiveCamera.position).addScaledVector(viewDirection, perspectiveCamera.position.distanceTo(hit));
     }
     function pivotOnGround(event: PointerEvent | WheelEvent) {
-      if (walkMode.active) return;
+      if (walkMode.active || isSpaceHeld) return;
       const rect = viewportElement!.getBoundingClientRect();
       pivotAtScreenPoint(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     }
     viewportElement.addEventListener('pointerdown', pivotOnGround, { capture: true });
     viewportElement.addEventListener('wheel', pivotOnGround, { capture: true });
+
+    // Hold Space and drag to pan, as in Figma and Photoshop. Only over this pane and not while typing; released
+    // when the window loses focus, the known cause of Figma's "stuck spacebar".
+    let isSpaceHeld = false;
+    let isPointerOver = false;
+    function setSpaceHeld(held: boolean) {
+      if (isSpaceHeld === held) return;
+      isSpaceHeld = held;
+      orbitControls.mouseButtons.LEFT = held ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE;
+      viewportElement!.style.cursor = held ? 'grab' : '';
+    }
+    function handleSpaceKey(event: KeyboardEvent) {
+      if (event.code !== 'Space' || walkMode.active) return;
+      if (event.type === 'keyup') {
+        setSpaceHeld(false);
+        return;
+      }
+      const target = event.target as HTMLElement | null;
+      const isTyping = !!target && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+      if (isTyping || !isPointerOver) return;
+      event.preventDefault(); // no page scroll or focused-button press
+      setSpaceHeld(true);
+    }
+    const releaseSpace = () => setSpaceHeld(false);
+    const markPointerOver = () => (isPointerOver = true);
+    const markPointerOut = () => (isPointerOver = false);
+    window.addEventListener('keydown', handleSpaceKey);
+    window.addEventListener('keyup', handleSpaceKey);
+    window.addEventListener('blur', releaseSpace);
+    viewportElement.addEventListener('pointerenter', markPointerOver);
+    viewportElement.addEventListener('pointerleave', markPointerOut);
 
     const scene = new THREE.Scene();
     sceneRef.current = scene;
@@ -303,6 +342,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     patchRenderer.group.visible = false;
     scene.add(patchRenderer.group);
     patchRendererRef.current = patchRenderer;
+    const water = createChunkWater();
+    scene.add(water.mesh);
+    waterRef.current = water;
     const patchFrustum = new THREE.Frustum();
     const patchViewMatrix = new THREE.Matrix4();
 
@@ -336,6 +378,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       // the eye position, and the camera moves every frame under orbit
       // controls.
       material.uniforms.uCameraPosition.value.copy(perspectiveCamera.position);
+      updateChunkWaterFrame(water, perspectiveCamera.position, deltaSeconds, viewportElement!.clientWidth * window.devicePixelRatio);
       if (!patchRenderer.group.visible) return;
       const settings = patchSettingsRef.current;
       perspectiveCamera.updateMatrixWorld();
@@ -360,12 +403,19 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
 
     return () => {
       viewportElement.removeEventListener('pointerdown', pivotOnGround, { capture: true });
+      window.removeEventListener('keydown', handleSpaceKey);
+      window.removeEventListener('keyup', handleSpaceKey);
+      window.removeEventListener('blur', releaseSpace);
+      viewportElement.removeEventListener('pointerenter', markPointerOver);
+      viewportElement.removeEventListener('pointerleave', markPointerOut);
       viewportElement.removeEventListener('wheel', pivotOnGround, { capture: true });
       sharedRenderer.unregisterView('landChunk');
       walkMode.dispose();
       orbitControls.dispose();
       patchRenderer.dispose();
       material.dispose();
+      water.dispose();
+      waterRef.current = null;
       patchRendererRef.current = null;
       sceneRef.current = null;
       gridMeshRef.current = null;
@@ -397,6 +447,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     material.uniforms.uShininess.value = shininess;
     material.uniforms.uDiffuseWrap.value = diffuseWrap;
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, lightDirZ);
+    if (waterRef.current) setChunkWaterLight(waterRef.current, new THREE.Vector3(lightDirX, lightDirY, lightDirZ), ambientLight, lightIntensity);
   }, [ambientLight, lightIntensity, specularStrength, shininess, diffuseWrap, lightDirX, lightDirY, lightDirZ]);
 
   // Base color — shared with the planet's own ColorPicker, not a separate
@@ -426,7 +477,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
     (material.uniforms.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
     material.uniforms.uRampCount.value = ramp.count;
-    material.uniforms.uElevationMin.value = elevationMin;
+    // With water on, the land ramp starts at sea level (the cartographic split, as on the planet).
+    material.uniforms.uElevationMin.value = water.enabled ? Math.max(elevationMin, water.seaLevel) : elevationMin;
     material.uniforms.uElevationMax.value = elevationMax;
     material.uniforms.uShadowsEnabled.value = shadowsEnabled ? 1 : 0;
     material.uniforms.uHeightMapGreenChannel.value = heightMapGreenChannel ? 1 : 0;
@@ -442,7 +494,17 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     elevationMax,
     shadowsEnabled,
     heightMapGreenChannel,
+    water.enabled,
+    water.seaLevel,
   ]);
+
+  // The water sheet (Seascape): placed at sea level over the chunk, reading the same height texture as the ground.
+  useEffect(() => {
+    const chunkWater = waterRef.current;
+    if (!chunkWater) return;
+    updateChunkWater(chunkWater, water, chunkSize, maxHeight, waterDeepest, heightMap, heightMapGreenChannel);
+    chunkWater.mesh.visible = water.enabled && heightMap !== null;
+  }, [water, waterDeepest, heightMap, heightMapGreenChannel, chunkSize, maxHeight]);
 
   // Grid spacing/visibility — mirrors SceneCanvas's own grid effect (rebuild
   // on spacing change, since cell size is baked into a shader uniform).

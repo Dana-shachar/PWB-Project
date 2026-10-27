@@ -11,7 +11,7 @@ import strokePathFragmentGlsl from '../shaders/strokePath.frag.glsl?raw'; // bru
 import minMaxReduceFragmentGlsl from '../shaders/minMaxReduce.frag.glsl?raw'; // elevation-range reduction pyramid, see getRegionMinMaxAsync()
 import elevationHistogramVertexGlsl from '../shaders/elevationHistogram.vert.glsl?raw'; // see getRegionPercentileRangeAsync()
 import elevationHistogramFragmentGlsl from '../shaders/elevationHistogram.frag.glsl?raw';
-import { HISTOGRAM_BINS, CLIP_PERCENT } from './elevationRange';
+import { HISTOGRAM_BINS, percentileRangeFromBins } from './elevationRange';
 
 // TODO(DS): arbitrary placeholder resolution — detail/generation-cost
 // tradeoff (see Dana's question 2026-09-14); lower this first if
@@ -397,6 +397,7 @@ export class HeightmapPipeline {
   private paintActiveIndex = new Map<string, number>();
   // The planet-wide fine detail strength patch bakes add (heightmap.frag.glsl planetDetail).
   private detailAmount = 0;
+  private shoreSeaLevel: number | null = null;
   private paintPlaceholder: THREE.DataTexture;
   // The stroke currently being drawn, if any — its whole point path is kept
   // here (not GPU-accumulated) and re-rendered fresh each dab by
@@ -424,6 +425,11 @@ export class HeightmapPipeline {
 
   setDetailAmount(amount: number): void {
     this.detailAmount = amount;
+  }
+
+  // The sea level Roughness fades out toward from both sides, or null with water off (heightmap.frag.glsl).
+  setShoreSeaLevel(seaLevel: number | null): void {
+    this.shoreSeaLevel = seaLevel;
   }
 
   constructor() {
@@ -483,6 +489,8 @@ export class HeightmapPipeline {
         // fade. Only a region (patch) bake sets it, see bakeRegionInto().
         uSampleSpacing: { value: 0 },
         uDetailAmount: { value: 0 },
+        uShoreEnabled: { value: 0 },
+        uShoreSeaLevel: { value: 0 },
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerHeightScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
@@ -579,6 +587,7 @@ export class HeightmapPipeline {
         uRangeMin: { value: 0 },
         uRangeMax: { value: 1 },
         uBinCount: { value: HISTOGRAM_BINS },
+        uAreaWeighted: { value: 0 },
       },
       blending: THREE.AdditiveBlending,
       depthTest: false,
@@ -768,6 +777,7 @@ export class HeightmapPipeline {
     // visible === undefined, and should default to visible (Dana, 2026-09-23).
     this.syncLayerUniforms(renderer, layers);
     uniforms.uRegionMode.value = 0;
+    uniforms.uSampleSpacing.value = 0; // no Roughness: with water on it never crosses sea level, so the readout stays exact
     renderer.setRenderTarget(this.renderTarget);
     renderer.render(this.scene, this.camera);
     renderer.setRenderTarget(null);
@@ -844,6 +854,8 @@ export class HeightmapPipeline {
     // Octaves finer than this grid can show are faded out (heightmap.frag.glsl).
     uniforms.uSampleSpacing.value = (max.x - min.x) / Math.max(1, target.width - 1);
     uniforms.uDetailAmount.value = this.detailAmount;
+    uniforms.uShoreEnabled.value = this.shoreSeaLevel === null ? 0 : 1;
+    uniforms.uShoreSeaLevel.value = this.shoreSeaLevel ?? 0;
 
     renderer.setRenderTarget(target);
     renderer.render(this.scene, this.camera);
@@ -1051,21 +1063,18 @@ export class HeightmapPipeline {
   // the result with the exact same bin-count/clip-percent/cumulative-count
   // logic elevationRange.ts's own CPU version already uses (imported, not
   // duplicated), so the two can't drift apart.
-  async getRegionPercentileRangeAsync(renderer: THREE.WebGLRenderer, sourceTarget: THREE.WebGLRenderTarget): Promise<{ min: number; max: number }> {
-    // The literal extremes aren't the answer, they're the histogram's own
-    // bucketing bounds — a real value has to be known before it can be
-    // binned, the same chicken-and-egg a real auto-exposure histogram also
-    // has to resolve, against a known full range first.
+  // The region's literal min and max plus a 256-bin histogram of its heights, built on the GPU with only the
+  // bins read back, asynchronously. null for flat data. areaWeighted counts whole-globe samples by their area.
+  async getRegionHistogramAsync(renderer: THREE.WebGLRenderer, sourceTarget: THREE.WebGLRenderTarget, areaWeighted = false): Promise<{ min: number; max: number; bins: Float32Array } | null> {
     const { min: trueMin, max: trueMax } = await this.getRegionMinMaxAsync(renderer, sourceTarget);
-    if (!Number.isFinite(trueMin) || !Number.isFinite(trueMax) || trueMax <= trueMin) {
-      return { min: trueMin, max: trueMax };
-    }
+    if (!Number.isFinite(trueMin) || !Number.isFinite(trueMax) || trueMax <= trueMin) return null;
 
     const histogramTarget = new THREE.WebGLRenderTarget(HISTOGRAM_BINS, 1, { type: THREE.FloatType });
     const uniforms = this.histogramMaterial.uniforms;
     uniforms.uSource.value = sourceTarget.texture;
     uniforms.uRangeMin.value = trueMin;
     uniforms.uRangeMax.value = trueMax;
+    uniforms.uAreaWeighted.value = areaWeighted ? 1 : 0;
 
     // A freshly created render target's own contents are undefined until
     // cleared — unlike the min/max pyramid's full-screen quad (which
@@ -1100,7 +1109,7 @@ export class HeightmapPipeline {
       function poll() {
         const status = gl.clientWaitSync(sync, 0, 0);
         if (status === gl.WAIT_FAILED) {
-          reject(new Error('getRegionPercentileRangeAsync: fenceSync wait failed'));
+          reject(new Error('getRegionHistogramAsync: fenceSync wait failed'));
         } else if (status === gl.TIMEOUT_EXPIRED) {
           requestAnimationFrame(poll);
         } else {
@@ -1116,31 +1125,23 @@ export class HeightmapPipeline {
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     gl.deleteBuffer(pbo);
     histogramTarget.dispose();
+    const bins = new Float32Array(HISTOGRAM_BINS);
+    for (let i = 0; i < HISTOGRAM_BINS; i++) bins[i] = rgba[i * 4]; // R, the only channel the fragment shader writes
+    return { min: trueMin, max: trueMax, bins };
+  }
 
-    // Same cumulative-count walk as elevationRange.ts's computeElevationRange,
-    // just fed from a GPU-built histogram (float counts, additive-blended)
-    // instead of one built by counting a CPU array directly — the total
-    // sample count is fixed and known (the point cloud's own size), not
-    // derived from the data, since every point always lands in exactly one
-    // bin regardless of the source's real content.
-    const clipCount = this.histogramSampleCount * CLIP_PERCENT;
-    const binWidth = (trueMax - trueMin) / HISTOGRAM_BINS;
-    let cumulative = 0;
-    let lowBin = 0;
-    for (; lowBin < HISTOGRAM_BINS; lowBin++) {
-      cumulative += rgba[lowBin * 4]; // R — the only channel the fragment shader writes
-      if (cumulative >= clipCount) break;
+  async getRegionPercentileRangeAsync(renderer: THREE.WebGLRenderer, sourceTarget: THREE.WebGLRenderTarget): Promise<{ min: number; max: number }> {
+    const histogram = await this.getRegionHistogramAsync(renderer, sourceTarget);
+    if (!histogram) {
+      const { min, max } = await this.getRegionMinMaxAsync(renderer, sourceTarget);
+      return { min, max };
     }
-    cumulative = 0;
-    let highBin = HISTOGRAM_BINS - 1;
-    for (; highBin >= 0; highBin--) {
-      cumulative += rgba[highBin * 4];
-      if (cumulative >= clipCount) break;
-    }
-    const clippedMin = trueMin + lowBin * binWidth;
-    const clippedMax = trueMin + (highBin + 1) * binWidth;
-    if (clippedMin >= clippedMax) return { min: trueMin, max: trueMax };
-    return { min: clippedMin, max: clippedMax };
+    return percentileRangeFromBins(histogram.bins, histogram.min, histogram.max);
+  }
+
+  // The whole-globe bake, for its height statistics.
+  getGlobeTarget(): THREE.WebGLRenderTarget {
+    return this.renderTarget;
   }
 
   // Creates a paint target for every current layer and disposes orphans.

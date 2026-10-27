@@ -5,6 +5,9 @@ import type { ProjectSummary } from '../firebase/storage';
 import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
 import { ColorRampEditor } from './panels/ColorRampEditor';
 import type { ColorStop } from '../planet/colorRamp';
+import type { WaterSettings } from '../planet/planetControls';
+import { depthToRampPosition, landShareAt, rampPositionToDepth, type HeightDistribution } from '../planet/seaLevel';
+import { setWaterDebugMode, waterDebugMode, WATER_DEBUG_OPTIONS } from '../planet/waterDebug'; // TEMP debug
 import { MAX_MAX_ERROR_PIXELS, maxErrorPixelsToResolution, MIN_MAX_ERROR_PIXELS, resolutionToMaxErrorPixels } from '../planet/patch';
 
 // 'voxel' only affects the land-chunk view for now — a display style, not a
@@ -98,6 +101,10 @@ interface PanelProps {
   heightScale: number;
   planetElevationRange: { min: number; max: number };
   chunkElevationRange: { min: number; max: number };
+  // Sea level and water look (planet/planetControls.ts), and the planet's heights for the land share readout.
+  water: WaterSettings;
+  onWaterChange: (changes: Partial<WaterSettings>) => void;
+  heightDistribution: HeightDistribution | null;
   // Planet Resolution: a detail bias, 1 is automatic (planet/planetPatches.ts).
   maxErrorPixels: number;
   onMaxErrorPixelsChange: (value: number) => void;
@@ -243,6 +250,9 @@ export function Panel({
   onChunkSizeChange,
   heightScale,
   planetElevationRange,
+  water,
+  onWaterChange,
+  heightDistribution,
   chunkElevationRange,
   maxErrorPixels,
   onMaxErrorPixelsChange,
@@ -261,6 +271,14 @@ export function Panel({
   // how the rest of this panel's Accordions already behave (Project
   // Settings and Edit can both be open at once).
   const [expandedStages, setExpandedStages] = useState<Set<PipelineStage>>(new Set());
+  // Raw height to the planet's meters, the same conversion the color ramp uses for the planet.
+  const planetMetersPerHeight = (heightScale / 100) * radiusKm * 1000;
+  const [waterDebug, setWaterDebug] = useState(String(waterDebugMode)); // TEMP debug
+  // With water on, the land ramp spans sea level to the top, the cartographic split (hypsometric above, bathymetric below).
+  const viewElevationRange = activeViewContext === 'landChunk' ? chunkElevationRange : planetElevationRange;
+  const landRampRange = water.enabled ? { min: Math.max(viewElevationRange.min, water.seaLevel), max: viewElevationRange.max } : viewElevationRange;
+  // Raw depth from sea level down to the planet's lowest ramp point, which the water ramp spans.
+  const waterDepthRange = Math.max(0.0001, water.seaLevel - planetElevationRange.min);
 
   function toggleExpanded(stage: PipelineStage) {
     setExpandedStages((previous) => {
@@ -275,7 +293,7 @@ export function Panel({
     <div className="panel-outer" style={{ width }}>
       <div className="panel-content">
         <div className="panel-section">
-          <Accordion title="Project Settings">
+          <Accordion title="Project Settings" defaultOpen>
             {/* Click-to-edit — replaces the old prompt-based Rename button,
                 auto-saves under the new name via the existing debounced save. */}
             <EditableText className="project-name-text" value={currentPlanetName ?? ''} onCommit={onRenameProject} />
@@ -285,7 +303,7 @@ export function Panel({
                 as subordinate to "Project Settings" (Dana, 2026-09-23 — the
                 two read as equal-weight siblings without it). Same row style
                 as the Layers list (ui/NoisePanel.tsx), click a row to load it. */}
-            <Accordion title="My Projects" defaultOpen={false} nested>
+            <Accordion title="My Projects" nested>
               {projects.map((project) => (
                 <div
                   key={project.id}
@@ -324,7 +342,7 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          <Accordion title="Edit">
+          <Accordion title="Edit" defaultOpen>
             <div className="panel-btn-row">
               {/* Mirrors the Cmd+Z/Ctrl+Z shortcut (see map/2Dbrush.ts) —
                   undoes the single most recent paint stroke, regardless of
@@ -555,19 +573,93 @@ export function Panel({
               disabled={activeViewContext === null}
               description="Small-scale bumps added to the terrain's shape under your layers. Part of the terrain itself, not display quality: it shows up as you zoom in close enough to see it. 0 turns it off."
             />
-            {/* Every color control grouped under its own named subsection
-                (Dana, 2026-10-21), not loose in Planet's own body. */}
+            {/* Water's shape controls sit with the terrain; every color control is in Color below (Dana, 2026-10-26).
+                Sea level is stored as a raw height so both views share one coastline; shown in planet meters. */}
+            {/* TEMP debug: remove with planet/waterDebug.ts */}
+            <Select
+              label="Debug (temp)"
+              value={waterDebug}
+              onChange={(value) => {
+                setWaterDebug(value);
+                setWaterDebugMode(Number(value));
+              }}
+              options={WATER_DEBUG_OPTIONS}
+              description="Temporary: shows one ingredient of the water color at a time."
+            />
+            <Toggle
+              label="Water"
+              value={water.enabled}
+              onChange={(enabled) => onWaterChange({ enabled })}
+              description="Fills everything below sea level with water, on the planet and in the land chunk."
+            />
+            <Slider
+              label={heightDistribution ? `Sea level · ${Math.round(landShareAt(heightDistribution, water.seaLevel) * 100)}% land` : 'Sea level'}
+              value={water.seaLevel * planetMetersPerHeight}
+              onChange={(meters) => onWaterChange({ seaLevel: meters / Math.max(planetMetersPerHeight, 0.0001) })}
+              min={Math.floor((heightDistribution?.min ?? planetElevationRange.min) * planetMetersPerHeight)}
+              max={Math.ceil((heightDistribution?.max ?? planetElevationRange.max) * planetMetersPerHeight)}
+              step={1}
+              precision={0}
+              unit="m"
+              disabled={!water.enabled}
+              description="The height the water fills up to, in the planet's meters. The share of the surface left as land is shown in the label."
+            />
+            <Slider
+              label="Clarity"
+              value={water.clarity}
+              onChange={(clarity) => onWaterChange({ clarity })}
+              min={0.01}
+              max={2}
+              step={0.01}
+              precision={2}
+              disabled={!water.enabled}
+              description="How far light reaches into the water, as a share of the deepest water. Higher shows more of the seabed."
+            />
+            <Slider
+              label="Foam"
+              value={water.foamWidth}
+              onChange={(foamWidth) => onWaterChange({ foamWidth })}
+              min={0}
+              max={0.2}
+              step={0.005}
+              precision={3}
+              disabled={!water.enabled}
+              description="How much foam: along the shore (as a share of the deepest water), on wave crests, and in scattered whitecaps you can see from far away. Shore foam on the planet shows only when zoomed in close. 0 turns it off."
+            />
+            <Slider
+              label="Wave detail"
+              value={water.waveDetail}
+              onChange={(waveDetail) => onWaterChange({ waveDetail })}
+              min={1}
+              max={5}
+              step={1}
+              precision={0}
+              disabled={!water.enabled}
+              description="How many layers of waves the water shows: 1 is simple and graphic, 5 is the original detailed sea."
+            />
+            <Slider
+              label="Wave size"
+              value={water.waveScale}
+              onChange={(waveScale) => onWaterChange({ waveScale })}
+              min={1}
+              max={30}
+              step={0.5}
+              precision={1}
+              disabled={!water.enabled}
+              description="How large the waves are: 1 is about 40 m long, as in the original sea, higher reads better from far away."
+            />
+            {/* Every color control, land and water, in one place (Dana, 2026-10-26). */}
             <Accordion title="Color" nested>
               {/* Rotates a hue, it doesn't pick three independent random RGB
                   values — see planetControls.ts's randomTerrainPalette() for
                   the conventions this follows. At the top (Dana, 2026-10-21). */}
               <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={onRandomizeColors}>
                 <PaletteIcon /> Randomize colors
-                <span className="ui-tooltip">Rotates a related hue for Base/Mid/High, not independent colors</span>
+                <span className="ui-tooltip">Rotates a related hue for the land, and picks the water's ramp from the hues the land left unused</span>
               </button>
-              {/* Gates the whole group below (Dana, 2026-10-14) — a
-                  labelled placeholder for Stage 11's real height+climate+
-                  biome color shader (ROADMAP.md), not that shader itself. */}
+              {/* Plain headers, not a third menu level (Dana, 2026-10-26: it costs space and isn't in the design system). */}
+              <span className="panel-section-title">Land</span>
+              {/* Gates the land ramp (Dana, 2026-10-14). */}
               <Toggle
                 label="Color by elevation"
                 value={colorByElevation}
@@ -582,8 +674,23 @@ export function Panel({
                 rampActive={colorByElevation}
                 /* Same view branching as Radius/Size: the chunk's own range and
                    footprint when it's in view, otherwise the planet's. */
-                elevationRange={activeViewContext === 'landChunk' ? chunkElevationRange : planetElevationRange}
+                elevationRange={landRampRange}
                 elevationScaleMeters={(heightScale / 100) * (activeViewContext === 'landChunk' ? chunkSize : radiusKm) * 1000}
+              />
+              <div className="panel-section-divider" />
+              <span className="panel-section-title">Water</span>
+              {/* The land's ramp editor, by depth: the first stop is the shore, the last the deepest water. */}
+              <ColorRampEditor
+                baseColor={water.colorStops[0]?.color ?? '#ffffff'}
+                onBaseColorChange={() => {}}
+                stops={water.colorStops}
+                onStopsChange={(colorStops) => onWaterChange({ colorStops })}
+                rampActive
+                elevationRange={{ min: 0, max: waterDepthRange }}
+                elevationScaleMeters={planetMetersPerHeight}
+                positionLabel="Depth (m)"
+                positionToMeters={(position) => rampPositionToDepth(position, water.clarity) * waterDepthRange * planetMetersPerHeight}
+                metersToPosition={(meters) => depthToRampPosition(meters / Math.max(waterDepthRange * planetMetersPerHeight, 0.0001), water.clarity)}
               />
             </Accordion>
           </Accordion>

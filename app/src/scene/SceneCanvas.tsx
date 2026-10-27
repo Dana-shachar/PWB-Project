@@ -8,7 +8,11 @@ import type { SharedViewportRenderer } from './sharedViewportRenderer';
 import { planet, planetGeometry } from '../planet/mesh';
 import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
-import { computeElevationRange } from '../map/elevationRange';
+import { percentileRangeFromBins } from '../map/elevationRange';
+import { buildHeightDistribution, type HeightDistribution } from '../planet/seaLevel';
+import { waterDebugMode } from '../planet/waterDebug'; // TEMP debug
+import { isRippleMapReady } from '../planet/rippleMap';
+import { WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { ElevationData } from '../voxel/chunkGrid';
 import { clampPatchSamples, clampPatchTextureResolution, faceIndex, PATCH_BORDER_TEXELS, patchContaining, type TerrainPatch } from '../planet/patch';
 import { PlanetPatchRenderer } from '../planet/PlanetPatchRenderer';
@@ -160,6 +164,9 @@ const patchViewDirection = new THREE.Vector3();
 // fixed density now that the Resolution slider is a detail bias.
 const OLD_MESH_SEGMENTS = 64;
 
+// The planet's height statistics (ramp range, % land) wait for a slider to pause this long, as the chunk does.
+const ELEVATION_STATS_DEBOUNCE_MS = 150;
+
 interface SceneCanvasProps {
   radius: number; // planet radius, in scene units (already converted from km by the caller)
   maxErrorPixels: number; // the Resolution slider: the largest screen error in pixels before a patch splits, lower is sharper (see planet/planetPatches.ts)
@@ -192,6 +199,11 @@ interface SceneCanvasProps {
   // Reports the terrain's real elevation range up to the UI each time it's
   // recomputed, so the color ramp can show its stops in meters.
   onElevationRangeChange?: (range: { min: number; max: number }) => void;
+  // The planet's area-weighted height distribution, for the land share readout (planet/seaLevel.ts).
+  onHeightDistributionChange?: (distribution: HeightDistribution | null) => void;
+  water: WaterSettings;
+  // The settled sea level Roughness fades toward, or null with water off (planet/planetControls.ts).
+  shoreSeaLevel: number | null;
 }
 
 // Renders nothing of its own — App.tsx's .planet-viewport div is both this
@@ -224,6 +236,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     viewportRef,
     sharedRenderer,
     onElevationRangeChange,
+    onHeightDistributionChange,
+    water,
+    shoreSeaLevel,
   },
   handleRef,
 ) {
@@ -257,6 +272,18 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     elevationMax: 0.5,
     displacementAmplitude: 0,
     radius: 20,
+    waterEnabled: 0,
+    seaLevel: 0,
+    waterStops: DEFAULT_COLOR_STOPS,
+    waterClarity: 0.4,
+    skyColor: new THREE.Color(WATER_SKY_COLOR),
+    waterShininess: WATER_SHININESS,
+    foamWidth: 0,
+    time: 0,
+    rippleEnabled: 0,
+    viewWidthPixels: 1000,
+    waveDetail: 5,
+    waveScale: 4,
     maxErrorPixels: AUTO_MAX_ERROR_PIXELS,
     viewHeightPixels: 800,
     fieldOfViewRadians: Math.PI / 4,
@@ -276,6 +303,10 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   // Same "latest prop" pattern, since updateElevationRange runs from effects.
   const onElevationRangeChangeRef = useRef(onElevationRangeChange);
   onElevationRangeChangeRef.current = onElevationRangeChange;
+  const onHeightDistributionChangeRef = useRef(onHeightDistributionChange);
+  onHeightDistributionChangeRef.current = onHeightDistributionChange;
+  const elevationRequestIdRef = useRef(0);
+  const elevationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Shared by applyStrokeHistory() and loadProject() below: replays each of
   // `layers`' stroke history (grouped by layer) and recomposites. Callers
@@ -313,15 +344,25 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   // disappears"). See map/elevationRange.ts. Runs only where the heightmap
   // itself was just rebuilt, not every frame.
   function updateElevationRange(renderer: THREE.WebGLRenderer, heightmapPipeline: HeightmapPipeline, planetMesh: THREE.Mesh): void {
-    const elevation = heightmapPipeline.getElevationData(renderer);
-    const range = computeElevationRange(elevation.data);
-    const material = planetMesh.material as THREE.ShaderMaterial;
-    material.uniforms.uElevationMin.value = range.min;
-    material.uniforms.uElevationMax.value = range.max;
-    sharedUniformsRef.current.elevationMin = range.min;
-    sharedUniformsRef.current.elevationMax = range.max;
-    planetPatchRendererRef.current?.applyShared(sharedUniformsRef.current);
-    onElevationRangeChangeRef.current?.({ min: range.min, max: range.max });
+    // Debounced, then read from a GPU histogram asynchronously (the land chunk's method, [B22]); a slower, older
+    // answer arriving after a newer request is dropped.
+    if (elevationDebounceRef.current !== null) clearTimeout(elevationDebounceRef.current);
+    elevationDebounceRef.current = setTimeout(() => {
+      elevationDebounceRef.current = null;
+      const requestId = ++elevationRequestIdRef.current;
+      void heightmapPipeline.getRegionHistogramAsync(renderer, heightmapPipeline.getGlobeTarget(), true).then((histogram) => {
+        if (requestId !== elevationRequestIdRef.current || !histogram) return;
+        const range = percentileRangeFromBins(histogram.bins, histogram.min, histogram.max);
+        const material = planetMesh.material as THREE.ShaderMaterial;
+        material.uniforms.uElevationMin.value = range.min;
+        material.uniforms.uElevationMax.value = range.max;
+        sharedUniformsRef.current.elevationMin = range.min;
+        sharedUniformsRef.current.elevationMax = range.max;
+        planetPatchRendererRef.current?.applyShared(sharedUniformsRef.current);
+        onElevationRangeChangeRef.current?.({ min: range.min, max: range.max });
+        onHeightDistributionChangeRef.current?.(buildHeightDistribution(histogram));
+      });
+    }, ELEVATION_STATS_DEBOUNCE_MS);
   }
 
   useImperativeHandle(
@@ -678,7 +719,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         sharedUniformsRef.current.frustum = patchFrustum;
         perspectiveCamera.getWorldDirection(patchViewDirection);
         sharedUniformsRef.current.viewDirection = patchViewDirection;
-        planetPatches.applyShared(sharedUniformsRef.current);
+        sharedUniformsRef.current.waterDebug = waterDebugMode; // TEMP debug
+        sharedUniformsRef.current.time = performance.now() / 1000;
+        sharedUniformsRef.current.rippleEnabled = isRippleMapReady() ? 1 : 0;
+        sharedUniformsRef.current.viewWidthPixels = Math.max(1, (viewportElement?.clientWidth ?? 1) * window.devicePixelRatio);
+        planetPatches.applyFrame(sharedUniformsRef.current);
         // Internally throttled by how far the camera's actually moved — see
         // PlanetPatchRenderer.updatePatches — cheap to call every frame.
         planetPatches.updatePatches(perspectiveCamera.position, webglRenderer, heightmapPipeline, layersRef.current, sharedUniformsRef.current);
@@ -785,8 +830,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         wireframeStaleRef.current = true;
       }
 
-      // updatePatches picks the radius up on the next animate() frame.
+      // updatePatches picks the radius up on the next animate() frame; materials no longer refresh every frame.
       sharedUniformsRef.current.radius = radius;
+      planetPatchRendererRef.current?.applyShared(sharedUniformsRef.current);
     }, 150);
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- displayMode is read fresh when the timeout fires (same debounce pattern saveProject.ts already uses), not a reason to restart this effect's own debounce
@@ -864,6 +910,29 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     colorByElevation,
     colorStops,
   ]);
+
+  // Sea level and water look, on the patches and on the old single mesh's vertex shader.
+  useEffect(() => {
+    const shared = sharedUniformsRef.current;
+    shared.waterEnabled = water.enabled ? 1 : 0;
+    shared.seaLevel = water.seaLevel;
+    shared.waterStops = water.colorStops;
+    shared.waterClarity = water.clarity;
+    shared.foamWidth = water.foamWidth;
+    shared.waveDetail = water.waveDetail;
+    shared.waveScale = water.waveScale;
+    planetPatchRendererRef.current?.applyShared(shared);
+  }, [water]);
+
+  // Roughness fades toward the sea level (heightmap.frag.glsl), so a settled sea level change re-bakes the shown patches.
+  useEffect(() => {
+    const webglRenderer = webglRendererRef.current;
+    const heightmapPipeline = heightmapPipelineRef.current;
+    if (!webglRenderer || !heightmapPipeline) return;
+    heightmapPipeline.setShoreSeaLevel(shoreSeaLevel);
+    if (detailAmount > 0) planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- detailAmount and layers changes re-bake through the layers effect
+  }, [shoreSeaLevel]);
 
   // Display mode: toggles the wireframe overlay's visibility (it renders
   // alongside the shaded surface, doesn't replace it). Also switches which

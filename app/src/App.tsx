@@ -55,6 +55,7 @@ function App() {
     planetControls.heightScale,
     erosion.result,
     planetControls.detailAmount,
+    planetControls.shoreSeaLevel,
   );
   // The chunk's patches bake through the planet view's heightmap pipeline.
   const bakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget) => sceneHandleRef.current?.bakePatchInto(patch, target) ?? false;
@@ -200,6 +201,9 @@ function App() {
         heightScale={planetControls.heightScale}
         planetElevationRange={planetControls.elevationRange}
         chunkElevationRange={{ min: landChunk.elevationMin, max: landChunk.elevationMax }}
+        water={planetControls.water}
+        onWaterChange={planetControls.updateWater}
+        heightDistribution={planetControls.heightDistribution}
         activeStage={activeStage}
         onStageChange={setActiveStage}
         stageEnabled={stageEnabled}
@@ -279,6 +283,9 @@ function App() {
                 colorByElevation={planetControls.colorByElevation}
                 colorStops={planetControls.colorStops}
                 onElevationRangeChange={planetControls.setElevationRange}
+                onHeightDistributionChange={planetControls.setHeightDistribution}
+                water={planetControls.water}
+                shoreSeaLevel={planetControls.shoreSeaLevel}
               />
             </div>
             {landChunk.viewMode === 'split' && <div className="viewport-divider" onMouseDown={landChunk.startResize} />}
@@ -324,6 +331,8 @@ function App() {
                 maxErrorPixels={planetControls.effectiveMaxErrorPixels}
                 bakePatch={bakeChunkPatch}
                 groundHeights={landChunk.groundHeights}
+                water={planetControls.water}
+                waterDeepest={planetControls.elevationRange.min}
               />
             </div>
             <ViewModeControl viewMode={landChunk.viewMode} onChange={landChunk.setViewMode} />

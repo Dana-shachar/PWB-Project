@@ -47,6 +47,7 @@
   --font-size-xs: 10px;
   --gap-sm: 8px;
   --gap-md: 12px;
+  --gap-lg: 20px; /* between nested accordions, Dana 2026-10-26 */
   --panel-radius: 4px;
   --panel-padding: 16px;
   --panel-max-width: 360px;
@@ -1012,6 +1013,16 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 .ui-accordion--nested {
   padding-left: var(--gap-md);
   border-left: 1px solid var(--color-divider);
+}
+/* A divider between parts inside an accordion (Color's Land and Water) gets the larger gap on both sides (Dana, 2026-10-26). */
+.ui-accordion-content > .panel-section-divider {
+  margin: calc(var(--gap-lg) - var(--gap-md)) 0;
+}
+/* A divider and a larger gap above each nested accordion, so stacked subsections read apart (Dana, 2026-10-26). */
+.ui-accordion-content > .ui-accordion--nested {
+  margin-top: calc(var(--gap-lg) - var(--gap-md));
+  padding-top: var(--gap-lg);
+  border-top: 1px solid var(--color-divider);
 }
 
 /* ── Modifier tabs (ui/NoisePanel.tsx's Modifiers section) ─── */

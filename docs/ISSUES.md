@@ -409,6 +409,68 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Built: black through a new design-system token (`--color-tooltip-bg`), text wraps at 240px, and the tooltip uses a fixed position clamped to the window.
 - One shared placement function (`placeTooltip` in `ui/UIElements.tsx`) and one delegated listener cover every tooltip.
 
+### [B63] Walk mode goes underwater and can't move from there · `wrong but workable`
+**🔴 Open** · **Where:** `scene/walkMode.ts` (eye height from `sampleHeight`), `voxel/chunkWater.ts`
+
+**What happens**
+- Dana, 2026-10-26: entering the person view over water puts the eye 1.7 m above the seabed, under the water surface, and walking does not work from there.
+- 💡 Likely fix, not planned yet: the eye follows the higher of the ground and the water surface (floating at the surface, as games keep a swimmer at the surface). The "can't walk" part is not diagnosed.
+
+### [B62] Every slider lags · `wrong but workable`
+**✅ Fixed 2026-10-26, Dana: "good enough"** · **Where:** `scene/SceneCanvas.tsx`, `map/heightmap.ts`, `planet/planetPatchMesh.ts`, `planet/PlanetPatchRenderer.ts`
+
+**What happens**
+- Dana, 2026-10-26: performance is bad and every slider lags. Not yet known whether it predates the water work.
+- Suspects, unconfirmed: every shown patch re-bakes on each change at Resolution 8192; every frame, every planet patch rebuilds its color ramp arrays (`applySharedUniforms`, now two ramps); the sea level slider used to re-bake everything (removed with option B).
+- Measured with `TEMP perf` logs: the whole-globe readback (`getElevationData`, 1024×512, synchronous) took 250 to 265 ms per slider tick, frames froze for 700 to 975 ms, and the per-frame ramp rebuild cost 4 to 8 ms. Orbiting with no slider gave steady 55 ms frames with only about 5 ms of CPU work, so the rest is the GPU (Resolution 8192, unconfirmed).
+- The cause repeated a problem already fixed for the chunk in `[B22]`. Fixed the same way: the planet's stats come from the GPU histogram (`getRegionHistogramAsync`, area-weighted for the globe), read asynchronously with a request ID, 150 ms after a slider pauses. Per-frame updates copy only the eye position (`applyFrameUniforms`); ramps are rebuilt once per change (`buildPatchRampArrays`).
+- Rule added to `.claude/CLAUDE.md`: reuse this repo's performance fixes before adding per-tick or per-frame work.
+- 📌 Not checked: whether the steady 55 ms frames while orbiting go away with Auto detail on. The `TEMP perf` logs are removed.
+
+### [B61] Water too dark, opaque at a slant, and "% land" wrong with Roughness · `wrong but workable`
+**🟡 Fixed 2026-10-26, untested** · **Where:** `shaders/water.glsl`, `shaders/planetPatch.frag.glsl`, `shaders/chunkWater.frag.glsl`, `voxel/chunkWater.ts`, `shaders/heightmap.frag.glsl`
+
+**What happened**
+- Fresnel raised the water's opacity with nothing to reflect, so slanted water went solid and dark. The deep color times the lighting was near black on the planet.
+- The "% land" readout and the slider range come from the whole-globe bake, which has no Roughness. At Roughness 0.37 thousands of bumps poked above the water, and because Roughness fades in with zoom the coastline changed with zoom.
+
+**Fix**
+- Schlick Fresnel blends in a sky color (`WATER_SKY_COLOR`, a placeholder until the atmosphere step) and no longer touches opacity. A glossier glint (`WATER_SHININESS`). A depth color ramp with the land's ramp editor. Per-channel absorption tints the seabed; the chunk draws it as a multiply pass then an additive pass.
+- Tried and reverted (2026-10-26): Roughness faded to zero at sea level (option B), to keep the coastline fixed at every zoom. It flattened the whole seabed and most land, because on Dana's planet Roughness (0.37 to 0.47) swings about ten times the layers' own relief (about 0.05 raw). Dana: "you shouldnt have touched it".
+- Option A (Roughness counted in the readout) was built, then replaced the same evening by a two-sided B (Dana: "b was better"): Roughness fades only near sea level, from both sides, over twice its largest swing, so it never crosses the coastline and the seabed and inland keep full detail. The readout is exact again. Sea level changes re-bake after a 150 ms pause (`shoreSeaLevel` in `planetControls.ts`). Untested.
+- 🟡 The water did not match its ramp. The debug view (`planet/waterDebug.ts`, TEMP) showed two causes: the planet's water normal faced a different way from the land's, so the water's own color got almost no light; and the seabed was tinted but never faded by depth, so the land ramp showed through at every depth. Fixed, untested: the water normal is the land's `heightfieldNormal` with no slope, and one shared `waterSurfaceColor` fades the seabed by transmittance while the water's color fades in.
+- Dana's retest (2026-10-26): Roughness under water looked wrong ("no rough patches where there's supposed to be water"), the sea level could not reach the top, and the water colors blended poorly. Built, untested: no Roughness under water again (the one-sided fade); the slider goes to the true highest point; the water ramp is spaced by light remaining (Beer-Lambert, NOAA's ocean light zones); with water on, the land ramp starts at sea level (the cartographic hypsometric/bathymetric split).
+- Water plan built 2026-10-26, untested: shore foam (both views, Foam slider), real reflection and refraction on the chunk (three.js Reflector and Refractor, two extra half-size renders per frame), ripples on the planet only within about 30 km of the eye. Gerstner waves deferred (`REFERENCES.md`). Water's shape controls now sit under Roughness and every color control under Color (Land and Water parts).
+- Dana: the chunk water "looks even worse", the foam line too sharp, no reflection. Replaced (2026-10-26, untested) the hand-built chunk water with three.js's own `Water` (the ocean example), used as-is. On the planet the foam is softer and shows only up close, and the glint has its own strength (`WATER_GLINT_STRENGTH`), since the Scene's Specular at 0 had switched it off. Color's Land and Water parts are plain headers now.
+- Dana: three.js `Water` looked the same, a sharp line at the shore, weak ripples, and the Foam slider did nothing on the chunk ("foam is both on shore and on top of waves"). Replaced (2026-10-26, untested) by a port of TDM's Seascape (`shaders/oceanWaves.glsl`), recolored by the water ramp, see-through in the shallows, with shore and crest foam and a Wave detail setting. The planet's white coastline is still unexplained: debug modes 6 (foam) and 7 (glint) were added to identify it.
+- Dana: from a distance it looked bad (speckles, a foam "grid"), only fine up close; stripes up close; the planet water too basic. Built (2026-10-26, untested): Seascape's own distance smoothing restored (I had replaced it), Bruneton's far-distance glare approximated, sporadic whitecaps visible from afar, a light haze, a Wave size setting, the sine hash replaced to remove the stripes, and the planet ocean moved onto Seascape at planet scale. The planet's old shore line code is gone, so the white coastline needs a recheck.
+- Dana: the planet "too much", big white lumps on the chunk out of sync with wave size, waves idle and predictable, no waves breaking on the shore, planet sliders seem to do nothing. Built (2026-10-26, untested): the separate whitecap pattern removed; foam now comes from the wave crests and averages out with distance (Dupuy & Bruneton 2012), so it follows Wave size and Wave detail on both views; currents via a procedural flow map (Vlachos 2010) and a different drift per wave layer; foam bands breaking toward the shore (depth as distance to shore).
+- Dana: crest foam still grid-like, the chunk's fade too strong, and the doubled wave cost. Built (2026-10-26, untested): crest foam by halftoning (Yingst et al. 2011) so it clumps; band-limiting (Quilez) drops octaves smaller than a pixel, and currents move only the two largest octaves; the far smoothing starts later and the haze is weakened to 200 km.
+- Dana's review (2026-10-26, 23:00): the planet needs more fading from orbit and its waves look too structured; the chunk is over-structured (evenly spaced foam specks); the default shine is far too strong (it is Seascape's own highlight, not the Scene light, and has no slider); up close too much detail; one texture layer does not move (the halftone foam mask is fixed in place by design).
+- ❓ **Pending plan, waiting for Dana's go:**
+  1. A water Shine slider (`shine` in `WaterSettings`) scaling Seascape's highlight, lower default.
+  2. The foam mask moves with the water (currents and drift) and has larger clusters (departs from the paper's fixed mask, to note).
+  3. Patchy foam: a slow large-scale pattern lowers foam in most areas (inferred; loosely Tessendorf et al. 2023 on whitecaps and wind, summary only).
+  4. Less regular waves: stronger currents plus a slow large bend of the wave coordinates from the same noise field (inferred, tunable).
+  5. Planet: a much smaller wave scale of its own (`PLANET_OCEAN_UNIT_KM`) so waves band-limit into the glare from orbit and appear on zoom; Wave size becomes relative there.
+  6. Wave detail default 3 instead of 5.
+- ⚠️ The land's light elevation is −4.30, and the land's normal may be flipped with the light set to compensate. Not checked.
+- ⚠️ The land is lit with view-space normals against a world-space light direction (`normalMatrix` in `planetPatch.frag.glsl` and `chunk.frag.glsl`). Water matches it, but this may make lighting shift as the camera turns. Not checked on screen.
+
+### [B60] Erosion keeps its own sea level, separate from the planet's water · `wrong but workable`
+**❓ Open, Dana's call** · **Where:** `erosion/erosionControls.ts` (`seaLevel`), `planet/planetControls.ts` (`water.seaLevel`)
+
+**What happens**
+- The Erosion panel has its own Sea level control, added before water existed. Now the planet has one too, so there are two values for the same idea.
+- Not changed, since erosion is paused. ❓ Should erosion read the planet's sea level instead?
+
+### [B59] The planet and the chunk convert height to meters differently · `wrong but workable`
+**🔴 Open** · **Where:** `ui/Panel.tsx` (`elevationScaleMeters`), `voxel/landChunk.ts` (`maxHeight`)
+
+**What happens**
+- The same raw height is a different number of meters in each view: Height % times the radius on the planet, times the chunk's size on the chunk. The color ramp's meters change when the view changes.
+- Water avoids it by storing sea level as a raw height, so both views draw the same coastline, and the slider always shows planet meters. The mismatch itself is not fixed.
+
 ### [B58] Walk mode (person view) test fixes, and stalling · `wrong but workable`
 **🟡 Built 2026-10-26, tested by Dana ("good enough"); 🔴 stalling open** · **Where:** `scene/walkMode.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`, `scene/Gumball.tsx`, `scene/sharedGumball.ts`
 
@@ -425,7 +487,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - 🔴 Stalling (Dana, 2026-10-26), open. Measured: `walkMode.update` takes 9 to 11 ms a frame, nearly all of it the blocking texture read in `sampleHeight` (patch updates average 0.4 to 1.4 ms, with 11 to 16 ms spikes; worst frame gaps 31 to 52 ms).
 - Tried and reverted (2026-10-26): an asynchronous read (`requestHeight`/`latestHeight`, three.js `readRenderTargetPixelsAsync`). The per-frame cost fell to 0.27 ms and the frame rate rose to about 120 fps, but Dana felt no improvement and found it worse, and it broke the click march: three's async read keeps a pixel buffer bound until it finishes, so the click's immediate read failed with `readPixels: PIXEL_PACK buffer should not be bound`. A late reading also makes the eye lag and bob, and an expired one falls back to the coarse copy, about 6.6 m off.
 - Next option, not built (needs Dana's go): keep a finer CPU height copy that follows the walker (a window about 600 m wide at about 1 m spacing, refreshed when the walker is 200 m from its center), read by both the eye and the click march with no GPU reads. 📚 Unity reads terrain heights from CPU data (`Terrain.SampleHeight`). Tradeoff: a small hitch at each refresh, and detail finer than about 1 m is missing. Dana was also asked what the stalling looks like (freezes, bobbing, or choppiness) and has not answered.
-- ❓ Click distance (Dana, 2026-10-26): a click walks the whole way to the spot, which can be hundreds of meters or more, and she finds it too far. Options offered, none picked: cap each click to a short stride, walk all the way but stop on a key or another click, or walk slower for clicks.
+- 🟡 Click distance (Dana, 2026-10-26): a click walked the whole way, could not be stopped and went too far. Built, untested: a click walks at most 100 m (`CLICK_WALK_MAX_METERS`, inferred), and another click, a drag or a movement key stops it. Speed is unchanged (Dana: speed is fine).
 - ❓ A speed readout is not built (it would be a new design-system element).
 - ⚠️ Walk speed 1.4 m/s (typical pace, blog level source), run 2.7x (from Unity's third-person Starter Assets ratio), field of view range 20 to 150 degrees (Unity's sample slider) are all inferred and tunable.
 

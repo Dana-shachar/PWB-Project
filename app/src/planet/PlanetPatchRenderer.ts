@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { HeightmapPipeline } from '../map/heightmap';
 import type { NoiseLayer } from '../map/heightmap';
-import { applySharedUniforms, buildPatchGeometry, createPatchMaterial, type PlanetSharedUniforms } from './planetPatchMesh';
+import { applyFrameUniforms, applySharedUniforms, buildPatchGeometry, buildPatchRampArrays, createPatchMaterial, type PlanetSharedUniforms } from './planetPatchMesh';
 import { computeStitchFlags, patchInView, patchKey, patchPixelWidth, selectPatchesIncremental, type EdgeStitchFlags, type PatchDetail } from './planetPatches';
 import { PatchLifecycle } from './patchLifecycle';
 import {
@@ -160,7 +160,13 @@ export class PlanetPatchRenderer {
   // is throttled this frame, so lighting/camera/color-ramp changes are
   // always live even while LOD selection is skipped.
   applyShared(shared: PlanetSharedUniforms): void {
-    for (const entry of this.entries.values()) applySharedUniforms(entry.material, shared);
+    const ramps = buildPatchRampArrays(shared);
+    for (const entry of this.entries.values()) applySharedUniforms(entry.material, shared, ramps);
+  }
+
+  // Every frame: only the eye position changes, so only it is copied.
+  applyFrame(shared: PlanetSharedUniforms): void {
+    for (const entry of this.entries.values()) applyFrameUniforms(entry.material, shared);
   }
 
   // The expensive half: re-walks the quadtree by camera distance, queues any

@@ -14,6 +14,9 @@ uniform sampler2D uSource;
 uniform float uRangeMin; // the region's own literal min (getRegionMinMaxAsync) — bins bucket within these bounds
 uniform float uRangeMax;
 uniform float uBinCount;
+// 1 for the whole-globe bake (latitude by longitude): each sample counts by cos(latitude), its share of the sphere.
+uniform float uAreaWeighted;
+varying float vWeight;
 
 void main() {
   float elevationRaw = texture2D(uSource, aSampleUV).g; // G: real elevation, same convention as every other heightmap read in this project
@@ -25,4 +28,5 @@ void main() {
   float ndcX = -1.0 + (bin + 0.5) * (2.0 / uBinCount); // bin's own column center, so a 1px point lands cleanly inside it
   gl_Position = vec4(ndcX, 0.0, 0.0, 1.0);
   gl_PointSize = 1.0;
+  vWeight = uAreaWeighted > 0.5 ? cos((aSampleUV.y - 0.5) * 3.14159265) : 1.0;
 }

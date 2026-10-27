@@ -21,6 +21,8 @@
 | Change which patches the planet shows | `planet/planetPatches.ts`, `planet/PlanetPatchRenderer.ts`, `planet/patchLifecycle.ts` |
 | Change patch bake size or depth limits | `planet/patch.ts`, then `PlanetPatchRenderer.ts` |
 | Change planet lighting or color | `shaders/terrain.glsl`, `shaders/planetPatch.frag.glsl`, `shaders/chunk.frag.glsl` |
+| Change water (sea level, color, transparency, waves) | `shaders/water.glsl` and `shaders/planetPatch.frag.glsl` (planet ocean), `voxel/chunkWater.ts`, `shaders/chunkWater.frag.glsl` and `shaders/oceanWaves.glsl` (chunk, Seascape), `WaterSettings` in `planet/planetControls.ts`, the water rows and Color section of `ui/Panel.tsx` |
+| Change the planet's height statistics (ramp range, % land) | `updateElevationRange` in `scene/SceneCanvas.tsx`, `getRegionHistogramAsync` in `map/heightmap.ts`, `percentileRangeFromBins` in `map/elevationRange.ts`, `planet/seaLevel.ts` |
 | Change the color ramp | `planet/colorRamp.ts`, `ui/panels/ColorRampEditor.tsx`, `terrainRampColor` in `shaders/terrain.glsl` |
 | Add a saved planet setting | `planet/planetControls.ts` (`PlanetSettings`, `applySettings`), `projectSettings/saveProject.ts` |
 | Add a design-system component | `ui/UIElements.tsx`, `design.css`, `ui/icons.tsx` |
@@ -131,11 +133,23 @@
 
 **planet/planetPatchMesh.ts**
 - What it is: patch geometry (stitching, skirts) and material.
-- Key names: `buildPatchGeometry`, `createPatchMaterial`, `applySharedUniforms`, `PlanetSharedUniforms`.
+- Key names: `buildPatchGeometry`, `createPatchMaterial`, `applySharedUniforms` (on a change), `applyFrameUniforms` (every frame, the eye only), `buildPatchRampArrays`, `PlanetSharedUniforms`.
 
 **planet/planetControls.ts**
 - What it is: the planet's settings state and their migrations.
-- Key names: `PlanetSettings` (incl. `maxErrorPixels`, `detailAmount`, `autoDetail`), `effectiveMaxErrorPixels`, `DEFAULT_PLANET_SETTINGS`, `usePlanetControls`, `applySettings`, `currentSettings`, `migrateColorStops`.
+- Key names: `PlanetSettings` (incl. `maxErrorPixels`, `detailAmount`, `autoDetail`, `water`), `WaterSettings`, `DEFAULT_WATER_SETTINGS`, `WATER_SKY_COLOR`, `WATER_SHININESS`, `migrateWater`, `shoreSeaLevel` (debounced), `effectiveMaxErrorPixels`, `DEFAULT_PLANET_SETTINGS`, `usePlanetControls`, `applySettings`, `currentSettings`, `migrateColorStops`.
+
+**planet/seaLevel.ts**
+- What it is: the planet's area-weighted height distribution, the "% land" readout, and the water ramp's spacing by light remaining.
+- Key names: `HeightDistribution`, `buildHeightDistribution`, `landShareAt`, `seaLevelForLandShare`, `depthToRampPosition`, `rampPositionToDepth`.
+
+**planet/rippleMap.ts**
+- What it is: the water's ripple texture, loaded once and shared by the planet and the chunk.
+- Key names: `getRippleMap`, `isRippleMapReady`.
+
+**planet/waterDebug.ts** (TEMP)
+- What it is: a temporary debug mode that draws one ingredient of the water color; remove when the water is settled.
+- Key names: `WATER_DEBUG_OPTIONS`, `waterDebugMode`, `setWaterDebugMode`.
 
 **planet/colorRamp.ts**
 - What it is: the ramp stops as shader arrays.
@@ -205,6 +219,10 @@
 - What it is: the chunk's person view. Drag to look, click to walk (the click ray is marched against the drawn ground, `pickGround`), WASD or arrows to move, arrows turn, R/F look up and down, Shift runs, `[` `]` or the wheel scale speed (default 10x), Esc leaves. A 1.5 s fly-in eases the camera from the orbit view.
 - Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `pickGround`, `flyIn`.
 - Talks to: `LandChunkCanvas.tsx` (saves and restores the orbit camera, eases fov/near/far with `progress`), `ChunkPatchRenderer.sampleHeight` for the eye height.
+
+**voxel/chunkWater.ts**
+- What it is: the chunk's water, TDM's Seascape on a flat sheet, recolored by the water ramp, see-through in the shallows, with shore and crest foam.
+- Key names: `ChunkWater`, `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame`, `setChunkWaterLight`.
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.
@@ -276,7 +294,19 @@
 
 **heightmap.frag.glsl**
 - What it is: composites every layer, masks and fractals into elevation.
-- Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `planetDetail`, `DETAIL_BASE_FREQUENCY`, `main`.
+- Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `planetDetail`, `DETAIL_BASE_FREQUENCY`, `shoreFade` (no Roughness under water), `main`.
+
+**oceanWaves.glsl** (CC BY-NC-SA 3.0, TDM's Seascape)
+- What it is: the chunk water's wave height, normal and sea color.
+- Key names: `sea_octave`, `map_detailed`, `getNormal`, `seaColor`, `getSkyColor`, `seaDiffuse`, `seaSpecular`, `uSeaTime`, `uSeaIterations`; `sea_octaves` (band-limited by `gSeaFootprint`), `sea_height` (currents on the two largest octaves), `seaFlow`, `OCTAVE_DRIFT_TURN`; project additions `seaFarFactor`, `crestFoam`, `halftoneMask`, `shoreWaveFoam`, `SEA_WAVELENGTH`, `FAR_SPECULAR_POWER`. Used by the chunk water and the planet ocean (`planetPatch.frag.glsl`, `uOceanScale`).
+
+**chunkWater.vert.glsl**, **chunkWater.frag.glsl**
+- What it is: the chunk's water sheet: Seascape plus depth transparency and foam.
+- Key names: `CREST_FOAM_START`, `CREST_FOAM_END`, `NORMAL_STEP_PER_METER`.
+
+**water.glsl**
+- What it is: the water look both views share.
+- Key names: `WATER_F0`, `waterFresnel` (Schlick), `waterTransmittance` (Beer-Lambert), `waterRampPosition`, `waterFilter`, `waterSeabedFactor`, `waterOwnLight`, `waterSurfaceColor`, `waterFoam`, `FOAM_COLOR`, `WATER_GLINT_STRENGTH`. Planet only since the chunk uses three.js `Water`.
 
 **noise.glsl**
 - What it is: the hash and the noise functions.

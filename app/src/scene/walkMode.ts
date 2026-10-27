@@ -28,6 +28,8 @@ const PICK_STEP_FRACTION = 0.05;
 const PICK_REFINE_STEPS = 12;
 // The fly-in from the orbit view to the person view, eased in and out. Inferred, TUNABLE.
 const TRANSITION_SECONDS = 1.5;
+// A click walks toward the clicked spot but stops after this far (Dana, 2026-10-26: walks ran too far). Inferred, TUNABLE.
+const CLICK_WALK_MAX_METERS = 100;
 
 const FORWARD_KEYS = ['KeyW', 'ArrowUp'];
 const BACK_KEYS = ['KeyS', 'ArrowDown'];
@@ -171,6 +173,7 @@ export class WalkMode {
     if (!this.pressStart) return;
     if (!this.dragged && Math.hypot(event.clientX - this.pressStart.x, event.clientY - this.pressStart.y) > CLICK_MAX_PIXELS) {
       this.dragged = true;
+      this.walkTarget = null; // looking around stops a click walk
       this.domElement.style.cursor = 'grabbing';
     }
     if (!this.dragged) return;
@@ -188,13 +191,23 @@ export class WalkMode {
     this.pressStart = null;
     this.domElement.style.cursor = 'grab';
     if (!wasClick) return;
+    // A click during a walk only stops it.
+    if (this.walkTarget) {
+      this.walkTarget = null;
+      return;
+    }
     const ground = this.getGround();
     if (!ground) return;
     const rect = this.domElement.getBoundingClientRect();
     const pointer = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     this.raycaster.setFromCamera(pointer, this.camera);
     const hit = this.pickGround(this.raycaster.ray, ground);
-    if (hit) this.walkTarget = new THREE.Vector2(hit.x, hit.z);
+    if (!hit) return;
+    const toX = hit.x - this.camera.position.x;
+    const toZ = hit.z - this.camera.position.z;
+    const maxDistance = CLICK_WALK_MAX_METERS / METERS_PER_UNIT;
+    const scale = Math.min(1, maxDistance / Math.max(Math.hypot(toX, toZ), 1e-9));
+    this.walkTarget = new THREE.Vector2(this.camera.position.x + toX * scale, this.camera.position.z + toZ * scale);
   };
 
   // Where a ray first meets the drawn ground (the same height the eye follows), or null.

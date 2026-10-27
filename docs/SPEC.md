@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-10-23`
+`Last updated: 2026-10-26`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -349,3 +349,31 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Nothing runs in reverse. Frames are recorded as the simulation runs and played back, so scrubbing backwards is replay rather than inverse simulation.
 - Not every frame: one heightmap is around 2MB, so recording is periodic with a rolling window, re-running the few steps between to land exactly.
 - *Dana's framing, drawing on how After Effects loads video in chunks rather than all at once.*
+
+---
+
+## 🌊 Water
+
+*Decided 2026-10-26, when the project's direction moved toward story and the water came first.*
+
+### [S37] Sea level is one raw height shared by both views · `decided`
+**Decided and built:** 2026-10-26
+
+- Sea level is stored as a raw height, the value both views read from the height texture, so the planet and the chunk draw the same coastline. The slider shows it in planet meters with a live "% land" readout, area-weighted on the GPU.
+- With water on, Roughness is kept out of the water and fades in over the coast, so the coastline never moves with zoom and the readout is exact.
+- *Dana: coastlines "need to match". The meters still differ between views (`[B59]`).*
+
+### [S38] Land and water get separate color ramps, split at sea level · `decided`
+**Decided and built:** 2026-10-26
+
+- Hypsometric tints above sea level, bathymetric below, the cartographic convention: with water on, the land ramp starts at sea level and the water ramp colors everything below, spaced by light remaining rather than meters.
+- Randomize colors rolls both, the water in hues the land left unused.
+- *Sources in `REFERENCES.md`.*
+
+### [S39] The water copies a tested shader, then extends it · `decided`
+**Decided:** 2026-10-26
+
+- Both views use a port of TDM's Seascape, recolored by the water ramp, with documented extensions (band-limiting, halftone foam, currents, shore bands), each sourced.
+- Hand-built water was tried first and replaced: a tested shader is the starting point, custom code only fills its gaps.
+- ⚠️ Seascape is CC BY-NC-SA 3.0: its port (`oceanWaves.glsl`) keeps that license; a commercial use needs the author's permission or a replacement.
+- *Dana: "there must be water shader in good enough quality you can look up and copy from."*

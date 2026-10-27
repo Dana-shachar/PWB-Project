@@ -1,6 +1,6 @@
 # 📚 References
 
-`Last updated: 2026-10-21`
+`Last updated: 2026-10-26`
 
 *Every outside source this project relies on, with what it is and what was taken from it. Cited once here, linked from everywhere else.*
 
@@ -33,6 +33,16 @@
 **Procedural planets end to end** · Sebastian Lague · `framing`
 - Noise layering through biomes to water, close to this project's own scope.
 - *[Procedural Planets playlist](https://www.youtube.com/watch?v=QN39W020LqU&list=PLFt_AvWsXl0cONs3T0By4puYy6GM22ko8)*
+
+**Simulations that play themselves** · Ian Cheng, *Emissaries* · `framing`
+- Live simulations of ecosystems and communities built on a game engine, where the story comes out of agents rather than being written.
+- The project's anchor reference since the 2026-10-26 change of direction: a world you set up, then watch evolve.
+- *[MoMA, Ian Cheng: Emissaries](https://www.moma.org/calendar/exhibitions/3656). Read 2026-10-26*
+
+**Evolved alien plants** · Karl Sims, *Panspermia* · `framing`
+- An animation of an alien plant life cycle, made with Sims's own artificial evolution of plant forms.
+- The second anchor reference, for the evolving plants planned on the land chunk.
+- *[Panspermia](https://www.karlsims.com/panspermia.html). Read 2026-10-26*
 
 **Seed-driven worlds that stay coherent** · Sean Murray · `framing`
 - One system producing wildly different but coherent worlds, which is the basis for generating themes from continuous axes rather than authoring them.
@@ -376,7 +386,158 @@
 - where the Resolution slider as a detail bias comes from (`[S32]`). Trust: official docs, high. ⚠️ The exact formula (error times screen height over distance times twice the tangent of half the field of view) is the widely used form, medium trust, and was not confirmed from an official page. The CDLOD paper could not be read, and Unreal and Unity bias settings were not documented anywhere authoritative
 - *[3D Tiles specification](https://github.com/CesiumGS/3d-tiles/tree/main/specification) · [Cesium3DTileset](https://cesium.com/learn/cesiumjs/ref-doc/Cesium3DTileset.html) · [Cesium Globe](https://cesium.com/learn/cesiumjs/ref-doc/Globe.html). Read 2026-10-21*
 
+### Water
+
+**Beer-Lambert light absorption** · ocean rendering survey, underwater optics review · `method used`
+- Light fades exponentially with the distance it travels through water, transmittance = e^(−absorption × distance), separately per color channel, which is why deep water turns blue-green.
+- The core of `waterColor` (`shaders/water.glsl`). Depth is measured as a share of the deepest water, not in meters, and the colors and clarity are hand-set for alien worlds, not real seawater values.
+- *[A Survey of Ocean Simulation and Rendering Techniques, eq. 18](https://arxiv.org/pdf/1109.6494) · [Underwater scenes review](https://arxiv.org/pdf/2505.01869). Read 2026-10-26*
+
+**Shallow and deep color with a Beer's law control, and a power-curve Fresnel** · Godot community water shaders · `method used`
+- Real-time water blends a shallow and a deep color by exp(−depth × strength), and makes water more reflective at grazing angles with a power of (1 − view angle).
+- The shape of `waterColor` and `waterFresnel`. ⚠️ Community code, medium trust.
+- *[Godot water shader](https://godotshaders.com/shader/water-shader/) · [Absorption-based stylized water](https://godotshaders.com/shader/absorption-based-stylized-water/). Read 2026-10-26*
+
+**Water as the volume between the ground's heightfield and the water surface** · Baboud and Décoret, 2006 · `method used`
+- Water depth at any point is the water surface minus the ground height below it, read from height data rather than a depth pass.
+- Why both views compute depth as sea level minus the baked ground height.
+- *[Realistic Water Volumes in Real-Time, Eurographics 2006](https://diglib.eg.org/items/5b40d5b3-ad48-42f4-be55-cdf122c33ae1/full). Read 2026-10-26*
+
+**Scrolling normal maps for water on curved surfaces** · three.js forum · `method used`
+- three.js's own `Water` and ocean examples only work on flat planes; for spheres the advice is one or two scrolling normal maps in a custom material.
+- The chunk's ripples (`shaders/chunkWater.frag.glsl`), and why the planet uses its own shader instead of three's `Water`. ⚠️ The ripple texture (`waternormals.jpg` from the three.js repo) is assumed to fall under the repo's MIT license.
+- *[Ocean water for curved surfaces](https://discourse.threejs.org/t/ocean-water-for-curved-surfaces/42166). Read 2026-10-26*
+- The texture is now in `app/public/textures/` (downloaded 2026-10-26).
+
+**Ocean colored by depth from the unclamped terrain height** · Sebastian Lague, Procedural Planets E07 · `method used`
+- The ocean is the terrain itself, flattened at sea level and colored by how deep the ground below would be.
+- The planet's ocean. ⚠️ Taken from the episode's description only; the video and code were not read.
+- *[Sebastian Lague, 2018 videos](https://rosetta.to/u/sebastianlague/2018). Read 2026-10-26*
+
+**Schlick's Fresnel approximation, F0 = 0.02 for water** · `method used`
+- Reflectance at a viewing angle is F0 + (1 − F0)(1 − cos θ)⁵. Head-on, water reflects ((1.33 − 1)/(1.33 + 1))² ≈ 0.02 for its refractive index of 1.33.
+- `waterFresnel` (`shaders/water.glsl`): the sky color is blended in by this amount, and the rest of the water is scaled by what is left.
+- *[UCR, ray tracing transparent surfaces](https://www.cs.ucr.edu/~craigs/courses/2026-summer-cs-130/lectures/raytracing-transparent.pdf) · [Berkeley CS184 discussion 8](https://cs184.eecs.berkeley.edu/su25/assets/discussions/08-sol.pdf). Read 2026-10-26*
+
+**Per-channel absorption tints the seabed** · Godot absorption-based water, underwater optics review · `method used`
+- The ground seen through water is multiplied by exp(−absorption × depth) per color channel, so channels the water lacks fade first and even shallow water colors the ground.
+- `waterFilter` (`shaders/water.glsl`), with the absorption taken as 1 minus the water ramp's color. The chunk applies it as a multiply pass over the drawn seabed.
+- *[Absorption-based stylized water](https://godotshaders.com/shader/absorption-based-stylized-water/) · [Underwater scenes review](https://arxiv.org/pdf/2505.01869). Read 2026-10-26*
+
+**Fine detail kept off the coastline** · World Creator Shore filter, Musgrave hetero terrain · `method used`
+- World Creator controls terrain in a band above and below sea level; hetero terrain scales each octave by the height so far, for smooth lowlands.
+- No Roughness below sea level, then a linear fade-in over twice its largest swing above it (`heightmap.frag.glsl`), so it never crosses the coastline and the "% land" readout stays exact. A two-sided version that kept seabed detail was tried and dropped (Dana: no rough patches under water) (`[B61]`). The band width is this project's own bound, assuming the noise stays within ±1.
+- *[World Creator, Shore filter](https://docs.world-creator.com/reference/terrain/biome/filters/effect/shore). Read 2026-10-26*
+
+**Hold Space and drag to pan** · Figma · `UX pattern used`
+- Space plus a drag pans the canvas; the space state is released when the canvas loses focus, the cause of Figma's known "stuck spacebar" bug.
+- The land chunk's pan.
+- *[How to pan in Figma](https://leyaa.ai/codefly/learn/figma/qna/how-to-pan-in-figma) · [Figma forum, spacebar panning glitch](https://forum.figma.com/report-a-problem-6/spacebar-panning-glitch-in-figma-49752). Read 2026-10-26*
+
+**Hypsometric and bathymetric tints, split at sea level** · cartography · `method used`
+- Land and water get separate color ramps: greens through browns to whites above sea level, blues by depth below it.
+- With water on, the land ramp starts at sea level and the water ramp colors everything below. Established practice, not a formal standard.
+- *[Hypsometric tints, Wikipedia](https://en.wikipedia.org/wiki/Hypsometric_tints) · [Esri, hypsometric tinting](https://www.esri.com/arcgis-blog/products/product/imagery/hypsometric-tinting). Read 2026-10-26*
+
+**Ocean light zones** · NOAA · `method used`
+- Sunlight reaches the top 200 m, a twilight zone runs to 1,000 m, and below that is dark, so most of the ocean's visible change is near the surface.
+- Why the water ramp is spaced by light remaining (1 − e^(−depth ÷ clarity), normalized), not by meters (`waterRampPosition`). The real depths are not used: this planet's exaggerated heights put its seas tens of kilometers deep, so only the principle is taken. Inferred, tunable.
+- *[NOAA Ocean Service, how far light travels](https://oceanservice.noaa.gov/facts/light_travel.html) · [NOAA Ocean Explorer](https://oceanexplorer.noaa.gov/facts/light-distributed.html). Read 2026-10-26*
+
+**"Seascape"** · Alexander Alekseev (TDM), 2014 · `code used` · CC BY-NC-SA 3.0
+- A Shadertoy ocean: layered "choppy" wave octaves, a normal from their height, and a sea color mixing a base color, a lighter tint on wave tops, the sky by Fresnel and a sun highlight.
+- The water in both views (`shaders/oceanWaves.glsl`, credited and licensed in its header): the wave and color functions copied, recolored by the water ramp, with the octave count as Wave detail and a Wave size multiplier. Its own distance smoothing (`dot(dist,dist) * 0.1 / screen width`) is kept as published. Its sine hash is replaced by the repo's sine-free hash, since it banded into stripes at kilometer coordinates (the banding Jarzynski and Olano 2020 report). ⚠️ Non-commercial and ShareAlike: that file must stay under CC BY-NC-SA 3.0, and a commercial use would need the author's permission or a replacement. Copied from Fuchsia's embedded copy (Shadertoy blocked the fetch); indentation was lost in the fetch, the tokens are as published.
+- *[Seascape on Shadertoy](https://www.shadertoy.com/view/Ms2SD1) · [Fuchsia's copy](https://fuchsia.googlesource.com/fuchsia/+/038d2b9/src/ui/examples/shadertoy/client/glsl_strings.cc). Read 2026-10-26*
+
+**Ocean lighting from geometry to BRDF** · Bruneton, Neyret & Holzschuch, 2010 · `method used`, approximated
+- Waves are handled by size: big ones as geometry, middle ones as normals, and those too small to see as roughness in the lighting, so the ocean reads correctly from any distance. Used in the Proland engine's planet oceans.
+- `seaFarFactor` (`shaders/oceanWaves.glsl`): once Seascape's distance-smoothed normal step passes the waves, the normal flattens and the sun highlight widens into a soft glare. ⚠️ A simplified stand-in for the paper's roughness model, not its math.
+- *[Paper page](https://evasion.inrialpes.fr/Publications/2010/BNH10) · [course slides](https://cgg.mff.cuni.cz/%7Ejaroslav/teaching/2012-npgr031/prezentace/Realtime%20Realistic%20Ocean%20Lighting.pdf) · [Proland ocean](https://proland.inrialpes.fr/doc/proland-4.0/ocean/html/page-examples.html). Read 2026-10-26*
+
+**Whitecaps from wave deformation, filtered across scales** · Dupuy & Bruneton, SIGGRAPH Asia 2012 · `method used`, approximated
+- Whitecap coverage comes from how much the waves deform, a value that can be averaged with distance, so foam stays correct from centimeters to planet scale.
+- `crestFoam` (`shaders/oceanWaves.glsl`): foam where Seascape's waves crest, blended with distance into an averaged, patchy coverage. ⚠️ Crest height stands in for the paper's deformation criterion; thresholds inferred.
+- *[Paper](https://liris.cnrs.fr/Documents/Liris-5812.pdf). Read (abstract) 2026-10-26*
+
+**Band-limiting procedural detail** · Inigo Quilez, "Bandlimiting" · `method used`
+- Each octave is multiplied by smoothstep(1.0, 0.5, w), where w is the pixel footprint from fwidth() carried down the octaves with the frequency, so detail that oscillates about once per pixel or faster fades out; a domain warp or rotation must be carried into w too.
+- `sea_octaves` (`shaders/oceanWaves.glsl`): w grows 3.8 times per octave (Seascape's octave_m doubles the coordinates and its frequency grows 1.9 times), the window is scaled to sea_octave's period of pi, and the loop stops once an octave is gone. Text pasted by Dana (the site blocks automated readers).
+- *[iquilezles.org/articles/bandlimiting](https://iquilezles.org/articles/bandlimiting/). Read 2026-10-26*
+
+**Foam by halftoning** · Yingst, Alford & Parberry, UNT LARC-2011-05 · `method used`
+- Foam saturation f = (H − H0)/(Hmax − H0) is compared per pixel against a clustered halftone mask (Gaussian-filtered white noise, σ = 24 clumps best); foam shows where f exceeds the mask, faded by clamp(f − m, 0.15, 3.0), so it clumps and pops instead of tiling.
+- `crestFoam` and `halftoneMask` (`shaders/oceanWaves.glsl`). ⚠️ Two octaves of smooth noise stand in for their precomputed mask texture.
+- *[Project page](https://ianparberry.com/research/seafoam/) · [tech report](https://ianparberry.com/techreports/LARC-2011-05.pdf). Read in full 2026-10-26*
+
+**Flow maps with a two-phase blend** · Vlachos, "Water Flow in Portal 2", SIGGRAPH 2010 · `method used`
+- A field of directions pushes the water's pattern; it is sampled twice half a cycle apart and blended so the motion loops without a visible reset.
+- `sea_height` (`shaders/oceanWaves.glsl`): currents from a procedural noise field instead of a painted map. Strength, scale and rate inferred.
+- *[Slides](https://www.advances.realtimerendering.com/s2010/Vlachos-Waterflow(SIGGRAPH%202010%20Advanced%20RealTime%20Rendering%20Course).pdf) · [Grimes, GDC 2011](https://www.hlportal.de/files/GDC2011_BronwenGrimes_NonstandardTextures.pdf). Read (summaries) 2026-10-26*
+
+**Shoreline waves from distance to shore** · Croakwood devlog, GameDev.net ocean log · `method used`, approximated
+- Waves and foam near the coast are driven by each point's distance to the shoreline, so bands travel toward it and break.
+- `shoreWaveFoam` (`shaders/oceanWaves.glsl`): foam bands moving toward the coast. ⚠️ Water depth stands in for distance to shore, which is wrong on steep coasts; a true distance field is the upgrade.
+- *[Croakwood devlog #5](https://www.texelraptor.com/blog/croakwood-devlog-5) · [GameDev.net, ocean rendering](https://gamedev.net/blogs/715/entry-2249487-ocean-rendering/page__st__5/). Read (summaries) 2026-10-26*
+
+**three.js `Water`, the ocean example** · three.js · `tried, replaced 2026-10-26`
+- A mirror reflection of the scene, animated normal-map waves, a sun glint and wave-distorted reflections, in one tested shader.
+- Tried for the chunk the same evening, scaled from meters to kilometers. Dana: it looked much the same, with a sharp line at the shore. Replaced by Seascape.
+- *[three.js ocean example](https://threejs.org/examples/#webgl_shaders_ocean)*
+
+**Planar reflection and refraction for flat water** · three.js `Reflector`, `Refractor`, `Water2` · `superseded 2026-10-26`
+- A mirrored camera renders the scene into a texture for the reflection, and a camera clipped at the surface renders what lies below for the refraction. Water2 projects both with a texture matrix, offsets the lookups by the ripple normal (factor 0.05) and blends them by Schlick Fresnel.
+- The chunk's water (`voxel/chunkWater.ts`): the refraction replaces the old multiply pass as the seabed, and the reflection replaces the flat sky color, with the sky as the fallback where nothing was drawn. Read in the installed three.js 0.185 source.
+
+**Shore foam from the depth gap** · Godot community water shaders, Unity forum · `method used`
+- Game water adds foam where the gap between the water surface and the ground behind it is small, softened with smoothstep and broken up by a scrolling texture.
+- `waterFoam` (`shaders/water.glsl`), with the depth already known exactly. Width and look inferred, tunable. ⚠️ Community examples, medium trust.
+- *[Godot, water with foam and depth](https://godotshaders.com/shader/water-with-foam-and-depth/). Read 2026-10-26*
+
+**Gerstner waves, in text** · Catlike Coding, "Waves" · `considered`
+- The full Gerstner wave function with its tangent and binormal, three summed waves, and example values (steepness 0.5, wavelength 10).
+- Verified source for waves if three.js `Water`'s own waves aren't enough.
+- *[Catlike Coding, Waves](https://catlikecoding.com/unity/tutorials/flow/waves/). Read 2026-10-26*
+
+**Gerstner waves** · Finch, GPU Gems ch. 1 · `deferred`
+- Waves that move the surface in circles, with sharp crests, summed in the vertex shader, plus normals from the same sum.
+- ⚠️ Not built: the chapter's equations are images, so they could not be verified from text. Also, the chunk's 18 km sheet can't carry meter-scale vertex waves.
+- *[GPU Gems ch. 1](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models)*
+
+**Land share weighted by area** · `method used`
+- On a latitude-by-longitude map each row covers cos(latitude) of the sphere's area, so the "% land" readout weights rows by it.
+- ⚠️ Standard sphere geometry, no source fetched.
+
+### Plants (planned, not built)
+
+**Parametric L-systems** · Prusinkiewicz and Lindenmayer; `nylki/lindenmayer` · `planned`
+- Rewriting rules grow a plant step by step, so more steps is a more complex plant. Chapter 4 covers spiral arrangements (cactus spines, rosettes).
+- The planned engine for evolving plants, one rule set per planet type. The library is MIT and has a three.js example.
+- *[The Algorithmic Beauty of Plants](http://algorithmicbotany.org/papers/abop/abop.pdf) · [Chapter 4](http://algorithmicbotany.org/papers/abop/abop-ch4.pdf) · [nylki/lindenmayer](https://github.com/nylki/lindenmayer). Read by a research agent 2026-10-26*
+
+**Artificial evolution of plant forms** · Karl Sims, SIGGRAPH 1991 · `planned`
+- Plants built from about 20 genes, each kept between 0 and 1. A mutation changes a gene with probability 0.2 by up to ±0.4, then clamps it. Section 3.3 gives four ways to mate two parents.
+- The planned evolution rule.
+- *[Artificial Evolution for Computer Graphics](https://www.karlsims.com/papers/SimsSiggraph91.pdf). Read by a research agent 2026-10-26*
+
+**Space colonization** · Runions et al. 2007; `nicknikolov/space-colonization` · `planned`
+- Branches grow toward a cloud of target points; the cloud's shape sets the silhouette (a sphere gives a coral bush, a ring an anemone).
+- Planned for coral and anemone forms. The library is MIT and marked unstable.
+- *[Runions et al.](http://algorithmicbotany.org/papers/colonization.egwnp2007.large.pdf) · [nicknikolov/space-colonization](https://github.com/nicknikolov/space-colonization). Read by a research agent 2026-10-26*
+
+**Ecological placement rules** · three.js `ForestGenerator` · `planned`
+- Trees placed by rejection sampling against an altitude band, a slope limit and a noise mask that opens clearings.
+- The planned placement method, each rule as a visible slider. Its material is WebGPU-only, so only the method is reused. Read in the installed three.js 0.185 source.
+
 ### Considered, not used
+
+**EZ-Tree** · Dan Greenheck · `considered 2026-10-26`
+- MIT three.js tree generator with 15 presets (oak, pine, bushes) and seeded parameters, 10k to 40k triangles a tree.
+- Not chosen for now: earth-like trees, heavy, and unconfirmed for alien or coral forms.
+- *[ez-tree](https://github.com/dgreenheck/ez-tree) · [CG Channel](https://www.cgchannel.com/2025/04/ez-tree-is-a-lightweight-free-open-source-tree-generator)*
+
+**Poly Haven scanned trees** · `considered 2026-10-26`
+- CC0 glTF trees, including desert quiver trees and island trees. Too realistic and heavy for the style.
+- *[Poly Haven trees](https://polyhaven.com/models/nature/trees)*
 
 **Storing height as a cubemap** · `considered 2026-10-13`
 - six square textures, one per cube face, instead of one rectangle, which removes pole distortion from the stored data itself and uses less memory for the same detail

@@ -25,6 +25,30 @@ export interface ElevationRange {
   max: number;
 }
 
+// Percent Clip from a histogram's bins (counts or area weights): the same cumulative walk as below.
+export function percentileRangeFromBins(bins: Float32Array, min: number, max: number): ElevationRange {
+  let total = 0;
+  for (let i = 0; i < bins.length; i++) total += bins[i];
+  const clipCount = total * CLIP_PERCENT;
+  const binWidth = (max - min) / bins.length;
+  let cumulative = 0;
+  let lowBin = 0;
+  for (; lowBin < bins.length; lowBin++) {
+    cumulative += bins[lowBin];
+    if (cumulative >= clipCount) break;
+  }
+  cumulative = 0;
+  let highBin = bins.length - 1;
+  for (; highBin >= 0; highBin--) {
+    cumulative += bins[highBin];
+    if (cumulative >= clipCount) break;
+  }
+  const clippedMin = min + lowBin * binWidth;
+  const clippedMax = min + (highBin + 1) * binWidth;
+  if (clippedMin >= clippedMax) return { min, max };
+  return { min: clippedMin, max: clippedMax };
+}
+
 export function computeElevationRange(data: Float32Array): ElevationRange {
   let trueMin = Infinity;
   let trueMax = -Infinity;

@@ -8,13 +8,15 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-26, third handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-10-26, fourth handover, late):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Everything below is committed. Marked items are untested on screen. The PWB dev server runs on **localhost:5173** (`app/vite.config.ts`, `strictPort`); run it in the background from `app/` with `npx vite`.
+> **State.** Everything is committed and pushed (2026-10-26, late): water on both views, Randomize colors for water, the Color menu (Land/Water headers), closed-by-default menus and `--gap-lg`, Space to pan, the walk click cap, the GPU-histogram planet stats and per-frame uniform split, and the Roughness shore fade. Untested items are marked in `ISSUES.md`. The dev server runs on **localhost:5173** (`app/vite.config.ts`, `strictPort`); run it from `app/` with `npx vite`.
 >
-> **Right now: walk mode stalling (`[B58]`), open.** The code is at commit `ba432f0` (pushed, working tree clean apart from docs). Measured: the blocking height read costs 9 to 11 ms a frame. An asynchronous read was tried and reverted (Dana: no improvement, and it broke click-to-walk). The next option is a finer CPU height copy that follows the walker (see `[B58]`); it needs Dana's go. Ask her what the stalling looks like first (freezes, bobbing or choppiness). Click distance is also an open ❓ (see `[B58]`).
+> **Right now: the water shader (`[B61]`).** The chunk and planet use a port of TDM's Seascape (`shaders/oceanWaves.glsl`, CC BY-NC-SA 3.0) with band-limiting (Quilez), halftone crest foam (Yingst et al.), currents (Vlachos flow map) and shore breaking bands. Dana's last review: too structured, the shine too strong, too much detail up close, one layer not moving, the planet needs more fading from orbit. **A plan is proposed and waits for her go** (in `[B61]`, "Pending plan"). The TEMP water debug dropdown (`planet/waterDebug.ts`) is still in the panel.
 >
-> **Working rules this session (Dana):** a numbered plan and her go before any file edit, including bug fixes; temporary `console.log` diagnostics can be added without asking (marked `TEMP`, removed when done); no attribution anywhere; no agents without her yes and a cost estimate.
+> **Working rules this session (Dana):** a numbered plan and her go before any file edit, including bug fixes; an answer to a question is not a go (memory `strict-confirm-before-acting`). Copy tested assets first (three.js addons, Shadertoy, papers' code) before hand-building (memory `existing-assets-first`). Verify a source by actually reading it, and say plainly when only a summary was read. Reuse this repo's performance fixes before adding per-tick or per-frame work (`.claude/CLAUDE.md`). Temporary `console.log` diagnostics can be added without asking (marked `TEMP`). No attribution anywhere. No agents without her yes and a cost estimate; page-reading helpers (web-fetch) are reported with their token cost.
+>
+> **Also open from this session:** `[B59]` meters differ between planet and chunk; `[B60]` erosion keeps its own sea level (❓); `[B63]` walk mode goes underwater; Gerstner waves deferred (Catlike Coding's formulas are verified if needed); the land shader layers and rule-based palettes are agreed for step 4 below.
 >
 > **Since the second handover (2026-10-26, later)**
 > - ✅ `[B56]` fixed and confirmed: the zoom slider and Reset View pivot to the ground (`pivotToGround`), and chunk patches get real height bounds (`fitBounds`) so near tiles are no longer culled. No further voxel work (Dana).
@@ -39,11 +41,24 @@
 > - 🧭 **Voxel style is being dropped:** no further work on it. `buildSmoothChunkGeometry` (`voxel/smoothMesh.ts`) is now unused; removing it was asked about, not decided.
 > - 🧭 Walk mode is for the chunk only; the chunk is meant for finer, closer detail.
 >
+> **🧭 New direction (Dana, 2026-10-26)**
+> *The rubric marked concept, development and design position "Fair". The story now drives the order, infrastructure pauses.*
+> - Anchor reference: Ian Cheng, *Emissaries* (simulations that play themselves). Karl Sims, *Panspermia* (evolved alien plants) is a second.
+> - Erosion (`[B54]`), Terrace (`[B57]`), undo/redo and patch polish are paused. Walk mode stalling (`[B58]`) is fixed only as far as walking needs.
+>
 > **Next, in this order**
-> 1. Look into the walk mode stalling (`[B58]`). Dana tests the batch above, then close `[B50]` to `[B53]`, `[B55]` as she confirms. Find the `[B55]` cliff first.
-> 2. **Walk mode** (plan below, Dana approved its shape).
-> 3. 🧭 **A discussion of the project's direction** (Dana, 2026-10-26): the work has been too technically focused, with not enough concept and story. Discuss before more technical features.
-> 4. **Smooth chunk shows erosion runs** (`[B54]`), unless the discussion reorders things.
+> 1. 🟡 **Sea level and water**: built, being refined (`[B61]`). Sea level is a raw height so both views share the coastline; the water ramp is spaced by light remaining; Seascape waves on both views.
+> 2. **Basic atmosphere**, tinted per planet type.
+> 3. **Planet types** (desert, forest, water, volcano, ice, each with variations): a tuned start plus "reroll within this type" (Dana chose option C).
+> 4. **Terrain shading and volcanoes:** rock by slope, snow by height, glowing lava, cones placed at Voronoi cell centers.
+>    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.
+>    - ⚪ **Land shader layers**, on top of the height ramp, in this order (Dana agreed 2026-10-26, plan to follow):
+>      1. Slope layer: steep faces get their own color (rock), from how far the surface tilts from "up". 📚 Tuts+ terrain texturing, UPenn CIS 566 planets.
+>      2. Large-scale color variation: a slow noise shifting hue and lightness so no region is one flat band. 📚 Same sources.
+>      3. Rule-based alien palettes, borrowed from No Man's Sky's color-theory system (e.g. accents complementary to the base), with Inigo Quilez's cosine palettes as the generator, tied into Randomize colors. 📚 Kill Screen and Engadget on Grant Duncan's GDC talk; iquilezles.org/articles/palettes.
+> 5. **Clouds and storms** (dust storms, hurricanes, ash plumes, blizzards).
+> 6. **Evolving plants on the land chunk:** 📚 parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*) and space colonization for coral, genes mutated per Sims 1991. One shared visual style across all plants. EZ-Tree considered for earth-like trees.
+> 7. If time allows: population agents, then one cataclysm. Final Review exhibition Dec 2.
 >
 > **Plan: walk mode in the chunk view**
 > - **Decided by Dana:** eye height 1.7 m; standard game field of view, Unity's default (60° vertical); you can look up well past the horizon from the ground; a mouse click walks you to the clicked spot; holding the arrow keys (and WASD) walks; the near plane is checked with a real measurement while building.

@@ -13,6 +13,8 @@ uniform float uDisplacementAmplitude;
 // A patch's bake size and border; 0 samples (the whole-globe mesh) reads uv as is.
 uniform float uBakeSamples;
 uniform float uBorderTexels;
+uniform float uWaterEnabled;
+uniform float uSeaLevel;
 
 void main() {
   vUv = uv;
@@ -26,6 +28,8 @@ void main() {
     ? (vec2(uBorderTexels + 0.5) + uv * (uBakeSamples - 1.0)) / (uBakeSamples + 2.0 * uBorderTexels)
     : uv;
   float elevation = texture2D(uHeightMap, textureUv).g;
+  // With water on, the ground below sea level is drawn at the sea surface (the planet's ocean, shaders/water.glsl).
+  if (uWaterEnabled > 0.5) elevation = max(elevation, uSeaLevel);
   vec3 displaced = position + normal * elevation * uDisplacementAmplitude;
 
   vWorldPosition = (modelMatrix * vec4(displaced, 1.0)).xyz;

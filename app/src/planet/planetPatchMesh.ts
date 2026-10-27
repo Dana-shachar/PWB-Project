@@ -2,12 +2,28 @@ import * as THREE from 'three';
 import vertexShader from '../shaders/vertex.glsl?raw';
 import patchFragmentShaderBody from '../shaders/planetPatch.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain.glsl?raw';
+import waterGlsl from '../shaders/water.glsl?raw';
+import oceanWavesGlsl from '../shaders/oceanWaves.glsl?raw';
+import { KM_PER_SCENE_UNIT } from './planetControls';
+import { getRippleMap } from './rippleMap';
+
+// The ocean's ripples: 2 km tiles, fading in as the eye comes within 30 km and full by 10 km. Inferred, TUNABLE.
+const PLANET_RIPPLE_TILE_KM = 2;
+const PLANET_RIPPLE_FADE_NEAR_KM = 10;
+const PLANET_RIPPLE_FADE_FAR_KM = 30;
+// Seascape at planet scale: one of its units is 1.5 km (its ~40-unit waves become ~60 km swells, times Wave size).
+// Inferred, TUNABLE.
+const PLANET_OCEAN_UNIT_KM = 1.5;
+
+function oceanScale(waveScale: number): number {
+  return KM_PER_SCENE_UNIT / (PLANET_OCEAN_UNIT_KM * Math.max(waveScale, 0.0001));
+}
 import { cubeFacePoint } from './cubeFace';
 import { faceIndex, PATCH_BORDER_TEXELS, type TerrainPatch } from './patch';
 import type { EdgeStitchFlags } from './planetPatches';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from './colorRamp';
 
-const patchFragmentShader = terrainGlsl + patchFragmentShaderBody;
+const patchFragmentShader = terrainGlsl + waterGlsl + oceanWavesGlsl + patchFragmentShaderBody;
 
 // How far inward (as a fraction of radius) a patch's outer edge drops to
 // form its skirt — a thin wall hiding any sliver left where this patch meets
@@ -259,6 +275,22 @@ export interface PlanetSharedUniforms {
   radius: number;
   // Wrap lighting amount, shared with the land chunk (Scene > Wrap).
   diffuseWrap: number;
+  // The ocean (shaders/water.glsl); depth is measured down to elevationMin.
+  waterEnabled: number;
+  seaLevel: number;
+  waterStops: ColorStop[];
+  waterClarity: number;
+  skyColor: THREE.Color;
+  waterShininess: number;
+  waterDebug?: number; // TEMP debug, planet/waterDebug.ts
+  foamWidth: number;
+  // Per frame: the ripples' clock, and whether the ripple texture has loaded.
+  time: number;
+  rippleEnabled: number;
+  viewWidthPixels: number;
+  // Seascape's settings, shared with the chunk (WaterSettings).
+  waveDetail: number;
+  waveScale: number;
   // What the screen-space-error selection reads (planet/planetPatches.ts),
   // not material uniforms: the Resolution slider as a maximum error in
   // pixels (lower is sharper), and the view's height in pixels and vertical
@@ -280,6 +312,7 @@ export function createPatchMaterial(
   shared: PlanetSharedUniforms,
 ): THREE.ShaderMaterial {
   const ramp = buildRampUniformArrays(shared.colorStops);
+  const waterRamp = buildRampUniformArrays(shared.waterStops);
   return new THREE.ShaderMaterial({
     vertexShader,
     fragmentShader: patchFragmentShader,
@@ -303,7 +336,7 @@ export function createPatchMaterial(
       uRampColors: { value: ramp.colors },
       uRampPositions: { value: ramp.positions },
       uRampCount: { value: ramp.count },
-      uElevationMin: { value: shared.elevationMin },
+      uElevationMin: { value: shared.waterEnabled > 0.5 ? Math.max(shared.elevationMin, shared.seaLevel) : shared.elevationMin },
       uElevationMax: { value: shared.elevationMax },
       uHeightMap: { value: heightMap },
       uDisplacementAmplitude: { value: shared.displacementAmplitude },
@@ -314,6 +347,27 @@ export function createPatchMaterial(
       uBakeSamples: { value: bakeSamples },
       uBorderTexels: { value: PATCH_BORDER_TEXELS },
       uDiffuseWrap: { value: shared.diffuseWrap },
+      uWaterEnabled: { value: shared.waterEnabled },
+      uSeaLevel: { value: shared.seaLevel },
+      uWaterDeepest: { value: shared.elevationMin },
+      uWaterRampColors: { value: waterRamp.colors },
+      uWaterRampPositions: { value: waterRamp.positions },
+      uWaterRampCount: { value: waterRamp.count },
+      uWaterClarity: { value: shared.waterClarity },
+      uSkyColor: { value: shared.skyColor.clone() },
+      uWaterShininess: { value: shared.waterShininess },
+      uWaterDebug: { value: shared.waterDebug ?? 0 }, // TEMP debug
+      uFoamWidth: { value: shared.foamWidth },
+      uRippleMap: { value: getRippleMap() },
+      uRippleEnabled: { value: shared.rippleEnabled },
+      uRippleTileSize: { value: PLANET_RIPPLE_TILE_KM / KM_PER_SCENE_UNIT },
+      uRippleFadeNear: { value: PLANET_RIPPLE_FADE_NEAR_KM / KM_PER_SCENE_UNIT },
+      uRippleFadeFar: { value: PLANET_RIPPLE_FADE_FAR_KM / KM_PER_SCENE_UNIT },
+      uTime: { value: shared.time },
+      uSeaTime: { value: shared.time },
+      uSeaIterations: { value: shared.waveDetail },
+      uOceanScale: { value: oceanScale(shared.waveScale) },
+      uResolution: { value: shared.viewWidthPixels },
     },
   });
 }
@@ -322,7 +376,27 @@ export function createPatchMaterial(
 // current patch whenever a shared value (lighting, color ramp, camera
 // position, elevation range) changes, mirroring the single-mesh path's own
 // `material.uniforms.X.value = Y` call sites in SceneCanvas.tsx.
-export function applySharedUniforms(material: THREE.ShaderMaterial, shared: PlanetSharedUniforms): void {
+// Both ramps as shader arrays, built once per change and shared by every patch (not once per patch per frame).
+export interface PatchRampArrays {
+  land: ReturnType<typeof buildRampUniformArrays>;
+  water: ReturnType<typeof buildRampUniformArrays>;
+}
+
+export function buildPatchRampArrays(shared: PlanetSharedUniforms): PatchRampArrays {
+  return { land: buildRampUniformArrays(shared.colorStops), water: buildRampUniformArrays(shared.waterStops) };
+}
+
+// The only uniforms that change every frame: the eye position (and the TEMP water debug mode).
+export function applyFrameUniforms(material: THREE.ShaderMaterial, shared: PlanetSharedUniforms): void {
+  (material.uniforms.uCameraPosition.value as THREE.Vector3).copy(shared.cameraPosition);
+  material.uniforms.uWaterDebug.value = shared.waterDebug ?? 0; // TEMP debug
+  material.uniforms.uTime.value = shared.time;
+  material.uniforms.uSeaTime.value = shared.time;
+  material.uniforms.uResolution.value = shared.viewWidthPixels;
+  material.uniforms.uRippleEnabled.value = shared.rippleEnabled;
+}
+
+export function applySharedUniforms(material: THREE.ShaderMaterial, shared: PlanetSharedUniforms, ramps: PatchRampArrays = buildPatchRampArrays(shared)): void {
   const u = material.uniforms;
   (u.uBaseColor.value as THREE.Color).copy(shared.baseColor);
   (u.uLightDirection.value as THREE.Vector3).copy(shared.lightDirection);
@@ -332,14 +406,30 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   u.uShininess.value = shared.shininess;
   (u.uCameraPosition.value as THREE.Vector3).copy(shared.cameraPosition);
   u.uColorByElevation.value = shared.colorByElevation;
-  const ramp = buildRampUniformArrays(shared.colorStops);
+  const ramp = ramps.land;
   const rampColors = u.uRampColors.value as THREE.Color[];
   for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
   (u.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
   u.uRampCount.value = ramp.count;
-  u.uElevationMin.value = shared.elevationMin;
+  // With water on, the land ramp starts at sea level (hypsometric above, bathymetric below); depth still uses the true low.
+  u.uElevationMin.value = shared.waterEnabled > 0.5 ? Math.max(shared.elevationMin, shared.seaLevel) : shared.elevationMin;
   u.uElevationMax.value = shared.elevationMax;
   u.uDisplacementAmplitude.value = shared.displacementAmplitude;
   u.uRadius.value = shared.radius;
   u.uDiffuseWrap.value = shared.diffuseWrap;
+  u.uWaterEnabled.value = shared.waterEnabled;
+  u.uSeaLevel.value = shared.seaLevel;
+  u.uWaterDeepest.value = shared.elevationMin;
+  const waterRamp = ramps.water;
+  const waterRampColors = u.uWaterRampColors.value as THREE.Color[];
+  for (let i = 0; i < MAX_COLOR_STOPS; i++) waterRampColors[i].copy(waterRamp.colors[i]);
+  (u.uWaterRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...waterRamp.positions);
+  u.uWaterRampCount.value = waterRamp.count;
+  u.uWaterClarity.value = shared.waterClarity;
+  (u.uSkyColor.value as THREE.Color).copy(shared.skyColor);
+  u.uWaterShininess.value = shared.waterShininess;
+  u.uFoamWidth.value = shared.foamWidth;
+  u.uSeaIterations.value = shared.waveDetail;
+  u.uOceanScale.value = oceanScale(shared.waveScale);
+  applyFrameUniforms(material, shared);
 }

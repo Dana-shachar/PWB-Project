@@ -17,6 +17,11 @@ interface ColorRampEditorProps {
   // how many meters one unit of it displaces by (Height % of radius/size).
   elevationRange: { min: number; max: number };
   elevationScaleMeters: number;
+  // The position column's header, for a ramp that isn't by elevation (the water's ramp is by depth).
+  positionLabel?: string;
+  // A non-linear ramp's own position-to-meters mapping (the water ramp is spaced by light remaining); linear by default.
+  positionToMeters?: (position: number) => number;
+  metersToPosition?: (meters: number) => number;
 }
 
 function clamp01(value: number): number {
@@ -144,6 +149,9 @@ export function ColorRampEditor({
   rampActive,
   elevationRange,
   elevationScaleMeters,
+  positionLabel = 'Elevation (m)',
+  positionToMeters = (position: number) => rawElevationAt(position, elevationRange) * elevationScaleMeters,
+  metersToPosition = (meters: number) => positionFromMeters(meters, elevationRange, elevationScaleMeters),
 }: ColorRampEditorProps) {
   const barRef = useRef<HTMLDivElement | null>(null);
   // An index into `stops`, or null for none selected.
@@ -204,7 +212,7 @@ export function ColorRampEditor({
   function commitStopElevation(index: number, text: string) {
     const meters = parseElevationMeters(text);
     if (meters === null) return;
-    const position = positionFromMeters(meters, elevationRange, elevationScaleMeters);
+    const position = metersToPosition(meters);
     onStopsChange(stops.map((stop, i) => (i === index ? { ...stop, position } : stop)));
   }
 
@@ -218,16 +226,16 @@ export function ColorRampEditor({
     event.preventDefault();
     event.stopPropagation();
     const field = event.currentTarget;
-    const spanMeters = Math.max(1, (elevationRange.max - elevationRange.min) * elevationScaleMeters);
+    const spanMeters = Math.max(1, positionToMeters(1) - positionToMeters(0));
     const metersPerPixel = spanMeters / 200; // about 200 px sweeps the whole range
-    let meters = rawElevationAt(stopsRef.current[index].position, elevationRange) * elevationScaleMeters;
+    let meters = positionToMeters(stopsRef.current[index].position);
     let hasMoved = false;
 
     const onMove = (moveEvent: MouseEvent) => {
       hasMoved = true;
       meters += moveEvent.movementX * metersPerPixel;
       const next = moveEvent.metaKey || moveEvent.ctrlKey ? Math.round(meters / 100) * 100 : meters;
-      const position = positionFromMeters(next, elevationRange, elevationScaleMeters);
+      const position = metersToPosition(next);
       onStopsChange(stopsRef.current.map((stop, i) => (i === index ? { ...stop, position } : stop)));
     };
     const onUp = () => {
@@ -362,13 +370,13 @@ export function ColorRampEditor({
       {/* Column headers, one per column (Dana, 2026-10-21). */}
       <div className="ui-ramp-list-header">
         <span className="ui-ramp-list-header-label">Color code</span>
-        <span className="ui-ramp-list-header-label ui-ramp-list-header-elevation">Elevation (m)</span>
+        <span className="ui-ramp-list-header-label ui-ramp-list-header-elevation">{positionLabel}</span>
       </div>
       <div className="ui-ramp-list">
         {allEntries.map((entry) => {
-          const elevationText = formatElevationMeters(rawElevationAt(entry.position, elevationRange) * elevationScaleMeters);
+          const elevationText = formatElevationMeters(positionToMeters(entry.position));
           // Every box takes the widest number's width, so they line up.
-          const elevationWidth = Math.max(...allEntries.map((other) => formatElevationMeters(rawElevationAt(other.position, elevationRange) * elevationScaleMeters).length));
+          const elevationWidth = Math.max(...allEntries.map((other) => formatElevationMeters(positionToMeters(other.position)).length));
           return (
           <div
             key={entry.key}

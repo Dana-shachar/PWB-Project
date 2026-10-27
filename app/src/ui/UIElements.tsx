@@ -348,7 +348,7 @@ interface AccordionProps {
 // (Dana, 2026-09-22). `nested` styles it as a subordinate of its parent
 // section rather than a peer category (Dana, 2026-09-23 — "Project Settings"
 // and "My Projects" read as equal-weight siblings with no `nested` variant).
-export function Accordion({ title, defaultOpen = true, nested = false, onHeaderClick, active = false, description, children }: AccordionProps) {
+export function Accordion({ title, defaultOpen = false, nested = false, onHeaderClick, active = false, description, children }: AccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   return (
     <div className={'ui-accordion' + (nested ? ' ui-accordion--nested' : '')}>

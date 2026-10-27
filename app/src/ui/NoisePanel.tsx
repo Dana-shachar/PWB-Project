@@ -402,7 +402,7 @@ export function NoisePanel({
         />
         {/* Translate and per-axis stretch, as Unity, Blender, Gaea and
             Terragen offer them; closed by default to keep the section short. */}
-        <Accordion title="Transform" nested defaultOpen={false}>
+        <Accordion title="Transform" nested>
           <Slider
             label="Offset X"
             value={selectedLayer.offsetX ?? 0}

@@ -46,6 +46,9 @@ uniform float uLayerFractalGain[MAX_LAYERS];
 uniform float uSampleSpacing;
 // Strength of the planet-wide fine detail added in patch bakes (planetDetail).
 uniform float uDetailAmount;
+// With water on, there is no Roughness under water, and it fades in over the coast, so it never moves the coastline.
+uniform float uShoreEnabled;
+uniform float uShoreSeaLevel;
 // Each layer's own mask pattern: a base generator type (-1 = unmasked), its
 // seed and frequency, then the brightness band that lets the layer through.
 uniform float uLayerMaskType[MAX_LAYERS];
@@ -594,6 +597,11 @@ void main() {
   // G = elevation (unclamped, can exceed 1 or go negative — real height,
   // read by the planet's displacement and the land chunk instead of R).
   // See map/heightmap.ts, ISSUES.md, 2026-09-24.
-  if (sampleSpacing > 0.0 && uDetailAmount > 0.0) elevation += uDetailAmount * planetDetail(basePosition, sampleSpacing);
+  if (sampleSpacing > 0.0 && uDetailAmount > 0.0) {
+    // None below sea level, then linear over twice the detail's largest swing (its octaves sum below 2), so a dip
+    // never reaches the sea and the coastline never moves (Dana: no rough patches where there's water).
+    float shoreFade = uShoreEnabled > 0.5 ? clamp((elevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
+    elevation += uDetailAmount * shoreFade * planetDetail(basePosition, sampleSpacing);
+  }
   gl_FragColor = vec4(clamp(composite, 0.0, 1.0), elevation, 0.0, 1.0);
 }

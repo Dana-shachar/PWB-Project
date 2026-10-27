@@ -52,6 +52,32 @@ uniform float uBakeSamples;
 uniform float uBorderTexels;
 uniform float uDiffuseWrap;
 uniform mat3 normalMatrix;
+// Sea level and water look (shaders/water.glsl). uWaterDeepest is the planet's lowest height, where depthShare is 1.
+uniform float uWaterEnabled;
+uniform float uSeaLevel;
+uniform float uWaterDeepest;
+uniform vec3 uWaterRampColors[MAX_COLOR_STOPS];
+uniform float uWaterRampPositions[MAX_COLOR_STOPS];
+uniform float uWaterRampCount;
+uniform float uWaterClarity;
+uniform vec3 uSkyColor;
+uniform float uWaterShininess;
+uniform float uWaterDebug; // TEMP debug, planet/waterDebug.ts
+uniform float uFoamWidth;
+// Ripples appear only when zoomed in close (Dana: movement matters up close, not from orbit), fading in between
+// uRippleFadeFar and uRippleFadeNear (scene units from the eye). The same scrolling ripple texture as the chunk.
+uniform sampler2D uRippleMap;
+uniform float uRippleEnabled;
+uniform float uRippleTileSize;
+uniform float uRippleFadeNear;
+uniform float uRippleFadeFar;
+uniform float uTime;
+// Seascape at planet scale: ocean units per scene unit, and the view's width.
+uniform float uOceanScale;
+uniform float uResolution;
+
+// How far ripples tilt the ocean, as the chunk's RIPPLE_STRENGTH.
+const float PLANET_RIPPLE_STRENGTH = 0.15;
 
 varying vec2 vUv;
 varying vec3 vSphereDirection; // unused here (kept only so vertex.glsl, shared with fragment.glsl, needs no changes) — this shader rebuilds its own cube-face normal instead, see below.
@@ -122,12 +148,67 @@ void main() {
 
   vec3 surfaceColor = uBaseColor;
   float ambient = uAmbient;
+  float elevationRaw = texture2D(uHeightMap, textureUv).g;
   if (uColorByElevation > 0.5) {
-    float elevationRaw = texture2D(uHeightMap, textureUv).g;
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
     surfaceColor = ramp;
   }
 
-  gl_FragColor = vec4(surfaceColor * (ambient + diffuse) + specular, 1.0);
+  vec3 litColor = surfaceColor * (ambient + diffuse) + specular;
+  // The ocean: Seascape's waves and sea color (shaders/oceanWaves.glsl) at a planet scale, in each point's own
+  // frame (x along the face, y up), smoothed with distance into a soft glare, with sporadic whitecaps that read from
+  // orbit, the seabed showing through the shallows (shaders/water.glsl), and ripples and shore foam up close.
+  if (uWaterEnabled > 0.5 && elevationRaw < uSeaLevel) {
+    float depthShare = (uSeaLevel - elevationRaw) / max(0.0001, uSeaLevel - uWaterDeepest);
+    vec3 seaBase = terrainRampColor(waterRampPosition(depthShare, uWaterClarity), uWaterRampColors, uWaterRampPositions, int(uWaterRampCount));
+    vec3 seaWaterColor = uWaterRampColors[0];
+    vec3 frameX = normalize(dPdu - localNormal * dot(localNormal, dPdu));
+    vec3 frameZ = cross(frameX, localNormal);
+    vec3 toPoint = vWorldPosition - uCameraPosition;
+    vec2 ocean = vec2(faceU, faceV) * uRadius * uOceanScale;
+    gSeaFootprint = length(fwidth(ocean)) * SEA_FREQ; // the pixel footprint for band-limiting (Quilez)
+    vec3 distOcean = toPoint * uOceanScale;
+    float waveHeight = -sea_height(vec3(ocean.x, 0.0, ocean.y));
+    vec3 surfacePoint = vec3(ocean.x, waveHeight, ocean.y);
+    float normalStep = dot(distOcean, distOcean) * 0.1 / max(uResolution, 1.0);
+    vec3 seaNormal = getNormal(surfacePoint, max(normalStep, 0.01));
+    float far = seaFarFactor(normalStep);
+    seaNormal = normalize(mix(seaNormal, vec3(0.0, 1.0, 0.0), far));
+    float breakup = 0.5;
+    float rippleFade = uRippleEnabled * (1.0 - smoothstep(uRippleFadeNear, uRippleFadeFar, length(toPoint)));
+    if (rippleFade > 0.0) {
+      vec2 rippleUv = vec2(faceU, faceV) * uRadius / uRippleTileSize;
+      vec3 rippleA = texture2D(uRippleMap, rippleUv + vec2(0.02, 0.01) * uTime).rgb;
+      vec3 rippleB = texture2D(uRippleMap, rippleUv * 0.7 - vec2(0.013, 0.021) * uTime).rgb;
+      vec2 tilt = ((rippleA.xy * 2.0 - 1.0) + (rippleB.xy * 2.0 - 1.0)) * PLANET_RIPPLE_STRENGTH * rippleFade;
+      seaNormal = normalize(seaNormal + vec3(tilt.x, 0.0, tilt.y));
+      breakup = mix(0.5, (rippleA.b + rippleB.b) * 0.5, rippleFade);
+    }
+    vec3 eyeDir = normalize(toPoint);
+    vec3 eyeLocal = vec3(dot(eyeDir, frameX), dot(eyeDir, localNormal), dot(eyeDir, frameZ));
+    vec3 sunDir = normalize(uLightDirection);
+    vec3 sunLocal = vec3(dot(sunDir, frameX), dot(sunDir, localNormal), dot(sunDir, frameZ));
+    vec3 sea = seaColor(surfacePoint, seaNormal, sunLocal, eyeLocal, distOcean, seaBase, seaWaterColor, uSkyColor, mix(60.0, FAR_SPECULAR_POWER, far)) * uLightIntensity;
+    float transmittance = waterTransmittance(depthShare, uWaterClarity);
+    vec3 seabed = surfaceColor * (ambient + diffuse) * waterFilter(depthShare, uWaterClarity, seaBase);
+    litColor = mix(seabed, sea, 1.0 - transmittance);
+    float foamLight = (ambient + seaDiffuse(seaNormal, sunLocal, 1.0)) * uLightIntensity;
+    // Foam from the wave crests at every distance (averaged far away); shore foam and breaking bands only up close
+    // (Dana: a crisp shoreline from orbit read too sharp).
+    float foamAmount = clamp(uFoamWidth / 0.05, 0.0, 1.0);
+    float whitecap = crestFoam(waveHeight, far, ocean) * foamAmount;
+    float shore = max(waterFoam(depthShare, uFoamWidth, breakup), shoreWaveFoam(depthShare, breakup)) * rippleFade * foamAmount;
+    float foam = max(shore, whitecap);
+    litColor = mix(litColor, FOAM_COLOR * foamLight, foam);
+    // TEMP debug: one ingredient at a time.
+    if (uWaterDebug > 0.5 && uWaterDebug < 1.5) litColor = vec3(clamp(depthShare, 0.0, 1.0));
+    if (uWaterDebug > 1.5 && uWaterDebug < 2.5) litColor = vec3(transmittance);
+    if (uWaterDebug > 2.5 && uWaterDebug < 3.5) litColor = seabed * transmittance;
+    if (uWaterDebug > 3.5 && uWaterDebug < 4.5) litColor = sea;
+    if (uWaterDebug > 4.5 && uWaterDebug < 5.5) litColor = vec3(far);
+    if (uWaterDebug > 5.5 && uWaterDebug < 6.5) litColor = vec3(foam);
+    if (uWaterDebug > 6.5) litColor = vec3(whitecap);
+  }
+  gl_FragColor = vec4(litColor, 1.0);
 }

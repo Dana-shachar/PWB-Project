@@ -1,13 +1,13 @@
 # Procedural World Building
 
-`Last updated: 2026-10-23`
+`Last updated: 2026-10-26`
 
 Cornell Tech, DESIGN 6197/4197, a procedural planet-building tool: paint and generate terrain on a sphere, built with Three.js + GLSL. This README is written for anyone with zero context on the project, what it is, and where everything lives. Kept up to date as the project changes, not a dated log.
 
 This will eventually grow into the fuller README the course's final deliverable requires (conceptual premise, procedural systems/algorithms used, AI-assisted process, run instructions, credits), for now, at build stage, it covers what actually exists.
 
-![A blue planet speckled with green and white Voronoi islands, with the color ramp stops and Resolution slider on the left and the layer, mask and Voronoi noise controls on the right.](docs/screenshots/2026-10-21-ramp-masks-and-resolution.png)
-*Current state, 2026-10-21.*
+![The land chunk: a river of blue water with sun glints and shore foam between green and brown hills.](docs/screenshots/2026-10-26-chunk-water.png)
+*Current state, 2026-10-26: water on the land chunk.*
 
 **The other docs, all in `docs/`, and when to open them:**
 > 🗺️ **[`ROADMAP.md`](docs/ROADMAP.md)**, current build status, organized by stage/feature. Start here to see what's done and what's next.

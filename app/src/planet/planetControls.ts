@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { DEFAULT_COLOR_STOPS, type ColorStop } from './colorRamp';
+import type { HeightDistribution } from './seaLevel';
 import { AUTO_MAX_ERROR_PIXELS, CURRENT_DETAIL_VERSION, migrateResolution } from './patch';
 
 // Generates a Low/Mid/High palette that reads as one lit terrain ramp
@@ -27,7 +28,7 @@ import { AUTO_MAX_ERROR_PIXELS, CURRENT_DETAIL_VERSION, migrateResolution } from
 // than that. Widened to 45-110° to actually match the source, not just
 // cite it; still one-directional around the wheel, so it stays a family
 // rather than a clash, just a far more visible one.
-function randomTerrainPalette(): { low: string; mid: string; high: string } {
+function randomTerrainPalette(): { low: string; mid: string; high: string; baseHue: number; highHue: number } {
   const baseHue = Math.random() * 360;
   const midHue = (baseHue + 45 + Math.random() * 65) % 360;
   // High previously reused midHue directly, so Low and High were only ever
@@ -46,7 +47,23 @@ function randomTerrainPalette(): { low: string; mid: string; high: string } {
   // not a saturated color. The one lightness rule left fixed, since this
   // one wasn't contested.
   const high = new THREE.Color().setHSL(highHue / 360, 0.05 + Math.random() * 0.1, 0.9 + Math.random() * 0.07);
-  return { low: `#${low.getHexString()}`, mid: `#${mid.getHexString()}`, high: `#${high.getHexString()}` };
+  return { low: `#${low.getHexString()}`, mid: `#${mid.getHexString()}`, high: `#${high.getHexString()}`, baseHue, highHue };
+}
+
+// The water's ramp by the land's rules, in the hues the land left unused: its base hue sits in the middle of the arc
+// from the land's top hue back round to its base, and each deeper stop turns a small analogous step. Shallow is light,
+// deep darker and more saturated (the bathymetric convention), mirroring the land's pale peaks. Ranges inferred, TUNABLE.
+function randomWaterPalette(landBaseHue: number, landHighHue: number): ColorStop[] {
+  const unusedArc = (landBaseHue - landHighHue + 360) % 360;
+  const waterHue = (landHighHue + unusedArc * (0.35 + Math.random() * 0.3)) % 360;
+  const step = 15 + Math.random() * 25;
+  const lightnesses = [0.72 + Math.random() * 0.1, 0.55 + Math.random() * 0.1, 0.4 + Math.random() * 0.1, 0.25 + Math.random() * 0.1];
+  const saturations = [0.35 + Math.random() * 0.2, 0.45 + Math.random() * 0.2, 0.55 + Math.random() * 0.2, 0.6 + Math.random() * 0.25];
+  const positions = [0, 0.3, 0.65, 1];
+  return positions.map((position, i) => {
+    const hue = (waterHue + step * i) % 360;
+    return { position, color: `#${new THREE.Color().setHSL(hue / 360, saturations[i], lightnesses[i]).getHexString()}` };
+  });
 }
 
 // TODO(DS): arbitrary placeholder conversion — the UI shows/accepts a
@@ -55,7 +72,60 @@ function randomTerrainPalette(): { low: string; mid: string; high: string } {
 // unit = 300 km is a made-up round number chosen to land near the previous
 // hardcoded default (~20 scene units) at an Earth-ish 6000km — not derived
 // from anything. Revisit once there's a real scene-scale convention.
-const KM_PER_SCENE_UNIT = 300;
+export const KM_PER_SCENE_UNIT = 300;
+
+// Sea level and water look (shaders/water.glsl). seaLevel is a raw height, the value both views read
+// from the height texture, so the planet and the chunk draw the same coastline.
+export interface WaterSettings {
+  enabled: boolean;
+  seaLevel: number;
+  // The water's color ramp by depth: position 0 is the shore, 1 the deepest water.
+  colorStops: ColorStop[];
+  // How far light reaches, as a share of the deepest water's depth (Beer-Lambert). Hand-set, TUNABLE.
+  clarity: number;
+  // How wide the shore foam is, as a share of the deepest water's depth. 0 is off.
+  foamWidth: number;
+  // How many of Seascape's wave octaves the chunk shows, 1 (simple, stylized) to 5 (the original).
+  waveDetail: number;
+  // How much larger than Seascape's own waves (about 40 m) the waves are, so they read at chunk scale.
+  waveScale: number;
+}
+
+export const DEFAULT_WATER_SETTINGS: WaterSettings = {
+  enabled: false,
+  seaLevel: 0,
+  // inferred, TUNABLE: art direction for alien worlds, not real seawater.
+  colorStops: [
+    { position: 0, color: '#8ff0e0' },
+    { position: 0.15, color: '#3fc9cf' },
+    { position: 0.45, color: '#2286c0' },
+    { position: 1, color: '#1d5a9e' },
+  ],
+  clarity: 0.4,
+  foamWidth: 0.05, // inferred, TUNABLE
+  waveDetail: 5,
+  waveScale: 4, // inferred, TUNABLE
+};
+
+// What the water reflects at a slant, until the atmosphere step sets a real sky. inferred, TUNABLE.
+export const WATER_SKY_COLOR = '#a9cdea';
+// How tight the sun's glint on water is (Blinn-Phong exponent), glossier than land. inferred, TUNABLE.
+export const WATER_SHININESS = 200;
+
+// Saves from before the water ramp stored a shallow and a deep color; they become a two-stop ramp.
+function migrateWater(saved: (Partial<WaterSettings> & { shallowColor?: string; deepColor?: string }) | undefined): WaterSettings {
+  if (!saved) return DEFAULT_WATER_SETTINGS;
+  const { shallowColor, deepColor, ...rest } = saved;
+  const colorStops =
+    rest.colorStops ??
+    (shallowColor && deepColor
+      ? [
+          { position: 0, color: shallowColor },
+          { position: 1, color: deepColor },
+        ]
+      : DEFAULT_WATER_SETTINGS.colorStops);
+  return { ...DEFAULT_WATER_SETTINGS, ...rest, colorStops };
+}
 
 // Every field this hook owns that's meant to be per-project, not global app
 // state — these were never wired into save/load at all until now, so
@@ -90,6 +160,8 @@ export interface PlanetSettings {
   // Display detail picked automatically, the slider ignored, as Unity's Pixel
   // Error and games' Auto quality default to. Absent in older saves.
   autoDetail?: boolean;
+  // Absent in older saves, which load with water off.
+  water?: WaterSettings;
 }
 
 export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
@@ -105,6 +177,7 @@ export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
   shadowsEnabled: false,
   detailAmount: 0.03, // inferred, TUNABLE
   autoDetail: true,
+  water: DEFAULT_WATER_SETTINGS,
 };
 
 // A saved project from before colorStops existed only has the old
@@ -166,6 +239,21 @@ export function usePlanetControls() {
   // The planet terrain's real elevation range, as SceneCanvas last computed
   // it. Read-only here (not saved), it's what the ramp's meters calibrate to.
   const [elevationRange, setElevationRange] = useState({ min: -0.5, max: 0.5 });
+  const [water, setWater] = useState<WaterSettings>(DEFAULT_WATER_SETTINGS);
+  // The planet's height distribution, for the land share readout. Read-only, not saved.
+  const [heightDistribution, setHeightDistribution] = useState<HeightDistribution | null>(null);
+
+  // The sea level Roughness fades toward (null with water off), settled 150 ms after a drag pauses, since it re-bakes the terrain.
+  const shoreSeaLevelNow = water.enabled ? water.seaLevel : null;
+  const [shoreSeaLevel, setShoreSeaLevel] = useState<number | null>(shoreSeaLevelNow);
+  useEffect(() => {
+    const timeoutId = setTimeout(() => setShoreSeaLevel(shoreSeaLevelNow), 150);
+    return () => clearTimeout(timeoutId);
+  }, [shoreSeaLevelNow]);
+
+  function updateWater(changes: Partial<WaterSettings>) {
+    setWater((previous) => ({ ...previous, ...changes }));
+  }
 
   function randomizeColors() {
     const palette = randomTerrainPalette();
@@ -175,12 +263,13 @@ export function usePlanetControls() {
       { position: 0.5, color: palette.mid },
       { position: 1.0, color: palette.high },
     ]);
+    updateWater({ colorStops: randomWaterPalette(palette.baseHue, palette.highHue) });
   }
 
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -197,6 +286,7 @@ export function usePlanetControls() {
     setShadowsEnabled(settings.shadowsEnabled);
     setDetailAmount(settings.detailAmount ?? DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
     setAutoDetail(settings.autoDetail ?? true);
+    setWater(migrateWater(settings.water));
   }
 
   // A project with nothing saved yet (new, or an old save from before this
@@ -232,6 +322,11 @@ export function usePlanetControls() {
     setDetailAmount,
     elevationRange,
     setElevationRange,
+    water,
+    updateWater,
+    shoreSeaLevel,
+    heightDistribution,
+    setHeightDistribution,
     randomizeColors,
     currentSettings,
     applySettings,
