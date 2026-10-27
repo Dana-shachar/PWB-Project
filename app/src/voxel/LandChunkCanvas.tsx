@@ -334,6 +334,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uCameraPosition: { value: new THREE.Vector3() },
         uHazeColor: { value: new THREE.Color() },
         uHazeDensity: { value: 0 },
+        uHazeStart: { value: 0 },
         uHeightMap: { value: heightMap },
         uHeightMapTexelSize: { value: 1 / Math.max(1, heightMapResolution) },
         uChunkHeightMap: { value: heightMap },
@@ -403,6 +404,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       frameLight.copy(sunDirectionRef.current);
       if (lightFollowsCameraRef.current) frameLight.applyQuaternion(perspectiveCamera.quaternion);
       material.uniforms.uLightDirection.value.copy(frameLight);
+      // Haze starts at the orbit point; when walking it starts at the eye.
+      const hazeStart = walkMode.active ? 0 : perspectiveCamera.position.distanceTo(orbitControls.target);
+      material.uniforms.uHazeStart.value = hazeStart;
+      water.mesh.material.uniforms.uHazeStart.value = hazeStart;
       (water.mesh.material.uniforms.uLightDirection.value as THREE.Vector3).copy(frameLight);
       updateSkyDomeFrame(sky, perspectiveCamera, frameLight, atmosphereRef.current.wind, deltaSeconds);
       updateChunkWaterFrame(water, perspectiveCamera.position, deltaSeconds, viewportElement!.clientWidth * window.devicePixelRatio);
@@ -540,10 +545,11 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     chunkWater.mesh.visible = water.enabled && heightMap !== null;
   }, [water, waterDeepest, heightMap, heightMapGreenChannel, chunkSize, maxHeight, atmosphere.wind]);
 
-  // The atmosphere: the sky dome, and the haze the ground and water fade into. Haze 1 halves the ground's color at
-  // half the chunk's width (FogExp2: 1 - exp(-(0.83)^2) is 0.5). Inferred, TUNABLE.
+  // The atmosphere: the sky dome, and the haze the ground and water fade into. Haze 1 halves the color one and a half
+  // chunk widths past the orbit point (FogExp2: 1 - exp(-(0.83)^2) is 0.5; Dana, 2026-10-27: was too dominant at half a
+  // width from the camera). Inferred, TUNABLE.
   useEffect(() => {
-    const hazeDensity = atmosphere.enabled ? (atmosphere.haze * 1.66) / Math.max(chunkSize, 0.0001) : 0;
+    const hazeDensity = atmosphere.enabled ? (atmosphere.haze * 0.83) / (1.5 * Math.max(chunkSize, 0.0001)) : 0;
     if (skyRef.current) updateSkyDome(skyRef.current, atmosphere);
     const material = materialRef.current;
     if (material) {

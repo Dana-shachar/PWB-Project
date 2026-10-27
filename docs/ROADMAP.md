@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-10-26`
+`Last updated: 2026-10-27`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,78 +8,37 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-26, fourth handover, late):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-10-27, fifth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Everything is committed and pushed (2026-10-26, late): water on both views, Randomize colors for water, the Color menu (Land/Water headers), closed-by-default menus and `--gap-lg`, Space to pan, the walk click cap, the GPU-histogram planet stats and per-frame uniform split, and the Roughness shore fade. Untested items are marked in `ISSUES.md`. The dev server runs on **localhost:5173** (`app/vite.config.ts`, `strictPort`); run it from `app/` with `npx vite`.
+> **State.** Water is done and committed. The atmosphere, the lighting fix (`[B65]`) and the shader folders are committed and pushed (`fbf692e`). Committed after it, not pushed and untested (`262dff4`): the chunk's haze starts at the orbit point and is three times gentler (`uHazeStart`), Glow brightens the chunk sky's horizon and sun halo (`uGlow`), and this docs pass. The dev server runs on **localhost:5173** (`app/vite.config.ts`, `strictPort`); run it from `app/` with `npx vite`.
 >
-> **Right now: water is done (2026-10-27); next is the basic atmosphere.** Dana closed the water work to get back to the story. Seascape (`shaders/oceanWaves.glsl`) stays the base, with these layered on: a Water menu section (Color, Shine, Reflection, Wind on the Beaufort scale), wind-set wave length and speed (Pierson-Moskowitz, dispersion), large Gerstner waves for light and dark variance (`waterVariance`, `planet/oceanSpectrum.ts`), the Cox and Munk glint far away, storm foam in streaks, surf only where waves break (McCowan), softer foam (`FOAM_OPACITY`), the land ramp starting at the depth light reaches, a triplanar seam fix on the planet, and wave work skipped where it's invisible (planet 17 to 27 fps became 68 to 90). Sources in `REFERENCES.md`. Known limits: Seascape's pattern is still somewhat regular; the chunk's depth in meters changes with its Size (`[B59]`); foam that builds up over time is deferred.
+> **Right now: test the atmosphere (`[B65]` and step 2 below).** Check: the chunk stays visible with the atmosphere on; Glow and Haze on both views; clouds move with Wind; the land and water light from the same side, with "Light follows camera" on and off. Then ask Dana whether to push.
 >
-> **Working rules this session (Dana):** a numbered plan and her go before any file edit, including bug fixes; an answer to a question is not a go (memory `strict-confirm-before-acting`). Copy tested assets first (three.js addons, Shadertoy, papers' code) before hand-building (memory `existing-assets-first`). Verify a source by actually reading it, and say plainly when only a summary was read. Reuse this repo's performance fixes before adding per-tick or per-frame work (`.claude/CLAUDE.md`). Temporary `console.log` diagnostics can be added without asking (marked `TEMP`). No attribution anywhere. No agents without her yes and a cost estimate; page-reading helpers (web-fetch) are reported with their token cost.
+> **Open decision:** ❓ Swirl. Musgrave's Venus shader (*Texturing & Modeling*, 1994; verified source) twists the noise around the planet's axis by distance from it, twist 0.22 by default, imitating Coriolis streams. Proposed as Swirl's replacement; the slider is hidden until Dana says go.
 >
-> **Also open from this session:** `[B59]` meters differ between planet and chunk; `[B60]` erosion keeps its own sea level (❓); `[B63]` walk mode goes underwater; Gerstner waves deferred (Catlike Coding's formulas are verified if needed); the land shader layers and rule-based palettes are agreed for step 4 below.
+> **Working rules this session (Dana; most are saved as memories):** a numbered plan and an explicit go before any change; an answer or "ok, that makes sense" is not a go (`strict-confirm-before-acting`). Answer questions from what is known; read code only after a plan is approved (`answer-before-reading-code`). Approving a plan without comment means the 💡 recommendations stand (`silence-means-recs-approved`). Never replace or rewrite a working system unless asked; layer onto it (`no-unasked-rewrites`). Fix structural bugs at the root, never with a compensating value (the −4.3 light elevation was one). Sourced methods only, verified by reading the source; say when only a summary was read. Copy tested assets before hand-building. Docs record only final, approved work. No attribution anywhere. No agents without Dana's yes and a cost estimate; page-reading helpers are reported with their tokens.
 >
-> **Since the second handover (2026-10-26, later)**
-> - ✅ `[B56]` fixed and confirmed: the zoom slider and Reset View pivot to the ground (`pivotToGround`), and chunk patches get real height bounds (`fitBounds`) so near tiles are no longer culled. No further voxel work (Dana).
-> - 🔴 `[B55]` reopened: a straight, diagonal cliff with a sawtooth top (and a thin dark line from afar) appears under some noise settings (Voronoi, Manhattan, Jitter 0.12). A per-patch color test showed it is in the height data, not at patch edges. Dana: it disappears when Layer 277 is hidden and looks fine on a new planet, so she treats it as that layer's settings (closed as not a code bug). Cause was not found; `voronoiNoise3D` itself is continuous, so look at that layer's Terrace, Domain warp, Ridged or fractal settings. A depth-based octave fade tried for it was removed.
-> - 🔴 `[B57]` Terrace (hard `floor` steps, enabled by Randomize half the time) is the likely cause of the cliffs and thin lines. Dana: it should not be randomized, and needs a more sophisticated use. ❓ Decision: stop Randomize enabling it, soften its edges, or both.
-> - 🟡 Walk mode (person view) is built and Dana found it good enough (`[B58]`): person button left of View, fly-in, drag to look, click to walk, keyboard-only controls, eye height read from the drawn ground. 🔴 Stalling open (likely the per-frame texture read). ❓ Speed readout not built.
-> - Open sources for walk mode defaults: walking speed (1.4 m/s has only a blog behind it), the run multiplier and Unity's field of view range.
-> - ❓ Randomize creates no new layers (it re-rolls the existing ones). Dana is weighing a layered recipe.
-> - 🧭 Voxel style is being dropped; patches need the smooth style for walk mode's height read.
-> - Layer names are an ever-increasing counter, never reused (by design, 2026-09-22), so "Layer 277" only means 277 layers were created.
+> **Also open:** `[B64]` the timeline panel is cut off and has no close button; `[B59]` meters differ between planet and chunk; `[B60]` erosion keeps its own sea level; `[B63]` walk mode goes underwater; `[B55]`, `[B57]` Terrace cliffs; `[B58]` walk mode stalling. Right panel for Water is not built (only Terrain, Erosion and Atmosphere switch it).
 >
-> **Built this session, all untested unless marked**
-> - 🟡 **Mask Jitter fix** (`[B52]`) and **Detail: Auto** in Scene with Roughness renamed (from the first handover's items 1 and 2).
-> - 🟡 **Land chunk on patches** (`[B53]`): `selectChunkPatches` (`voxel/chunkPatches.ts`), `ChunkPatchRenderer`, `buildFlatPatchGeometry` (`voxel/chunkPatchMesh.ts`), `bakePatchInto` on `SceneCanvasHandle`. Shadows still read one whole-chunk texture. Dana saw it sharpen.
-> - 🟡 **Patch edge seams** (`[B55]`): bordered bakes (`PATCH_BORDER_TEXELS`, `createPatchTarget`, `borderTexels`) and a one-texel slope (`texelStepUv`), planet and chunk both. Dana: remaining faint lines are likely the noise pattern; lighting is not an issue.
-> - 🟡 **Chunk zoom** (`[B56]`): a CPU copy of the chunk's heights (`voxel/chunkGround.ts`), the orbit pivot moves to the ground under the cursor, the camera stays above the ground (`keepAboveFlatGround`), `zoomToCursor` with map-style panning. The first try failed Dana's test; this second version is untested.
-> - 🟡 **Chunk Resolution slider** shows only in voxel style, as does the Erosion panel's "raise the chunk's Resolution" warning.
-> - 🟡 **Roughness max** raised from 0.2 to 1 (still a hand-set range).
->
-> **Decisions this session**
-> - 🧭 One shared Resolution for planet and chunk (the Scene panel's Detail: Auto).
-> - 🧭 **Voxel style is being dropped:** no further work on it. `buildSmoothChunkGeometry` (`voxel/smoothMesh.ts`) is now unused; removing it was asked about, not decided.
-> - 🧭 Walk mode is for the chunk only; the chunk is meant for finer, closer detail.
->
-> **🧭 New direction (Dana, 2026-10-26)**
-> *The rubric marked concept, development and design position "Fair". The story now drives the order, infrastructure pauses.*
+> **🧭 Direction (Dana, 2026-10-26)**
+> *The story drives the order; infrastructure pauses.*
 > - Anchor reference: Ian Cheng, *Emissaries* (simulations that play themselves). Karl Sims, *Panspermia* (evolved alien plants) is a second.
 > - Erosion (`[B54]`), Terrace (`[B57]`), undo/redo and patch polish are paused. Walk mode stalling (`[B58]`) is fixed only as far as walking needs.
 >
 > **Next, in this order**
 > 1. ✅ **Sea level and water** (2026-10-27). Sea level is a raw height so both views share the coastline; the water ramp is spaced by light remaining; Seascape waves on both views.
-> 2. **Basic atmosphere**, minimal, from existing assets (Dana, 2026-10-27): a slight glow, alien clouds, weather (winds, rain of any kind, ice and snow, poles). Order 🧭 atmosphere, then terrain shading, then planet profiles.
-> 3. **Terrain shading and volcanoes:** rock by slope, snow by height, glowing lava, cones placed at Voronoi cell centers.
+> 2. 🟡 **Atmosphere** (replaces the Climate stage): built 2026-10-27, being tested. Left: on/off, Horizon and Sky colors, Haze, Glow. Right panel (select the Atmosphere header): Wind, Clouds (coverage, softness, color, scale, detail, feather, banding, latitude distribution), Moon. 📌 Still to do: Swirl as Musgrave's Coriolis twist (researched, waiting for Dana's go); rain or snow particles (copy a tested library such as three.quarks, verify first); poles' ice belongs to step 3.
+> 3. **Terrain shading and volcanoes:** rock by slope, snow by height and latitude (poles), glowing lava, cones placed at Voronoi cell centers, rock strata on cliffs (Sable).
+>    - 🧭 Art direction (Dana, 2026-10-27): 2.5D, real 3D but flatter: soft wrapped light, little shine, depth from haze layers, limited palettes; between No Man's Sky and Sable, not toon. Images in `docs/references/`, listed under 🎨 Visual in `REFERENCES.md` (No Man's Sky, Sable, Outer Wilds, Gris, Monument Valley).
 >    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.
 >    - ⚪ **Land shader layers**, on top of the height ramp, in this order (Dana agreed 2026-10-26, plan to follow):
 >      1. Slope layer: steep faces get their own color (rock), from how far the surface tilts from "up". 📚 Tuts+ terrain texturing, UPenn CIS 566 planets.
 >      2. Large-scale color variation: a slow noise shifting hue and lightness so no region is one flat band. 📚 Same sources.
 >      3. Rule-based alien palettes, borrowed from No Man's Sky's color-theory system (e.g. accents complementary to the base), with Inigo Quilez's cosine palettes as the generator, tied into Randomize colors. 📚 Kill Screen and Engadget on Grant Duncan's GDC talk; iquilezles.org/articles/palettes.
 > 4. **Planet types** (desert, forest, water, volcano, ice, each with variations): a tuned start plus "reroll within this type" (Dana chose option C). 🧭 Moved after terrain shading (Dana, 2026-10-27): profiles save every look setting, so they come once those exist. Profiles: save a planet you like, "Generate" makes variations within ranges around it.
-> 5. **Clouds and storms** (dust storms, hurricanes, ash plumes, blizzards).
+> 5. **Storms** (dust storms, hurricanes, ash plumes, blizzards); the base clouds are now part of step 2.
 > 6. **Evolving plants on the land chunk:** 📚 parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*) and space colonization for coral, genes mutated per Sims 1991. One shared visual style across all plants. EZ-Tree considered for earth-like trees.
 > 7. If time allows: population agents, then cataclysms (more than one, Dana 2026-10-27). A tsunami is one: about 50 cm high and 800 km long in open ocean, seen from orbit only in the sun glint, rising at the coast (📚 NASA MISR, Sri Lanka 2004). Final Review exhibition Dec 2.
->
-> **Plan: walk mode in the chunk view**
-> - **Decided by Dana:** eye height 1.7 m; standard game field of view, Unity's default (60° vertical); you can look up well past the horizon from the ground; a mouse click walks you to the clicked spot; holding the arrow keys (and WASD) walks; the near plane is checked with a real measurement while building.
-> - **Sources:** three.js `PointerLockControls` (mouse look, a hidden cursor, Esc to leave); Blender walk mode (WASD and mouse); ArcGIS first-person (the wheel sets travel speed); VU.CITY, KeyShot and Maya (a set eye height, ground following). Walking speed still needs a source (about 1.4 m/s is typical, to confirm).
-> - **Steps:**
->   1. Gumball (`scene/Gumball.tsx`, `design.css`): the View select and a new square person button share one row, the select narrowing to fit. The button uses `.gumball-btn`'s black frame. The gumball is plain DOM, so `PersonIcon` is an SVG string kept with `ui/icons.tsx`. Enabled only when the chunk pane is the target.
->   2. New `scene/walkMode.ts` (`WalkMode`): wraps `PointerLockControls`; arrows and WASD walk level, Shift runs; a click raycasts the ground (`raycastGround`) and walks there; each frame the height is `groundHeightAt` plus `EYE_HEIGHT_METERS` (1.7 m), smoothed; you stop at the chunk's edges. New constants `EYE_HEIGHT_METERS`, `WALK_SPEED`, `RUN_MULTIPLIER`.
->   3. `voxel/LandChunkCanvas.tsx`: entering saves the orbit camera and turns orbit off; leaving restores it. The handle gets `enterWalkMode` and `exitWalkMode`.
->   4. Field of view: a "Field of view" slider in Scene while walking (`ui/Panel.tsx`, `scene/sceneControls.ts`), default 60°.
->   5. Near plane from the eye height; log its value and check a ground-level screenshot for depth flicker.
-> - ✅ **Design system:** `.gumball-btn` now has focus (accent border), active (`.gumball-btn--active`, accent at 70% on the fill) and disabled (35% opacity) states, also in the `ui-design` skill (Dana approved, 2026-10-26). The square icon variant and the shared View row are still to build in step 1.
-> - 🧭 Field of view follows Unity's conventions (Dana, 2026-10-26): 60° vertical default. 📌 Unity's own slider range is still unconfirmed: the docs give no limits, and their sample slider runs 20 to 150°. Check Unity's camera Inspector source when building step 4.
->
-> **Open issues in `ISSUES.md`**
-> - 🔴 `[B54]` smooth chunk never shows an erosion run. `[B27]` Expand shows a black preview.
-> - 🟡 Built and waiting on a test: `[B50]` to `[B53]`, `[B55]`, `[B56]`; from before, `[B28]`, `[B36]` to `[B41]`, `[B43]` to `[B49]`; `[B26]` likely resolved; `[B14]` tabled until after erosion.
->
-> **Loose threads, after the items above**
-> - **Measured fine detail strength:** match the Roughness at each scale to real terrain statistics, replacing the hand-set `detailAmount` and its range.
-> - **Planet camera altitude above the actual ground:** the planet still measures height above its highest peak. The chunk now has the ground lookup (`groundHeightAt`); the planet needs its own.
-> - Modifier fade second pass; bounded heights; plateau shaping, then height in meters; undo/redo; planet cast shadows; later items as listed in the stages below.
 >
 > **Open threads for Dana (not code)**
 > - 📌 **Firebase key:** restrict it in Google Cloud Console (console.cloud.google.com/apis/credentials, the "Browser key (auto created by Firebase)": Application restrictions = Websites, add `http://localhost:*/*` and any hosted address).
@@ -87,9 +46,7 @@
 > - 📌 **Before submitting for class:** add a copy of the user-scoped `ui-design` skill to the repo, placement Dana's call.
 > - ⏸️ **Run instructions** belong in the final README the syllabus requires.
 >
-> **Known risks.** `CHUNK_MAX_EXTRA_DEPTH` (10), `CHUNK_MAX_TRIANGLES`, `PATCH_BORDER_TEXELS` (4), `GROUND_SAMPLES` (257), `MIN_CAMERA_ALTITUDE` and the Roughness range are inferred and tunable. The chunk's ground copy is coarser (about 70 m on 18 km) than its finest patches, so the camera's floor can sit slightly off the drawn ground up close. No GLSL compiler on this machine: shader changes are only checked on screen. Frustum culling for planet patches is partial. The Hoskins hash constants were typed from memory.
->
-> **Rules in force.** No forks; no agent without Dana's yes and a cost estimate. Read `CODE-INDEX.md` first and read narrowly. Plan as numbered steps naming files and new names, then wait for a go. Sourced methods only: an unsourced add-on is a separate suggestion, never part of a plan (memory `no-improvised-methods`). Read the code before stating what it does (memory `verify-claims-about-code`). Design-system components only. No attribution anywhere.
+> **Known risks.** No GLSL compiler on this machine: shader changes are only checked on screen, so a blank view usually means a shader compile error in the console. The planet's cloud shader samples noise up to about 18 times a pixel; lower Detail if it lags. Many atmosphere and water values are inferred and tunable (marked in the code). Planet waves use meter-scale coordinates across the whole planet, so very close up they may show float precision blockiness.
 
 **Overall** ▓▓▓▓▓▓░░░░ 61%
 

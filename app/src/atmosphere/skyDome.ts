@@ -40,6 +40,7 @@ export function createSkyDome(): SkyDome {
       uCloudColor: { value: new THREE.Color() },
       uCloudSoftness: { value: 0.5 },
       uCloudOffset: { value: new THREE.Vector2() },
+      uGlow: { value: 0.5 },
       uCloudScale: { value: 1 },
       uCloudDetail: { value: 4 },
       uCloudFeather: { value: 0.4 },
@@ -65,6 +66,7 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
   uniforms.uMoonEnabled.value = settings.moon ? 1 : 0;
   (uniforms.uMoonColor.value as THREE.Color).set(settings.moonColor);
   uniforms.uMoonSize.value = THREE.MathUtils.degToRad(settings.moonSize);
+  uniforms.uGlow.value = settings.glow;
   uniforms.uCloudCoverage.value = settings.cloudCoverage;
   (uniforms.uCloudColor.value as THREE.Color).set(settings.cloudColor);
   uniforms.uCloudSoftness.value = settings.cloudSoftness;

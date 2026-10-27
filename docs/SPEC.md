@@ -376,4 +376,22 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Both views use a port of TDM's Seascape, recolored by the water ramp, with documented extensions (band-limiting, halftone foam, currents, shore bands), each sourced.
 - Hand-built water was tried first and replaced: a tested shader is the starting point, custom code only fills its gaps.
 - ⚠️ Seascape is CC BY-NC-SA 3.0: its port (`oceanWaves.glsl`) keeps that license; a commercial use needs the author's permission or a replacement.
-- *Dana: "there must be water shader in good enough quality you can look up and copy from."*
+- *Dana: "there must be water shader in good enough quality you can look up and copy from."* Extensions are layered onto Seascape, never a replacement (a hand-written Gerstner replacement failed and was reverted, 2026-10-27).
+
+### [S40] The atmosphere is a stage, minimal and built from existing assets · `decided`
+**Decided:** 2026-10-27
+
+- Atmosphere replaces the Climate stage: a sky dome on the chunk, haze, a rim glow and surface haze on the planet, clouds, wind and an optional moon. General controls on the left, detail controls on the right panel.
+- One wind drives both the clouds and the water's waves.
+- Each piece starts from a tested source (three.js's sky dome, Stemkoski's glow, Horizon Zero Dawn's cloud lighting).
+
+### [S41] One light, in world space, optionally following the camera · `decided`
+**Decided:** 2026-10-27
+
+- Every surface (land, water, clouds, haze, sky) is lit from the same direction, in world space, with normals that face outward.
+- "Light follows camera" (on by default) turns that direction with the camera, as modeling tools do; off gives a fixed sun with a day and night side.
+
+### [S42] Art direction: 2.5D · `decided`
+**Decided:** 2026-10-27
+
+- Real 3D, slightly flat: soft wrapped light, little shine, depth from haze layers, limited palettes. Between No Man's Sky (palettes, hazy light) and Sable (soft gradients, simple shapes), not toon. References in `REFERENCES.md`.

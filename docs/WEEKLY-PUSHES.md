@@ -13,7 +13,7 @@
 
 `Covers 2026-10-21 to 2026-10-28 · Class topic: Agents and behavior: state machines and schedules · Due: start of class, 10:10 am`
 
-*Made the repo safe to publish and took it public, added an architecture diagram generated from a script, then, after the rubric marked the concept "Fair", turned the project toward story: planet types, atmosphere, evolving alien plants, and first, water.*
+*Made the repo safe to publish and took it public, added an architecture diagram generated from a script, then, after the rubric marked the concept "Fair", turned the project toward story: finished the water, added an atmosphere, and set a 2.5D art direction.*
 
 ![The architecture diagram: the app's modules and which one owns what.](diagrams/architecture-2026-10-26.svg)
 
@@ -32,6 +32,10 @@
 
 ![The land chunk's water: Seascape's waves recolored by the water ramp, with shore foam.](screenshots/2026-10-26-chunk-water.png)
 
+- **Water finished (2026-10-27):** a Water menu section; Shine and Reflection; wind sets wave length, height and speed (Pierson-Moskowitz and the deep-water dispersion relation), whitecaps and storm streaks by the Beaufort scale, and the glint's width (Cox and Munk); large Gerstner waves add moving light and dark variance; surf only where waves break (McCowan's criterion); seams at the planet's cube edges removed by triplanar mapping; planet frame rate up from about 20 to about 80 by skipping wave work that can't be seen.
+- **Atmosphere (2026-10-27, replacing the Climate stage):** a sky dome over the land chunk (three.js's own example), haze, a rim glow and surface haze on the planet, and clouds with Horizon Zero Dawn's cloud lighting and edge erosion, NASA's cloud bands and NOAA's wind bands. General controls on the left, Wind, Clouds and Moon on the right panel.
+- **Lighting fixed at the root (2026-10-27):** the land was lit in camera space and its planet normals pointed inward, hidden by a light setting that compensated. Both fixed in the shared shader code; a "Light follows camera" toggle (on by default) lights whatever is in view.
+- **Art direction (2026-10-27):** 2.5D, real 3D but flatter, between No Man's Sky and Sable; reference images from No Man's Sky, Sable, Outer Wilds and Gris added to the repo. Shaders reorganized into folders by feature.
 - **Land chunk detail (2026-10-26):** the chunk now splits into patches as you zoom, the planet's chunked level-of-detail rule over a flat square, so close-ups keep gaining shape. Patch textures carry a border of neighbor ground so lighting matches across edges. The chunk camera orbits and zooms around the ground under the cursor and stays above the terrain, Cesium's convention. Voxel style is being dropped.
 
 ### 🤖 AI process
@@ -44,6 +48,9 @@
 - **Debug views before guessing:** a temporary view that drew one ingredient of the water color at a time found two real bugs (an unlit water normal, a seabed that never faded), after two confident guesses had been wrong.
 - **Copy tested work first:** a hand-built water shader went through several weak rounds before switching to a known shader (TDM's Seascape). The lesson is now a standing rule. Sources are verified by reading them, and when only a summary was read the docs say so; one article was pasted by Dana because the site blocks automated readers.
 - **Research agents:** two research agents and several page-reading helpers were used, each reported with its token cost (about 7k to 63k each).
+- **An unasked rewrite (2026-10-27):** asked to add wind and glint changes to the water, Claude replaced the whole tested water shader with a hand-written one. It broke the planet, looked worse and was reverted, at a large token cost. New standing rule: never replace a working system unless asked; layer onto it.
+- **Root fixes over workarounds (2026-10-27):** a light setting of −4.3 had silently compensated for inward-facing normals. Fixing the space mismatch exposed it; the fix went into the shared normal function (`faceforward`), not another compensating value.
+- **Sources read, not recalled:** the cloud formulas were read from the Horizon Zero Dawn slides themselves after a summary came back empty; claims recalled from memory were flagged as such.
 - **A slip:** the README screenshot's alt text was written from the filename without looking at the image. It was checked against the image and corrected afterward.
 
 ### 📊 Worked / didn't / next
@@ -51,7 +58,9 @@
 - ❌ The key had already been committed, so cleaning history alone does not undo the exposure.
 - ✅ Reusing the chunk's GPU statistics for the planet: slider lag gone.
 - ❌ Hand-built water, three rounds; the shader that works was copied, not invented.
-- ⏭️ Finish tuning the water (a plan is waiting: shine slider, moving foam mask, patchy foam, less regular waves, planet fading), then the atmosphere, then planet types.
+- ✅ Layering the research onto the tested water shader instead of replacing it.
+- ❌ Replacing Seascape with hand-written waves: reverted the same day.
+- ⏭️ Test and tune the atmosphere, Swirl as Musgrave's Coriolis twist, rain or snow, then terrain shading in the 2.5D direction, then planet profiles.
 
 ---
 

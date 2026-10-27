@@ -595,6 +595,42 @@
 - ⚠️ Not built: the chapter's equations are images, so they could not be verified from text. Also, the chunk's 18 km sheet can't carry meter-scale vertex waves.
 - *[GPU Gems ch. 1](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models)*
 
+### Atmosphere
+
+**Sky dome gradient** · three.js, `webgl_lights_hemisphere` example · `code used` · MIT
+- A sphere seen from inside: `mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0))` with `h = normalize(position + offset).y`, offset 33 and exponent 0.6 on a 4000-radius sphere.
+- The chunk's sky (`shaders/atmosphere/skyDome.*`), scaled to the camera's far plane, with a sun halo, moon disc, clouds and a horizon glow added (inferred).
+- *[three.js example source](https://raw.githubusercontent.com/mrdoob/three.js/dev/examples/webgl_lights_hemisphere.html). Read 2026-10-27*
+
+**Rim glow and shell** · Lee Stemkoski, three.js Shader-Glow demo · `method used`
+- `intensity = pow(c - dot(N, V), p)`; presets: halo c 0.6, p 6, back side, additive; shell c 1, p 2, front side.
+- The planet's glow (halo) and surface haze (shell) (`atmosphere/planetGlow.ts`, `planetHaze.ts`). Rewritten, not copied: the demo has no license.
+- *[Shader-Glow source](https://raw.githubusercontent.com/stemkoski/stemkoski.github.com/master/Three.js/Shader-Glow.html). Read 2026-10-27*
+
+**Three-cell atmospheric circulation** · NOAA JetStream · `method used`
+- Easterlies near the equator, westerlies between 35° and 60°, polar easterlies beyond.
+- The clouds' wind bands (`bandSpeed` in `clouds.frag.glsl`). Speeds inferred.
+- *[NOAA, global atmospheric circulations](https://www.noaa.gov/jetstream/global/global-atmospheric-circulations). Read 2026-10-27*
+
+**Cloud lighting and edge erosion** · Schneider and Vos, "The Real-time Volumetric Cloudscapes of Horizon Zero Dawn", SIGGRAPH 2015 · `method used`
+- Beer's law E = e^−d and the powder term E = 1 − e^(−2d), combined, view dependent (slides 61 and 62); detail noise "applied as an erosion from the edge of the base cloud shape", distorted by curl noise.
+- The clouds' lighting and Feather (`clouds.frag.glsl`). ⚠️ A small domain warp stands in for curl noise.
+- *[Slides](https://www.advances.realtimerendering.com/s2015/The%20Real-time%20Volumetric%20Cloudscapes%20of%20Horizon%20-%20Zero%20Dawn%20-%20ARTR.pdf). Read (pages 33 to 37, 59 to 66) 2026-10-27*
+
+**Where clouds gather** · NASA MODIS (Earth Observatory) · `method used`
+- Three cloudy bands: a narrow one at the equator and two wider ones in the mid-latitudes; about 67% cloud cover overall.
+- The Distribution sliders' defaults. Band widths inferred.
+- *[NASA, Cloudy Earth](https://www.nasa.gov/image-article/cloudy-earth). Read (summary) 2026-10-27*
+
+**Coriolis cloud twist** · F. K. Musgrave, Venus shader, *Texturing & Modeling* (1994), Gritz's RenderMan port · `considered`
+- Each point is rotated about the planet's axis by `twist * 2π * (distance from the axis)²` before the fractal noise (twist 0.22, omega 0.65, 8 octaves).
+- Proposed as Swirl's replacement; waiting for Dana.
+- *[KMVenus.sl](https://people.eecs.berkeley.edu/~jfc/cs184f98/labs/proj2/dq/KMVenus.sl). Read in full 2026-10-27*
+
+**Haze as fog** · three.js `FogExp2` · `method used`
+- Fog factor 1 − exp(−(density × distance)²).
+- The chunk's haze toward the horizon color, measured from the orbit point. Density per Haze inferred.
+
 **Land share weighted by area** · `method used`
 - On a latitude-by-longitude map each row covers cos(latitude) of the sphere's area, so the "% land" readout weights rows by it.
 - ⚠️ Standard sphere geometry, no source fetched.

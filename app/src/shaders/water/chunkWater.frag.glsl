@@ -22,6 +22,7 @@ uniform float uLightIntensity;
 uniform vec3 uCameraPosition;
 uniform vec3 uHazeColor; // the sky's horizon color (atmosphere/)
 uniform float uHazeDensity; // per chunk unit; 0 is clear
+uniform float uHazeStart; // distance from the camera where haze begins: the orbit point, 0 when walking
 
 varying vec3 vWorldPosition;
 
@@ -80,7 +81,8 @@ void main() {
   color = mix(color, FOAM_COLOR * (uAmbient + seaDiffuse(normal, light, 1.0)) * uLightIntensity, foam);
 
   // Haze toward the sky's horizon color with distance: three.js's FogExp2, 1 - exp(-(density * distance)^2).
-  float hazeDistance = uHazeDensity * length(toPoint);
+  // Measured from the orbit point, so the chunk in view stays clear and only what lies beyond it fades.
+  float hazeDistance = uHazeDensity * max(length(toPoint) - uHazeStart, 0.0);
   color = mix(color, uHazeColor, 1.0 - exp(-hazeDistance * hazeDistance));
 
   // See-through in the shallows, so the shore blends into the ground instead of meeting it at a hard edge.

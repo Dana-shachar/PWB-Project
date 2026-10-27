@@ -47,6 +47,7 @@ export function createChunkWater(): ChunkWater {
       uWaveScale: { value: 4 },
       uHazeColor: { value: new THREE.Color(WATER_SKY_COLOR) },
       uHazeDensity: { value: 0 },
+      uHazeStart: { value: 0 },
       uResolution: { value: 1000 },
     },
   });

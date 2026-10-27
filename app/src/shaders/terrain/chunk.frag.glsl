@@ -23,6 +23,7 @@ uniform float uShininess;
 uniform vec3 uCameraPosition;
 uniform vec3 uHazeColor; // the sky's horizon color (atmosphere/)
 uniform float uHazeDensity; // per chunk unit; 0 is clear
+uniform float uHazeStart; // distance from the camera where haze begins: the orbit point, 0 when walking
 
 // Elevation color ramp + self-shadow. Top surface samples uHeightMap;
 // walls/the bottom cap use their own world-space height instead (a vertical
@@ -153,7 +154,8 @@ void main() {
   }
 
   // Haze toward the sky's horizon color with distance: three.js's FogExp2, 1 - exp(-(density * distance)^2).
-  float hazeDistance = uHazeDensity * length(vWorldPosition - uCameraPosition);
+  // Measured from the orbit point, so the chunk in view stays clear and only what lies beyond it fades.
+  float hazeDistance = uHazeDensity * max(length(vWorldPosition - uCameraPosition) - uHazeStart, 0.0);
   vec3 litColor = surfaceColor * (ambient + diffuse) + specular;
   gl_FragColor = vec4(mix(litColor, uHazeColor, 1.0 - exp(-hazeDistance * hazeDistance)), 1.0);
 }

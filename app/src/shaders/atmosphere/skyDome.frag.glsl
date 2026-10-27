@@ -17,6 +17,7 @@ uniform float uCloudCoverage;
 uniform vec3 uCloudColor;
 uniform float uCloudSoftness;
 uniform vec2 uCloudOffset;
+uniform float uGlow; // the atmosphere's Glow: a bright horizon band and a stronger sun halo
 uniform float uCloudScale;
 uniform float uCloudDetail;
 uniform float uCloudFeather;
@@ -52,9 +53,11 @@ void main() {
   float h = normalize(dir * uRadius + offset).y;
   vec3 sky = mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0));
 
-  // Sun: a wide soft halo and a small bright core.
+  // Glow, seen from the ground: the air's bright band along the horizon (the rim seen from space). Width inferred.
+  sky += bottomColor * uGlow * 0.35 * exp(-abs(dir.y) * 8.0);
+  // Sun: a wide soft halo, stronger and wider with Glow, and a small bright core.
   float sun = max(dot(dir, normalize(uSunDirection)), 0.0);
-  sky += vec3(1.0, 0.96, 0.88) * (pow(sun, 12.0) * 0.3 + smoothstep(0.9993, 0.9998, sun));
+  sky += vec3(1.0, 0.96, 0.88) * (pow(sun, 12.0 / (1.0 + uGlow)) * 0.3 * (1.0 + uGlow) + smoothstep(0.9993, 0.9998, sun));
 
   // Moon: a soft-edged disc.
   float moonAngle = acos(clamp(dot(dir, normalize(uMoonDirection)), -1.0, 1.0));

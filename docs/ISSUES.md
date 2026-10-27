@@ -454,15 +454,24 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Dana: the planet "too much", big white lumps on the chunk out of sync with wave size, waves idle and predictable, no waves breaking on the shore, planet sliders seem to do nothing. Built (2026-10-26, untested): the separate whitecap pattern removed; foam now comes from the wave crests and averages out with distance (Dupuy & Bruneton 2012), so it follows Wave size and Wave detail on both views; currents via a procedural flow map (Vlachos 2010) and a different drift per wave layer; foam bands breaking toward the shore (depth as distance to shore).
 - Dana: crest foam still grid-like, the chunk's fade too strong, and the doubled wave cost. Built (2026-10-26, untested): crest foam by halftoning (Yingst et al. 2011) so it clumps; band-limiting (Quilez) drops octaves smaller than a pixel, and currents move only the two largest octaves; the far smoothing starts later and the haze is weakened to 200 km.
 - Dana's review (2026-10-26, 23:00): the planet needs more fading from orbit and its waves look too structured; the chunk is over-structured (evenly spaced foam specks); the default shine is far too strong (it is Seascape's own highlight, not the Scene light, and has no slider); up close too much detail; one texture layer does not move (the halftone foam mask is fixed in place by design).
-- ❓ **Pending plan, waiting for Dana's go:**
-  1. A water Shine slider (`shine` in `WaterSettings`) scaling Seascape's highlight, lower default.
-  2. The foam mask moves with the water (currents and drift) and has larger clusters (departs from the paper's fixed mask, to note).
-  3. Patchy foam: a slow large-scale pattern lowers foam in most areas (inferred; loosely Tessendorf et al. 2023 on whitecaps and wind, summary only).
-  4. Less regular waves: stronger currents plus a slow large bend of the wave coordinates from the same noise field (inferred, tunable).
-  5. Planet: a much smaller wave scale of its own (`PLANET_OCEAN_UNIT_KM`) so waves band-limit into the glare from orbit and appear on zoom; Wave size becomes relative there.
-  6. Wave detail default 3 instead of 5.
-- ⚠️ The land's light elevation is −4.30, and the land's normal may be flipped with the light set to compensate. Not checked.
-- ⚠️ The land is lit with view-space normals against a world-space light direction (`normalMatrix` in `planetPatch.frag.glsl` and `chunk.frag.glsl`). Water matches it, but this may make lighting shift as the camera turns. Not checked on screen.
+- ✅ **Closed 2026-10-27, final state.** Seascape stays the base, with layers added on top (a hand-written Gerstner replacement was tried and reverted the same day; Dana: never replace a working system unless asked):
+  - Water menu section; Shine and Reflection; foam softer and capped (`FOAM_OPACITY`); the land ramp starts at the depth light reaches (`landRampFloor`).
+  - Wind (now in Atmosphere) sets wave length, speed and height (Pierson-Moskowitz, dispersion), whitecaps and storm streaks (Beaufort), and the far glint (Cox and Munk, floor 0.02).
+  - Large Gerstner waves add moving light and dark variance and pinch foam (`waterVariance`); stronger noise push (`SEA_WARP`) and tighter bend, counted in the band-limiting.
+  - Surf only where waves break (McCowan, `surfZoneShare`), smooth slope from the height texture, faded with distance.
+  - Planet: triplanar waves (no cube-face seams), wave work skipped where invisible (17 to 27 fps became 68 to 90), ocean darkens on the night side.
+- ⚠️ Known limits: Seascape's pattern stays somewhat regular; the chunk's depth in meters changes with its Size (`[B59]`); foam that builds up and fades over time needs a simulation texture (deferred).
+
+### [B65] Land lit from the wrong side: view-space normals and inward planet normals · `wrong but workable`
+**🟡 Fixed 2026-10-27, being tested** · **Where:** `shaders/terrain/terrain.glsl` (`heightfieldNormal`), `planetPatch.frag.glsl`, `chunk.frag.glsl`, `chunk.vert.glsl`, `fragment.glsl`, `scene/sceneControls.ts`
+
+**What happened**
+- The clouds' lit side disagreed with the land's, and after a first fix the water brightened while the land darkened under the same light.
+- Two causes, both structural: the land's normals were in view space (`normalMatrix`) against a world-space light, so the lit side turned with the camera; and `heightfieldNormal`'s cross product pointed inward on the planet's cube faces, with the light elevation set to −4.3 to compensate.
+
+**Fix**
+- Normals in world space (`mat3(modelMatrix)`) on every land shader; `heightfieldNormal` keeps its result on the surface's outer side with GLSL's `faceforward`, for every caller; default light elevation +4.3. The ocean now darkens on its night side like the land.
+- New Scene toggle "Light follows camera" (Dana's choice, on by default): the light turns with the camera, as in modeling tools; off gives a fixed sun with a day and night side.
 
 ### [B60] Erosion keeps its own sea level, separate from the planet's water · `wrong but workable`
 **❓ Open, Dana's call** · **Where:** `erosion/erosionControls.ts` (`seaLevel`), `planet/planetControls.ts` (`water.seaLevel`)
