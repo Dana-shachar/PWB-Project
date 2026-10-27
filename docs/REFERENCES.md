@@ -635,6 +635,78 @@
 - On a latitude-by-longitude map each row covers cos(latitude) of the sphere's area, so the "% land" readout weights rows by it.
 - ⚠️ Standard sphere geometry, no source fetched.
 
+### Stylized sky, planet and terrain shaders (candidates)
+
+*Collected 2026-10-27 for the moon, haze, clouds and later terrain shading. Most need stylizing to fit the art direction.*
+
+**Moon with all phases and a roughened shadow** · sturm_trouper, Godot Shaders · `planned` · CC0
+- A hemisphere point rebuilt from the disc, `sphere_point = vec3(uv.x + height, uv.y, 1 - sqrt(uv.x² + uv.y²))`, with noise `height` roughening the terminator; terminator `smoothstep(-.05, 0., dot_val)`, disc edge `smoothstep(1., .98, length(uv))`.
+- For the grainy moon in the chunk's sky. Dana's favorite of the moons.
+- *[Godot Shaders](https://godotshaders.com/shader/moon-shader-2d-all-phases-and-roughened-shadow/). Code read 2026-10-27*
+
+**Day and night sky** · DimensionAlmios, Godot Shaders · `planned` · MIT
+- Sky hues from a height blend `pow(y, 1.25)` and a warm tint near the sun `exp(-rs * 2.5)`; two-term halos `exp(-r * 12) * 0.22 + exp(-r * 3.5) * 0.06`.
+- For the haze's hues and the moon's halo.
+- *[Godot Shaders](https://godotshaders.com/shader/day-and-night-sky-with-sun-moon-stars-and-clouds/). Code read 2026-10-27*
+
+**Simple spatial planet** · segue2ant, Godot Shaders · `planned` · CC0
+- Bands from a domain-warped sine and cosine noise (`whorley`), sampled from two opposite projections blended to hide the seam; a Fresnel rim as emission. No palette: the color is the warped vector itself.
+- Closest to the references (Dana). For two-toned clouds now, planets in the sky later.
+- *[Godot Shaders](https://godotshaders.com/shader/simple-spatial-planet/). Code read 2026-10-27*
+
+**Better fog** · Inigo Quilez · `planned`
+- Fog tinted toward the sun, `mix(fogColor, sunColor, pow(max(dot(rd, lig), 0), 8))`; color can also change with altitude; height fog with an analytic integral (after Crytek), `(a/b) * exp(-ro.y*b) * (1 - exp(-t*rd.y*b)) / rd.y`.
+- For the chunk's layered, hued haze.
+- *iquilezles.org/articles/fog. Text pasted by Dana 2026-10-27 (the page would not load here)*
+
+**Multiresolution ambient occlusion** · Inigo Quilez · `planned`
+- Occlusion at three scales (procedural, screen space, a blurred top-down shadow map), multiplied; it darkens only the ambient light, never the sun.
+- For terrain shading (Roadmap step 3), to help stylize.
+- *iquilezles.org. Text pasted by Dana 2026-10-27*
+
+**Stylized sky with procedural sun and moon** · krzmig, Godot Shaders · `considered` · MIT
+- The moon lit by ray-sphere hit and Lambert, `pow(clamp(dot(n, -sun), 0.05, 1.0), 2)`.
+- *[Godot Shaders](https://godotshaders.com/shader/stylized-sky-with-procedural-sun-and-moon/). Code read 2026-10-27*
+
+**CGI Moon Kit** · NASA Scientific Visualization Studio · `considered`
+- Moon color maps (2k is 447 KB) and height maps; credit NASA SVS, no license stated on the page.
+- A possible surface texture for the moon.
+- *[NASA SVS 4720](https://svs.gsfc.nasa.gov/4720). Read 2026-10-27*
+
+**Realtime planet shader** · jsulpis · `considered` · GPL-3.0
+- Raycast spheres in WebGL with fbm normals and colors and a fake atmosphere from distance functions; procedural and textured planets.
+- Reference only: GPL code cannot be copied into this project.
+- *[GitHub](https://github.com/jsulpis/realtime-planet-shader), [demo](https://jsulpis.github.io/realtime-planet-shader/procedural). README read 2026-10-27*
+
+**Shadertoy candidates** · `considered`
+- Dana's picks, "barely stylized, need a lot of work": [ice](https://www.shadertoy.com/view/XltGRX), [moons in the sky](https://www.shadertoy.com/view/wsjBD3), [lava](https://www.shadertoy.com/view/ldBfDR), [trees, look easy](https://www.shadertoy.com/view/4s33zf), [day and night](https://www.shadertoy.com/view/ltlSWB), [moonlight, no texture](https://www.shadertoy.com/view/4sl3z4).
+- ⚠️ Shadertoy refuses automated reads (403); five codes below were pasted by Dana 2026-10-27. All are CC BY-NC-SA (non-commercial, share-alike) or unlicensed, so only their ideas are reused, rewritten, never their code.
+
+**Moonlight** · Reinder Nijhoff, 2013 · `considered` · CC BY-NC-SA 4.0
+- A ray-sphere moon lit from a fixed side; the sky tinted toward a moonlight color near the moon, with a broad glow plus a tight one, `pow(moonglow, 21.0)`.
+
+**Over the Moon** · Martijn Steinrucken (BigWings), 2015 · `considered` · CC BY-NC-SA 3.0
+- Fully 2D: a crescent from a disc minus an offset disc, `c *= 1 - circ(MOONPOS + .03) * .95`; ten silhouette layers of pines mixed toward the sky gradient by depth, which is the art direction's "depth from haze layers". Pines from three stacked skewed boxes.
+
+**Starry night with moonlit clouds** · `considered` · no license stated
+- A moon texture mapped onto a disc facing the camera (two axes built on the plane perpendicular to the moon direction); blue-noise dithering hides banding in the gradients (after demofox, "Ray marching fog with blue noise"); glow `pow(radius / dist, intensity)`. Volumetric clouds, too heavy here.
+
+**Night bridge** · `considered` · no license stated
+- A textureless moon surface: layered noise through smoothstep thresholds makes maria-like patches, `moon += .6 * smoothstep(.2, .8, noise(.6 * mp))` and finer layers; clouds brighten near the moon.
+
+**Day and night cycle** · built on StillTravelling's "The sun, the sky and the clouds" · `considered` · no license, mostly uncredited code
+- Physical Rayleigh and Mie scattering, an aurora (triangle noise), meteors, layered snow, a rainbow. Not stylized; snow and aurora worth a look at the storms step.
+
+**Procedural skybox** · Eugene Chu (shadowlenz) · `considered`
+- A Unity skybox with sun, moon and stars; "free to use, please mention my name".
+- *[GitHub](https://github.com/shadowlenz/Procedural.SkyBox). README read 2026-10-27, shader not opened*
+
+**Pixel planets** · Deep-Fold · `considered` · MIT
+- Rejected: fully 2D pixel art (Dana checked the itch.io demo). Wanted instead: a project like it closer to the art direction.
+- *[GitHub](https://github.com/Deep-Fold/PixelPlanets)*
+
+**Also seen, not useful:** Bryson Taylor's Unity solar system (no shader code, an orbit script only); Stylized SkyShader on Godot Shaders (nothing beyond what exists). A YouTube reference Dana rated good, not watched here: [video](https://www.youtube.com/watch?v=XOssaQAmVN0).
+
 ### Plants (planned, not built)
 
 **Parametric L-systems** · Prusinkiewicz and Lindenmayer; `nylki/lindenmayer` · `planned`

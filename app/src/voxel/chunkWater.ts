@@ -3,6 +3,7 @@ import waterVertexGlsl from '../shaders/water/chunkWater.vert.glsl?raw';
 import waterFragmentBody from '../shaders/water/chunkWater.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
 import waterGlsl from '../shaders/water/water.glsl?raw';
+import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw';
 import oceanWavesGlsl from '../shaders/water/oceanWaves.glsl?raw';
 import { buildRampUniformArrays, MAX_COLOR_STOPS } from '../planet/colorRamp';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
@@ -22,7 +23,7 @@ export function createChunkWater(): ChunkWater {
   const ramp = buildRampUniformArrays([{ position: 0, color: '#ffffff' }]);
   const material = new THREE.ShaderMaterial({
     vertexShader: waterVertexGlsl,
-    fragmentShader: terrainGlsl + waterGlsl + oceanWavesGlsl + waterFragmentBody,
+    fragmentShader: terrainGlsl + waterGlsl + oceanWavesGlsl + hazeGlsl + waterFragmentBody,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
@@ -46,6 +47,7 @@ export function createChunkWater(): ChunkWater {
       uSeaIterations: { value: 3 },
       uWaveScale: { value: 4 },
       uHazeColor: { value: new THREE.Color(WATER_SKY_COLOR) },
+      uHazeSkyColor: { value: new THREE.Color(WATER_SKY_COLOR) },
       uHazeDensity: { value: 0 },
       uHazeStart: { value: 0 },
       uResolution: { value: 1000 },
@@ -74,10 +76,11 @@ export function updateChunkWaterFrame(water: ChunkWater, cameraPosition: THREE.V
 }
 
 // The atmosphere: the sky the water reflects, and the haze it fades into with distance (as the land does).
-export function setChunkWaterSky(water: ChunkWater, skyColor: string, hazeColor: string, hazeDensity: number): void {
+export function setChunkWaterSky(water: ChunkWater, skyColor: string, hazeColor: string, hazeSkyColor: string, hazeDensity: number): void {
   const uniforms = water.mesh.material.uniforms;
   (uniforms.uSkyColor.value as THREE.Color).set(skyColor);
   (uniforms.uHazeColor.value as THREE.Color).set(hazeColor);
+  (uniforms.uHazeSkyColor.value as THREE.Color).set(hazeSkyColor);
   uniforms.uHazeDensity.value = hazeDensity;
 }
 

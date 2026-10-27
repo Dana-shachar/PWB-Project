@@ -19,11 +19,11 @@ export function AtmospherePanel({ atmosphere, onAtmosphereChange }: AtmospherePa
             value={atmosphere.wind}
             onChange={(wind) => onAtmosphereChange({ wind })}
             min={0}
-            max={12}
+            max={40}
             step={0.5}
             precision={1}
             disabled={off}
-            description="How calm or stormy, on the Beaufort scale: 0 is calm, 3 brings the first whitecaps, 12 is a storm. It moves the clouds and sets the water's waves."
+            description="How calm or stormy, on the Beaufort scale: 0 is calm, 3 brings the first whitecaps, 12 is a storm, 40 is Jupiter's jet streams. It moves the clouds and sets the water's waves, which stop growing at 12."
           />
         </Accordion>
       </div>
@@ -33,6 +33,7 @@ export function AtmospherePanel({ atmosphere, onAtmosphereChange }: AtmospherePa
           <Slider label="Coverage" value={atmosphere.cloudCoverage} onChange={(cloudCoverage) => onAtmosphereChange({ cloudCoverage })} min={0} max={1} step={0.01} precision={2} disabled={off} description="How much of the sky the clouds cover. 0 turns them off." />
           <Slider label="Softness" value={atmosphere.cloudSoftness} onChange={(cloudSoftness) => onAtmosphereChange({ cloudSoftness })} min={0} max={1} step={0.01} precision={2} disabled={off} description="How soft the clouds' edges are: 0 is crisp, 1 is a soft blur." />
           <ColorPicker label="Color" value={atmosphere.cloudColor} onChange={(cloudColor) => onAtmosphereChange({ cloudColor })} />
+          <ColorPicker label="Second color" value={atmosphere.cloudColor2} onChange={(cloudColor2) => onAtmosphereChange({ cloudColor2 })} />
           <span className="panel-section-title">Shape</span>
           <Slider label="Scale" value={atmosphere.cloudScale} onChange={(cloudScale) => onAtmosphereChange({ cloudScale })} min={0.2} max={4} step={0.05} precision={2} disabled={off} description="How large the clouds are: lower is bigger." />
           <Slider label="Detail" value={atmosphere.cloudDetail} onChange={(cloudDetail) => onAtmosphereChange({ cloudDetail })} min={1} max={8} step={1} precision={0} disabled={off} description="How many layers of noise shape each cloud: 1 is simple blobs, 8 is finely broken up." />

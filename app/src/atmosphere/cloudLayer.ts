@@ -23,6 +23,7 @@ export function createCloudLayer(): CloudLayer {
     uniforms: {
       uCloudCoverage: { value: 0 },
       uCloudColor: { value: new THREE.Color() },
+      uCloudColor2: { value: new THREE.Color() },
       uCloudSoftness: { value: 0.5 },
       uCloudTime: { value: 0 },
       uLightDirection: { value: new THREE.Vector3(1, 1, 1) },
@@ -57,6 +58,7 @@ export function updateCloudLayer(clouds: CloudLayer, settings: AtmosphereSetting
   const uniforms = clouds.mesh.material.uniforms;
   uniforms.uCloudCoverage.value = settings.cloudCoverage;
   (uniforms.uCloudColor.value as THREE.Color).set(settings.cloudColor);
+  (uniforms.uCloudColor2.value as THREE.Color).set(settings.cloudColor2);
   uniforms.uCloudSoftness.value = settings.cloudSoftness;
   uniforms.uCloudScale.value = settings.cloudScale;
   uniforms.uCloudDetail.value = settings.cloudDetail;
@@ -69,11 +71,14 @@ export function updateCloudLayer(clouds: CloudLayer, settings: AtmosphereSetting
   uniforms.uCloudDistributionStrength.value = settings.cloudDistributionStrength;
 }
 
+// Cloud clock speed per unit of wind (Dana, 2026-10-27: 3x, was too slow). Inferred, TUNABLE.
+const CLOUD_TIME_PER_WIND = 0.75;
+
 // Every frame: the clouds' clock runs with the wind (stronger wind, faster drift), and the light follows the Scene.
 export function updateCloudLayerFrame(clouds: CloudLayer, wind: number, deltaSeconds: number, lightDirection: THREE.Vector3, ambient: number, cameraPosition: THREE.Vector3): void {
   const uniforms = clouds.mesh.material.uniforms;
   (uniforms.uCameraPosition.value as THREE.Vector3).copy(cameraPosition);
-  uniforms.uCloudTime.value += deltaSeconds * (wind / 4);
+  uniforms.uCloudTime.value += deltaSeconds * wind * CLOUD_TIME_PER_WIND;
   (uniforms.uLightDirection.value as THREE.Vector3).copy(lightDirection);
   uniforms.uAmbient.value = ambient;
 }

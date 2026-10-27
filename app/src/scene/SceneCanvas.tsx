@@ -10,7 +10,7 @@ import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 import { percentileRangeFromBins } from '../map/elevationRange';
 import { buildHeightDistribution, type HeightDistribution } from '../planet/seaLevel';
-import { windTimeScale } from '../planet/oceanSpectrum';
+import { MAX_WAVE_WIND, windTimeScale } from '../planet/oceanSpectrum';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { createPlanetGlow, updatePlanetGlow, updatePlanetGlowFrame } from '../atmosphere/planetGlow';
 import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame } from '../atmosphere/cloudLayer';
@@ -974,7 +974,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   // The wind (it sets the water's waves) and the sky the water reflects come from the atmosphere.
   useEffect(() => {
     const shared = sharedUniformsRef.current;
-    shared.wind = atmosphere.wind;
+    shared.wind = Math.min(atmosphere.wind, MAX_WAVE_WIND);
     shared.skyColor.set(atmosphere.enabled ? atmosphere.horizonColor : WATER_SKY_COLOR);
     planetPatchRendererRef.current?.applyShared(shared);
   }, [atmosphere]);

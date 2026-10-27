@@ -3,11 +3,13 @@ import vertexShader from '../shaders/atmosphere/planetGlow.vert.glsl?raw';
 import fragmentShader from '../shaders/atmosphere/planetGlow.frag.glsl?raw';
 import type { AtmosphereSettings } from './atmosphereSettings';
 
-// The planet's rim glow: a slightly larger sphere drawn from inside and added on top, with Stemkoski's "halo" preset
-// (c 0.6, p 6, back side, additive). Glow sets both how wide the shell reaches past the planet and how bright it is,
-// since brightness alone only re-tints a thin ring. Widths inferred, TUNABLE.
-const GLOW_MIN_SCALE = 1.02;
-const GLOW_SCALE_PER_UNIT = 0.12;
+// The planet's glow: a sphere around the planet drawn from inside and added on top; its shader fades the glow out from
+// the planet's edge like Photoshop's outer glow (planetGlow.frag.glsl). Glow sets the fade's size. Inferred, TUNABLE.
+const GLOW_MIN_WIDTH = 0.03; // share of the radius
+const GLOW_WIDTH_PER_UNIT = 0.06;
+const GLOW_STRENGTH = 1.2;
+// The shell reaches this many widths past the edge, where the fade is nearly done.
+const GLOW_SHELL_WIDTHS = 5;
 
 export interface PlanetGlow {
   mesh: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
@@ -24,11 +26,12 @@ export function createPlanetGlow(): PlanetGlow {
     transparent: true,
     depthWrite: false,
     uniforms: {
-      viewVector: { value: new THREE.Vector3() },
-      c: { value: 0.6 },
-      p: { value: 6.0 },
       glowColor: { value: new THREE.Color() },
-      uStrength: { value: 0.5 },
+      uCenter: { value: new THREE.Vector3() },
+      uRadius: { value: 1 },
+      uWidth: { value: 0.1 },
+      uStrength: { value: GLOW_STRENGTH },
+      uCameraPosition: { value: new THREE.Vector3() },
     },
   });
   const mesh = new THREE.Mesh(geometry, material);
@@ -43,13 +46,17 @@ export function createPlanetGlow(): PlanetGlow {
 
 export function updatePlanetGlow(glow: PlanetGlow, settings: AtmosphereSettings, radius: number): void {
   glow.mesh.visible = settings.enabled && settings.glow > 0;
-  glow.mesh.scale.setScalar(radius * (GLOW_MIN_SCALE + settings.glow * GLOW_SCALE_PER_UNIT));
+  const width = radius * (GLOW_MIN_WIDTH + settings.glow * GLOW_WIDTH_PER_UNIT);
+  glow.mesh.scale.setScalar(radius + width * GLOW_SHELL_WIDTHS);
   const uniforms = glow.mesh.material.uniforms;
   (uniforms.glowColor.value as THREE.Color).set(settings.zenithColor);
-  uniforms.uStrength.value = Math.min(2, settings.glow);
+  uniforms.uRadius.value = radius;
+  uniforms.uWidth.value = width;
 }
 
-// Every frame: the view vector is the camera's position relative to the planet, as in the demo.
+// Every frame: the camera and the planet's center, for the view rays.
 export function updatePlanetGlowFrame(glow: PlanetGlow, cameraPosition: THREE.Vector3): void {
-  (glow.mesh.material.uniforms.viewVector.value as THREE.Vector3).copy(cameraPosition).sub(glow.mesh.position);
+  const uniforms = glow.mesh.material.uniforms;
+  (uniforms.uCameraPosition.value as THREE.Vector3).copy(cameraPosition);
+  (uniforms.uCenter.value as THREE.Vector3).copy(glow.mesh.position);
 }

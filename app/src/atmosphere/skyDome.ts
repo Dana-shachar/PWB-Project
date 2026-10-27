@@ -9,8 +9,8 @@ const EXAMPLE_RADIUS = 4000;
 const EXAMPLE_OFFSET = 33;
 // Where the moon sits in the sky, as a direction. Inferred, TUNABLE.
 const MOON_DIRECTION = new THREE.Vector3(-0.6, 0.35, -0.7).normalize();
-// How fast the clouds drift at force 4, in noise units per second. Inferred, TUNABLE.
-const CLOUD_DRIFT = 0.04;
+// How fast the clouds drift at force 4, in noise units per second (Dana, 2026-10-27: 3x, was too slow). Inferred, TUNABLE.
+const CLOUD_DRIFT = 0.12;
 
 export interface SkyDome {
   mesh: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
@@ -38,6 +38,7 @@ export function createSkyDome(): SkyDome {
       uMoonSize: { value: 0.1 },
       uCloudCoverage: { value: 0 },
       uCloudColor: { value: new THREE.Color() },
+      uCloudColor2: { value: new THREE.Color() },
       uCloudSoftness: { value: 0.5 },
       uCloudOffset: { value: new THREE.Vector2() },
       uGlow: { value: 0.5 },
@@ -69,6 +70,7 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
   uniforms.uGlow.value = settings.glow;
   uniforms.uCloudCoverage.value = settings.cloudCoverage;
   (uniforms.uCloudColor.value as THREE.Color).set(settings.cloudColor);
+  (uniforms.uCloudColor2.value as THREE.Color).set(settings.cloudColor2);
   uniforms.uCloudSoftness.value = settings.cloudSoftness;
   uniforms.uCloudScale.value = settings.cloudScale;
   uniforms.uCloudDetail.value = settings.cloudDetail;

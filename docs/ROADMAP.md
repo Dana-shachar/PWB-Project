@@ -28,6 +28,7 @@
 > **Next, in this order**
 > 1. ✅ **Sea level and water** (2026-10-27). Sea level is a raw height so both views share the coastline; the water ramp is spaced by light remaining; Seascape waves on both views.
 > 2. 🟡 **Atmosphere** (replaces the Climate stage): built 2026-10-27, being tested. Left: on/off, Horizon and Sky colors, Haze, Glow. Right panel (select the Atmosphere header): Wind, Clouds (coverage, softness, color, scale, detail, feather, banding, latitude distribution), Moon. 📌 Still to do: Swirl as Musgrave's Coriolis twist (researched, waiting for Dana's go); rain or snow particles (copy a tested library such as three.quarks, verify first); poles' ice belongs to step 3.
+>    - 🔴 Test results (Dana, 2026-10-27): the planet's glow is too wide and bright from afar (fine up close); Wind moves the clouds too slowly; the chunk's haze is too weak, invisible even at Haze 3 from the orbit view.
 > 3. **Terrain shading and volcanoes:** rock by slope, snow by height and latitude (poles), glowing lava, cones placed at Voronoi cell centers, rock strata on cliffs (Sable).
 >    - 🧭 Art direction (Dana, 2026-10-27): 2.5D, real 3D but flatter: soft wrapped light, little shine, depth from haze layers, limited palettes; between No Man's Sky and Sable, not toon. Images in `docs/references/`, listed under 🎨 Visual in `REFERENCES.md` (No Man's Sky, Sable, Outer Wilds, Gris, Monument Valley).
 >    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.
@@ -35,8 +36,9 @@
 >      1. Slope layer: steep faces get their own color (rock), from how far the surface tilts from "up". 📚 Tuts+ terrain texturing, UPenn CIS 566 planets.
 >      2. Large-scale color variation: a slow noise shifting hue and lightness so no region is one flat band. 📚 Same sources.
 >      3. Rule-based alien palettes, borrowed from No Man's Sky's color-theory system (e.g. accents complementary to the base), with Inigo Quilez's cosine palettes as the generator, tied into Randomize colors. 📚 Kill Screen and Engadget on Grant Duncan's GDC talk; iquilezles.org/articles/palettes.
+>      4. Ambient occlusion, to help stylize (Dana, 2026-10-27): darkens only the ambient light, never the sun. 📚 Quilez's multiresolution ambient occlusion. Candidate shaders for ice, lava and trees are under "Stylized sky, planet and terrain shaders" in `REFERENCES.md`.
 > 4. **Planet types** (desert, forest, water, volcano, ice, each with variations): a tuned start plus "reroll within this type" (Dana chose option C). 🧭 Moved after terrain shading (Dana, 2026-10-27): profiles save every look setting, so they come once those exist. Profiles: save a planet you like, "Generate" makes variations within ranges around it.
-> 5. **Storms** (dust storms, hurricanes, ash plumes, blizzards); the base clouds are now part of step 2.
+> 5. **Storms** (dust storms, hurricanes, ash plumes, blizzards); the base clouds are now part of step 2. 📌 Look at the day-and-night Shadertoy's layered snow and aurora first (under Shadertoy candidates in `REFERENCES.md`).
 > 6. **Evolving plants on the land chunk:** 📚 parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*) and space colonization for coral, genes mutated per Sims 1991. One shared visual style across all plants. EZ-Tree considered for earth-like trees.
 > 7. If time allows: population agents, then cataclysms (more than one, Dana 2026-10-27). A tsunami is one: about 50 cm high and 800 km long in open ocean, seen from orbit only in the sun glint, rising at the coast (📚 NASA MISR, Sri Lanka 2004). Final Review exhibition Dec 2.
 >

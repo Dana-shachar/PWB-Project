@@ -12,6 +12,8 @@ export interface AtmosphereSettings {
   // Clouds: how much of the sky they cover (0 to 1), their color, and how soft their edges are (0 to 1).
   cloudCoverage: number;
   cloudColor: string;
+  // A second cloud color, mixed in by warped bands; the same as cloudColor gives one tone.
+  cloudColor2: string;
   cloudSoftness: number;
   // Cloud shape: feature size (1 is the default size), noise layers (1 to 8), wispy worn edges (0 to 1), and how much
   // they stretch along latitude lines into bands (0 patchy, 1 Jupiter-like).
@@ -42,6 +44,7 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   glow: 0.5,
   cloudCoverage: 0.4,
   cloudColor: '#f7eef2',
+  cloudColor2: '#f7eef2',
   cloudSoftness: 0.6,
   cloudScale: 1,
   cloudDetail: 4,
@@ -62,5 +65,6 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
 // Older saves have no atmosphere; their wind lived in the water settings.
 export function migrateAtmosphere(saved: Partial<AtmosphereSettings> | undefined, legacyWind: number | undefined): AtmosphereSettings {
   const wind = saved?.wind ?? legacyWind ?? DEFAULT_ATMOSPHERE_SETTINGS.wind;
-  return { ...DEFAULT_ATMOSPHERE_SETTINGS, ...saved, wind };
+  const cloudColor2 = saved?.cloudColor2 ?? saved?.cloudColor ?? DEFAULT_ATMOSPHERE_SETTINGS.cloudColor2;
+  return { ...DEFAULT_ATMOSPHERE_SETTINGS, ...saved, wind, cloudColor2 };
 }

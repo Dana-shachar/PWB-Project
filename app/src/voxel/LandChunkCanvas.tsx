@@ -2,7 +2,8 @@ import { useEffect, useImperativeHandle, useRef, forwardRef, type RefObject } fr
 import * as THREE from 'three';
 import chunkVertexGlsl from '../shaders/terrain/chunk.vert.glsl?raw';
 import chunkFragmentBody from '../shaders/terrain/chunk.frag.glsl?raw';
-import terrainGlsl from '../shaders/terrain/terrain.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
+import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
+import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
 import { camera, defaultCameraPosition } from '../scene/camera';
 import { controls, keepAboveFlatGround } from '../scene/controls';
 import { EYE_HEIGHT_METERS, WalkMode } from '../scene/walkMode';
@@ -20,8 +21,9 @@ import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { createSkyDome, updateSkyDome, updateSkyDomeFrame, type SkyDome } from '../atmosphere/skyDome';
 import { landRampFloor } from '../planet/seaLevel';
+import { MAX_WAVE_WIND } from '../planet/oceanSpectrum';
 
-const chunkFragmentGlsl = terrainGlsl + chunkFragmentBody;
+const chunkFragmentGlsl = terrainGlsl + hazeGlsl + chunkFragmentBody;
 
 // For the single shared gumball (scene/sharedGumball.ts) to target this
 // view's camera when the land-chunk pane is selected — see ISSUES.md,
@@ -222,7 +224,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
       const renderer = sharedRendererRef.current.renderer;
       return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight)) : null;
-    }, () => {
+    }, () => (water.mesh.visible ? water.mesh.position.y : null), () => {
       perspectiveCamera.position.copy(orbitSaved.position);
       perspectiveCamera.up.copy(orbitSaved.up);
       orbitControls.target.copy(orbitSaved.target);
@@ -277,6 +279,30 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       pivotAtScreenPoint(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     }
     viewportElement.addEventListener('pointerdown', pivotOnGround, { capture: true });
+    // TEMP [B55]: Alt+click logs heights in a row across the cursor (drawn bake and its patch depth, then the coarse CPU copy).
+    function logCliffRow(event: PointerEvent) {
+      if (!event.altKey) return;
+      const ground = currentGround();
+      const renderer = sharedRendererRef.current.renderer;
+      if (!ground || !renderer) return;
+      const rect = viewportElement!.getBoundingClientRect();
+      pickPointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
+      pickRay.setFromCamera(pickPointer, perspectiveCamera);
+      const hit = raycastGround(ground, pickRay.ray, ground.chunkSize * 4);
+      if (!hit) return console.log('[TEMP B55] no hit');
+      const right = new THREE.Vector3().setFromMatrixColumn(perspectiveCamera.matrixWorld, 0).setY(0).normalize();
+      const span = ground.chunkSize * 0.01;
+      const rows = [];
+      for (let i = -10; i <= 10; i++) {
+        const x = hit.x + right.x * span * (i / 10);
+        const z = hit.z + right.z * span * (i / 10);
+        const drawn = patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight));
+        rows.push({ meters: Math.round(span * (i / 10) * 1000), drawnM: drawn === null ? null : +(drawn * 1000).toFixed(1), depth: patchRenderer.lastSampleDepth, coarseM: +((groundHeightAt(ground, x, z) ?? NaN) * 1000).toFixed(1) });
+      }
+      console.log('[TEMP B55] row across the cursor, left to right, at', hit.toArray());
+      console.table(rows);
+    }
+    viewportElement.addEventListener('pointerdown', logCliffRow);
     viewportElement.addEventListener('wheel', pivotOnGround, { capture: true });
 
     // Hold Space and drag to pan, as in Figma and Photoshop. Only over this pane and not while typing; released
@@ -333,6 +359,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uDiffuseWrap: { value: diffuseWrap },
         uCameraPosition: { value: new THREE.Vector3() },
         uHazeColor: { value: new THREE.Color() },
+        uHazeSkyColor: { value: new THREE.Color() },
         uHazeDensity: { value: 0 },
         uHazeStart: { value: 0 },
         uHeightMap: { value: heightMap },
@@ -435,6 +462,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
 
     return () => {
       viewportElement.removeEventListener('pointerdown', pivotOnGround, { capture: true });
+      viewportElement.removeEventListener('pointerdown', logCliffRow); // TEMP [B55]
       window.removeEventListener('keydown', handleSpaceKey);
       window.removeEventListener('keyup', handleSpaceKey);
       window.removeEventListener('blur', releaseSpace);
@@ -541,22 +569,22 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   useEffect(() => {
     const chunkWater = waterRef.current;
     if (!chunkWater) return;
-    updateChunkWater(chunkWater, water, chunkSize, maxHeight, waterDeepest, heightMap, heightMapGreenChannel, atmosphere.wind);
+    updateChunkWater(chunkWater, water, chunkSize, maxHeight, waterDeepest, heightMap, heightMapGreenChannel, Math.min(atmosphere.wind, MAX_WAVE_WIND));
     chunkWater.mesh.visible = water.enabled && heightMap !== null;
   }, [water, waterDeepest, heightMap, heightMapGreenChannel, chunkSize, maxHeight, atmosphere.wind]);
 
-  // The atmosphere: the sky dome, and the haze the ground and water fade into. Haze 1 halves the color one and a half
-  // chunk widths past the orbit point (FogExp2: 1 - exp(-(0.83)^2) is 0.5; Dana, 2026-10-27: was too dominant at half a
-  // width from the camera). Inferred, TUNABLE.
+  // The atmosphere: the sky dome, and the haze the ground and water fade into (shaders/atmosphere/haze.glsl). Haze 1 halves
+  // the color half a chunk width past the orbit point at height 0 (1 - e^-0.69 is 0.5); less higher up. Inferred, TUNABLE.
   useEffect(() => {
-    const hazeDensity = atmosphere.enabled ? (atmosphere.haze * 0.83) / (1.5 * Math.max(chunkSize, 0.0001)) : 0;
+    const hazeDensity = atmosphere.enabled ? (atmosphere.haze * Math.LN2) / (0.5 * Math.max(chunkSize, 0.0001)) : 0;
     if (skyRef.current) updateSkyDome(skyRef.current, atmosphere);
     const material = materialRef.current;
     if (material) {
       (material.uniforms.uHazeColor.value as THREE.Color).set(atmosphere.horizonColor);
+      (material.uniforms.uHazeSkyColor.value as THREE.Color).set(atmosphere.zenithColor);
       material.uniforms.uHazeDensity.value = hazeDensity;
     }
-    if (waterRef.current) setChunkWaterSky(waterRef.current, atmosphere.enabled ? atmosphere.horizonColor : WATER_SKY_COLOR, atmosphere.horizonColor, hazeDensity);
+    if (waterRef.current) setChunkWaterSky(waterRef.current, atmosphere.enabled ? atmosphere.horizonColor : WATER_SKY_COLOR, atmosphere.horizonColor, atmosphere.zenithColor, hazeDensity);
   }, [atmosphere, chunkSize]);
 
   // Grid spacing/visibility — mirrors SceneCanvas's own grid effect (rebuild

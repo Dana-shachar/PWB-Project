@@ -10,6 +10,8 @@ const GRAVITY = 9.8;
 // Midpoints of each Beaufort force's speed range in mph (NWS Miami table), force 0 to 12.
 const BEAUFORT_MPH = [0.5, 2, 5.5, 10, 15.5, 21.5, 28, 35, 42.5, 50.5, 59, 68, 77.5];
 const METERS_PER_SECOND_PER_MPH = 0.44704;
+// Wind beyond force 12 (Jupiter-like, for the clouds) leaves the waves at a hurricane's.
+export const MAX_WAVE_WIND = BEAUFORT_MPH.length - 1;
 
 export function beaufortWindSpeed(force: number): number {
   const clamped = Math.min(12, Math.max(0, force));

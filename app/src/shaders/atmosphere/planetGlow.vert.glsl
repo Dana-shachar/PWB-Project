@@ -1,12 +1,7 @@
-// The planet's rim glow (Fresnel rim), after Lee Stemkoski's three.js glow demo: intensity = pow(c - dot(N, V), p),
-// with N and V the surface normal and the view vector, both in view space.
-uniform vec3 viewVector;
-uniform float c;
-uniform float p;
-varying float intensity;
+// The planet's glow shell: passes each point's world position so the fragment shader can measure the view ray.
+varying vec3 vWorldPosition;
 void main() {
-  vec3 viewNormal = normalize(normalMatrix * normal);
-  vec3 viewDirection = normalize(normalMatrix * viewVector);
-  intensity = pow(max(c - dot(viewNormal, viewDirection), 0.0), p);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  vWorldPosition = worldPosition.xyz;
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
 }

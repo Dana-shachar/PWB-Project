@@ -154,6 +154,7 @@ export class ChunkPatchRenderer {
   // The drawn ground's height at chunk point (x, z), read from the deepest shown
   // patch's bake, as Cesium reads terrain height from the most detailed loaded
   // tile. Null off the chunk or before a patch shows. Same texel mapping as chunk.vert.glsl.
+  lastSampleDepth = -1; // TEMP [B55]
   sampleHeight(renderer: THREE.WebGLRenderer, x: number, z: number, maxHeight: number): number | null {
     const root = this.root;
     if (!root) return null;
@@ -168,6 +169,7 @@ export class ChunkPatchRenderer {
       if (!best || entry.patch.depth > best.patch.depth) best = entry;
     }
     if (!best) return null;
+    this.lastSampleDepth = best.patch.depth; // TEMP [B55]
     const fractions = rootFractions(root, best.patch);
     const size = best.bakeSamples + 2 * PATCH_BORDER_TEXELS;
     const texelAt = (fraction: number, min: number, max: number) =>

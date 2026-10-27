@@ -1,14 +1,9 @@
-// The planet's haze: Stemkoski's glow vertex shader (intensity = pow(c - dot(N, V), p)), plus the world-space normal
-// so the haze can follow the sunlight.
-uniform vec3 viewVector;
-uniform float c;
-uniform float p;
-varying float intensity;
+// The planet's haze shell: passes each point's world position and the ground normal under it.
+varying vec3 vWorldPosition;
 varying vec3 vWorldNormal;
 void main() {
-  vec3 viewNormal = normalize(normalMatrix * normal);
-  vec3 viewDirection = normalize(normalMatrix * viewVector);
-  intensity = pow(max(c - dot(viewNormal, viewDirection), 0.0), p);
+  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  vWorldPosition = worldPosition.xyz;
   vWorldNormal = normalize(mat3(modelMatrix) * normal);
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * viewMatrix * worldPosition;
 }

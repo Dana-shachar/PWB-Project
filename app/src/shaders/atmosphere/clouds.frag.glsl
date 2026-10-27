@@ -8,6 +8,7 @@
 // Band speed, latitude widths, warp strength and light amounts inferred, TUNABLE.
 uniform float uCloudCoverage;
 uniform vec3 uCloudColor;
+uniform vec3 uCloudColor2;
 uniform float uCloudSoftness;
 uniform float uCloudTime; // advances faster in stronger wind
 uniform float uCloudScale;
@@ -80,6 +81,30 @@ float cloudShape(vec3 dir, float angle, float threshold) {
   return base - detail * uCloudFeather * 0.35 * edgeness;
 }
 
+// Two tones: warped bands mix in the second color, after segue2ant's "Simple Spatial Planet" (CC0): its sine and cosine
+// warp, sampled from two opposite projections blended to hide the seam. Band counts inferred, TUNABLE.
+const float TONE_PI = 3.14159265;
+const vec2 TONE_SCALE = vec2(8.0, 3.0);
+float toneBands(vec2 uv) {
+  for (float i = 1.0; i < 5.0; i += 1.0) {
+    uv.x += 0.5 * sin(i * uv.y);
+    uv.y += 0.5 * cos(i * uv.x);
+  }
+  return 0.5 + 0.5 * sin(uv.x + uv.y);
+}
+vec2 toneSphereUv(vec3 dir) {
+  return vec2(atan(dir.y, length(dir.xz)) / TONE_PI + 0.5, (atan(dir.x, dir.z) + TONE_PI) / (2.0 * TONE_PI));
+}
+float cloudTone(vec3 dir, float angle) {
+  float ca = cos(angle);
+  float sa = sin(angle);
+  vec3 moved = vec3(ca * dir.x - sa * dir.z, dir.y, sa * dir.x + ca * dir.z);
+  vec2 across = moved.xz / max(length(moved.xz), 1e-4);
+  float blend = (-across.y + 1.0) / 2.0;
+  vec2 scale = TONE_SCALE * uCloudScale;
+  return mix(toneBands(toneSphereUv(moved) * scale), toneBands(toneSphereUv(-moved) * scale), blend);
+}
+
 void main() {
   vec3 dir = normalize(vSphereDirection);
   float latitude = degrees(asin(clamp(dir.y, -1.0, 1.0)));
@@ -107,8 +132,9 @@ void main() {
   float towardSun = max(dot(-toEye, light), 0.0);
   float energy = mix(beer, beer * powder * 2.0, towardSun);
   float sunlit = clamp((dot(dir, light) + LIGHT_WRAP) / (1.0 + LIGHT_WRAP), 0.0, 1.0);
-  vec3 shadowColor = uCloudColor * 0.55;
+  vec3 baseColor = mix(uCloudColor, uCloudColor2, cloudTone(dir, drift));
+  vec3 shadowColor = baseColor * 0.55;
   // The darkest a core gets is capped at halfway to the shadow color.
-  vec3 color = mix(shadowColor, uCloudColor, clamp(0.5 + 0.5 * energy, 0.0, 1.0)) * (uAmbient + sunlit);
+  vec3 color = mix(shadowColor, baseColor, clamp(0.5 + 0.5 * energy, 0.0, 1.0)) * (uAmbient + sunlit);
   gl_FragColor = vec4(color, cloud * 0.9);
 }

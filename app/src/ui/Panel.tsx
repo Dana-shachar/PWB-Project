@@ -763,7 +763,7 @@ export function Panel({
               value={atmosphere.haze}
               onChange={(haze) => onAtmosphereChange({ haze })}
               min={0}
-              max={3}
+              max={10}
               step={0.01}
               precision={2}
               disabled={!atmosphere.enabled}
