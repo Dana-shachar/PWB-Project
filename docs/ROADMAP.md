@@ -48,14 +48,14 @@
 >
 > **Next, in this order**
 > 1. ✅ **Sea level and water** (2026-10-27). Sea level is a raw height so both views share the coastline; the water ramp is spaced by light remaining; Seascape waves on both views.
-> 2. **Basic atmosphere**, tinted per planet type.
-> 3. **Planet types** (desert, forest, water, volcano, ice, each with variations): a tuned start plus "reroll within this type" (Dana chose option C).
-> 4. **Terrain shading and volcanoes:** rock by slope, snow by height, glowing lava, cones placed at Voronoi cell centers.
+> 2. **Basic atmosphere**, minimal, from existing assets (Dana, 2026-10-27): a slight glow, alien clouds, weather (winds, rain of any kind, ice and snow, poles). Order 🧭 atmosphere, then terrain shading, then planet profiles.
+> 3. **Terrain shading and volcanoes:** rock by slope, snow by height, glowing lava, cones placed at Voronoi cell centers.
 >    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.
 >    - ⚪ **Land shader layers**, on top of the height ramp, in this order (Dana agreed 2026-10-26, plan to follow):
 >      1. Slope layer: steep faces get their own color (rock), from how far the surface tilts from "up". 📚 Tuts+ terrain texturing, UPenn CIS 566 planets.
 >      2. Large-scale color variation: a slow noise shifting hue and lightness so no region is one flat band. 📚 Same sources.
 >      3. Rule-based alien palettes, borrowed from No Man's Sky's color-theory system (e.g. accents complementary to the base), with Inigo Quilez's cosine palettes as the generator, tied into Randomize colors. 📚 Kill Screen and Engadget on Grant Duncan's GDC talk; iquilezles.org/articles/palettes.
+> 4. **Planet types** (desert, forest, water, volcano, ice, each with variations): a tuned start plus "reroll within this type" (Dana chose option C). 🧭 Moved after terrain shading (Dana, 2026-10-27): profiles save every look setting, so they come once those exist. Profiles: save a planet you like, "Generate" makes variations within ranges around it.
 > 5. **Clouds and storms** (dust storms, hurricanes, ash plumes, blizzards).
 > 6. **Evolving plants on the land chunk:** 📚 parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*) and space colonization for coral, genes mutated per Sims 1991. One shared visual style across all plants. EZ-Tree considered for earth-like trees.
 > 7. If time allows: population agents, then cataclysms (more than one, Dana 2026-10-27). A tsunami is one: about 50 cm high and 800 km long in open ocean, seen from orbit only in the sun glint, rising at the coast (📚 NASA MISR, Sri Lanka 2004). Final Review exhibition Dec 2.
