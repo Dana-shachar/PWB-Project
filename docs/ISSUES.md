@@ -548,8 +548,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - 📚 Now Cesium's convention (`minimumPickingTerrainHeight`, `enableCollisionDetection`): a CPU copy of the chunk's heights (`groundHeightAt`, `raycastGround` in `voxel/chunkGround.ts`); before a drag or wheel zoom the pivot moves to the ground under the cursor, and the camera stays `MIN_CAMERA_ALTITUDE` of the chunk's size above the ground under it (`keepAboveFlatGround`).
 - Map-style navigation: `zoomToCursor` with `screenSpacePanning = false`, which keeps the orbit target on the ground plane (checked in three.js r185's OrbitControls source; with screen-space panning, zoom-to-cursor pulls the target off the ground). Panning now slides along the ground, as in `MapControls`.
 
-### [B55] Lighting seams along the land chunk's patch edges · `wrong but workable`
-**🔴 Open, retest failed 2026-10-26** · **Opened:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `shaders/chunk.frag.glsl`, `voxel/ChunkPatchRenderer.ts`
+### [B55] Lighting seams and a straight cliff on the land chunk · `wrong but workable`
+**🔴 Open, cliff seen again 2026-10-27** · **Opened:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `shaders/chunk.frag.glsl`, `voxel/ChunkPatchRenderer.ts`
 
 **What happened**
 - Dana: after the chunk moved onto patches (`[B53]`), straight lighting lines show where patches meet; the surface itself lines up (screenshot, 2026-10-26).
@@ -560,6 +560,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - The planet's patches use the same slope code, so they likely share this.
 - Retest cause, first guess (2026-10-26, WRONG): the remaining seams were height steps from each bake fading octaves by its own sample spacing. The depth-based fade built for it did not help and was removed.
 - Evidence (2026-10-26): with each patch tinted its own color, the jagged wall runs straight across a patch boundary and is not on any boundary (screenshot). So it is in the height data, not the patches. It is a long, straight, diagonal cliff with a sawtooth top (one tooth per texel). Seen only under some noise settings (Voronoi, Manhattan, Jitter 0.12). Dana (2026-10-26, later): the wall disappears when Layer 277 is hidden and looks fine on a new planet, so she treats it as that layer's settings, not a code bug (the cliff part is closed; the patch-edge lighting seams above still wait on a test). The cause is not yet found: `voronoiNoise3D`'s nearest-point distance is continuous, so a cliff has to come from another step (a layer's transform, fractal type or mask, or modifiers).
+
+- 🔴 Reopened 2026-10-27 (Dana, screenshot): close to the ground on the chunk, a tall vertical wall still cuts across the terrain, its face streaked in vertical stripes (the texture stretched down a near-vertical drop). So the cliff part is not closed by hiding one layer. Cause still unknown; next step is data, not a guess: tint the bake by layer or log the height on both sides of the wall to find which step makes the jump.
 
 **Fix**
 - 📚 Known fix: bake each tile with a border of extra texels so edge slopes read real neighbor ground (Unity's terrain normals, see `REFERENCES.md` once added).
