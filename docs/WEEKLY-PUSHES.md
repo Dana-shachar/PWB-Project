@@ -15,7 +15,7 @@
 
 *Made the repo safe to publish and took it public, added an architecture diagram generated from a script, then, after the rubric marked the concept "Fair", turned the project toward story: planet types, atmosphere, evolving alien plants, and first, water.*
 
-![The architecture diagram: the app's modules and which one owns what.](diagrams/architecture.svg)
+![The architecture diagram: the app's modules and which one owns what.](diagrams/architecture-2026-10-26.svg)
 
 ### 🛠️ Done
 - **Publishing:** the Firebase config now comes from environment variables (settings kept in a git-ignored local file, with a template in the repo). Without them the app still loads, with sign-in and saving off.
