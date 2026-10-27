@@ -6,8 +6,10 @@ import waterGlsl from '../shaders/water.glsl?raw';
 import oceanWavesGlsl from '../shaders/oceanWaves.glsl?raw';
 import { buildRampUniformArrays, MAX_COLOR_STOPS } from '../planet/colorRamp';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
+import { applyWaveSet, buildWaveSet, createWaveUniforms, surfZoneShare, windLengthScale, windTimeScale } from '../planet/oceanSpectrum';
 
-// The chunk's water: TDM's Seascape waves and sea color (shaders/oceanWaves.glsl, CC BY-NC-SA 3.0) on a flat sheet,
+// The chunk's water: TDM's Seascape waves and sea color (shaders/oceanWaves.glsl, CC BY-NC-SA 3.0), with large Gerstner
+// waves for variance (planet/oceanSpectrum.ts), on a flat sheet,
 // recolored by the water ramp, see-through in the shallows, with shore and crest foam (shaders/chunkWater.frag.glsl).
 export interface ChunkWater {
   mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
@@ -40,8 +42,8 @@ export function createChunkWater(): ChunkWater {
       uAmbient: { value: 0.15 },
       uLightIntensity: { value: 1 },
       uCameraPosition: { value: new THREE.Vector3() },
-      uSeaTime: { value: 0 },
-      uSeaIterations: { value: 5 },
+      ...createWaveUniforms(), // the variance waves, plus Shine, Reflection and Wind
+      uSeaIterations: { value: 3 },
       uWaveScale: { value: 4 },
       uResolution: { value: 1000 },
     },
@@ -58,12 +60,14 @@ export function createChunkWater(): ChunkWater {
   };
 }
 
-// Every frame: the eye, the waves' clock, and the view's width in pixels (Seascape's distance smoothing).
+// Every frame: the eye, the waves' clocks (Seascape's runs faster in wind, the variance waves keep real seconds since
+// their speeds already follow the wind), and the view's width in pixels (Seascape's distance smoothing).
 export function updateChunkWaterFrame(water: ChunkWater, cameraPosition: THREE.Vector3, deltaSeconds: number, viewWidthPixels: number): void {
   const uniforms = water.mesh.material.uniforms;
   uniforms.uResolution.value = viewWidthPixels;
   (uniforms.uCameraPosition.value as THREE.Vector3).copy(cameraPosition);
-  uniforms.uSeaTime.value += deltaSeconds;
+  uniforms.uSeaTime.value += deltaSeconds * windTimeScale(uniforms.uSeaWind.value as number);
+  uniforms.uSeaClock.value += deltaSeconds;
 }
 
 // The sun and light follow the Scene lighting, as the land's do.
@@ -76,6 +80,9 @@ export function setChunkWaterLight(water: ChunkWater, lightDirection: THREE.Vect
 
 // Sizes the sheet to the chunk, lifts it to sea level with the chunk's own height rule (chunk.vert.glsl), and loads the
 // look: the ground's height texture, the water ramp, clarity, foam and wave detail.
+// How many variance waves (4 per step, planet/oceanSpectrum.ts). Inferred, TUNABLE.
+const VARIANCE_WAVE_DETAIL = 3;
+
 export function updateChunkWater(
   water: ChunkWater,
   settings: WaterSettings,
@@ -96,7 +103,20 @@ export function updateChunkWater(
   uniforms.uWaterClarity.value = settings.clarity;
   uniforms.uFoamWidth.value = settings.foamWidth;
   uniforms.uSeaIterations.value = settings.waveDetail;
-  uniforms.uWaveScale.value = settings.waveScale;
+  // Wind lengthens Seascape's waves (windLengthScale); the variance waves already have the wind's lengths, so their
+  // lengths and heights are divided back by it to stay true in meters.
+  const lengthScale = windLengthScale(settings.wind);
+  uniforms.uWaveScale.value = settings.waveScale * lengthScale;
+  uniforms.uSeaWaveScale.value = settings.waveScale * lengthScale;
+  const depthRangeMeters = Math.max(0, settings.seaLevel - waterDeepest) * maxHeight * 1000;
+  uniforms.uSurfZone.value = surfZoneShare(settings.wind, depthRangeMeters);
+  uniforms.uSeaShine.value = settings.shine;
+  uniforms.uSeaReflection.value = settings.reflection;
+  uniforms.uSeaWind.value = settings.wind;
+  const waveSet = buildWaveSet(settings.wind, VARIANCE_WAVE_DETAIL);
+  waveSet.wavelengths = waveSet.wavelengths.map((length) => length / lengthScale);
+  waveSet.amplitudes = waveSet.amplitudes.map((amplitude) => amplitude / lengthScale);
+  applyWaveSet(uniforms, waveSet, settings.wind);
   const ramp = buildRampUniformArrays(settings.colorStops);
   const rampColors = uniforms.uWaterRampColors.value as THREE.Color[];
   for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);

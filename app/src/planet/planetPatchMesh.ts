@@ -6,14 +6,22 @@ import waterGlsl from '../shaders/water.glsl?raw';
 import oceanWavesGlsl from '../shaders/oceanWaves.glsl?raw';
 import { KM_PER_SCENE_UNIT } from './planetControls';
 import { getRippleMap } from './rippleMap';
+import { landRampFloor } from './seaLevel';
+import { beaufortWindSpeed, windLengthScale } from './oceanSpectrum';
 
 // The ocean's ripples: 2 km tiles, fading in as the eye comes within 30 km and full by 10 km. Inferred, TUNABLE.
 const PLANET_RIPPLE_TILE_KM = 2;
 const PLANET_RIPPLE_FADE_NEAR_KM = 10;
 const PLANET_RIPPLE_FADE_FAR_KM = 30;
-// Seascape at planet scale: one of its units is 1.5 km (its ~40-unit waves become ~60 km swells, times Wave size).
-// Inferred, TUNABLE.
-const PLANET_OCEAN_UNIT_KM = 1.5;
+
+// Seascape at planet scale: one of its units is 1 m, as on the chunk, so both views show the same waves. From orbit
+// they are far below pixel size, band-limit away and leave only the glare; they appear as you zoom in (Dana, 2026-10-27).
+const PLANET_OCEAN_UNIT_KM = 0.001;
+
+// With water on, the land ramp starts at the depth light reaches (planet/seaLevel.ts); depth still uses the true low.
+function landRampMin(shared: PlanetSharedUniforms): number {
+  return shared.waterEnabled > 0.5 ? landRampFloor(shared.seaLevel, shared.elevationMin, shared.waterClarity) : shared.elevationMin;
+}
 
 function oceanScale(waveScale: number): number {
   return KM_PER_SCENE_UNIT / (PLANET_OCEAN_UNIT_KM * Math.max(waveScale, 0.0001));
@@ -282,15 +290,18 @@ export interface PlanetSharedUniforms {
   waterClarity: number;
   skyColor: THREE.Color;
   waterShininess: number;
-  waterDebug?: number; // TEMP debug, planet/waterDebug.ts
   foamWidth: number;
   // Per frame: the ripples' clock, and whether the ripple texture has loaded.
   time: number;
+  seaTime: number; // the waves' clock, faster in wind (planet/oceanSpectrum.ts, windTimeScale)
   rippleEnabled: number;
   viewWidthPixels: number;
   // Seascape's settings, shared with the chunk (WaterSettings).
   waveDetail: number;
   waveScale: number;
+  shine: number;
+  reflection: number;
+  wind: number;
   // What the screen-space-error selection reads (planet/planetPatches.ts),
   // not material uniforms: the Resolution slider as a maximum error in
   // pixels (lower is sharper), and the view's height in pixels and vertical
@@ -336,7 +347,7 @@ export function createPatchMaterial(
       uRampColors: { value: ramp.colors },
       uRampPositions: { value: ramp.positions },
       uRampCount: { value: ramp.count },
-      uElevationMin: { value: shared.waterEnabled > 0.5 ? Math.max(shared.elevationMin, shared.seaLevel) : shared.elevationMin },
+      uElevationMin: { value: landRampMin(shared) },
       uElevationMax: { value: shared.elevationMax },
       uHeightMap: { value: heightMap },
       uDisplacementAmplitude: { value: shared.displacementAmplitude },
@@ -356,7 +367,6 @@ export function createPatchMaterial(
       uWaterClarity: { value: shared.waterClarity },
       uSkyColor: { value: shared.skyColor.clone() },
       uWaterShininess: { value: shared.waterShininess },
-      uWaterDebug: { value: shared.waterDebug ?? 0 }, // TEMP debug
       uFoamWidth: { value: shared.foamWidth },
       uRippleMap: { value: getRippleMap() },
       uRippleEnabled: { value: shared.rippleEnabled },
@@ -364,9 +374,14 @@ export function createPatchMaterial(
       uRippleFadeNear: { value: PLANET_RIPPLE_FADE_NEAR_KM / KM_PER_SCENE_UNIT },
       uRippleFadeFar: { value: PLANET_RIPPLE_FADE_FAR_KM / KM_PER_SCENE_UNIT },
       uTime: { value: shared.time },
-      uSeaTime: { value: shared.time },
+      uSeaTime: { value: shared.seaTime },
       uSeaIterations: { value: shared.waveDetail },
-      uOceanScale: { value: oceanScale(shared.waveScale) },
+      uSeaShine: { value: shared.shine },
+      uSeaReflection: { value: shared.reflection },
+      uSeaWind: { value: shared.wind },
+      uOceanScale: { value: oceanScale(shared.waveScale * windLengthScale(shared.wind)) },
+      uSeaWindSpeed: { value: beaufortWindSpeed(shared.wind) },
+      uSurfZone: { value: 0.12 }, // planet surf shows only within 30 km, which the planet camera doesn't reach
       uResolution: { value: shared.viewWidthPixels },
     },
   });
@@ -386,12 +401,11 @@ export function buildPatchRampArrays(shared: PlanetSharedUniforms): PatchRampArr
   return { land: buildRampUniformArrays(shared.colorStops), water: buildRampUniformArrays(shared.waterStops) };
 }
 
-// The only uniforms that change every frame: the eye position (and the TEMP water debug mode).
+// The only uniforms that change every frame: the eye position.
 export function applyFrameUniforms(material: THREE.ShaderMaterial, shared: PlanetSharedUniforms): void {
   (material.uniforms.uCameraPosition.value as THREE.Vector3).copy(shared.cameraPosition);
-  material.uniforms.uWaterDebug.value = shared.waterDebug ?? 0; // TEMP debug
   material.uniforms.uTime.value = shared.time;
-  material.uniforms.uSeaTime.value = shared.time;
+  material.uniforms.uSeaTime.value = shared.seaTime;
   material.uniforms.uResolution.value = shared.viewWidthPixels;
   material.uniforms.uRippleEnabled.value = shared.rippleEnabled;
 }
@@ -411,8 +425,7 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
   (u.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
   u.uRampCount.value = ramp.count;
-  // With water on, the land ramp starts at sea level (hypsometric above, bathymetric below); depth still uses the true low.
-  u.uElevationMin.value = shared.waterEnabled > 0.5 ? Math.max(shared.elevationMin, shared.seaLevel) : shared.elevationMin;
+  u.uElevationMin.value = landRampMin(shared);
   u.uElevationMax.value = shared.elevationMax;
   u.uDisplacementAmplitude.value = shared.displacementAmplitude;
   u.uRadius.value = shared.radius;
@@ -430,6 +443,10 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   u.uWaterShininess.value = shared.waterShininess;
   u.uFoamWidth.value = shared.foamWidth;
   u.uSeaIterations.value = shared.waveDetail;
-  u.uOceanScale.value = oceanScale(shared.waveScale);
+  u.uSeaShine.value = shared.shine;
+  u.uSeaReflection.value = shared.reflection;
+  u.uSeaWind.value = shared.wind;
+  u.uOceanScale.value = oceanScale(shared.waveScale * windLengthScale(shared.wind));
+  u.uSeaWindSpeed.value = beaufortWindSpeed(shared.wind);
   applyFrameUniforms(material, shared);
 }

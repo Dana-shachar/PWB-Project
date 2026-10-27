@@ -45,13 +45,21 @@ vec3 waterSurfaceColor(vec3 seabedLit, float depthShare, float clarity, vec3 ram
   return seabedLit * waterSeabedFactor(depthShare, clarity, rampColor, fresnel) + waterOwnLight(depthShare, clarity, rampColor, waterLight, fresnel, skyColor);
 }
 
-// Shore foam: a soft band where the water is shallowest, the depth-difference foam of game water shaders (here the
-// depth is already known). breakup (0..1, from the ripple texture) varies its strength. Width and look inferred, TUNABLE.
+// Shore foam, Roystan's toon water method: a noise threshold that rises with depth, so foam is solid at the waterline
+// and breaks into patches further out, softened by a smoothstep. breakup (0..1) is the noise. Roystan's cutoff tops
+// out at 0.777, leaving foam everywhere; here it rises past 1 so the foam ends at the zone's edge. Softness is wider
+// than his 0.01 for a soft rather than toon edge. Inferred, TUNABLE.
 const vec3 FOAM_COLOR = vec3(0.95, 0.97, 1.0);
+const float SHORE_FOAM_SOFTNESS = 0.3; // widened from 0.12: the waterline dashes had hard edges (Dana, 2026-10-27)
+// Even at the waterline only the noise above this shows, so the edge is patchy, not a solid band (Dana, 2026-10-27).
+const float SHORE_FOAM_EDGE_CUTOFF = 0.45;
+// How white foam gets at most, everywhere (Dana, 2026-10-27: foam too strong). Inferred, TUNABLE.
+const float FOAM_OPACITY = 0.6;
 float waterFoam(float depthShare, float foamWidth, float breakup) {
   if (foamWidth <= 0.0) return 0.0;
-  float band = 1.0 - smoothstep(0.0, foamWidth, max(depthShare, 0.0));
-  return band * band * (0.4 + 0.6 * breakup);
+  float depth01 = clamp(max(depthShare, 0.0) / foamWidth, 0.0, 1.0);
+  float cutoff = mix(SHORE_FOAM_EDGE_CUTOFF, 1.0 + 2.0 * SHORE_FOAM_SOFTNESS, depth01);
+  return smoothstep(cutoff - SHORE_FOAM_SOFTNESS, cutoff + SHORE_FOAM_SOFTNESS, breakup);
 }
 
 // The sun's glint on water, its own strength so the land's Specular slider can't switch it off. Inferred, TUNABLE.

@@ -12,7 +12,7 @@
 >
 > **State.** Everything is committed and pushed (2026-10-26, late): water on both views, Randomize colors for water, the Color menu (Land/Water headers), closed-by-default menus and `--gap-lg`, Space to pan, the walk click cap, the GPU-histogram planet stats and per-frame uniform split, and the Roughness shore fade. Untested items are marked in `ISSUES.md`. The dev server runs on **localhost:5173** (`app/vite.config.ts`, `strictPort`); run it from `app/` with `npx vite`.
 >
-> **Right now: the water shader (`[B61]`).** The chunk and planet use a port of TDM's Seascape (`shaders/oceanWaves.glsl`, CC BY-NC-SA 3.0) with band-limiting (Quilez), halftone crest foam (Yingst et al.), currents (Vlachos flow map) and shore breaking bands. Dana's last review: too structured, the shine too strong, too much detail up close, one layer not moving, the planet needs more fading from orbit. **A plan is proposed and waits for her go** (in `[B61]`, "Pending plan"). The TEMP water debug dropdown (`planet/waterDebug.ts`) is still in the panel.
+> **Right now: water is done (2026-10-27); next is the basic atmosphere.** Dana closed the water work to get back to the story. Seascape (`shaders/oceanWaves.glsl`) stays the base, with these layered on: a Water menu section (Color, Shine, Reflection, Wind on the Beaufort scale), wind-set wave length and speed (Pierson-Moskowitz, dispersion), large Gerstner waves for light and dark variance (`waterVariance`, `planet/oceanSpectrum.ts`), the Cox and Munk glint far away, storm foam in streaks, surf only where waves break (McCowan), softer foam (`FOAM_OPACITY`), the land ramp starting at the depth light reaches, a triplanar seam fix on the planet, and wave work skipped where it's invisible (planet 17 to 27 fps became 68 to 90). Sources in `REFERENCES.md`. Known limits: Seascape's pattern is still somewhat regular; the chunk's depth in meters changes with its Size (`[B59]`); foam that builds up over time is deferred.
 >
 > **Working rules this session (Dana):** a numbered plan and her go before any file edit, including bug fixes; an answer to a question is not a go (memory `strict-confirm-before-acting`). Copy tested assets first (three.js addons, Shadertoy, papers' code) before hand-building (memory `existing-assets-first`). Verify a source by actually reading it, and say plainly when only a summary was read. Reuse this repo's performance fixes before adding per-tick or per-frame work (`.claude/CLAUDE.md`). Temporary `console.log` diagnostics can be added without asking (marked `TEMP`). No attribution anywhere. No agents without her yes and a cost estimate; page-reading helpers (web-fetch) are reported with their token cost.
 >
@@ -47,7 +47,7 @@
 > - Erosion (`[B54]`), Terrace (`[B57]`), undo/redo and patch polish are paused. Walk mode stalling (`[B58]`) is fixed only as far as walking needs.
 >
 > **Next, in this order**
-> 1. 🟡 **Sea level and water**: built, being refined (`[B61]`). Sea level is a raw height so both views share the coastline; the water ramp is spaced by light remaining; Seascape waves on both views.
+> 1. ✅ **Sea level and water** (2026-10-27). Sea level is a raw height so both views share the coastline; the water ramp is spaced by light remaining; Seascape waves on both views.
 > 2. **Basic atmosphere**, tinted per planet type.
 > 3. **Planet types** (desert, forest, water, volcano, ice, each with variations): a tuned start plus "reroll within this type" (Dana chose option C).
 > 4. **Terrain shading and volcanoes:** rock by slope, snow by height, glowing lava, cones placed at Voronoi cell centers.
@@ -58,7 +58,7 @@
 >      3. Rule-based alien palettes, borrowed from No Man's Sky's color-theory system (e.g. accents complementary to the base), with Inigo Quilez's cosine palettes as the generator, tied into Randomize colors. 📚 Kill Screen and Engadget on Grant Duncan's GDC talk; iquilezles.org/articles/palettes.
 > 5. **Clouds and storms** (dust storms, hurricanes, ash plumes, blizzards).
 > 6. **Evolving plants on the land chunk:** 📚 parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*) and space colonization for coral, genes mutated per Sims 1991. One shared visual style across all plants. EZ-Tree considered for earth-like trees.
-> 7. If time allows: population agents, then one cataclysm. Final Review exhibition Dec 2.
+> 7. If time allows: population agents, then cataclysms (more than one, Dana 2026-10-27). A tsunami is one: about 50 cm high and 800 km long in open ocean, seen from orbit only in the sun glint, rising at the coast (📚 NASA MISR, Sri Lanka 2004). Final Review exhibition Dec 2.
 >
 > **Plan: walk mode in the chunk view**
 > - **Decided by Dana:** eye height 1.7 m; standard game field of view, Unity's default (60° vertical); you can look up well past the horizon from the ground; a mouse click walks you to the clicked spot; holding the arrow keys (and WASD) walks; the near plane is checked with a real measurement while building.

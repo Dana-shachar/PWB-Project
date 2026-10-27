@@ -436,7 +436,7 @@
 
 **Hypsometric and bathymetric tints, split at sea level** · cartography · `method used`
 - Land and water get separate color ramps: greens through browns to whites above sea level, blues by depth below it.
-- With water on, the land ramp starts at sea level and the water ramp colors everything below. Established practice, not a formal standard.
+- With water on, the land ramp starts at the depth light reaches (Clarity), not exactly at sea level, so the seabed seen through the shallows keeps the land's colors (Dana, 2026-10-27); the water ramp colors the water. Established practice, not a formal standard.
 - *[Hypsometric tints, Wikipedia](https://en.wikipedia.org/wiki/Hypsometric_tints) · [Esri, hypsometric tinting](https://www.esri.com/arcgis-blog/products/product/imagery/hypsometric-tinting). Read 2026-10-26*
 
 **Ocean light zones** · NOAA · `method used`
@@ -446,7 +446,7 @@
 
 **"Seascape"** · Alexander Alekseev (TDM), 2014 · `code used` · CC BY-NC-SA 3.0
 - A Shadertoy ocean: layered "choppy" wave octaves, a normal from their height, and a sea color mixing a base color, a lighter tint on wave tops, the sky by Fresnel and a sun highlight.
-- The water in both views (`shaders/oceanWaves.glsl`, credited and licensed in its header): the wave and color functions copied, recolored by the water ramp, with the octave count as Wave detail and a Wave size multiplier. Its own distance smoothing (`dot(dist,dist) * 0.1 / screen width`) is kept as published. Its sine hash is replaced by the repo's sine-free hash, since it banded into stripes at kilometer coordinates (the banding Jarzynski and Olano 2020 report). ⚠️ Non-commercial and ShareAlike: that file must stay under CC BY-NC-SA 3.0, and a commercial use would need the author's permission or a replacement. Copied from Fuchsia's embedded copy (Shadertoy blocked the fetch); indentation was lost in the fetch, the tokens are as published.
+- The water in both views (`shaders/oceanWaves.glsl`, credited and licensed in its header): the wave and color functions copied, recolored by the water ramp, with the octave count as Wave detail and a Wave size multiplier. Its own distance smoothing (`dot(dist,dist) * 0.1 / screen width`) is kept as published. Its sky reflection and sun highlight are scaled by the Reflection and Shine settings (Shine defaults to 0.3 of the original glare). Its sine hash is replaced by the repo's sine-free hash, since it banded into stripes at kilometer coordinates (the banding Jarzynski and Olano 2020 report). ⚠️ Non-commercial and ShareAlike: that file must stay under CC BY-NC-SA 3.0, and a commercial use would need the author's permission or a replacement. Copied from Fuchsia's embedded copy (Shadertoy blocked the fetch); indentation was lost in the fetch, the tokens are as published.
 - *[Seascape on Shadertoy](https://www.shadertoy.com/view/Ms2SD1) · [Fuchsia's copy](https://fuchsia.googlesource.com/fuchsia/+/038d2b9/src/ui/examples/shadertoy/client/glsl_strings.cc). Read 2026-10-26*
 
 **Ocean lighting from geometry to BRDF** · Bruneton, Neyret & Holzschuch, 2010 · `method used`, approximated
@@ -454,7 +454,7 @@
 - `seaFarFactor` (`shaders/oceanWaves.glsl`): once Seascape's distance-smoothed normal step passes the waves, the normal flattens and the sun highlight widens into a soft glare. ⚠️ A simplified stand-in for the paper's roughness model, not its math.
 - *[Paper page](https://evasion.inrialpes.fr/Publications/2010/BNH10) · [course slides](https://cgg.mff.cuni.cz/%7Ejaroslav/teaching/2012-npgr031/prezentace/Realtime%20Realistic%20Ocean%20Lighting.pdf) · [Proland ocean](https://proland.inrialpes.fr/doc/proland-4.0/ocean/html/page-examples.html). Read 2026-10-26*
 
-**Whitecaps from wave deformation, filtered across scales** · Dupuy & Bruneton, SIGGRAPH Asia 2012 · `method used`, approximated
+**Whitecaps from wave deformation, filtered across scales** · Dupuy & Bruneton, SIGGRAPH Asia 2012 · `replaced 2026-10-27` by the Cox and Munk glint and wind-set foam
 - Whitecap coverage comes from how much the waves deform, a value that can be averaged with distance, so foam stays correct from centimeters to planet scale.
 - `crestFoam` (`shaders/oceanWaves.glsl`): foam where Seascape's waves crest, blended with distance into an averaged, patchy coverage. ⚠️ Crest height stands in for the paper's deformation criterion; thresholds inferred.
 - *[Paper](https://liris.cnrs.fr/Documents/Liris-5812.pdf). Read (abstract) 2026-10-26*
@@ -466,7 +466,7 @@
 
 **Foam by halftoning** · Yingst, Alford & Parberry, UNT LARC-2011-05 · `method used`
 - Foam saturation f = (H − H0)/(Hmax − H0) is compared per pixel against a clustered halftone mask (Gaussian-filtered white noise, σ = 24 clumps best); foam shows where f exceeds the mask, faded by clamp(f − m, 0.15, 3.0), so it clumps and pops instead of tiling.
-- `crestFoam` and `halftoneMask` (`shaders/oceanWaves.glsl`). ⚠️ Two octaves of smooth noise stand in for their precomputed mask texture.
+- `crestFoam` and `halftoneMask` (`shaders/oceanWaves.glsl`). ⚠️ Two octaves of smooth noise stand in for their precomputed mask texture. Departs from the paper: the mask moves with the currents and a slow drift, in larger clusters (Dana, 2026-10-27: a still layer looked wrong).
 - *[Project page](https://ianparberry.com/research/seafoam/) · [tech report](https://ianparberry.com/techreports/LARC-2011-05.pdf). Read in full 2026-10-26*
 
 **Flow maps with a two-phase blend** · Vlachos, "Water Flow in Portal 2", SIGGRAPH 2010 · `method used`
@@ -474,7 +474,7 @@
 - `sea_height` (`shaders/oceanWaves.glsl`): currents from a procedural noise field instead of a painted map. Strength, scale and rate inferred.
 - *[Slides](https://www.advances.realtimerendering.com/s2010/Vlachos-Waterflow(SIGGRAPH%202010%20Advanced%20RealTime%20Rendering%20Course).pdf) · [Grimes, GDC 2011](https://www.hlportal.de/files/GDC2011_BronwenGrimes_NonstandardTextures.pdf). Read (summaries) 2026-10-26*
 
-**Shoreline waves from distance to shore** · Croakwood devlog, GameDev.net ocean log · `method used`, approximated
+**Shoreline waves from distance to shore** · Croakwood devlog, GameDev.net ocean log · `superseded 2026-10-27` by the surf waves below
 - Waves and foam near the coast are driven by each point's distance to the shoreline, so bands travel toward it and break.
 - `shoreWaveFoam` (`shaders/oceanWaves.glsl`): foam bands moving toward the coast. ⚠️ Water depth stands in for distance to shore, which is wrong on steep coasts; a true distance field is the upgrade.
 - *[Croakwood devlog #5](https://www.texelraptor.com/blog/croakwood-devlog-5) · [GameDev.net, ocean rendering](https://gamedev.net/blogs/715/entry-2249487-ocean-rendering/page__st__5/). Read (summaries) 2026-10-26*
@@ -488,10 +488,75 @@
 - A mirrored camera renders the scene into a texture for the reflection, and a camera clipped at the surface renders what lies below for the refraction. Water2 projects both with a texture matrix, offsets the lookups by the ripple normal (factor 0.05) and blends them by Schlick Fresnel.
 - The chunk's water (`voxel/chunkWater.ts`): the refraction replaces the old multiply pass as the seabed, and the reflection replaces the flat sky color, with the sky as the fallback where nothing was drawn. Read in the installed three.js 0.185 source.
 
-**Shore foam from the depth gap** · Godot community water shaders, Unity forum · `method used`
+**Shore foam from the depth gap** · Godot community water shaders, Unity forum · `superseded 2026-10-27`
 - Game water adds foam where the gap between the water surface and the ground behind it is small, softened with smoothstep and broken up by a scrolling texture.
-- `waterFoam` (`shaders/water.glsl`), with the depth already known exactly. Width and look inferred, tunable. ⚠️ Community examples, medium trust.
+- The first `waterFoam`: a smooth band that read as a hard line at the waterline. Replaced by Roystan's noise threshold below. ⚠️ Community examples, medium trust.
 - *[Godot, water with foam and depth](https://godotshaders.com/shader/water-with-foam-and-depth/). Read 2026-10-26*
+
+**Toon water: depth foam by a rising noise threshold, and distorted noise** · Erik Roystan Ross · `method used` · Unlicense
+- Foam where the depth gap is small: `foamDepthDifference01 = saturate(depthDifference / foamDistance)`, `surfaceNoiseCutoff = foamDepthDifference01 * _SurfaceNoiseCutoff` (0.777), then `smoothstep(cutoff - SMOOTHSTEP_AA, cutoff + SMOOTHSTEP_AA, noise)` with `SMOOTHSTEP_AA` 0.01. The noise UVs are pushed by a second texture: `(sample * 2 - 1) * _SurfaceDistortionAmount` (0.27).
+- `waterFoam` (`shaders/water.glsl`): the shore foam, solid at the waterline and breaking into patches further out; the cutoff rises past 1 so the foam ends at the zone's edge, and the softness is wider (0.12) for a soft edge. `foamPatchiness`: the same threshold on a slow noise, so crest foam gathers in patches. `seaBend` (`shaders/oceanWaves.glsl`): the distortion step applied to the wave coordinates. Values inferred, tunable.
+- *[Roystan, Toon Water Shader](https://roystan.net/articles/toon-water.html) · [code, ToonWater.shader](https://github.com/IronWarrior/ToonWaterShader). Read the shader file in full 2026-10-27*
+
+**Domain warping** · Inigo Quilez · `method used`
+- A pattern is evaluated at a distorted position, f(p + h(p)), with the offset h made of noise, which breaks up regular shapes into flowing ones.
+- `seaBend` (`shaders/oceanWaves.glsl`): a slow, gentle warp of the wave coordinates so crests curve instead of running in rows, kept small so band-limiting's footprint stays about right (Quilez's bandlimiting note: a warp changes the footprint). ⚠️ The article itself returned 404 to the reader; read through search summaries and The Book of Shaders, chapter 13, only.
+- *[Quilez, warp](https://iquilezles.org/articles/warp/) · [The Book of Shaders, ch. 13](https://thebookofshaders.com/13/). Read (summaries) 2026-10-27*
+
+**Fetch limits wave size** · Physical Geology (Earle), Kalff via PSU limnology notes · `method used`
+- Waves grow with fetch, how far the wind blows over open water: harbors and lakes stay small, open oceans grow large. Kalff's estimate: max height ≈ 0.332 √(fetch in km) meters.
+- `seaFetchScale` (`shaders/oceanWaves.glsl`): wave height grows with the square root of a fetch stand-in. ⚠️ Water depth stands in for fetch, inferred.
+- *[Physical Geology, waves](https://geo.libretexts.org/Bookshelves/Geology/Book%253A_Physical_Geology_(Earle)/17%253A_Shorelines/17.1%253A_Waves) · [PSU limnology notes](https://web.pdx.edu/~sytsmam/limno/Limno09.10.Motion.pdf). Read (summaries) 2026-10-27*
+
+**Sun glint shows roughness, slicks and currents from space** · NASA, Oceanography magazine · `replaced 2026-10-27` by the Cox and Munk glint and wind-set foam
+- From orbit, waves are seen only through the sun glint: slicks, current boundaries and wind change the surface's roughness, so they show as brighter or darker streaks in the glare.
+- `seaRoughness` and `seaFarSpecularPower` (`shaders/oceanWaves.glsl`). Scales inferred.
+- *[NASA, Ocean Revealed](https://earthobservatory.nasa.gov/images/81814/ocean-revealed) · [Oceanography, sun glitter from space](https://tos.org/oceanography/article/sun-glitter-photographs-of-georges-bank-and-the-gulf-of-maine-from-the-spac) · [NASA, tsunami waves off Sri Lanka](https://science.nasa.gov/earth/earth-observatory/deep-ocean-tsunami-waves-off-the-sri-lankan-coast-5198/). Read (summaries) 2026-10-27*
+
+**Surf waves from distance to shore, foam born at the crest** · GameDev.net ocean log and ShaderLab · `method used`, approximated
+- A surf wave shape is looked up by distance from shore and added to the open-sea waves; foam is masked near the coast and moved by flow.
+- `surfWave` (`shaders/oceanWaves.glsl`), replacing the earlier foam-only bands. ⚠️ Developer write-ups, medium trust; depth stands in for distance to shore.
+- *[GameDev.net, ocean rendering](https://gamedev.net/blogs/715/entry-2249487-ocean-rendering/page__st__5/) · [GameDev.net, foam with flow mapping](https://gamedev.net/shaderlab/53-foam-with-flow-mapping/). Read (summaries) 2026-10-27*
+
+**Triplanar mapping** · Catlike Coding · `method used`
+- Three flat projections of the world position (zy, xz, xy) blended by weights from the normal: `abs(normal) - 0.25` clamped, raised to 2, divided by their sum.
+- The planet ocean's waves, roughness and crest foam (`shaders/oceanWaves.glsl`), so the cube's face edges leave no seam. The published offset and exponent are kept.
+- *[Catlike Coding, Triplanar Mapping](https://catlikecoding.com/unity/tutorials/advanced-rendering/triplanar-mapping/). Read 2026-10-27*
+
+**Beaufort wind scale** · NOAA National Weather Service · `method used`
+- Wind force 0 to 12 with the sea's look: a mirror at 0, crests begin to break and "scattered white horses" at 3, "many" at 5, foam blown in streaks from 7, the sea "white" from 10.
+- The Wind setting: whitecaps start at 3 and cover the sea from 10. The page gives no wave heights, so wave size scales relative to force 4. Curves inferred.
+- *[NWS Miami, Beaufort scale](https://www.weather.gov/mfl/beaufort). Read 2026-10-27*
+
+**Deep-water dispersion and choppy-wave foam** · Tessendorf, "Simulating Ocean Water" (2004 notes) · `method used`
+- Deep water: ω² = g·k (eq. 31), so speed c = √(gλ/2π); the Jacobian of the horizontal displacement, J = Jxx·Jyy − Jxy² (eq. 45), drops below 0 where the surface folds, a signal for foam and breaking.
+- `waterVariance` (`shaders/oceanWaves.glsl`): the variance waves' speeds and foam where they pinch; Seascape's clock follows the same relation by wind (`windTimeScale`). Applying eq. 45 to Gerstner sums is inferred.
+- *[Tessendorf, course notes 2004](https://jtessen.people.clemson.edu/reports/papers_files/coursenotes2004.pdf). Read 2026-10-27*
+
+**Pierson-Moskowitz wind-wave spectrum** · Stewart, Introduction to Physical Oceanography 16.4 · `method used`
+- For a fully developed sea, peak frequency 0.877 g/U19.5 and significant height 0.21 U19.5²/g, with U19.5 ≈ 1.026 U10.
+- `peakWavelength`, `significantWaveHeight`, `windLengthScale` (`planet/oceanSpectrum.ts`): Wind sets Seascape's wave length and the variance waves.
+- *[Stewart, ocean-wave spectra (LibreTexts, CC BY-NC-SA 4.0)](https://geo.libretexts.org/Bookshelves/Oceanography/Introduction_to_Physical_Oceanography_(Stewart)/16:_Ocean_Waves/16.4:_Ocean-Wave_Spectra). Read 2026-10-27*
+
+**Sea surface slopes by wind** · Cox and Munk 1954, via the Ocean Optics Web Book · `method used`
+- Clean surface mean square slope σ² = 0.003 + 5.12·10⁻³ U (U in m/s at 12.5 m); slopes follow a Gaussian distribution.
+- `seaGlint` and `seaSlopeVariance`: far away, Seascape's highlight blends into this glint, sharp when calm and wide in wind. The 0.25 brightness scale is inferred.
+- *[Ocean Optics Web Book, Cox-Munk slope statistics (CC BY 2.0)](https://oceanopticsbook.info/view/surfaces/cox-munk-sea-surface-slope-statistics). Read 2026-10-27*
+
+**Choosing Gerstner waves** · Finch, GPU Gems 1 ch. 1 · `method used`
+- Wavelengths random between half and double a median, amplitude in proportion to length, directions within a constant angle of the wind, steepness Q_i = Q/(w_i A_i N) so crests never loop.
+- `buildWaveSet` (`planet/oceanSpectrum.ts`): the large variance waves layered under Seascape. The spread angle (60°) and Q by wind are inferred.
+- *[GPU Gems ch. 1](https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-1-effective-water-simulation-physical-models). Read (text only, equations are images) 2026-10-27*
+
+**Wave breaking depth** · McCowan 1894, via Bosboom and Stive, Goda 2010 · `method used`
+- A wave breaks once the water is shallower than about its height / 0.78, a first estimate that varies with beach slope and wave steepness (Goda).
+- `surfZoneShare` (`planet/oceanSpectrum.ts`): the surf shows only where the water is shallower than the wind's wave height / 0.78.
+- *[Bosboom and Stive, Coastal Dynamics, wave breaking](https://geo.libretexts.org/Bookshelves/Oceanography/Coastal_Dynamics_(Bosboom_and_Stive)/05%3A_Coastal_hydrodynamics/5.02%3A_Wave_transformation/5.2.5%3A_Wave_breaking) · [Goda 2010](https://www.ancientportsantiques.com/wp-content/uploads/Documents/ENGINEERING/Maritime/BW/WaveBreaking-Goda2010.pdf). Read (summaries) 2026-10-27*
+
+**Foam deposited where waves pinch, faded over time** · Crest Ocean System docs · `considered`
+- Foam is deposited where waves are "pinched" and reduced every update by a fade rate, in its own simulation.
+- Pinch foam is used; the build-up and fade is deferred (it needs a simulation texture).
+- *[Crest, water appearance](https://crest.readthedocs.io/en/stable/user/water-appearance.html). Read 2026-10-27*
 
 **Gerstner waves, in text** · Catlike Coding, "Waves" · `considered`
 - The full Gerstner wave function with its tangent and binormal, three summed waves, and example values (steepness 0.5, wavelength 10).

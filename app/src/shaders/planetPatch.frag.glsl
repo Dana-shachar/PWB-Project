@@ -62,7 +62,6 @@ uniform float uWaterRampCount;
 uniform float uWaterClarity;
 uniform vec3 uSkyColor;
 uniform float uWaterShininess;
-uniform float uWaterDebug; // TEMP debug, planet/waterDebug.ts
 uniform float uFoamWidth;
 // Ripples appear only when zoomed in close (Dana: movement matters up close, not from orbit), fading in between
 // uRippleFadeFar and uRippleFadeNear (scene units from the eye). The same scrolling ripple texture as the chunk.
@@ -166,15 +165,27 @@ void main() {
     vec3 frameX = normalize(dPdu - localNormal * dot(localNormal, dPdu));
     vec3 frameZ = cross(frameX, localNormal);
     vec3 toPoint = vWorldPosition - uCameraPosition;
-    vec2 ocean = vec2(faceU, faceV) * uRadius * uOceanScale;
-    gSeaFootprint = length(fwidth(ocean)) * SEA_FREQ; // the pixel footprint for band-limiting (Quilez)
+    vec2 ocean = vec2(faceU, faceV) * uRadius * uOceanScale; // face coordinates: ripples and surf only
+    // The waves, roughness and crest foam read the sphere point by triplanar mapping, so cube face edges leave no seam.
+    vec3 spherePoint = localNormal * uRadius * uOceanScale;
+    vec3 weights = triplanarWeights(localNormal);
+    gSeaFootprint = length(fwidth(spherePoint)) * SEA_FREQ; // the pixel footprint for band-limiting (Quilez)
+    float fetch = seaFetchScale(depthShare);
+    gSeaAmplitude = fetch * min(1.0, seaWindScale()); // open ocean rougher than enclosed seas; calm wind flattens it
     vec3 distOcean = toPoint * uOceanScale;
-    float waveHeight = -sea_height(vec3(ocean.x, 0.0, ocean.y));
-    vec3 surfacePoint = vec3(ocean.x, waveHeight, ocean.y);
     float normalStep = dot(distOcean, distOcean) * 0.1 / max(uResolution, 1.0);
-    vec3 seaNormal = getNormal(surfacePoint, max(normalStep, 0.01));
     float far = seaFarFactor(normalStep);
-    seaNormal = normalize(mix(seaNormal, vec3(0.0, 1.0, 0.0), far));
+    // Where the waves are fully faded (far is 1, as everywhere from orbit) the wave and foam work is skipped: it would
+    // only return a flat surface, at about three times Seascape's cost per pixel.
+    bool wavesVisible = far < 0.999;
+    float waveHeight = 0.0;
+    vec3 seaNormal = vec3(0.0, 1.0, 0.0);
+    if (wavesVisible) {
+      waveHeight = seaHeightTriplanar(spherePoint, weights);
+      seaNormal = seaNormalTriplanar(spherePoint, waveHeight, frameX, frameZ, weights, max(normalStep, 0.01));
+      seaNormal = normalize(mix(seaNormal, vec3(0.0, 1.0, 0.0), far));
+    }
+    vec3 surfacePoint = vec3(ocean.x, waveHeight, ocean.y); // seaColor reads only its height
     float breakup = 0.5;
     float rippleFade = uRippleEnabled * (1.0 - smoothstep(uRippleFadeNear, uRippleFadeFar, length(toPoint)));
     if (rippleFade > 0.0) {
@@ -185,11 +196,14 @@ void main() {
       seaNormal = normalize(seaNormal + vec3(tilt.x, 0.0, tilt.y));
       breakup = mix(0.5, (rippleA.b + rippleB.b) * 0.5, rippleFade);
     }
+    // Surf near the coast, only up close like the shore foam.
+    vec3 surf = surfWave(depthShare, ocean, breakup, worldGradient(depthShare, ocean), length(fwidth(ocean))) * rippleFade * (1.0 - far);
+    seaNormal = normalize(seaNormal + vec3(-surf.x, 0.0, -surf.y));
     vec3 eyeDir = normalize(toPoint);
     vec3 eyeLocal = vec3(dot(eyeDir, frameX), dot(eyeDir, localNormal), dot(eyeDir, frameZ));
     vec3 sunDir = normalize(uLightDirection);
     vec3 sunLocal = vec3(dot(sunDir, frameX), dot(sunDir, localNormal), dot(sunDir, frameZ));
-    vec3 sea = seaColor(surfacePoint, seaNormal, sunLocal, eyeLocal, distOcean, seaBase, seaWaterColor, uSkyColor, mix(60.0, FAR_SPECULAR_POWER, far)) * uLightIntensity;
+    vec3 sea = seaColor(surfacePoint, seaNormal, sunLocal, eyeLocal, distOcean, seaBase, seaWaterColor, uSkyColor, far, seaSlopeVariance(fetch)) * uLightIntensity;
     float transmittance = waterTransmittance(depthShare, uWaterClarity);
     vec3 seabed = surfaceColor * (ambient + diffuse) * waterFilter(depthShare, uWaterClarity, seaBase);
     litColor = mix(seabed, sea, 1.0 - transmittance);
@@ -197,18 +211,10 @@ void main() {
     // Foam from the wave crests at every distance (averaged far away); shore foam and breaking bands only up close
     // (Dana: a crisp shoreline from orbit read too sharp).
     float foamAmount = clamp(uFoamWidth / 0.05, 0.0, 1.0);
-    float whitecap = crestFoam(waveHeight, far, ocean) * foamAmount;
-    float shore = max(waterFoam(depthShare, uFoamWidth, breakup), shoreWaveFoam(depthShare, breakup)) * rippleFade * foamAmount;
-    float foam = max(shore, whitecap);
+    float whitecap = (wavesVisible ? crestFoamTriplanar(waveHeight, far, spherePoint, weights) : seaFarFoam()) * foamAmount;
+    float shore = max(waterFoam(depthShare, uFoamWidth, breakup) * rippleFade, surf.z) * foamAmount;
+    float foam = max(shore, whitecap) * FOAM_OPACITY;
     litColor = mix(litColor, FOAM_COLOR * foamLight, foam);
-    // TEMP debug: one ingredient at a time.
-    if (uWaterDebug > 0.5 && uWaterDebug < 1.5) litColor = vec3(clamp(depthShare, 0.0, 1.0));
-    if (uWaterDebug > 1.5 && uWaterDebug < 2.5) litColor = vec3(transmittance);
-    if (uWaterDebug > 2.5 && uWaterDebug < 3.5) litColor = seabed * transmittance;
-    if (uWaterDebug > 3.5 && uWaterDebug < 4.5) litColor = sea;
-    if (uWaterDebug > 4.5 && uWaterDebug < 5.5) litColor = vec3(far);
-    if (uWaterDebug > 5.5 && uWaterDebug < 6.5) litColor = vec3(foam);
-    if (uWaterDebug > 6.5) litColor = vec3(whitecap);
   }
   gl_FragColor = vec4(litColor, 1.0);
 }

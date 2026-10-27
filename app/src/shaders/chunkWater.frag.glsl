@@ -1,7 +1,8 @@
 // The chunk's water: Seascape's waves and sea color (shaders/oceanWaves.glsl) on a flat sheet, recolored by the water
 // ramp. Far away the waves turn into a soft glare instead of speckles (Bruneton et al. 2010's geometry-to-lighting
-// transition, approximated), sporadic whitecaps and a light haze keep it readable, shallow water turns see-through by
-// Beer-Lambert (shaders/water.glsl), and foam sits on the shore and the crests. Seascape works in meters.
+// transition, approximated), large Gerstner waves add moving light and dark variance, a light haze fades the far water,
+// shallow water turns see-through by Beer-Lambert (shaders/water.glsl), and foam sits on the shore, the surf and the
+// crests. Seascape works in meters.
 uniform sampler2D uChunkHeightMap;
 uniform float uHeightMapGreenChannel;
 uniform float uChunkSize;
@@ -25,6 +26,8 @@ varying vec3 vWorldPosition;
 const float METERS_PER_UNIT = 1000.0;
 // The haze distance in chunk units (km). Inferred, TUNABLE.
 const float HAZE_DISTANCE = 200.0;
+// How far apart the surf's slope samples are, as a share of the chunk. Inferred, TUNABLE.
+const float SURF_SLOPE_UV_STEP = 0.002;
 
 void main() {
   vec2 chunkUv = vWorldPosition.xz / uChunkSize + 0.5;
@@ -39,7 +42,11 @@ void main() {
   vec3 toPoint = vWorldPosition - uCameraPosition;
   vec3 distMeters = toPoint * METERS_PER_UNIT / uWaveScale;
   vec2 meters = vWorldPosition.xz * METERS_PER_UNIT / uWaveScale;
-  gSeaFootprint = length(fwidth(meters)) * SEA_FREQ; // the pixel footprint for band-limiting (Quilez)
+  float footprint = length(fwidth(meters));
+  gSeaFootprint = footprint * SEA_FREQ; // the pixel footprint for band-limiting (Quilez)
+  float fetch = seaFetchScale(depthShare);
+  // Open water rougher than enclosed water; calm wind flattens the sea (stronger wind lengthens it, via uWaveScale).
+  gSeaAmplitude = fetch * min(1.0, seaWindScale());
   float waveHeight = -sea_height(vec3(meters.x, 0.0, meters.y));
   vec3 surfacePoint = vec3(meters.x, waveHeight, meters.y);
   // Seascape's own distance smoothing: getNormal(p, dot(dist,dist) * EPSILON_NRM), EPSILON_NRM = 0.1 / iResolution.x.
@@ -48,16 +55,28 @@ void main() {
   // Once the step passes the waves, they are too small to see: flatten the normal and blunt the highlight.
   float far = seaFarFactor(normalStep);
   normal = normalize(mix(normal, vec3(0.0, 1.0, 0.0), far));
+  // Large Gerstner waves under Seascape's, for slow light and dark variance.
+  vec3 variance = waterVariance(meters, footprint, fetch);
+  normal = normalize(normal + vec3(-variance.x, 0.0, -variance.y));
+  // Surf rolling toward the shore, lit as a wave and leaving foam behind its crest.
+  float breakup = 0.5 + 0.5 * noise(meters * 0.08 + uSeaTime * 0.3);
+  // The depth's slope from the ground's heights at neighboring points, per unit of the waves' coordinates.
+  vec2 uvStep = vec2(SURF_SLOPE_UV_STEP, 0.0);
+  float groundX = mix(texture2D(uChunkHeightMap, chunkUv + uvStep.xy).r, texture2D(uChunkHeightMap, chunkUv + uvStep.xy).g, uHeightMapGreenChannel);
+  float groundZ = mix(texture2D(uChunkHeightMap, chunkUv + uvStep.yx).r, texture2D(uChunkHeightMap, chunkUv + uvStep.yx).g, uHeightMapGreenChannel);
+  float seaUnitsPerStep = SURF_SLOPE_UV_STEP * uChunkSize * METERS_PER_UNIT / uWaveScale;
+  vec2 depthGradient = -vec2(groundX - groundRaw, groundZ - groundRaw) / max(0.0001, uSeaLevel - uWaterDeepest) / seaUnitsPerStep;
+  vec3 surf = surfWave(depthShare, meters, breakup, depthGradient, footprint) * (1.0 - far);
+  normal = normalize(normal + vec3(-surf.x, 0.0, -surf.y));
   vec3 eye = normalize(toPoint);
   vec3 light = normalize(uLightDirection);
-  vec3 color = seaColor(surfacePoint, normal, light, eye, distMeters, seaBase, seaWaterColor, uSkyColor, mix(60.0, FAR_SPECULAR_POWER, far)) * uLightIntensity;
+  vec3 color = seaColor(surfacePoint, normal, light, eye, distMeters, seaBase, seaWaterColor, uSkyColor, far, seaSlopeVariance(fetch)) * uLightIntensity;
 
-  // Foam: from the wave crests (averaged with distance), the shore edge, and breaking bands in the shallows.
+  // Foam: from the wave crests (averaged with distance), the shore edge, and the surf; never fully white.
   float foamAmount = clamp(uFoamWidth / 0.05, 0.0, 1.0);
-  float breakup = 0.5 + 0.5 * noise(meters * 0.08 + uSeaTime * 0.3);
-  float crest = crestFoam(waveHeight, far, meters);
-  float shore = max(waterFoam(depthShare, uFoamWidth, breakup), shoreWaveFoam(depthShare, breakup));
-  float foam = max(shore, crest) * foamAmount;
+  float crest = max(crestFoam(waveHeight, far, meters), variance.z * (1.0 - far)); // plus foam where the big waves pinch
+  float shore = max(waterFoam(depthShare, uFoamWidth, breakup), surf.z);
+  float foam = max(shore, crest) * foamAmount * FOAM_OPACITY;
   color = mix(color, FOAM_COLOR * (uAmbient + seaDiffuse(normal, light, 1.0)) * uLightIntensity, foam);
 
   // A light haze toward the sky color with distance, as Seascape fades its sea into the horizon.

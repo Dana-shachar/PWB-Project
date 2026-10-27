@@ -89,6 +89,12 @@ export interface WaterSettings {
   waveDetail: number;
   // How much larger than Seascape's own waves (about 40 m) the waves are, so they read at chunk scale.
   waveScale: number;
+  // How strong the sun's highlight is, as a share of Seascape's own (1).
+  shine: number;
+  // How strongly the sky is reflected at a slant (Fresnel), as a share of Seascape's own (1).
+  reflection: number;
+  // How windy, as a Beaufort force: 0 is a calm mirror, 12 a sea white with foam. Later driven by the atmosphere.
+  wind: number;
 }
 
 export const DEFAULT_WATER_SETTINGS: WaterSettings = {
@@ -103,8 +109,11 @@ export const DEFAULT_WATER_SETTINGS: WaterSettings = {
   ],
   clarity: 0.4,
   foamWidth: 0.05, // inferred, TUNABLE
-  waveDetail: 5,
+  waveDetail: 3,
   waveScale: 4, // inferred, TUNABLE
+  shine: 0.3, // hand-set, TUNABLE (Dana, 2026-10-27: Seascape's own glare was far too strong)
+  reflection: 1,
+  wind: 4, // Beaufort 4, "fairly frequent white horses": the look before this setting existed
 };
 
 // What the water reflects at a slant, until the atmosphere step sets a real sky. inferred, TUNABLE.

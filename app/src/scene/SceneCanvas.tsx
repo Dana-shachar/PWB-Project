@@ -10,7 +10,7 @@ import type { GumballTarget } from './Gumball';
 import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 import { percentileRangeFromBins } from '../map/elevationRange';
 import { buildHeightDistribution, type HeightDistribution } from '../planet/seaLevel';
-import { waterDebugMode } from '../planet/waterDebug'; // TEMP debug
+import { windTimeScale } from '../planet/oceanSpectrum';
 import { isRippleMapReady } from '../planet/rippleMap';
 import { WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { ElevationData } from '../voxel/chunkGrid';
@@ -280,10 +280,14 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     waterShininess: WATER_SHININESS,
     foamWidth: 0,
     time: 0,
+    seaTime: 0,
     rippleEnabled: 0,
     viewWidthPixels: 1000,
-    waveDetail: 5,
+    waveDetail: 3,
     waveScale: 4,
+    shine: 0.3,
+    reflection: 1,
+    wind: 4,
     maxErrorPixels: AUTO_MAX_ERROR_PIXELS,
     viewHeightPixels: 800,
     fieldOfViewRadians: Math.PI / 4,
@@ -719,8 +723,10 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         sharedUniformsRef.current.frustum = patchFrustum;
         perspectiveCamera.getWorldDirection(patchViewDirection);
         sharedUniformsRef.current.viewDirection = patchViewDirection;
-        sharedUniformsRef.current.waterDebug = waterDebugMode; // TEMP debug
-        sharedUniformsRef.current.time = performance.now() / 1000;
+        const nowSeconds = performance.now() / 1000;
+        const seaStep = sharedUniformsRef.current.time > 0 ? Math.min(nowSeconds - sharedUniformsRef.current.time, 0.1) : 0;
+        sharedUniformsRef.current.seaTime += seaStep * windTimeScale(sharedUniformsRef.current.wind);
+        sharedUniformsRef.current.time = nowSeconds;
         sharedUniformsRef.current.rippleEnabled = isRippleMapReady() ? 1 : 0;
         sharedUniformsRef.current.viewWidthPixels = Math.max(1, (viewportElement?.clientWidth ?? 1) * window.devicePixelRatio);
         planetPatches.applyFrame(sharedUniformsRef.current);
@@ -921,6 +927,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shared.foamWidth = water.foamWidth;
     shared.waveDetail = water.waveDetail;
     shared.waveScale = water.waveScale;
+    shared.shine = water.shine;
+    shared.reflection = water.reflection;
+    shared.wind = water.wind;
     planetPatchRendererRef.current?.applyShared(shared);
   }, [water]);
 

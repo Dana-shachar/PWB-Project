@@ -17,6 +17,7 @@ import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
 import type { ElevationData } from './chunkGrid';
 import { createChunkWater, setChunkWaterLight, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
 import type { WaterSettings } from '../planet/planetControls';
+import { landRampFloor } from '../planet/seaLevel';
 
 const chunkFragmentGlsl = terrainGlsl + chunkFragmentBody;
 
@@ -477,8 +478,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
     (material.uniforms.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
     material.uniforms.uRampCount.value = ramp.count;
-    // With water on, the land ramp starts at sea level (the cartographic split, as on the planet).
-    material.uniforms.uElevationMin.value = water.enabled ? Math.max(elevationMin, water.seaLevel) : elevationMin;
+    // With water on, the land ramp starts at the depth light reaches, as on the planet.
+    material.uniforms.uElevationMin.value = water.enabled
+      ? Math.max(elevationMin, landRampFloor(water.seaLevel, waterDeepest, water.clarity))
+      : elevationMin;
     material.uniforms.uElevationMax.value = elevationMax;
     material.uniforms.uShadowsEnabled.value = shadowsEnabled ? 1 : 0;
     material.uniforms.uHeightMapGreenChannel.value = heightMapGreenChannel ? 1 : 0;
@@ -496,6 +499,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     heightMapGreenChannel,
     water.enabled,
     water.seaLevel,
+    water.clarity,
+    waterDeepest,
   ]);
 
   // The water sheet (Seascape): placed at sea level over the chunk, reading the same height texture as the ground.
