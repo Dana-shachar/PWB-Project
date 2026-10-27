@@ -1,8 +1,8 @@
 import { useEffect, useImperativeHandle, useRef, forwardRef, type RefObject } from 'react';
 import * as THREE from 'three';
-import chunkVertexGlsl from '../shaders/chunk.vert.glsl?raw';
-import chunkFragmentBody from '../shaders/chunk.frag.glsl?raw';
-import terrainGlsl from '../shaders/terrain.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain.glsl
+import chunkVertexGlsl from '../shaders/terrain/chunk.vert.glsl?raw';
+import chunkFragmentBody from '../shaders/terrain/chunk.frag.glsl?raw';
+import terrainGlsl from '../shaders/terrain/terrain.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
 import { camera, defaultCameraPosition } from '../scene/camera';
 import { controls, keepAboveFlatGround } from '../scene/controls';
 import { EYE_HEIGHT_METERS, WalkMode } from '../scene/walkMode';
@@ -15,8 +15,10 @@ import { ChunkPatchRenderer, type BakeChunkPatch } from './ChunkPatchRenderer';
 import { chunkBaseDepth } from './chunkPatchMesh';
 import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
 import type { ElevationData } from './chunkGrid';
-import { createChunkWater, setChunkWaterLight, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
-import type { WaterSettings } from '../planet/planetControls';
+import { createChunkWater, setChunkWaterLight, setChunkWaterSky, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
+import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
+import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
+import { createSkyDome, updateSkyDome, updateSkyDomeFrame, type SkyDome } from '../atmosphere/skyDome';
 import { landRampFloor } from '../planet/seaLevel';
 
 const chunkFragmentGlsl = terrainGlsl + chunkFragmentBody;
@@ -62,7 +64,7 @@ interface LandChunkCanvasProps {
   colorStops: ColorStop[];
   // This patch's own real low and high, in raw elevation units — the color
   // ramp spans this range, not a guessed or fixed-anchor one. See
-  // voxel/landChunk.ts and shaders/terrain.glsl.
+  // voxel/landChunk.ts and shaders/terrain/terrain.glsl.
   elevationMin: number;
   elevationMax: number;
   shadowsEnabled: boolean;
@@ -89,6 +91,9 @@ interface LandChunkCanvasProps {
   // Sea level and water look, shared with the planet, and the planet's lowest height for the depth scale.
   water: WaterSettings;
   waterDeepest: number;
+  atmosphere: AtmosphereSettings;
+  // The light turns with the camera instead of staying fixed (scene/sceneControls.ts).
+  lightFollowsCamera: boolean;
 }
 
 // TODO(DS): arbitrary — framing distance for a ~16-unit chunk, unrelated to
@@ -138,12 +143,22 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     groundHeights,
     water,
     waterDeepest,
+    atmosphere,
+    lightFollowsCamera,
   },
   handleRef,
 ) {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const meshRef = useRef<THREE.Mesh | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
+  const skyRef = useRef<SkyDome | null>(null);
+  // Read every frame by the sky (wind and sun), so it follows the latest settings without rebuilding the scene.
+  const atmosphereRef = useRef(atmosphere);
+  atmosphereRef.current = atmosphere;
+  const sunDirectionRef = useRef(new THREE.Vector3(1, 1, 1));
+  const lightFollowsCameraRef = useRef(lightFollowsCamera);
+  lightFollowsCameraRef.current = lightFollowsCamera;
+  const frameLight = new THREE.Vector3();
   const waterRef = useRef<ChunkWater | null>(null);
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   // The setup effect below runs once, so it reads the shared renderer through a ref (the renderer
@@ -317,6 +332,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uShininess: { value: shininess },
         uDiffuseWrap: { value: diffuseWrap },
         uCameraPosition: { value: new THREE.Vector3() },
+        uHazeColor: { value: new THREE.Color() },
+        uHazeDensity: { value: 0 },
         uHeightMap: { value: heightMap },
         uHeightMapTexelSize: { value: 1 / Math.max(1, heightMapResolution) },
         uChunkHeightMap: { value: heightMap },
@@ -346,6 +363,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     const water = createChunkWater();
     scene.add(water.mesh);
     waterRef.current = water;
+    const sky = createSkyDome();
+    scene.add(sky.mesh);
+    skyRef.current = sky;
     const patchFrustum = new THREE.Frustum();
     const patchViewMatrix = new THREE.Matrix4();
 
@@ -379,6 +399,12 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       // the eye position, and the camera moves every frame under orbit
       // controls.
       material.uniforms.uCameraPosition.value.copy(perspectiveCamera.position);
+      // The Scene light, turned with the camera when it follows it, for the ground, the water and the sky.
+      frameLight.copy(sunDirectionRef.current);
+      if (lightFollowsCameraRef.current) frameLight.applyQuaternion(perspectiveCamera.quaternion);
+      material.uniforms.uLightDirection.value.copy(frameLight);
+      (water.mesh.material.uniforms.uLightDirection.value as THREE.Vector3).copy(frameLight);
+      updateSkyDomeFrame(sky, perspectiveCamera, frameLight, atmosphereRef.current.wind, deltaSeconds);
       updateChunkWaterFrame(water, perspectiveCamera.position, deltaSeconds, viewportElement!.clientWidth * window.devicePixelRatio);
       if (!patchRenderer.group.visible) return;
       const settings = patchSettingsRef.current;
@@ -417,6 +443,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       material.dispose();
       water.dispose();
       waterRef.current = null;
+      sky.dispose();
+      skyRef.current = null;
       patchRendererRef.current = null;
       sceneRef.current = null;
       gridMeshRef.current = null;
@@ -427,8 +455,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   }, []);
 
   // Lighting — the Scene controls now mean exactly what they mean on the
-  // planet, because both go through the same model (shaders/chunk.frag.glsl
-  // and shaders/fragment.glsl). The old rescaling multipliers are gone with
+  // planet, because both go through the same model (shaders/terrain/chunk.frag.glsl
+  // and shaders/terrain/fragment.glsl). The old rescaling multipliers are gone with
   // the standard material that needed them.
   //
   // Deliberately NOT rotated into the patch's own real position on the
@@ -448,6 +476,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     material.uniforms.uShininess.value = shininess;
     material.uniforms.uDiffuseWrap.value = diffuseWrap;
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, lightDirZ);
+    sunDirectionRef.current.set(lightDirX, lightDirY, lightDirZ);
     if (waterRef.current) setChunkWaterLight(waterRef.current, new THREE.Vector3(lightDirX, lightDirY, lightDirZ), ambientLight, lightIntensity);
   }, [ambientLight, lightIntensity, specularStrength, shininess, diffuseWrap, lightDirX, lightDirY, lightDirZ]);
 
@@ -507,9 +536,22 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   useEffect(() => {
     const chunkWater = waterRef.current;
     if (!chunkWater) return;
-    updateChunkWater(chunkWater, water, chunkSize, maxHeight, waterDeepest, heightMap, heightMapGreenChannel);
+    updateChunkWater(chunkWater, water, chunkSize, maxHeight, waterDeepest, heightMap, heightMapGreenChannel, atmosphere.wind);
     chunkWater.mesh.visible = water.enabled && heightMap !== null;
-  }, [water, waterDeepest, heightMap, heightMapGreenChannel, chunkSize, maxHeight]);
+  }, [water, waterDeepest, heightMap, heightMapGreenChannel, chunkSize, maxHeight, atmosphere.wind]);
+
+  // The atmosphere: the sky dome, and the haze the ground and water fade into. Haze 1 halves the ground's color at
+  // half the chunk's width (FogExp2: 1 - exp(-(0.83)^2) is 0.5). Inferred, TUNABLE.
+  useEffect(() => {
+    const hazeDensity = atmosphere.enabled ? (atmosphere.haze * 1.66) / Math.max(chunkSize, 0.0001) : 0;
+    if (skyRef.current) updateSkyDome(skyRef.current, atmosphere);
+    const material = materialRef.current;
+    if (material) {
+      (material.uniforms.uHazeColor.value as THREE.Color).set(atmosphere.horizonColor);
+      material.uniforms.uHazeDensity.value = hazeDensity;
+    }
+    if (waterRef.current) setChunkWaterSky(waterRef.current, atmosphere.enabled ? atmosphere.horizonColor : WATER_SKY_COLOR, atmosphere.horizonColor, hazeDensity);
+  }, [atmosphere, chunkSize]);
 
   // Grid spacing/visibility — mirrors SceneCanvas's own grid effect (rebuild
   // on spacing change, since cell size is baked into a shader uniform).

@@ -58,7 +58,7 @@ export function MapView({
   // Adds one point to the active stroke — the shader connects it to the
   // previous point as part of the whole stroke's path, so no manual gap-
   // filling between pointermove events is needed here. See
-  // shaders/strokePath.frag.glsl and ISSUES.md, 2026-09-22.
+  // shaders/heightmap/strokePath.frag.glsl and ISSUES.md, 2026-09-22.
   function paintStrokeTo(uv: { x: number; y: number }) {
     const radiusUV = brushRadiusPx / HEIGHTMAP_WIDTH; // px is relative to the texture, not the display size
     sceneHandleRef.current?.paintStroke(selectedLayerId, uv, radiusUV, brushValue, feather);

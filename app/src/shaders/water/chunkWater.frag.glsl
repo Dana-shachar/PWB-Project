@@ -1,7 +1,7 @@
-// The chunk's water: Seascape's waves and sea color (shaders/oceanWaves.glsl) on a flat sheet, recolored by the water
+// The chunk's water: Seascape's waves and sea color (shaders/water/oceanWaves.glsl) on a flat sheet, recolored by the water
 // ramp. Far away the waves turn into a soft glare instead of speckles (Bruneton et al. 2010's geometry-to-lighting
 // transition, approximated), large Gerstner waves add moving light and dark variance, a light haze fades the far water,
-// shallow water turns see-through by Beer-Lambert (shaders/water.glsl), and foam sits on the shore, the surf and the
+// shallow water turns see-through by Beer-Lambert (shaders/water/water.glsl), and foam sits on the shore, the surf and the
 // crests. Seascape works in meters.
 uniform sampler2D uChunkHeightMap;
 uniform float uHeightMapGreenChannel;
@@ -20,12 +20,12 @@ uniform vec3 uLightDirection;
 uniform float uAmbient;
 uniform float uLightIntensity;
 uniform vec3 uCameraPosition;
+uniform vec3 uHazeColor; // the sky's horizon color (atmosphere/)
+uniform float uHazeDensity; // per chunk unit; 0 is clear
 
 varying vec3 vWorldPosition;
 
 const float METERS_PER_UNIT = 1000.0;
-// The haze distance in chunk units (km). Inferred, TUNABLE.
-const float HAZE_DISTANCE = 200.0;
 // How far apart the surf's slope samples are, as a share of the chunk. Inferred, TUNABLE.
 const float SURF_SLOPE_UV_STEP = 0.002;
 
@@ -79,9 +79,9 @@ void main() {
   float foam = max(shore, crest) * foamAmount * FOAM_OPACITY;
   color = mix(color, FOAM_COLOR * (uAmbient + seaDiffuse(normal, light, 1.0)) * uLightIntensity, foam);
 
-  // A light haze toward the sky color with distance, as Seascape fades its sea into the horizon.
-  float haze = 1.0 - exp(-length(toPoint) / HAZE_DISTANCE);
-  color = mix(color, getSkyColor(vec3(0.0)) * uSkyColor * uLightIntensity, haze);
+  // Haze toward the sky's horizon color with distance: three.js's FogExp2, 1 - exp(-(density * distance)^2).
+  float hazeDistance = uHazeDensity * length(toPoint);
+  color = mix(color, uHazeColor, 1.0 - exp(-hazeDistance * hazeDistance));
 
   // See-through in the shallows, so the shore blends into the ground instead of meeting it at a hard edge.
   float opacity = max(1.0 - waterTransmittance(depthShare, uWaterClarity), foam);

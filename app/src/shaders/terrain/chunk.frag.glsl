@@ -21,6 +21,8 @@ uniform float uLightIntensity;
 uniform float uSpecularStrength;
 uniform float uShininess;
 uniform vec3 uCameraPosition;
+uniform vec3 uHazeColor; // the sky's horizon color (atmosphere/)
+uniform float uHazeDensity; // per chunk unit; 0 is clear
 
 // Elevation color ramp + self-shadow. Top surface samples uHeightMap;
 // walls/the bottom cap use their own world-space height instead (a vertical
@@ -51,7 +53,7 @@ uniform float uMaxHeight; // world-unit height a raw value of 0.5 displaces to (
 // Three.js built-in, auto-set but not auto-declared in the fragment stage —
 // same reason fragment.glsl (the planet) declares it, needed here to turn a
 // locally-rebuilt normal into the same space vNormal's own transform uses.
-uniform mat3 normalMatrix;
+uniform mat4 modelMatrix;
 // 1 texel of uHeightMap, in uv units — lets the gradient sample below scale
 // to whatever resolution the bound texture actually is (it's no longer a
 // fixed, known size the way the planet's whole-globe map is), rather than a
@@ -106,7 +108,7 @@ void main() {
       uHeightMap, textureUv, stepUv * textureScale, uHeightMapGreenChannel,
       vec3(uPatchWorldSize / textureScale, 0.0, 0.0), vec3(0.0, 0.0, uPatchWorldSize / textureScale), vec3(0.0, 1.0, 0.0), uMaxHeight
     );
-    normal = normalize(normalMatrix * localNormal);
+    normal = normalize(mat3(modelMatrix) * localNormal); // world space, as in chunk.vert.glsl
   }
 
   vec3 lightDir = normalize(uLightDirection);
@@ -150,5 +152,8 @@ void main() {
     surfaceColor = ramp;
   }
 
-  gl_FragColor = vec4(surfaceColor * (ambient + diffuse) + specular, 1.0);
+  // Haze toward the sky's horizon color with distance: three.js's FogExp2, 1 - exp(-(density * distance)^2).
+  float hazeDistance = uHazeDensity * length(vWorldPosition - uCameraPosition);
+  vec3 litColor = surfaceColor * (ambient + diffuse) + specular;
+  gl_FragColor = vec4(mix(litColor, uHazeColor, 1.0 - exp(-hazeDistance * hazeDistance)), 1.0);
 }

@@ -12,11 +12,11 @@ uniform float uLightIntensity;
 uniform float uSpecularStrength;
 uniform float uShininess;
 uniform vec3 uCameraPosition;
-// Elevation color ramp — see shaders/terrain.glsl. Cast shadows are chunk-
+// Elevation color ramp — see shaders/terrain/terrain.glsl. Cast shadows are chunk-
 // only for now (flat-plane march; the planet's curved surface needs the
 // same idea projected onto its local tangent plane, a scoped follow-up).
 uniform float uColorByElevation;
-// The ramp's stops — see shaders/terrain.glsl's terrainRampColor and
+// The ramp's stops — see shaders/terrain/terrain.glsl's terrainRampColor and
 // planet/colorRamp.ts for how these are assembled (colors[0]/positions[0]
 // is always uBaseColor at 0, not stored separately here).
 uniform vec3 uRampColors[MAX_COLOR_STOPS];
@@ -38,7 +38,7 @@ uniform float uElevationMax;
 uniform sampler2D uHeightMap;
 uniform float uDisplacementAmplitude;
 uniform float uRadius;
-uniform mat3 normalMatrix; // Three.js built-in, auto-set but not auto-declared in fragment stage
+uniform mat4 modelMatrix; // Three.js built-in, auto-set but not auto-declared in fragment stage
 
 varying vec2 vUv;
 varying vec3 vSphereDirection;
@@ -96,7 +96,9 @@ void main() {
   float bumpStrength = min(uDisplacementAmplitude, MAX_BUMP_STRENGTH);
   vec3 tangentU = dPdu + localNormal * dHdu * bumpStrength;
   vec3 tangentV = dPdv + localNormal * dHdv * bumpStrength;
-  vec3 normal = normalize(normalMatrix * cross(tangentV, tangentU));
+  vec3 bumped = normalize(cross(tangentV, tangentU));
+  bumped = faceforward(bumped, localNormal, -bumped); // on the surface's outer side, as heightfieldNormal ([B61])
+  vec3 normal = normalize(mat3(modelMatrix) * bumped); // world space, as the light ([B61])
 
   vec3 lightDir = normalize(uLightDirection);
 

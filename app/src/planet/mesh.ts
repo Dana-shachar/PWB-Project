@@ -1,7 +1,7 @@
 import * as THREE from 'three';
-import vertexShader from '../shaders/vertex.glsl?raw';
-import fragmentShaderBody from '../shaders/fragment.glsl?raw';
-import terrainGlsl from '../shaders/terrain.glsl?raw'; // the elevation color ramp — shared with chunk.frag.glsl, see shaders/terrain.glsl
+import vertexShader from '../shaders/terrain/vertex.glsl?raw';
+import fragmentShaderBody from '../shaders/terrain/fragment.glsl?raw';
+import terrainGlsl from '../shaders/terrain/terrain.glsl?raw'; // the elevation color ramp — shared with chunk.frag.glsl, see shaders/terrain/terrain.glsl
 import { CUBE_FACES, cubeFacePoint, type CubeFace } from './cubeFace';
 import { buildRampUniformArrays, DEFAULT_COLOR_STOPS } from './colorRamp';
 
@@ -180,7 +180,7 @@ export function planet(radius = 20, segmentsPerFace = 32): THREE.Mesh {
       // Elevation color ramp — off by default so nothing changes until
       // Dana turns it on. Placeholder defaults, not a design-system choice
       // yet (Stage 11 is the real color stage). Low is uBaseColor itself,
-      // not a separate uniform — see shaders/terrain.glsl.
+      // not a separate uniform — see shaders/terrain/terrain.glsl.
       uColorByElevation: { value: 0 },
       uRampColors: { value: INITIAL_RAMP.colors },
       uRampPositions: { value: INITIAL_RAMP.positions },

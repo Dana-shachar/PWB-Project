@@ -409,6 +409,13 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Built: black through a new design-system token (`--color-tooltip-bg`), text wraps at 240px, and the tooltip uses a fixed position clamped to the window.
 - One shared placement function (`placeTooltip` in `ui/UIElements.tsx`) and one delegated listener cover every tooltip.
 
+### [B64] The timeline panel is cut off on the right and can't be closed · `wrong but workable`
+**🔴 Open** · **Found:** 2026-10-27 · **Where:** the timeline panel at the bottom (play, erosion, reset; years scale)
+
+**What happens**
+- Dana (screenshot, 2026-10-27): the panel runs past the right edge, cutting off the Unit select, the year field's buttons and the end of the scale. There's no X to dismiss it.
+- Cause not checked yet. A close button would be a design-system button with every state and its own icon.
+
 ### [B63] Walk mode goes underwater and can't move from there · `wrong but workable`
 **🔴 Open** · **Where:** `scene/walkMode.ts` (eye height from `sampleHeight`), `voxel/chunkWater.ts`
 

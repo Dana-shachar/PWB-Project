@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import vertexShader from '../shaders/vertex.glsl?raw';
-import patchFragmentShaderBody from '../shaders/planetPatch.frag.glsl?raw';
-import terrainGlsl from '../shaders/terrain.glsl?raw';
-import waterGlsl from '../shaders/water.glsl?raw';
-import oceanWavesGlsl from '../shaders/oceanWaves.glsl?raw';
+import vertexShader from '../shaders/terrain/vertex.glsl?raw';
+import patchFragmentShaderBody from '../shaders/terrain/planetPatch.frag.glsl?raw';
+import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
+import waterGlsl from '../shaders/water/water.glsl?raw';
+import oceanWavesGlsl from '../shaders/water/oceanWaves.glsl?raw';
 import { KM_PER_SCENE_UNIT } from './planetControls';
 import { getRippleMap } from './rippleMap';
 import { landRampFloor } from './seaLevel';
@@ -283,7 +283,7 @@ export interface PlanetSharedUniforms {
   radius: number;
   // Wrap lighting amount, shared with the land chunk (Scene > Wrap).
   diffuseWrap: number;
-  // The ocean (shaders/water.glsl); depth is measured down to elevationMin.
+  // The ocean (shaders/water/water.glsl); depth is measured down to elevationMin.
   waterEnabled: number;
   seaLevel: number;
   waterStops: ColorStop[];
@@ -408,6 +408,7 @@ export function applyFrameUniforms(material: THREE.ShaderMaterial, shared: Plane
   material.uniforms.uSeaTime.value = shared.seaTime;
   material.uniforms.uResolution.value = shared.viewWidthPixels;
   material.uniforms.uRippleEnabled.value = shared.rippleEnabled;
+  (material.uniforms.uLightDirection.value as THREE.Vector3).copy(shared.lightDirection); // per frame: it can follow the camera
 }
 
 export function applySharedUniforms(material: THREE.ShaderMaterial, shared: PlanetSharedUniforms, ramps: PatchRampArrays = buildPatchRampArrays(shared)): void {

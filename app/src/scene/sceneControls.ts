@@ -14,7 +14,8 @@ export function useSceneControls() {
   // unreachable. Reverted the invented "Contrast" curve in favor of this
   // plus uLightIntensity below: known Blinn-Phong terms, not a reshaped
   // falloff. See ISSUES.md, 2026-10-13.
-  const [lightDirZ, setLightDirZ] = useState(-4.3);
+  // +4.3 since the planet's normals point outward ([B61], 2026-10-27); -4.3 had compensated for inward normals.
+  const [lightDirZ, setLightDirZ] = useState(4.3);
   // The land chunk's own elevation, independent of the planet's (Dana,
   // 2026-10-20: "that's basically the only difference between the two,
   // they can share all light settings, beside the elevation"). The chunk
@@ -40,8 +41,13 @@ export function useSceneControls() {
   const [gridVisible, setGridVisible] = useState(true);
   // Vertical field of view of the chunk's walk mode, degrees (Unity's default is 60).
   const [walkFieldOfView, setWalkFieldOfView] = useState(60);
+  // On: the light turns with the camera, so the side in view is always lit, as in modeling tools. Off: a fixed light,
+  // like a distant sun, with a day and night side (Dana, 2026-10-27).
+  const [lightFollowsCamera, setLightFollowsCamera] = useState(true); // on by default (Dana, 2026-10-27)
 
   return {
+    lightFollowsCamera,
+    setLightFollowsCamera,
     ambientLight,
     setAmbientLight,
     lightDirX,

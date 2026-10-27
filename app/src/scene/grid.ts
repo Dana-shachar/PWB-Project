@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import vertexShader from '../shaders/grid.vert.glsl?raw';
-import fragmentShader from '../shaders/grid.frag.glsl?raw';
+import vertexShader from '../shaders/scene/grid.vert.glsl?raw';
+import fragmentShader from '../shaders/scene/grid.frag.glsl?raw';
 
 // TODO(DS): arbitrary placeholder — large enough + fade short enough that
 // the plane's finite edge is never actually reached/visible.

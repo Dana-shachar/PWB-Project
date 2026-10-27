@@ -48,7 +48,7 @@ export function useLandChunk(
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
   // The chunk's own raw elevation, as a texture the shader can sample at an
   // arbitrary point — not just at a vertex. Shared by the elevation-color
-  // ramp, the cast-shadow march (shaders/terrain.glsl), and, for the smooth
+  // ramp, the cast-shadow march (shaders/terrain/terrain.glsl), and, for the smooth
   // render style, the vertex displacement itself (chunk.vert.glsl), so it's
   // a real GPU render-region texture now (renderDisplayRegion's own target,
   // RGBA/G-channel, the same convention the planet's uHeightMap already
@@ -68,7 +68,7 @@ export function useLandChunk(
   // displaces to — the same `effectiveHeightScale` the geometry itself is
   // built with below, exposed so the shader's color ramp and shadow march
   // can convert between raw elevation and world units the same way the mesh
-  // does. See shaders/terrain.glsl.
+  // does. See shaders/terrain/terrain.glsl.
   const [maxHeight, setMaxHeight] = useState(0);
   // This patch's own real low and high, in the same raw elevation units the
   // heightmap stores — what the color ramp spans, read from the actual

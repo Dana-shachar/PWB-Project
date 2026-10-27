@@ -71,7 +71,11 @@ vec3 heightfieldNormal(
   float dHdv = (hU - hD) / (2.0 * stepUv);
   vec3 tangentU = dPdu + surfaceNormal * dHdu * amplitude;
   vec3 tangentV = dPdv + surfaceNormal * dHdv * amplitude;
-  return normalize(cross(tangentV, tangentU));
+  // The cross product's side depends on how the caller's u and v are laid out (the planet's cube faces gave inward
+  // normals, [B61]); faceforward keeps it on the surface's own side for every caller: faceforward(N, I, Nref) is N when
+  // dot(Nref, I) < 0, so Nref = -surfaceNormal returns N on surfaceNormal's side.
+  vec3 normal = normalize(cross(tangentV, tangentU));
+  return faceforward(normal, surfaceNormal, -normal);
 }
 
 // Wrap lighting: wrap 0 is plain clamped Lambert, wrap 1 is Valve's squared

@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText, IconButton } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker } from './UIElements';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
 import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
 import { ColorRampEditor } from './panels/ColorRampEditor';
 import type { ColorStop } from '../planet/colorRamp';
 import type { WaterSettings } from '../planet/planetControls';
+import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { depthToRampPosition, landRampFloor, landShareAt, rampPositionToDepth, type HeightDistribution } from '../planet/seaLevel';
 import { MAX_MAX_ERROR_PIXELS, maxErrorPixelsToResolution, MIN_MAX_ERROR_PIXELS, resolutionToMaxErrorPixels } from '../planet/patch';
 
@@ -24,6 +25,8 @@ interface PanelProps {
   onAmbientLightChange: (value: number) => void;
   lightDirX: number;
   onLightDirXChange: (value: number) => void;
+  lightFollowsCamera: boolean;
+  onLightFollowsCameraChange: (value: boolean) => void;
   lightDirY: number;
   onLightDirYChange: (value: number) => void;
   lightDirZ: number;
@@ -55,7 +58,7 @@ interface PanelProps {
   displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
   onDisplayModeChange: (value: string) => void;
   onRandomizeTerrain: () => void;
-  // Elevation color ramp (shaders/terrain.glsl) — folded directly into the
+  // Elevation color ramp (shaders/terrain/terrain.glsl) — folded directly into the
   // Planet section under Base color, not a separate accordion (Dana,
   // 2026-10-13: "these shouldn't be separated" the first time, then "why
   // the f was this moved to the right" when it landed in the Terrain
@@ -103,6 +106,8 @@ interface PanelProps {
   // Sea level and water look (planet/planetControls.ts), and the planet's heights for the land share readout.
   water: WaterSettings;
   onWaterChange: (changes: Partial<WaterSettings>) => void;
+  atmosphere: AtmosphereSettings;
+  onAtmosphereChange: (changes: Partial<AtmosphereSettings>) => void;
   heightDistribution: HeightDistribution | null;
   // Planet Resolution: a detail bias, 1 is automatic (planet/planetPatches.ts).
   maxErrorPixels: number;
@@ -195,6 +200,8 @@ export function Panel({
   onAmbientLightChange,
   lightDirX,
   onLightDirXChange,
+  lightFollowsCamera,
+  onLightFollowsCameraChange,
   lightDirY,
   onLightDirYChange,
   lightDirZ,
@@ -251,6 +258,8 @@ export function Panel({
   planetElevationRange,
   water,
   onWaterChange,
+  atmosphere,
+  onAtmosphereChange,
   heightDistribution,
   chunkElevationRange,
   maxErrorPixels,
@@ -406,6 +415,12 @@ export function Panel({
                 sphere always faces the light) can leave it dim; everything
                 else above/below still rebinds to the same shared value
                 either way. */}
+            <Toggle
+              label="Light follows camera"
+              value={lightFollowsCamera}
+              onChange={onLightFollowsCameraChange}
+              description="On: the light turns with the camera, so whatever you look at is lit. Off: the light stays fixed like a distant sun, so the planet has a day side and a night side."
+            />
             <Slider
               label="Light elevation"
               value={activeViewContext === 'landChunk' ? chunkLightDirZ : lightDirZ}
@@ -447,7 +462,7 @@ export function Panel({
                 terrain behind it), not a terrain-generation one, so it sits
                 here rather than with the elevation color ramp, which moved
                 to the Terrain stage instead (ui/NoisePanel.tsx) — see
-                shaders/terrain.glsl. */}
+                shaders/terrain/terrain.glsl. */}
             <Toggle
               label="Cast shadows"
               value={shadowsEnabled}
@@ -607,6 +622,24 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
+          {/* Erosion shapes the terrain, so it sits right under it, before Water (Dana, 2026-10-27). */}
+          {PIPELINE_STAGES.filter((stage) => stage.key === 'erosion').map((stage) => (
+            <PipelineStageRow
+              key={stage.key}
+              label={stage.label}
+              active={activeStage === stage.key}
+              expanded={expandedStages.has(stage.key)}
+              enabled={stageEnabled[stage.key]}
+              onSelect={() => onStageChange(stage.key)}
+              onToggleExpand={() => toggleExpanded(stage.key)}
+              onToggleEnabled={(value) => onToggleStageEnabled(stage.key, value)}
+            />
+          ))}
+        </div>
+
+        <div className="panel-section-divider" />
+
+        <div className="panel-section">
           {/* Its own section, so the water's controls and colors are easy to find (Dana, 2026-10-27). */}
           <Accordion title="Water">
             {/* Sea level is stored as a raw height so both views share one coastline; shown in planet meters. */}
@@ -649,17 +682,6 @@ export function Panel({
               precision={3}
               disabled={!water.enabled}
               description="How much foam: along the shore (as a share of the deepest water), on wave crests, and in scattered whitecaps you can see from far away. Shore foam on the planet shows only when zoomed in close. 0 turns it off."
-            />
-            <Slider
-              label="Wind"
-              value={water.wind}
-              onChange={(wind) => onWaterChange({ wind })}
-              min={0}
-              max={12}
-              step={0.5}
-              precision={1}
-              disabled={!water.enabled}
-              description="How calm or stormy the sea is, on the Beaufort scale: 0 is a mirror, 3 brings the first whitecaps, 7 blows foam into streaks, 12 turns the sea white. It also sets the size of the broad light and dark patches."
             />
             <Slider
               label="Wave detail"
@@ -726,8 +748,46 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          {/* Terrain is selected from Planet Terrain above, not its own row. */}
-          {PIPELINE_STAGES.filter((stage) => stage.key !== 'terrain').map((stage) => (
+          {/* The planet's atmosphere: its general controls here; wind, clouds and the moon on the right (Dana, 2026-10-27). */}
+          <Accordion title="Atmosphere" onHeaderClick={() => onStageChange('atmosphere')} active={activeStage === 'atmosphere'}>
+            <Toggle
+              label="Atmosphere"
+              value={atmosphere.enabled}
+              onChange={(enabled) => onAtmosphereChange({ enabled })}
+              description="A sky, haze and clouds around the planet and over the land chunk, and a glow around the planet from space."
+            />
+            <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} />
+            <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} />
+            <Slider
+              label="Haze"
+              value={atmosphere.haze}
+              onChange={(haze) => onAtmosphereChange({ haze })}
+              min={0}
+              max={3}
+              step={0.01}
+              precision={2}
+              disabled={!atmosphere.enabled}
+              description="How thick the air is: distant ground fades into the horizon color. 0 is clear."
+            />
+            <Slider
+              label="Glow"
+              value={atmosphere.glow}
+              onChange={(glow) => onAtmosphereChange({ glow })}
+              min={0}
+              max={4}
+              step={0.01}
+              precision={2}
+              disabled={!atmosphere.enabled}
+              description="How strongly the planet's edge glows from space, in the sky color."
+            />
+          </Accordion>
+        </div>
+
+        <div className="panel-section-divider" />
+
+        <div className="panel-section">
+          {/* Terrain and Atmosphere are selected from their own sections above, Erosion sits under Terrain. */}
+          {PIPELINE_STAGES.filter((stage) => stage.key !== 'terrain' && stage.key !== 'erosion' && stage.key !== 'atmosphere').map((stage) => (
             <PipelineStageRow
               key={stage.key}
               label={stage.label}

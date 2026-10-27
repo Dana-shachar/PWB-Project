@@ -1,16 +1,16 @@
 import * as THREE from 'three';
 import { NOISE_RANGES } from './noiseRanges';
-import noiseGlsl from '../shaders/noise.glsl?raw';
+import noiseGlsl from '../shaders/heightmap/noise.glsl?raw';
 // Shared by both passes below — a plain full-screen-quad pass-through, identical
 // either way since both render the same quad geometry through the same ortho
 // camera; only the fragment shader differs per feature. See heightmap.ts's
 // HeightmapPipeline constructor.
-import heightmapBrushVertexGlsl from '../shaders/heightmapBrush.vert.glsl?raw';
-import heightmapFragmentGlsl from '../shaders/heightmap.frag.glsl?raw'; // noise compositing (the "Noise" tab)
-import strokePathFragmentGlsl from '../shaders/strokePath.frag.glsl?raw'; // brush stroke rendering, see beginStroke()/paintStroke()
-import minMaxReduceFragmentGlsl from '../shaders/minMaxReduce.frag.glsl?raw'; // elevation-range reduction pyramid, see getRegionMinMaxAsync()
-import elevationHistogramVertexGlsl from '../shaders/elevationHistogram.vert.glsl?raw'; // see getRegionPercentileRangeAsync()
-import elevationHistogramFragmentGlsl from '../shaders/elevationHistogram.frag.glsl?raw';
+import heightmapBrushVertexGlsl from '../shaders/heightmap/heightmapBrush.vert.glsl?raw';
+import heightmapFragmentGlsl from '../shaders/heightmap/heightmap.frag.glsl?raw'; // noise compositing (the "Noise" tab)
+import strokePathFragmentGlsl from '../shaders/heightmap/strokePath.frag.glsl?raw'; // brush stroke rendering, see beginStroke()/paintStroke()
+import minMaxReduceFragmentGlsl from '../shaders/heightmap/minMaxReduce.frag.glsl?raw'; // elevation-range reduction pyramid, see getRegionMinMaxAsync()
+import elevationHistogramVertexGlsl from '../shaders/heightmap/elevationHistogram.vert.glsl?raw'; // see getRegionPercentileRangeAsync()
+import elevationHistogramFragmentGlsl from '../shaders/heightmap/elevationHistogram.frag.glsl?raw';
 import { HISTOGRAM_BINS, percentileRangeFromBins } from './elevationRange';
 
 // TODO(DS): arbitrary placeholder resolution — detail/generation-cost
@@ -638,7 +638,7 @@ export class HeightmapPipeline {
   // frozen pre-stroke base — so overlapping/repeated coverage along one
   // drag never stacks opacity, and the shape stays a smooth capsule chain
   // rather than a union of separate circles (see ISSUES.md, 2026-09-22, and
-  // shaders/strokePath.frag.glsl). brushValue: -1 (black) .. 1 (white) — an
+  // shaders/heightmap/strokePath.frag.glsl). brushValue: -1 (black) .. 1 (white) — an
   // absolute target height, not a delta; it's read fresh on every dab, so it
   // must stay constant for the duration of one stroke (the UI doesn't let it
   // change mid-drag).
@@ -962,7 +962,7 @@ export class HeightmapPipeline {
 
   // The patch's real low/high, without ever reading back its full-resolution
   // buffer: a min/max reduction pyramid (Tevs/Ihrke/Seidel 2008, "Maximum
-  // Mipmaps," see REFERENCES.md and shaders/minMaxReduce.frag.glsl) halves
+  // Mipmaps," see REFERENCES.md and shaders/heightmap/minMaxReduce.frag.glsl) halves
   // the source over and over, each pass keeping the true min/max of every
   // 2x2 block rather than blurring it away, until one texel holds the exact
   // min/max of the whole region. Only that one texel (16 bytes) is ever read

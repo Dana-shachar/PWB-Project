@@ -27,7 +27,7 @@ export function buildHeightDistribution(histogram: { min: number; max: number; b
 
 // The water ramp is spaced by light remaining, not meters: Beer-Lambert's exp(-depth / clarity), normalized so the
 // deepest water is 1. Colors change fastest near the surface, as light does (NOAA's ocean light zones).
-// Mirrors waterRampPosition in shaders/water.glsl.
+// Mirrors waterRampPosition in shaders/water/water.glsl.
 export function depthToRampPosition(depthShare: number, clarity: number): number {
   const scale = Math.max(clarity, 0.001);
   return (1 - Math.exp(-Math.min(1, Math.max(0, depthShare)) / scale)) / (1 - Math.exp(-1 / scale));

@@ -1,3 +1,4 @@
+import { DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { DEFAULT_COLOR_STOPS, type ColorStop } from './colorRamp';
@@ -74,7 +75,7 @@ function randomWaterPalette(landBaseHue: number, landHighHue: number): ColorStop
 // from anything. Revisit once there's a real scene-scale convention.
 export const KM_PER_SCENE_UNIT = 300;
 
-// Sea level and water look (shaders/water.glsl). seaLevel is a raw height, the value both views read
+// Sea level and water look (shaders/water/water.glsl). seaLevel is a raw height, the value both views read
 // from the height texture, so the planet and the chunk draw the same coastline.
 export interface WaterSettings {
   enabled: boolean;
@@ -93,8 +94,6 @@ export interface WaterSettings {
   shine: number;
   // How strongly the sky is reflected at a slant (Fresnel), as a share of Seascape's own (1).
   reflection: number;
-  // How windy, as a Beaufort force: 0 is a calm mirror, 12 a sea white with foam. Later driven by the atmosphere.
-  wind: number;
 }
 
 export const DEFAULT_WATER_SETTINGS: WaterSettings = {
@@ -113,7 +112,6 @@ export const DEFAULT_WATER_SETTINGS: WaterSettings = {
   waveScale: 4, // inferred, TUNABLE
   shine: 0.3, // hand-set, TUNABLE (Dana, 2026-10-27: Seascape's own glare was far too strong)
   reflection: 1,
-  wind: 4, // Beaufort 4, "fairly frequent white horses": the look before this setting existed
 };
 
 // What the water reflects at a slant, until the atmosphere step sets a real sky. inferred, TUNABLE.
@@ -171,6 +169,8 @@ export interface PlanetSettings {
   autoDetail?: boolean;
   // Absent in older saves, which load with water off.
   water?: WaterSettings;
+  // Absent in older saves, which load with the default atmosphere (and their water's wind, if any).
+  atmosphere?: AtmosphereSettings;
 }
 
 export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
@@ -187,6 +187,7 @@ export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
   detailAmount: 0.03, // inferred, TUNABLE
   autoDetail: true,
   water: DEFAULT_WATER_SETTINGS,
+  atmosphere: DEFAULT_ATMOSPHERE_SETTINGS,
 };
 
 // A saved project from before colorStops existed only has the old
@@ -231,7 +232,7 @@ export function usePlanetControls() {
   const [heightScale, setHeightScale] = useState(DEFAULT_PLANET_SETTINGS.heightScale);
   // The Resolution slider, see PlanetSettings.maxErrorPixels.
   const [maxErrorPixels, setMaxErrorPixels] = useState(DEFAULT_PLANET_SETTINGS.maxErrorPixels);
-  // Elevation color ramp (shaders/terrain.glsl) — off by default so nothing
+  // Elevation color ramp (shaders/terrain/terrain.glsl) — off by default so nothing
   // changes until turned on. A labelled placeholder for Stage 11's real
   // height+climate+biome shader, not that shader itself (Dana, 2026-10-13:
   // "color slope... control of colors for min, max, mid"). See ROADMAP.md.
@@ -249,6 +250,7 @@ export function usePlanetControls() {
   // it. Read-only here (not saved), it's what the ramp's meters calibrate to.
   const [elevationRange, setElevationRange] = useState({ min: -0.5, max: 0.5 });
   const [water, setWater] = useState<WaterSettings>(DEFAULT_WATER_SETTINGS);
+  const [atmosphere, setAtmosphere] = useState<AtmosphereSettings>(DEFAULT_ATMOSPHERE_SETTINGS);
   // The planet's height distribution, for the land share readout. Read-only, not saved.
   const [heightDistribution, setHeightDistribution] = useState<HeightDistribution | null>(null);
 
@@ -259,6 +261,10 @@ export function usePlanetControls() {
     const timeoutId = setTimeout(() => setShoreSeaLevel(shoreSeaLevelNow), 150);
     return () => clearTimeout(timeoutId);
   }, [shoreSeaLevelNow]);
+
+  function updateAtmosphere(changes: Partial<AtmosphereSettings>) {
+    setAtmosphere((previous) => ({ ...previous, ...changes }));
+  }
 
   function updateWater(changes: Partial<WaterSettings>) {
     setWater((previous) => ({ ...previous, ...changes }));
@@ -278,7 +284,7 @@ export function usePlanetControls() {
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -296,6 +302,7 @@ export function usePlanetControls() {
     setDetailAmount(settings.detailAmount ?? DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
     setAutoDetail(settings.autoDetail ?? true);
     setWater(migrateWater(settings.water));
+    setAtmosphere(migrateAtmosphere(settings.atmosphere, (settings.water as { wind?: number } | undefined)?.wind));
   }
 
   // A project with nothing saved yet (new, or an old save from before this
@@ -333,6 +340,8 @@ export function usePlanetControls() {
     setElevationRange,
     water,
     updateWater,
+    atmosphere,
+    updateAtmosphere,
     shoreSeaLevel,
     heightDistribution,
     setHeightDistribution,

@@ -2,6 +2,8 @@ import type { RefObject } from 'react';
 import { NoisePanel } from './NoisePanel';
 import { ErosionPanel } from './panels/ErosionPanel';
 import { StagePlaceholder } from './panels/StagePlaceholder';
+import { AtmospherePanel } from './panels/AtmospherePanel';
+import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
@@ -14,6 +16,8 @@ interface RightPanelProps {
   // 2026-10-07 — keeping both would mean two sources of truth for the same
   // selection; see ROADMAP.md's Procedural System Feedback section).
   activeStage: PipelineStage;
+  atmosphere: AtmosphereSettings;
+  onAtmosphereChange: (changes: Partial<AtmosphereSettings>) => void;
   layers: NoiseLayer[];
   selectedLayerIds: string[];
   onLayerClick: (id: string, event: { shiftKey: boolean }) => void;
@@ -57,7 +61,7 @@ interface RightPanelProps {
 // (ui/Panel.tsx's `activeStage`/`onStageChange`). Terrain gets the existing
 // full `NoisePanel` and Erosion its own; every remaining stage is still an
 // empty placeholder until that stage's own feature gets built.
-export function RightPanel({ width, activeStage, erosion, erosionPatch, chunkMeshResolution, ...props }: RightPanelProps) {
+export function RightPanel({ width, activeStage, atmosphere, onAtmosphereChange, erosion, erosionPatch, chunkMeshResolution, ...props }: RightPanelProps) {
   return (
     <div className="panel-outer" style={{ width }}>
       <div className="panel-content">
@@ -80,7 +84,8 @@ export function RightPanel({ width, activeStage, erosion, erosionPatch, chunkMes
             isStale={erosion.isStale}
           />
         )}
-        {activeStage !== 'terrain' && activeStage !== 'erosion' && (
+        {activeStage === 'atmosphere' && <AtmospherePanel atmosphere={atmosphere} onAtmosphereChange={onAtmosphereChange} />}
+        {activeStage !== 'terrain' && activeStage !== 'erosion' && activeStage !== 'atmosphere' && (
           <StagePlaceholder label={PIPELINE_STAGES.find((stage) => stage.key === activeStage)!.label} />
         )}
       </div>

@@ -140,6 +140,8 @@ function App() {
         onAmbientLightChange={sceneControls.setAmbientLight}
         lightDirX={sceneControls.lightDirX}
         onLightDirXChange={sceneControls.setLightDirX}
+        lightFollowsCamera={sceneControls.lightFollowsCamera}
+        onLightFollowsCameraChange={sceneControls.setLightFollowsCamera}
         lightDirY={sceneControls.lightDirY}
         onLightDirYChange={sceneControls.setLightDirY}
         lightDirZ={sceneControls.lightDirZ}
@@ -203,6 +205,8 @@ function App() {
         chunkElevationRange={{ min: landChunk.elevationMin, max: landChunk.elevationMax }}
         water={planetControls.water}
         onWaterChange={planetControls.updateWater}
+        atmosphere={planetControls.atmosphere}
+        onAtmosphereChange={planetControls.updateAtmosphere}
         heightDistribution={planetControls.heightDistribution}
         activeStage={activeStage}
         onStageChange={setActiveStage}
@@ -285,6 +289,8 @@ function App() {
                 onElevationRangeChange={planetControls.setElevationRange}
                 onHeightDistributionChange={planetControls.setHeightDistribution}
                 water={planetControls.water}
+                atmosphere={planetControls.atmosphere}
+                lightFollowsCamera={sceneControls.lightFollowsCamera}
                 shoreSeaLevel={planetControls.shoreSeaLevel}
               />
             </div>
@@ -332,6 +338,8 @@ function App() {
                 bakePatch={bakeChunkPatch}
                 groundHeights={landChunk.groundHeights}
                 water={planetControls.water}
+                atmosphere={planetControls.atmosphere}
+                lightFollowsCamera={sceneControls.lightFollowsCamera}
                 waterDeepest={planetControls.elevationRange.min}
               />
             </div>
@@ -341,6 +349,8 @@ function App() {
       </div>
       <div className="viewport-divider" onMouseDown={rightPanel.startResize} />
       <RightPanel
+        atmosphere={planetControls.atmosphere}
+        onAtmosphereChange={planetControls.updateAtmosphere}
         activeStage={activeStage}
         layers={noiseLayers.layers}
         selectedLayerIds={noiseLayers.selectedLayerIds}

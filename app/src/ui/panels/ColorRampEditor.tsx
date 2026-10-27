@@ -29,7 +29,7 @@ function clamp01(value: number): number {
 }
 
 // A ramp position (0-1) back to the raw elevation it colors, the same
-// linear map the shaders use (elevationFraction in shaders/fragment.glsl).
+// linear map the shaders use (elevationFraction in shaders/terrain/fragment.glsl).
 function rawElevationAt(position: number, range: { min: number; max: number }): number {
   return range.min + position * (range.max - range.min);
 }
@@ -93,7 +93,7 @@ function formatColorCode(hex: string, format: ColorCodeFormat): string {
 }
 
 // Linear interpolation across the stops, matching terrainRampColor's
-// own math (shaders/terrain.glsl) closely enough for a UI preview — not
+// own math (shaders/terrain/terrain.glsl) closely enough for a UI preview — not
 // pixel-identical to the shader (sRGB-vs-linear blending differences aren't
 // worth chasing for a swatch), same as any gradient-editor preview bar.
 function rampColorAt(stops: ColorStop[], t: number): string {
@@ -139,7 +139,7 @@ function cssGradient(stops: ColorStop[]): string {
 // fixed Base/Mid/High three-stop pickers. Every stop is equal: freely added,
 // dragged, typed into or removed, between MIN_COLOR_STOPS and
 // MAX_COLOR_STOPS (GLSL ES 1.00's fixed-size ramp array, see
-// shaders/terrain.glsl). baseColor is only the flat color shown here when
+// shaders/terrain/terrain.glsl). baseColor is only the flat color shown here when
 // the ramp is off (Dana, 2026-10-21).
 export function ColorRampEditor({
   baseColor,

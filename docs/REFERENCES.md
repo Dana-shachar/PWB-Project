@@ -67,6 +67,33 @@
 - The convention `ui/panels/ColorRampEditor.tsx` follows: drag along the bar, click empty space to add (sampling the ramp's own current color there), delete the selected stop, linear interpolation. Base color stays the fixed stop at position 0 (Dana, 2026-10-13), not a separate control.
 - *[Blender Manual, Color Ramp Widget](https://docs.blender.org/manual/en/4.1/interface/controls/templates/color_ramp.html). Verified 2026-10-20.*
 
+**Art direction: between No Man's Sky and Sable** · Dana's reference images, 2026-10-27 · `direction`
+- Bold, alien palettes and hazy light from No Man's Sky, drawn with Sable's soft gradients and simple shapes; not photo-real, no toon outlines. Monument Valley stays the reference for color rules.
+
+**Monument Valley, color rules** · `reference`
+- Calm, limited palettes with clear rules: a few related hues per scene, soft value steps, one accent. The reference for coloring rules, kept less simple here (Dana, 2026-10-26 and 2026-10-27). No images saved yet.
+
+**Gris** · `reference`
+- Watercolor-soft gradients, large calm color fields, and color used as mood: supports the soft sky ramps and limited palettes. Color inspiration: warm coral against cool teal, pastel pink and blue skies, deep red with sage green.
+- ![](references/gris-hands.png) ![](references/gris-sky.png) ![](references/gris-forest.png)
+- Landscape (red desert): layered ridges fading into a pale haze toward the horizon, one hue in many values, a soft white sun. ![](references/gris-red-desert.png)
+
+**Outer Wilds, forest planet** · `reference`
+- Thick haze fading distance into the sky color (aerial perspective), a large glowing sun, planets of very different sizes.
+- ![](references/outer-wilds-forest.png)
+
+**Sable, sunset and desert** · `reference`
+- Soft gradient skies pale at the horizon, strong haze on distant cliffs, a sun with a soft halo, simple soft-edged clouds, a limited palette; striped rock strata on cliffs (for terrain shading).
+- ![](references/sable-sunset.png) ![](references/sable-desert.png)
+
+**No Man's Sky, water** · `reference`
+- Saturated turquoise, clear to the bottom, sharp sun sparkles.
+- ![](references/nms-water.png)
+
+**No Man's Sky, skies and palettes** · `reference`
+- A pink hazy sky with a large moon; thick one-color glowing haze with silhouettes and sun bloom; complementary colors across land, clouds and water (orange land, purple clouds, lilac water).
+- ![](references/nms-pink-sky.png) ![](references/nms-yellow-haze.png) ![](references/nms-complementary-palette.png)
+
 ---
 
 ## ⚙️ Computational

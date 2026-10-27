@@ -43,7 +43,8 @@ uniform float uBakeSamples;
 uniform float uBorderTexels;
 
 void main() {
-  vNormal = normalMatrix * normal;
+  // World space, to match the sun and view directions ([B61], fixed 2026-10-27; normalMatrix gave view space).
+  vNormal = mat3(modelMatrix) * normal;
   vUv = uv;
   vDisplace = displace;
   vIsTopSurface = isTopSurface;

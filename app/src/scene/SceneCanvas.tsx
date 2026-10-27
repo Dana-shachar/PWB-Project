@@ -11,6 +11,10 @@ import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '
 import { percentileRangeFromBins } from '../map/elevationRange';
 import { buildHeightDistribution, type HeightDistribution } from '../planet/seaLevel';
 import { windTimeScale } from '../planet/oceanSpectrum';
+import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
+import { createPlanetGlow, updatePlanetGlow, updatePlanetGlowFrame } from '../atmosphere/planetGlow';
+import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame } from '../atmosphere/cloudLayer';
+import { createPlanetHaze, updatePlanetHaze } from '../atmosphere/planetHaze';
 import { isRippleMapReady } from '../planet/rippleMap';
 import { WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { ElevationData } from '../voxel/chunkGrid';
@@ -202,6 +206,9 @@ interface SceneCanvasProps {
   // The planet's area-weighted height distribution, for the land share readout (planet/seaLevel.ts).
   onHeightDistributionChange?: (distribution: HeightDistribution | null) => void;
   water: WaterSettings;
+  atmosphere: AtmosphereSettings;
+  // The light turns with the camera instead of staying fixed (scene/sceneControls.ts).
+  lightFollowsCamera: boolean;
   // The settled sea level Roughness fades toward, or null with water off (planet/planetControls.ts).
   shoreSeaLevel: number | null;
 }
@@ -238,6 +245,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     onElevationRangeChange,
     onHeightDistributionChange,
     water,
+    atmosphere,
+    lightFollowsCamera,
     shoreSeaLevel,
   },
   handleRef,
@@ -251,6 +260,13 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   // mode is actually selected, rather than ever showing a stale overlay.
   const wireframeStaleRef = useRef(false);
   const planetPatchRendererRef = useRef<PlanetPatchRenderer | null>(null);
+  // Read every frame by the glow and clouds, so they follow the latest settings without rebuilding the scene.
+  const atmosphereRef = useRef(atmosphere);
+  atmosphereRef.current = atmosphere;
+  // The Scene panel's light direction, and whether it turns with the camera; applied every frame.
+  const lightBaseRef = useRef(new THREE.Vector3(1, 1, 1));
+  const lightFollowsCameraRef = useRef(lightFollowsCamera);
+  lightFollowsCameraRef.current = lightFollowsCamera;
   // One shared copy of every uniform value both the old single mesh and the
   // new per-patch meshes need the same values for (lighting, color ramp,
   // elevation range, camera position) — every effect below that used to set
@@ -693,6 +709,13 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
 
     scene.add(gridMesh);
     scene.add(planetMesh);
+    // The atmosphere seen from space: a rim glow and a cloud shell (atmosphere/).
+    const planetGlow = createPlanetGlow();
+    const cloudLayer = createCloudLayer();
+    const planetHaze = createPlanetHaze();
+    scene.add(planetGlow.mesh);
+    scene.add(cloudLayer.mesh);
+    scene.add(planetHaze.mesh);
 
     // Runs right before this view renders, every frame it's actually drawn —
     // the shared renderer (scene/sharedViewportRenderer.ts) already handles
@@ -727,6 +750,15 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const seaStep = sharedUniformsRef.current.time > 0 ? Math.min(nowSeconds - sharedUniformsRef.current.time, 0.1) : 0;
         sharedUniformsRef.current.seaTime += seaStep * windTimeScale(sharedUniformsRef.current.wind);
         sharedUniformsRef.current.time = nowSeconds;
+        const shared = sharedUniformsRef.current;
+        const terrainReach = shared.displacementAmplitude * Math.max(Math.abs(shared.elevationMin), Math.abs(shared.elevationMax));
+        updatePlanetGlow(planetGlow, atmosphereRef.current, shared.radius + terrainReach);
+        updatePlanetGlowFrame(planetGlow, perspectiveCamera.position);
+        updateCloudLayer(cloudLayer, atmosphereRef.current, shared.radius, terrainReach);
+        updatePlanetHaze(planetHaze, atmosphereRef.current, shared.radius + terrainReach, perspectiveCamera.position, shared.lightDirection, shared.ambient);
+        updateCloudLayerFrame(cloudLayer, atmosphereRef.current.wind, seaStep, shared.lightDirection, shared.ambient, perspectiveCamera.position);
+        sharedUniformsRef.current.lightDirection.copy(lightBaseRef.current);
+        if (lightFollowsCameraRef.current) sharedUniformsRef.current.lightDirection.applyQuaternion(perspectiveCamera.quaternion);
         sharedUniformsRef.current.rippleEnabled = isRippleMapReady() ? 1 : 0;
         sharedUniformsRef.current.viewWidthPixels = Math.max(1, (viewportElement?.clientWidth ?? 1) * window.devicePixelRatio);
         planetPatches.applyFrame(sharedUniformsRef.current);
@@ -740,6 +772,12 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     return () => {
       sharedRenderer.unregisterView('planet');
       orbitControls.dispose();
+      scene.remove(planetGlow.mesh);
+      scene.remove(cloudLayer.mesh);
+      scene.remove(planetHaze.mesh);
+      planetGlow.dispose();
+      cloudLayer.dispose();
+      planetHaze.dispose();
 
       heightmapPipelineRef.current?.dispose();
       heightmapPipelineRef.current = null;
@@ -897,6 +935,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shared.shininess = shininess;
     shared.diffuseWrap = diffuseWrap;
     shared.lightDirection.set(lightDirX, lightDirY, lightDirZ);
+    lightBaseRef.current.set(lightDirX, lightDirY, lightDirZ);
     shared.displacementAmplitude = (heightScale / 100) * radius;
     shared.colorByElevation = colorByElevation ? 1 : 0;
     shared.colorStops = colorStops;
@@ -929,9 +968,16 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shared.waveScale = water.waveScale;
     shared.shine = water.shine;
     shared.reflection = water.reflection;
-    shared.wind = water.wind;
     planetPatchRendererRef.current?.applyShared(shared);
   }, [water]);
+
+  // The wind (it sets the water's waves) and the sky the water reflects come from the atmosphere.
+  useEffect(() => {
+    const shared = sharedUniformsRef.current;
+    shared.wind = atmosphere.wind;
+    shared.skyColor.set(atmosphere.enabled ? atmosphere.horizonColor : WATER_SKY_COLOR);
+    planetPatchRendererRef.current?.applyShared(shared);
+  }, [atmosphere]);
 
   // Roughness fades toward the sea level (heightmap.frag.glsl), so a settled sea level change re-bakes the shown patches.
   useEffect(() => {

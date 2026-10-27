@@ -3,7 +3,7 @@ import type { ElevationReadback } from '../map/heightmap';
 // Shared by every pass below — the same plain full-screen-quad pass-through
 // the heightmap pipeline uses, since all of these render the same quad
 // through the same ortho camera and only the fragment shader differs.
-import quadVertexGlsl from '../shaders/heightmapBrush.vert.glsl?raw';
+import quadVertexGlsl from '../shaders/heightmap/heightmapBrush.vert.glsl?raw';
 import commonGlsl from '../shaders/erosion/common.glsl?raw';
 import seedGlsl from '../shaders/erosion/seed.frag.glsl?raw';
 import rainGlsl from '../shaders/erosion/rain.frag.glsl?raw';

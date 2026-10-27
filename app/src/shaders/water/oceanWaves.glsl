@@ -7,7 +7,7 @@
  * under the same CC BY-NC-SA 3.0 license. Changes: SEA_TIME reads a uniform instead of iGlobalTime; map_detailed
  * stops after uSeaIterations octaves (the "Wave detail" setting); getSeaColor takes its base, water and sky colors
  * and its sun highlight's sharpness as arguments (seaColor), so the water ramp can recolor it and far water can
- * widen the highlight; hash is the repo's sine-free hash (shaders/noise.glsl's hash1), since the sine hash banded
+ * widen the highlight; hash is the repo's sine-free hash (shaders/heightmap/noise.glsl's hash1), since the sine hash banded
  * into stripes at kilometer-scale coordinates; diffuse and specular are renamed seaDiffuse and seaSpecular, since
  * the planet shader already has variables by those names; each wave octave drifts in its own direction and speed
  * instead of all along one diagonal; the octave loop lives in sea_octaves, band-limited by the pixel footprint
@@ -35,7 +35,7 @@ const mat2 octave_m = mat2(1.6,1.2,-1.2,1.6);
 // Port: each octave's drift turns about 40 degrees and speeds up 10%, so the layers don't all slide one way.
 const mat2 OCTAVE_DRIFT_TURN = mat2(0.766,0.643,-0.643,0.766);
 
-// Port: Dave Hoskins' hash without sine (shaders/noise.glsl), replacing fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123).
+// Port: Dave Hoskins' hash without sine (shaders/heightmap/noise.glsl), replacing fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453123).
 float hash( vec2 p ) {
   vec3 p3 = fract(vec3(p.xyx) * 0.1031);
   p3 += dot(p3, p3.yzx + 33.33);
@@ -156,7 +156,8 @@ float seaGlint(vec3 n, vec3 l, vec3 toEye, float slopeVariance) {
   return 0.25 * exp(-tan2 / slopeVariance) / (PI * slopeVariance * cos2 * cos2) * step(0.0, dot(n, l));
 }
 float seaSlopeVariance(float fetch) {
-  return max((0.003 + 0.00512 * uSeaWindSpeed) * fetch * fetch, 0.0015);
+  // A floor of 0.02 keeps calm water's glint soft instead of a tiny, very bright point (Dana, 2026-10-27; 2.5D look).
+  return max((0.003 + 0.00512 * uSeaWindSpeed) * fetch * fetch, 0.02);
 }
 
 // getSeaColor with SEA_BASE, SEA_WATER_COLOR and the sky passed in (port). The sun highlight is Seascape's own up close

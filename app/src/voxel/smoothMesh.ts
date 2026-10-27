@@ -58,7 +58,7 @@ export function buildSmoothChunkGeometry(resolution: number, size: number): THRE
   // z/resolution) convention — shared by the elevation-color ramp and the
   // cast-shadow march, both of which need to read the raw heightmap at an
   // arbitrary point, not just at a vertex. See landChunk.ts and
-  // shaders/terrain.glsl.
+  // shaders/terrain/terrain.glsl.
   const uvs: number[] = [];
   // 1 = chunk.vert.glsl samples the heightmap and displaces this vertex
   // (the top surface, and the skirt walls' own top edge); 0 = stays fixed

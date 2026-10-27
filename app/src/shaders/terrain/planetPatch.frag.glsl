@@ -51,8 +51,8 @@ uniform float uFace;
 uniform float uBakeSamples;
 uniform float uBorderTexels;
 uniform float uDiffuseWrap;
-uniform mat3 normalMatrix;
-// Sea level and water look (shaders/water.glsl). uWaterDeepest is the planet's lowest height, where depthShare is 1.
+uniform mat4 modelMatrix;
+// Sea level and water look (shaders/water/water.glsl). uWaterDeepest is the planet's lowest height, where depthShare is 1.
 uniform float uWaterEnabled;
 uniform float uSeaLevel;
 uniform float uWaterDeepest;
@@ -135,7 +135,9 @@ void main() {
   float stepUv = texelStepUv(uBakeSamples);
   float textureScale = (uBakeSamples - 1.0) / (uBakeSamples + 2.0 * uBorderTexels);
   vec2 textureUv = borderedTextureUv(vUv, uBakeSamples, uBorderTexels);
-  vec3 normal = normalize(normalMatrix * heightfieldNormal(uHeightMap, textureUv, stepUv * textureScale, 1.0, dPdu / textureScale, dPdv / textureScale, localNormal, uDisplacementAmplitude));
+  // World space, to match the sun and view directions (normalMatrix gave view space, so the lit side turned with the
+  // camera; [B61], fixed 2026-10-27). mat3(modelMatrix) suits rotation and uniform scale.
+  vec3 normal = normalize(mat3(modelMatrix) * heightfieldNormal(uHeightMap, textureUv, stepUv * textureScale, 1.0, dPdu / textureScale, dPdv / textureScale, localNormal, uDisplacementAmplitude));
 
   vec3 lightDir = normalize(uLightDirection);
   float diffuse = softDiffuse(normal, lightDir, uDiffuseWrap) * uLightIntensity;
@@ -155,9 +157,9 @@ void main() {
   }
 
   vec3 litColor = surfaceColor * (ambient + diffuse) + specular;
-  // The ocean: Seascape's waves and sea color (shaders/oceanWaves.glsl) at a planet scale, in each point's own
+  // The ocean: Seascape's waves and sea color (shaders/water/oceanWaves.glsl) at a planet scale, in each point's own
   // frame (x along the face, y up), smoothed with distance into a soft glare, with sporadic whitecaps that read from
-  // orbit, the seabed showing through the shallows (shaders/water.glsl), and ripples and shore foam up close.
+  // orbit, the seabed showing through the shallows (shaders/water/water.glsl), and ripples and shore foam up close.
   if (uWaterEnabled > 0.5 && elevationRaw < uSeaLevel) {
     float depthShare = (uSeaLevel - elevationRaw) / max(0.0001, uSeaLevel - uWaterDeepest);
     vec3 seaBase = terrainRampColor(waterRampPosition(depthShare, uWaterClarity), uWaterRampColors, uWaterRampPositions, int(uWaterRampCount));
@@ -203,7 +205,10 @@ void main() {
     vec3 eyeLocal = vec3(dot(eyeDir, frameX), dot(eyeDir, localNormal), dot(eyeDir, frameZ));
     vec3 sunDir = normalize(uLightDirection);
     vec3 sunLocal = vec3(dot(sunDir, frameX), dot(sunDir, localNormal), dot(sunDir, frameZ));
-    vec3 sea = seaColor(surfacePoint, seaNormal, sunLocal, eyeLocal, distOcean, seaBase, seaWaterColor, uSkyColor, far, seaSlopeVariance(fetch)) * uLightIntensity;
+    // Day and night like the land: the same ambient and wrapped sunlight on the sphere's own direction, in world space.
+    vec3 sphereNormal = normalize(mat3(modelMatrix) * localNormal);
+    float dayLight = ambient + softDiffuse(sphereNormal, lightDir, uDiffuseWrap);
+    vec3 sea = seaColor(surfacePoint, seaNormal, sunLocal, eyeLocal, distOcean, seaBase, seaWaterColor, uSkyColor, far, seaSlopeVariance(fetch)) * uLightIntensity * dayLight;
     float transmittance = waterTransmittance(depthShare, uWaterClarity);
     vec3 seabed = surfaceColor * (ambient + diffuse) * waterFilter(depthShare, uWaterClarity, seaBase);
     litColor = mix(seabed, sea, 1.0 - transmittance);
