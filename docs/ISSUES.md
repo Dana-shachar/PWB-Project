@@ -594,13 +594,63 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 1. Roughness → 0. 2. Domain warp → off. 3. Octaves modifier → off. 4. Fractal type → fBm instead of Hybrid. 5. Blend mode → Normal instead of Multiply.
 - Whichever removes the pattern names the step; read only that code, propose a fix, and get a go first.
 
-**Untested leads, to check next session (each needs a plan and a go first)**
-1. **The pattern depends on patch depth:** one screenshot shows it stop at a straight patch border, smooth on one side. Compare the two neighboring patches' depths and how many extra fine octaves each adds (the Alt+click row readout gives the depth); if only some depths show it, the cause is in what changes with depth.
-2. **The slope (normal) calculation amplifies sample-level noise:** `heightfieldNormal` in `terrain.glsl` takes the slope from neighbors one texel apart, so a tiny height sawtooth becomes a strong light-and-dark pattern. Check by reading the measured row's slope; a wider slope step (2 to 3 texels) is a common remedy, needs a source.
-3. **The Hybrid fractal's feedback:** in Blender's Hybrid multifractal each octave's weight depends on the previous one (`gain`, `offset`); with gain 1.7 the fine octaves may be boosted rather than faded. Toggle 4 of the list tests it.
-4. **Multiply blend at partial opacity (0.47):** multiplying a noise into the base can sharpen small dips into regular pits. Toggle 5 tests it.
-5. **Number precision at the finest octaves:** not ruled out for the sub-meter holes. Today's simulation was simplified (plain fBm, no Hybrid, no domain warp, an arbitrary spot), so its negative result is weak. Only revisit if 1 to 4 come up empty.
-6. **Roughness (`planetDetail`):** its octaves step by exactly 2 and are not rotated; toggle 1 tests it.
+**Untested leads, to check next session**
+
+*Each lead: the idea, the evidence for and against, the test step by step, what each result means, and the code involved. Every test needs Dana's go first, including log-only ones.*
+
+**Lead 1: the pattern depends on the patch's detail level**
+- Idea: each patch adds as many extra fine octaves as its own sample spacing allows (`octaveFade` with the patch's `latticeSpacing`, in `fbm3D`, `ridgedFbm3D` and the Musgrave loop of `heightmap.frag.glsl`). If the pattern comes from one particular fine octave, only patches deep enough to include it would show it, and the boundary between two depths would be a straight line with the pattern on one side only.
+- Evidence for: Dana's screenshot (2026-10-27 21:41, snow slope, Voronoi Manhattan Jitter 0.21) shows the dimples stopping at a straight vertical patch border, smooth on the left, dimpled on the right. The walker log showed depth 12 near the eye, so neighbors at depths 10 to 12 sit side by side.
+- Evidence against: none yet; not tested.
+- Test: on that kind of view, Alt+click once on the smooth side and once on the dimpled side, right next to the border. Each click prints `[TEMP pattern]` with the patch `depth`, `samples` and `patchMeters`. Paste both lines.
+- Reading the result: different depths, with the pattern on the deeper (or shallower) side, means the cause is an octave that only exists at some depths; then compute which octave index first appears at that depth from the layer's frequency and lacunarity. Same depth on both sides means this lead is wrong.
+- Code involved: `octaveFade`, `NYQUIST_FADE_MIN`/`MAX`, the `deepOn` octave loops in `shaders/heightmap/heightmap.frag.glsl`; `readPatchRow` in `voxel/ChunkPatchRenderer.ts` for the readout.
+
+**Lead 2: the slope calculation turns a tiny height ripple into a strong light pattern**
+- Idea: the lighting's slope (normal) comes from the height of the immediate neighbors, one texel apart (`heightfieldNormal` in `shaders/terrain/terrain.glsl`, step `texelStepUv`). A sawtooth of a few centimeters between samples becomes a large alternating slope, so the lighting shows a strong regular pattern even if the heights are almost flat.
+- Evidence for: the measured row (depth 10, 0.49 m samples) has a sample-to-sample sawtooth (lag-1 curvature correlation −0.58); the height steps between neighbors vary from +0.12 to −0.71 m on a gentle slope. Visible mostly where the ground is flat or bright (snow, the shore), where lighting differences show most.
+- Evidence against: none yet.
+- Test (log only): from the same `[TEMP pattern]` row, compute the slope with a 1-texel step and with a 3-texel step and compare how much each swings. Or, as a one-variable visual test, temporarily widen the slope step to 3 texels in `chunk.frag.glsl` and look at the same view.
+- Reading the result: if the pattern fades a lot with the wider step, the heights carry a tiny ripple and the slope magnifies it; the fix is then in the source of the ripple, and a wider slope step only as a sourced secondary measure. If nothing changes, this lead is wrong.
+- Code involved: `heightfieldNormal`, `texelStepUv`, `borderedTextureUv` in `shaders/terrain/terrain.glsl`; the call in `shaders/terrain/chunk.frag.glsl`.
+
+**Lead 3: the Hybrid fractal boosts the fine octaves**
+- Idea: Dana's layer uses the Octaves modifier with Fractal type Hybrid, offset 0.82, gain 1.70. In Blender's Hybrid multifractal (which our Musgrave loop follows) each octave is weighted by the signal of the previous ones times the gain; with gain above 1 the weight can stay at its maximum of 1 for every fine octave instead of shrinking, so the finest octaves (the ones near the sample limit) keep full strength.
+- Evidence for: the pattern survived every change made to the seeds, rotation and fade of the extra octaves; Hybrid's weighting happens after those. Gain 1.70 is high.
+- Evidence against: the pattern was also seen with other noise types, settings unknown (possibly not Hybrid).
+- Test: on the same view, switch Fractal type from Hybrid to plain fBm (Modifiers → Octaves), change nothing else, screenshot. Then back to Hybrid with gain 1.0, screenshot.
+- Reading the result: the pattern gone with fBm and with gain 1.0 means Hybrid's feedback is the cause; the fix is in how the extra fine octaves are weighted in the Hybrid branch of the Musgrave loop. Unchanged means this lead is wrong.
+- Code involved: the `fractalType` branch for hybrid multifractal (`signal`, `weight`, `gain`) in `shaders/heightmap/heightmap.frag.glsl`; Blender's `gpu_shader_material_tex_musgrave.glsl` as the source.
+
+**Lead 4: Multiply blend sharpens small dips into regular pits**
+- Idea: the layer's Blend mode is Multiply at Opacity 0.47. Multiplying a noise into the base turns small negative dips into proportionally deeper pits where the base is high, which on bright, flat ground can read as a regular grid of holes.
+- Evidence for: the "holes" are dark pits on high, smooth areas (snow).
+- Evidence against: there is only one layer, so Multiply has little base to multiply against; weak lead.
+- Test: Blend mode → Normal, nothing else changed, same view, screenshot.
+- Reading the result: pattern gone means `applyBlendMode`'s multiply path is involved. Unchanged means wrong.
+- Code involved: `applyBlendMode` in `shaders/heightmap/heightmap.frag.glsl`.
+
+**Lead 5: number precision at the finest octaves (sub-meter holes only)**
+- Idea: at walking scale the finest octaves are computed at coordinates in the millions, where 32-bit floats can only place a few positions per noise cell, making a staircase.
+- Evidence for: arithmetic: on a 1000 km planet, cells of about half a meter sit at coordinates around 2 million, about 4 to 8 positions per cell.
+- Evidence against: a float32 simulation of the Voronoi octave sum along a row did not reproduce the measured sawtooth, and a relative-to-center version changed nothing. But that simulation was simplified: plain fBm instead of Hybrid, no domain warp, an arbitrary spot on the sphere, numpy's float32 instead of the GPU's. So the negative result is weak.
+- Test (only if leads 1 to 4 come up empty, and with a go): repeat the simulation with Dana's exact settings (Hybrid, warp on, the clicked spot's real position from the Alt+click log), and compare with the measured row.
+- Code involved: `basePosition`, `cubeFacePoint`, `faceCoord` and the octave loops in `heightmap.frag.glsl`; `bakeRegionInto` in `map/heightmap.ts`.
+
+**Lead 6: Roughness's own octaves**
+- Idea: Roughness (`planetDetail`) adds fine octaves stepping by exactly 2 in frequency, all on axis-aligned lattices, and is faded out near sea level (`shoreFade`). Its lattices nest and could form a grid.
+- Evidence for: its octaves are not rotated (the rotation added for `[B66]` covers the layer's octaves only).
+- Evidence against: Dana reported the pattern near water, where Roughness is faded to nothing; but it was also seen on snow slopes, where Roughness is full.
+- Test: Roughness → 0 (right panel, Terrain), nothing else changed, same snow view, screenshot.
+- Reading the result: pattern gone on the snow means Roughness is involved there. Unchanged means wrong for that area.
+- Code involved: `planetDetail`, `DETAIL_BASE_FREQUENCY`, `DETAIL_SEED`, `shoreFade` in `heightmap.frag.glsl`; `detailAmount` in `planet/planetControls.ts`.
+
+**Order for next session**
+1. Lead 6, 3 and 4 first: one toggle each, no code, about a minute each.
+2. Then lead 1 (two Alt+clicks) and lead 2 (computed from the same readout).
+3. Lead 5 only if all of these come up empty.
+- Before any test: confirm the planet's Radius (it may still be 1000 km from the test; the planet's normal radius is 6000) and note the layer's full settings, so every screenshot is comparable.
+
 - 💡 Dana's softening idea (average out the holes, a Gaussian over about 0.5 m after each patch bake, like Gaea's Blur node) is verified on the measured row to remove the fine holes and keep the texture. A mask, not a root fix; proposed as an optional Soften control.
 
 ### [B67] From walk mode the water is barely visible · `minor`
