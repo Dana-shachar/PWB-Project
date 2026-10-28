@@ -33,6 +33,7 @@ export interface AtmosphereSettings {
   moon: boolean;
   moonColor: string;
   moonSize: number; // degrees across
+  moonHeight: number; // degrees above the horizon
 }
 
 // Inferred, TUNABLE: a soft, pale default between the references (Sable, Gris, No Man's Sky).
@@ -60,6 +61,7 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   moon: false,
   moonColor: '#e9d2c4',
   moonSize: 8,
+  moonHeight: 40,
 };
 
 // Older saves have no atmosphere; their wind lived in the water settings.

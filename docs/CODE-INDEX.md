@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-10-26`
+`Last updated: 2026-10-27`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -150,7 +150,7 @@
 
 **planet/oceanSpectrum.ts**
 - What it is: waves from the wind: Beaufort force to wind speed, Pierson-Moskowitz wavelength and height, the variance waves, wave clock and surf zone.
-- Key names: `beaufortWindSpeed`, `peakWavelength`, `significantWaveHeight`, `windLengthScale`, `windTimeScale`, `surfZoneShare`, `buildWaveSet`, `applyWaveSet`, `createWaveUniforms`, `MAX_WAVES`.
+- Key names: `beaufortWindSpeed`, `peakWavelength`, `significantWaveHeight`, `windLengthScale`, `windTimeScale`, `surfZoneShare`, `buildWaveSet`, `applyWaveSet`, `createWaveUniforms`, `MAX_WAVES`, `MAX_WAVE_WIND` (waves stop growing at force 12; Wind goes to 40 for the clouds).
 
 **planet/colorRamp.ts**
 - What it is: the ramp stops as shader arrays.
@@ -171,11 +171,11 @@
 
 **atmosphere/atmosphereSettings.ts**
 - What it is: the settings and their defaults; older saves take their wind from the water.
-- Key names: `AtmosphereSettings`, `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`.
+- Key names: `AtmosphereSettings` (incl. `cloudColor2`, `moonHeight`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`.
 
 **atmosphere/skyDome.ts**, **planetGlow.ts**, **planetHaze.ts**, **cloudLayer.ts**
 - What it is: the chunk's sky, the planet's rim glow, surface haze and cloud shell.
-- Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`; `createPlanetHaze`, `updatePlanetHaze`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`.
+- Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`, `setSkyDomeLight` (the Scene light for the moon), `MOON_AZIMUTH`, `CLOUD_DRIFT`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`, `GLOW_MIN_WIDTH`, `GLOW_WIDTH_PER_UNIT`, `GLOW_SHELL_WIDTHS`; `createPlanetHaze`, `updatePlanetHaze`, `HAZE_SCALE_HEIGHT`, `HAZE_DENSITY_PER_UNIT`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`, `CLOUD_TIME_PER_WIND`.
 
 **ui/panels/AtmospherePanel.tsx**
 - What it is: the right panel's Wind, Clouds and Moon controls, shown when Atmosphere is selected.
@@ -235,7 +235,7 @@
 
 **scene/walkMode.ts**
 - What it is: the chunk's person view. Drag to look, click to walk (the click ray is marched against the drawn ground, `pickGround`), WASD or arrows to move, arrows turn, R/F look up and down, Shift runs, `[` `]` or the wheel scale speed (default 10x), Esc leaves. A 1.5 s fly-in eases the camera from the orbit view.
-- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `pickGround`, `flyIn`.
+- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `pickGround`, `flyIn`; water rules `getSeaHeight`, `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
 - Talks to: `LandChunkCanvas.tsx` (saves and restores the orbit camera, eases fov/near/far with `progress`), `ChunkPatchRenderer.sampleHeight` for the eye height.
 
 **voxel/chunkWater.ts**
@@ -244,7 +244,7 @@
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.
-- Key names: `ChunkGround`, `groundHeightAt`, `raycastGround`.
+- Key names: `ChunkGround`, `groundHeightAt` (rows run opposite to z, `[B63]`), `raycastGround`.
 
 **voxel/LandChunkCanvas.tsx**
 - What it is: the chunk view, its chunk material (shared by the voxel mesh and every patch), map-style orbit (`zoomToCursor`, pivot on the ground under the cursor) and the patch renderer.
@@ -290,7 +290,7 @@
 - Key names: `Panel`, `PipelineStageRow`.
 
 **ui/RightPanel.tsx**, **ui/NoisePanel.tsx**
-- What it is: the right panel for the active stage, and the Terrain stage's layer controls.
+- What it is: the right panel for the active stage, and the Terrain stage's layer controls (its Terrain section holds Height and Roughness).
 - Key names: `RightPanel`, `NoisePanel`.
 
 **ui/MaskControls.tsx**
@@ -312,7 +312,7 @@
 
 **heightmap/** (`heightmap.frag.glsl`, `noise.glsl`, `heightmapBrush.vert.glsl`, `strokePath.frag.glsl`, `elevationHistogram`, `minMaxReduce.frag.glsl`)
 - What it is: the height bakes, the noise functions, brush strokes and the height statistics.
-- Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `planetDetail`, `DETAIL_BASE_FREQUENCY`, `shoreFade`; in `noise.glsl`: `hash1`, `perlinNoise3D`, `simplexNoise3D`, `voronoiNoise3D`, `voronoiMetric`, `ridge`, `terrace`.
+- Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `planetDetail`, `DETAIL_BASE_FREQUENCY`, `shoreFade`, `NYQUIST_FADE_MIN`/`MAX`; unproven `[B66]` changes: `isDeepCellOctave`, `deepCellOctave`, `octaveSeed`, `nextOctavePoint`, `OCTAVE_ROTATION`; in `noise.glsl`: `hash1`, `perlinNoise3D`, `simplexNoise3D`, `voronoiNoise3D`, `voronoiMetric`, `ridge`, `terrace`.
 
 **terrain/** (`terrain.glsl`, `planetPatch.frag.glsl`, `chunk.frag.glsl`, `chunk.vert.glsl`, `vertex.glsl`, `fragment.glsl`)
 - What it is: the land surfaces (planet patches, chunk, old globe) and the pieces they share. Lighting is in world space; `heightfieldNormal` always faces outward (`faceforward`).
@@ -326,9 +326,9 @@
 - What it is: the water look both views share, and the chunk's water sheet (Seascape plus variance, surf, foam, depth transparency and haze).
 - Key names: `WATER_F0`, `waterFresnel`, `waterTransmittance`, `waterRampPosition`, `waterFilter`, `waterFoam` (`SHORE_FOAM_SOFTNESS`, `SHORE_FOAM_EDGE_CUTOFF`), `FOAM_COLOR`, `FOAM_OPACITY`.
 
-**atmosphere/** (`skyDome`, `planetGlow`, `planetHaze`, `clouds`)
-- What it is: the chunk's sky dome, the planet's rim glow and surface haze, and the planet's cloud shell.
-- Key names: sky dome `topColor`, `bottomColor`, `uGlow`, sun halo, moon disc, `skyFbm`; glow and haze `c`, `p`, `viewVector`; clouds `cloudShape` (Swirl, Feather erosion), `cloudFbm`, `bandSpeed`, `GLOBAL_DRIFT`, `BAND_SWING`, Beer and powder lighting.
+**atmosphere/** (`skyDome`, `planetGlow`, `planetHaze`, `clouds`, `haze.glsl`)
+- What it is: the chunk's sky dome, the planet's rim glow and surface haze, the planet's cloud shell, and the chunk haze shared by ground and water.
+- Key names: sky dome `topColor`, `bottomColor`, `uGlow`, sun halo, `skyFbm`, `drawMoon`, `moonCells`, `moonRelief`; glow `uWidth`, `uStrength`, edge-distance fade; haze `sphereHits`, `uScaleHeight`, `HAZE_STEPS`; clouds `cloudShape` (Swirl, Feather erosion), `cloudFbm`, `cloudTone`, `toneBands`, `bandSpeed`, `GLOBAL_DRIFT`, `BAND_SWING`, Beer and powder lighting; `haze.glsl` `applyHaze` (Quilez height fog, sun and sky hues), `interleavedGradientNoise`, `HAZE_FALLOFF`, `HAZE_GRAIN`.
 
 **erosion/**, **scene/** (the grid)
 - What it is: the erosion passes and the ground grid.

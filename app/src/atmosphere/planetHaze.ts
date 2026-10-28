@@ -3,9 +3,10 @@ import vertexShader from '../shaders/atmosphere/planetHaze.vert.glsl?raw';
 import fragmentShader from '../shaders/atmosphere/planetHaze.frag.glsl?raw';
 import type { AtmosphereSettings } from './atmosphereSettings';
 
-// The haze over the planet: a thin air layer drawn over the ground in the horizon color, as thick as the air each view
-// ray crosses (planetHaze.frag.glsl). Haze 1 is about 5% looking straight down; layer height inferred, TUNABLE.
-const HAZE_AIR_HEIGHT = 0.02; // share of the radius
+// The haze over the planet: air thinning with height drawn over the ground in the horizon color, as thick as the air each
+// view ray crosses (planetHaze.frag.glsl). Haze 1 is about 5% looking straight down. Scale height inferred, TUNABLE.
+const HAZE_SCALE_HEIGHT = 0.007; // share of the radius
+const HAZE_SHELL_HEIGHTS = 5; // the shell reaches this many scale heights up, where the air is nearly gone
 const HAZE_DENSITY_PER_UNIT = 0.05;
 
 export interface PlanetHaze {
@@ -27,6 +28,7 @@ export function createPlanetHaze(): PlanetHaze {
       uCenter: { value: new THREE.Vector3() },
       uRadius: { value: 1 },
       uAirRadius: { value: 1 },
+      uScaleHeight: { value: 0.01 },
       uCameraPosition: { value: new THREE.Vector3() },
       uLightDirection: { value: new THREE.Vector3(1, 1, 1) },
       uAmbient: { value: 0.2 },
@@ -46,7 +48,8 @@ export function createPlanetHaze(): PlanetHaze {
 // Every frame: size, color and density, the camera and the planet's center, and the sun.
 export function updatePlanetHaze(haze: PlanetHaze, settings: AtmosphereSettings, radius: number, cameraPosition: THREE.Vector3, lightDirection: THREE.Vector3, ambient: number): void {
   haze.mesh.visible = settings.enabled && settings.haze > 0;
-  const airRadius = radius * (1 + HAZE_AIR_HEIGHT);
+  const airRadius = radius * (1 + HAZE_SCALE_HEIGHT * HAZE_SHELL_HEIGHTS);
+  haze.mesh.material.uniforms.uScaleHeight.value = radius * HAZE_SCALE_HEIGHT;
   haze.mesh.scale.setScalar(airRadius);
   const uniforms = haze.mesh.material.uniforms;
   (uniforms.uCameraPosition.value as THREE.Vector3).copy(cameraPosition);

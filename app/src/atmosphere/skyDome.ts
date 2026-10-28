@@ -7,8 +7,8 @@ import type { AtmosphereSettings } from './atmosphereSettings';
 // drawn from inside, following the camera, behind everything else, sized just inside the camera's far plane.
 const EXAMPLE_RADIUS = 4000;
 const EXAMPLE_OFFSET = 33;
-// Where the moon sits in the sky, as a direction. Inferred, TUNABLE.
-const MOON_DIRECTION = new THREE.Vector3(-0.6, 0.35, -0.7).normalize();
+// The moon's compass direction (its height comes from the Moon Height setting). Inferred, TUNABLE.
+const MOON_AZIMUTH = Math.atan2(-0.7, -0.6);
 // How fast the clouds drift at force 4, in noise units per second (Dana, 2026-10-27: 3x, was too slow). Inferred, TUNABLE.
 const CLOUD_DRIFT = 0.12;
 
@@ -32,8 +32,11 @@ export function createSkyDome(): SkyDome {
       uCenter: { value: new THREE.Vector3() },
       uRadius: { value: 1 },
       uSunDirection: { value: new THREE.Vector3(1, 1, 1) },
+      uAmbient: { value: 0.2 },
+      uLightIntensity: { value: 1 },
+      uDiffuseWrap: { value: 0 },
       uMoonEnabled: { value: 0 },
-      uMoonDirection: { value: MOON_DIRECTION.clone() },
+      uMoonDirection: { value: new THREE.Vector3(0, 1, 0) },
       uMoonColor: { value: new THREE.Color() },
       uMoonSize: { value: 0.1 },
       uCloudCoverage: { value: 0 },
@@ -67,6 +70,8 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
   uniforms.uMoonEnabled.value = settings.moon ? 1 : 0;
   (uniforms.uMoonColor.value as THREE.Color).set(settings.moonColor);
   uniforms.uMoonSize.value = THREE.MathUtils.degToRad(settings.moonSize);
+  const elevation = THREE.MathUtils.degToRad(settings.moonHeight);
+  (uniforms.uMoonDirection.value as THREE.Vector3).set(Math.cos(elevation) * Math.cos(MOON_AZIMUTH), Math.sin(elevation), Math.cos(elevation) * Math.sin(MOON_AZIMUTH));
   uniforms.uGlow.value = settings.glow;
   uniforms.uCloudCoverage.value = settings.cloudCoverage;
   (uniforms.uCloudColor.value as THREE.Color).set(settings.cloudColor);
@@ -75,6 +80,14 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
   uniforms.uCloudScale.value = settings.cloudScale;
   uniforms.uCloudDetail.value = settings.cloudDetail;
   uniforms.uCloudFeather.value = settings.cloudFeather;
+}
+
+// The Scene lighting, so the moon is lit as the land is.
+export function setSkyDomeLight(sky: SkyDome, ambient: number, intensity: number, wrap: number): void {
+  const uniforms = sky.mesh.material.uniforms;
+  uniforms.uAmbient.value = ambient;
+  uniforms.uLightIntensity.value = intensity;
+  uniforms.uDiffuseWrap.value = wrap;
 }
 
 // Every frame: the dome follows the camera and stays inside its far plane, and the clouds drift with the wind.

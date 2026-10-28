@@ -94,6 +94,10 @@
 - A pink hazy sky with a large moon; thick one-color glowing haze with silhouettes and sun bloom; complementary colors across land, clouds and water (orange land, purple clouds, lilac water).
 - ![](references/nms-pink-sky.png) ![](references/nms-yellow-haze.png) ![](references/nms-complementary-palette.png)
 
+**No Man's Sky, moons and planets in the sky** · Dana's reference images, 2026-10-27 · `reference`
+- The moon style Dana wants, a mix of a flat glowing disc and a textured planet: a thin bright rim along the edge, strongest on the sun's side; washed toward the sky color so the sky shows through; bumpy, cracked relief that catches the light; soft, low-contrast lighting; high in the sky. Several bodies of different sizes and a ringed planet (image 2) are for planets in the sky later.
+- ![](references/nms-moon-rim.png) ![](references/nms-ringed-moons.png) ![](references/nms-textured-moon.png)
+
 ---
 
 ## ⚙️ Computational
@@ -706,6 +710,22 @@
 - *[GitHub](https://github.com/Deep-Fold/PixelPlanets)*
 
 **Also seen, not useful:** Bryson Taylor's Unity solar system (no shader code, an orbit script only); Stylized SkyShader on Godot Shaders (nothing beyond what exists). A YouTube reference Dana rated good, not watched here: [video](https://www.youtube.com/watch?v=XOssaQAmVN0).
+
+**Interleaved gradient noise** · Jimenez, "Next Generation Post Processing in Call of Duty: Advanced Warfare", SIGGRAPH 2014 · `method used`
+- `fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))))`, a fine per-pixel grain with no texture.
+- The chunk haze's grain (`haze.glsl`). Constants checked against Lygia's `interleavedGradientNoise` (rounded there); the talk itself not read.
+
+**Cellular noise (Worley F1)** · The Book of Shaders, chapter 12 · `method used`
+- One random point per cell, the distance to the nearest over the 3x3 neighbors.
+- The moon's relief (`moonCells` in `skyDome.frag.glsl`). *[thebookofshaders.com/12](https://thebookofshaders.com/12/). Loop read 2026-10-27*
+
+**Fine detail for Voronoi and fractal octaves** · FastNoiseLite (MIT), xarray-spatial, Gaea, Wysilab · `considered` (code changed for `[B66]`, unproven)
+- FastNoiseLite advances the seed every octave (`seed++`, read verbatim) and offers an independent per-octave warp (summary only). xarray-spatial blends Worley at 0.1 to 0.3 as micro-texture (read verbatim). Gaea uses Voronoi for structure, cut by warped Perlin; Wysilab attenuates each detail level.
+- *[FastNoiseLite](https://github.com/Auburn/FastNoiseLite), [xarray-spatial terrain](https://xarray-spatial.readthedocs.io/en/stable/_modules/xrspatial/terrain.html), [Gaea terrain folding](https://docs.quadspinner.com/Learning/Techniques/Terrain-Folding.html), [Wysilab cellular noise](https://wysilab.com/OnLineDocumentation/Nodes/Nodes_TerrainGeneration_CellularNoise.html)*
+
+**Exponential air density** · O'Neil, *GPU Gems 2* ch. 16 (scale height); the Mie scale height of about 1.2 km common in sky scattering · `method used`
+- Air thinning as e^(−height / scale height), summed along the view ray.
+- The planet haze (`planetHaze.frag.glsl`) and the chunk haze's height falloff (`HAZE_FALLOFF`). ⚠️ Not re-read today; values recalled and marked tunable.
 
 ### Plants (planned, not built)
 

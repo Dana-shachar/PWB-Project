@@ -9,6 +9,9 @@ uniform float exponent;
 uniform vec3 uCenter;
 uniform float uRadius;
 uniform vec3 uSunDirection;
+uniform float uAmbient; // the Scene lighting, for the moon
+uniform float uLightIntensity;
+uniform float uDiffuseWrap;
 uniform float uMoonEnabled;
 uniform vec3 uMoonDirection;
 uniform vec3 uMoonColor;
@@ -49,21 +52,44 @@ float skyFbm(vec2 p) {
   return sum / max(norm, 0.0001);
 }
 
-// The moon: a lit ball with a grainy terminator (sturm_trouper's moon, CC0: the sphere point shifted by noise before
-// lighting, terminator smoothstep(-.05, 0), edge smoothstep(1, .98)), soft maria-like patches from thresholded noise
-// layers (idea from a Shadertoy night scene, rewritten), and a two-term halo (DimensionAlmios's sky, MIT).
-// Strengths inferred, TUNABLE.
-const float MOON_ROUGHNESS = 0.18;
-const float MOON_GRAIN_SCALE = 9.0;
-const float MOON_PATCH_CONTRAST = 0.3;
-const float MOON_DARK_SIDE = 0.9; // the dark side is the sky, this much dimmer
+// The moon, after Dana's No Man's Sky references (REFERENCES.md): a disc washed toward the sky so the sky shows through,
+// bumpy cracked relief from cellular noise (Worley F1, The Book of Shaders ch. 12) used as a bump map so it catches the
+// light, soft low-contrast light (the land's wrapped light, lifted), a thin bright rim strongest toward the sun, sturm_trouper's
+// crisp edge (CC0) and a two-term halo (DimensionAlmios's sky, MIT). Strengths inferred, TUNABLE.
+const float MOON_OPACITY = 0.75;
+const float MOON_SKY_TINT = 0.25;
+const float MOON_LIGHT_LIFT = 0.45; // extra fill light, so the dark side fades instead of going black
+const float MOON_BUMP = 0.35;
+const float MOON_RIM = 0.8;
+float moonDiffuse(vec3 normal, vec3 lightDir, float wrap) {
+  float wrapped = clamp((dot(normal, lightDir) + wrap) / (1.0 + wrap), 0.0, 1.0);
+  return pow(wrapped, 1.0 + wrap);
+}
+// Distance to the nearest of one random point per cell (Worley F1).
+float moonCells(vec2 p) {
+  vec2 cell = floor(p);
+  vec2 local = fract(p);
+  float nearest = 1.0;
+  for (int y = -1; y <= 1; y++) {
+    for (int x = -1; x <= 1; x++) {
+      vec2 neighbor = vec2(float(x), float(y));
+      vec2 point = vec2(skyHash(cell + neighbor), skyHash(cell + neighbor + 17.3));
+      nearest = min(nearest, length(neighbor + point - local));
+    }
+  }
+  return nearest;
+}
+// Relief: rounded bumps from two cell sizes plus soft mottling.
+float moonRelief(vec2 uv) {
+  return 0.6 * (1.0 - moonCells(uv * 7.0)) + 0.3 * (1.0 - moonCells(uv * 17.0 + 5.1)) + 0.1 * skyNoise(uv * 30.0);
+}
 vec3 drawMoon(vec3 sky, vec3 dir) {
   vec3 moonDir = normalize(uMoonDirection);
   float radius = uMoonSize * 0.5;
   float moonAngle = acos(clamp(dot(dir, moonDir), -1.0, 1.0));
   // Halo: a tight and a wide falloff around the disc.
-  float rim = max(moonAngle - radius, 0.0);
-  sky += uMoonColor * (exp(-rim * 12.0) * 0.22 + exp(-rim * 3.5) * 0.06) * uMoonEnabled;
+  float halo = max(moonAngle - radius, 0.0);
+  sky += uMoonColor * (exp(-halo * 12.0) * 0.22 + exp(-halo * 3.5) * 0.06) * uMoonEnabled;
   if (moonAngle > radius * 1.05 || uMoonEnabled < 0.5) return sky;
 
   vec3 right = normalize(cross(abs(moonDir.y) > 0.99 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0), moonDir));
@@ -71,15 +97,26 @@ vec3 drawMoon(vec3 sky, vec3 dir) {
   vec3 offsetDir = dir - moonDir * dot(dir, moonDir);
   vec2 disc = vec2(dot(offsetDir, right), dot(offsetDir, up)) / sin(radius);
   float discRadius = length(disc);
-  float grain = (skyNoise(disc * MOON_GRAIN_SCALE) - 0.5) * MOON_ROUGHNESS;
-  vec3 ball = vec3(disc.x + grain, disc.y, sqrt(max(1.0 - discRadius * discRadius, 0.0)));
+  vec3 ball = vec3(disc, sqrt(max(1.0 - discRadius * discRadius, 0.0)));
   vec3 normal = normalize(right * ball.x + up * ball.y - moonDir * ball.z);
-  float lit = smoothstep(-0.05, 0.0, dot(normal, normalize(uSunDirection)));
+  vec3 sun = normalize(uSunDirection);
 
-  float patches = 0.6 * smoothstep(0.2, 0.8, skyNoise(ball.xy * 2.2 + 3.7)) + 0.4 * smoothstep(0.2, 1.0, skyNoise(ball.xy * 5.1 + 11.3));
-  vec3 surface = uMoonColor * (1.0 - MOON_PATCH_CONTRAST * patches);
-  vec3 moon = mix(sky * MOON_DARK_SIDE, surface, lit);
-  return mix(sky, moon, smoothstep(1.0, 0.98, discRadius));
+  // Relief on longitude and latitude, so it bunches toward the edge like a ball's; its slope tilts the normal.
+  vec2 surfaceUv = vec2(atan(ball.x, max(ball.z, 1e-3)), asin(clamp(ball.y, -1.0, 1.0)));
+  float relief = moonRelief(surfaceUv);
+  float delta = 0.01;
+  vec2 slope = vec2(moonRelief(surfaceUv + vec2(delta, 0.0)) - relief, moonRelief(surfaceUv + vec2(0.0, delta)) - relief) / delta;
+  vec3 bumped = normalize(normal - (right * slope.x + up * slope.y) * MOON_BUMP * 0.1);
+
+  float light = uAmbient + MOON_LIGHT_LIFT + moonDiffuse(bumped, sun, uDiffuseWrap) * uLightIntensity * (1.0 - MOON_LIGHT_LIFT);
+  vec3 surface = mix(uMoonColor * (0.85 + 0.25 * relief) * light, bottomColor, MOON_SKY_TINT);
+  vec3 moon = mix(sky, surface, smoothstep(1.0, 0.98, discRadius) * MOON_OPACITY);
+
+  // Rim: a thin bright line inside the edge, strongest on the side facing the sun.
+  vec2 sunOnDisc = vec2(dot(sun, right), dot(sun, up));
+  float sunSide = length(sunOnDisc) > 1e-4 ? 0.5 + 0.5 * dot(disc / max(discRadius, 1e-4), normalize(sunOnDisc)) : 0.5;
+  float rim = smoothstep(0.9, 0.985, discRadius) * smoothstep(1.0, 0.985, discRadius);
+  return moon + mix(uMoonColor, vec3(1.0), 0.5) * rim * mix(0.25, 1.0, sunSide) * MOON_RIM;
 }
 
 void main() {

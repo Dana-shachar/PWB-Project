@@ -81,6 +81,9 @@ interface NoisePanelProps {
   // attached to any one layer, same as the noise canvas/brush controls above.
   heightScale: number;
   onHeightScaleChange: (value: number) => void;
+  // Roughness: the planet-wide fine bumps under the layers (planet/planetControls.ts), next to Height (Dana, 2026-10-27).
+  detailAmount: number;
+  onDetailAmountChange: (value: number) => void;
   // Lifted up to App.tsx, not local state here — expanding now *replaces*
   // the 3D viewport's content with the full-size canvas (both side panels
   // stay visible) instead of a dark overlay on top of everything, so
@@ -119,6 +122,8 @@ export function NoisePanel({
   paintVersion,
   heightScale,
   onHeightScaleChange,
+  detailAmount,
+  onDetailAmountChange,
   isMapExpanded,
   onMapExpandedChange,
 }: NoisePanelProps) {
@@ -259,6 +264,16 @@ export function NoisePanel({
             step={0.5}
             precision={1}
             description="Overall terrain relief, as a percentage of whichever view you're in — the same number reads correctly against the planet's radius and the chunk's much smaller footprint."
+          />
+          <Slider
+            label="Roughness"
+            value={detailAmount}
+            onChange={onDetailAmountChange}
+            min={0}
+            max={1}
+            step={0.005}
+            precision={3}
+            description="Small-scale bumps added to the terrain's shape under your layers. Part of the terrain itself, not display quality: it shows up as you zoom in close enough to see it. 0 turns it off."
           />
         </Accordion>
       </div>

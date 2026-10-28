@@ -14,7 +14,8 @@ export interface ChunkGround {
 export function groundHeightAt(ground: ChunkGround, x: number, z: number): number | null {
   const { heights, chunkSize, maxHeight } = ground;
   const fractionU = x / chunkSize + 0.5;
-  const fractionV = z / chunkSize + 0.5;
+  // Rows run opposite to z, as the drawn ground's do (measured 2026-10-27: read the other way it was mirrored, [B63]).
+  const fractionV = 0.5 - z / chunkSize;
   if (fractionU < 0 || fractionU > 1 || fractionV < 0 || fractionV > 1) return null;
   const pixelX = fractionU * (heights.width - 1);
   const pixelY = fractionV * (heights.height - 1);

@@ -19,7 +19,7 @@ import type { ElevationData } from './chunkGrid';
 import { createChunkWater, setChunkWaterLight, setChunkWaterSky, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
-import { createSkyDome, updateSkyDome, updateSkyDomeFrame, type SkyDome } from '../atmosphere/skyDome';
+import { createSkyDome, setSkyDomeLight, updateSkyDome, updateSkyDomeFrame, type SkyDome } from '../atmosphere/skyDome';
 import { landRampFloor } from '../planet/seaLevel';
 import { MAX_WAVE_WIND } from '../planet/oceanSpectrum';
 
@@ -221,6 +221,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
 
     // Walk mode ([walkMode.ts]): entering saves the orbit camera and turns orbit off; leaving restores it.
     const orbitSaved = { position: new THREE.Vector3(), target: new THREE.Vector3(), up: new THREE.Vector3(), fov: 60, near: 0.1, far: 1000 };
+    let lastGroundLog = 0; // TEMP
     const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
       const renderer = sharedRendererRef.current.renderer;
       return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight)) : null;
@@ -301,6 +302,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       }
       console.log('[TEMP B55] row across the cursor, left to right, at', hit.toArray());
       console.table(rows);
+      const patchRow = patchRenderer.readPatchRow(renderer, hit.x, hit.z);
+      console.log('[TEMP pattern] copy this line:', JSON.stringify(patchRow));
     }
     viewportElement.addEventListener('pointerdown', logCliffRow);
     viewportElement.addEventListener('wheel', pivotOnGround, { capture: true });
@@ -417,6 +420,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
           perspectiveCamera.updateProjectionMatrix();
         }
         walkMode.update(deltaSeconds);
+        if (performance.now() - lastGroundLog > 2000) { // TEMP: detail under the walker (the last height read was under the eye)
+          lastGroundLog = performance.now();
+          console.log('[TEMP ground] under the walker: patch depth', patchRenderer.lastSampleDepth, 'height samples every', patchRenderer.lastTexelMeters.toFixed(2), 'm');
+        }
       } else {
         orbitControls.update();
         const ground = currentGround();
@@ -511,6 +518,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     material.uniforms.uLightDirection.value.set(lightDirX, lightDirY, lightDirZ);
     sunDirectionRef.current.set(lightDirX, lightDirY, lightDirZ);
     if (waterRef.current) setChunkWaterLight(waterRef.current, new THREE.Vector3(lightDirX, lightDirY, lightDirZ), ambientLight, lightIntensity);
+    if (skyRef.current) setSkyDomeLight(skyRef.current, ambientLight, lightIntensity, diffuseWrap);
   }, [ambientLight, lightIntensity, specularStrength, shininess, diffuseWrap, lightDirX, lightDirY, lightDirZ]);
 
   // Base color — shared with the planet's own ColorPicker, not a separate

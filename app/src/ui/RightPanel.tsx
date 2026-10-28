@@ -40,6 +40,8 @@ interface RightPanelProps {
   paintVersion: number;
   heightScale: number;
   onHeightScaleChange: (value: number) => void;
+  detailAmount: number;
+  onDetailAmountChange: (value: number) => void;
   isMapExpanded: boolean;
   onMapExpandedChange: (value: boolean) => void;
   // The Erosion stage's whole feature, passed as one bundle rather than ten

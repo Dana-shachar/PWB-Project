@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-10-26`
+`Last updated: 2026-10-27`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -11,10 +11,11 @@
 > Bugs only. Architecture and the decisions behind it are in `SPEC.md`. Status by stage is in `ROADMAP.md`.
 
 ```
-🔴 Open       1
-🟡 Partial   16
+🔴 Open      12
+🟡 Partial   22
+❓ Decision   1
 📋 Tracked    4
-✅ Fixed     29
+✅ Fixed     31
 ```
 
 <details>
@@ -417,11 +418,19 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Cause not checked yet. A close button would be a design-system button with every state and its own icon.
 
 ### [B63] Walk mode goes underwater and can't move from there · `wrong but workable`
-**🔴 Open** · **Where:** `scene/walkMode.ts` (eye height from `sampleHeight`), `voxel/chunkWater.ts`
+**🟡 Built, partly tested 2026-10-27** · **Where:** `scene/walkMode.ts`, `voxel/chunkGround.ts`, `voxel/LandChunkCanvas.tsx`
 
 **What happens**
 - Dana, 2026-10-26: entering the person view over water puts the eye 1.7 m above the seabed, under the water surface, and walking does not work from there.
 - 💡 Likely fix, not planned yet: the eye follows the higher of the ground and the water surface (floating at the surface, as games keep a swimmer at the surface). The "can't walk" part is not diagnosed.
+- 🧭 Dana, 2026-10-27: no walking on water. Built, not working yet: entering, clicking or walking into water goes to the nearest shore, searched on the coarse height copy.
+- 🔴 Retest 2026-10-27 (logs): the shore point read 597 m on the coarse copy (dry, sea 537 m) but 467 m on the drawn ground, so the walker stood 70 m under water and every step was blocked.
+- Cause (measured 2026-10-27): the coarse copy was mirrored front to back. Read with z flipped it matched the drawn ground within 0 to 1 m at two spots; every other axis mapping was 26 to 127 m off. Roughness at 0 changed nothing, so the detail octaves were ruled out.
+- 🧭 Dana, 2026-10-27: walk mode is never under water. Built: the eye never drops below the sea surface, and if the ground under the walker sinks below sea level (terrain or sea level edited while walking) the walker moves to the nearest shore.
+- Fix for the mirror, ✅ tested 2026-10-27 (coarse and drawn now agree within 0 to 2 m): `groundHeightAt` reads rows opposite to z. It is shared infrastructure, so it also corrects camera pivot (`raycastGround`) and camera collision over the chunk.
+- 🧭 Dana, 2026-10-27, after a wrong first version (clicks on water were sent to the nearest shore of the clicked spot, which was where she stood): walking is normal walking; water only stops the walker at the shore. ✅ Tested: a click walks to the clicked spot and stops at the waterline; entering over water starts on the nearest shore (`nearestShore`: coarse candidates, each checked against the drawn ground).
+- ⚪ Built, not yet tested: the never-under-water rule above (eye clamped to the sea surface; relocation when the ground sinks).
+- The water seen from walk mode, the straight shoreline and the color line at the shore are their own entries: `[B67]`, `[B68]`, `[B69]`.
 
 ### [B62] Every slider lags · `wrong but workable`
 **✅ Fixed 2026-10-26, Dana: "good enough"** · **Where:** `scene/SceneCanvas.tsx`, `map/heightmap.ts`, `planet/planetPatchMesh.ts`, `planet/PlanetPatchRenderer.ts`
@@ -549,6 +558,63 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - 📚 Now Cesium's convention (`minimumPickingTerrainHeight`, `enableCollisionDetection`): a CPU copy of the chunk's heights (`groundHeightAt`, `raycastGround` in `voxel/chunkGround.ts`); before a drag or wheel zoom the pivot moves to the ground under the cursor, and the camera stays `MIN_CAMERA_ALTITUDE` of the chunk's size above the ground under it (`keepAboveFlatGround`).
 - Map-style navigation: `zoomToCursor` with `screenSpacePanning = false`, which keeps the orbit target on the ground plane (checked in three.js r185's OrbitControls source; with screen-space panning, zoom-to-cursor pulls the target off the ground). Panning now slides along the ground, as in `MapControls`.
 
+### [B66] A regular stripe, dimple or knit pattern on the ground up close · `wrong but workable`
+**🔴 Open, cause not found** · **Found:** 2026-10-27 · **Where:** the terrain bake, `shaders/heightmap/heightmap.frag.glsl` and `noise.glsl` (suspected, not proven)
+
+**What happens**
+- Dana, 2026-10-27: on the land chunk, close to the ground (walk mode and low orbit), the ground shows a very regular pattern: an egg-crate of square bumps, rows of stripes running along the x and z axes, or a fine "knit" weave. Clearest on flat or smooth ground (near water, snow slopes), also visible from orbit (screenshots 2026-10-27, 19:41 to 21:51).
+- It changes look with the noise settings but never goes away: Voronoi (all distances), simplex (bright axis lines), Perlin (faint), random (completely smooth, no texture at all).
+- In one screenshot the pattern stops at a straight patch border (smooth on one side, dimpled on the other).
+
+**Checked and ruled out (with the test used)**
+1. Shadows: "Cast shadows" was already off.
+2. The patch sample grid: logged spacing under the walker is 12 cm once refined (depth 12; 7.8 to 15.6 m only in the first second after entering).
+3. Patch borders: a temporary per-patch color tint showed the stripes running inside a single patch.
+4. Terrace modifier: off.
+5. Voronoi Jitter alone: at Jitter 0 every distance type is a perfect grid by design, but raising Jitter (0.21, then 0.76) did not remove the fine pattern.
+6. The octave fade limits (`NYQUIST_FADE_MIN`/`MAX`): a one-variable test (0.25/0.95 → 1.0/2.0) left the pattern unchanged; reverted.
+7. Float32 precision in the noise input: a float32 simulation of the bake's position math showed many 12 cm samples collapsing on a 6000 km planet, and Dana's 1000 km test was inconclusive (badly designed: walking-scale numbers stay in the millions at both radii). A float32 simulation of the Voronoi octave sum along the measured row did NOT reproduce the measured sawtooth, and a relative-to-center version changed nothing. Not proven, not built.
+
+**Measured**
+- Alt+click raw row readout (depth-10 patch, 129 samples, 0.49 m apart, Voronoi Manhattan Jitter 0.21, Hybrid, 2 octaves, lacunarity 2.4, persistence 0.43, radius probably 1000 km): a repeat every 7 samples (3.4 m) and a sample-to-sample sawtooth (lag-1 curvature correlation −0.58).
+- On that row, a 0.5 m Gaussian softening removed the sawtooth (−0.58 → +0.35) while keeping about 99% of the 8 to 40 m texture; it did not remove the 3.4 m repeat.
+
+**Research done**
+- Voronoi at small scale: Gaea (Voronoi for structure, cut by warped Perlin), xarray-spatial (Worley blended at 0.1 to 0.3 as micro-texture, read verbatim), Wysilab (per-level attenuation), FastNoiseLite (seed++ per octave, read verbatim; independent per-octave warp, summary only), World Creator (recursive warp).
+- Octave alignment: Quilez's rotated octaves, `p = m*p*2.02` with `mat3(0.00,0.80,0.60,-0.80,0.36,-0.48,-0.60,-0.48,0.64)` (verbatim in Dana's pasted Shadertoys).
+- Planet-scale precision: relative-to-center (Cesium; Ohlarik 2008), Unreal Engine 5 Large World Coordinates (not read).
+
+**Code changed while chasing it (uncommitted, none proven to help)**
+- Voronoi's extra fine octaves: own seed, small warp, 20% blend (`isDeepCellOctave`, `deepCellOctave`, `VORONOI_DETAIL_BLEND`, `VORONOI_DETAIL_WARP`).
+- Every type's extra fine octaves and Roughness: own seed per octave (`octaveSeed`; `DETAIL_SEED + float(i)`).
+- Extra fine octaves rotated with Quilez's matrix and lacunarity × 1.01 (`OCTAVE_ROTATION`, `nextOctavePoint`); Roughness not rotated yet.
+- ❓ Keep or revert all three: Dana's call.
+
+**Next (agreed method: one toggle at a time on the same view, no theories)**
+1. Roughness → 0. 2. Domain warp → off. 3. Octaves modifier → off. 4. Fractal type → fBm instead of Hybrid. 5. Blend mode → Normal instead of Multiply.
+- Whichever removes the pattern names the step; read only that code, propose a fix, and get a go first.
+
+**Untested leads, to check next session (each needs a plan and a go first)**
+1. **The pattern depends on patch depth:** one screenshot shows it stop at a straight patch border, smooth on one side. Compare the two neighboring patches' depths and how many extra fine octaves each adds (the Alt+click row readout gives the depth); if only some depths show it, the cause is in what changes with depth.
+2. **The slope (normal) calculation amplifies sample-level noise:** `heightfieldNormal` in `terrain.glsl` takes the slope from neighbors one texel apart, so a tiny height sawtooth becomes a strong light-and-dark pattern. Check by reading the measured row's slope; a wider slope step (2 to 3 texels) is a common remedy, needs a source.
+3. **The Hybrid fractal's feedback:** in Blender's Hybrid multifractal each octave's weight depends on the previous one (`gain`, `offset`); with gain 1.7 the fine octaves may be boosted rather than faded. Toggle 4 of the list tests it.
+4. **Multiply blend at partial opacity (0.47):** multiplying a noise into the base can sharpen small dips into regular pits. Toggle 5 tests it.
+5. **Number precision at the finest octaves:** not ruled out for the sub-meter holes. Today's simulation was simplified (plain fBm, no Hybrid, no domain warp, an arbitrary spot), so its negative result is weak. Only revisit if 1 to 4 come up empty.
+6. **Roughness (`planetDetail`):** its octaves step by exactly 2 and are not rotated; toggle 1 tests it.
+- 💡 Dana's softening idea (average out the holes, a Gaussian over about 0.5 m after each patch bake, like Gaea's Blur node) is verified on the measured row to remove the fine holes and keep the texture. A mask, not a root fix; proposed as an optional Soften control.
+
+### [B67] From walk mode the water is barely visible · `minor`
+**🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`
+- Dana: standing on the shore, the water reads as muddy ground. It is there, but its opacity depends on depth only, so the shallows are nearly see-through, and at eye height everything is seen at a grazing angle where real water reflects more (Fresnel). Fix not planned.
+
+### [B68] The shoreline is far too straight up close · `wrong but workable`
+**🔴 Open** · **Found:** 2026-10-27 · **Where:** `shoreFade` in `shaders/heightmap/heightmap.frag.glsl`
+- Cause from the code: Roughness fades to nothing near sea level (so the coastline never moves, a 2026-10 decision), leaving a smooth slope that meets the water in a near-straight line. Fix not chosen; needs a sourced method for coastline detail that doesn't make new islands or ponds.
+
+### [B69] A hard color line where the land meets the water · `wrong but workable`
+**🔴 Open** · **Found:** 2026-10-27 · **Where:** the land color ramp at sea level (`landRampFloor` in `planet/seaLevel.ts`, `chunk.frag.glsl`)
+- Dana (screenshot): the land's color ramp stops at the waterline instead of continuing under the water, so the shore shows a sharp color edge. Fix not planned; read the ramp floor code first.
+
 ### [B55] Lighting seams and a straight cliff on the land chunk · `wrong but workable`
 **🔴 Open, cliff seen again 2026-10-27** · **Opened:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `shaders/chunk.frag.glsl`, `voxel/ChunkPatchRenderer.ts`
 
@@ -562,6 +628,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Retest cause, first guess (2026-10-26, WRONG): the remaining seams were height steps from each bake fading octaves by its own sample spacing. The depth-based fade built for it did not help and was removed.
 - Evidence (2026-10-26): with each patch tinted its own color, the jagged wall runs straight across a patch boundary and is not on any boundary (screenshot). So it is in the height data, not the patches. It is a long, straight, diagonal cliff with a sawtooth top (one tooth per texel). Seen only under some noise settings (Voronoi, Manhattan, Jitter 0.12). Dana (2026-10-26, later): the wall disappears when Layer 277 is hidden and looks fine on a new planet, so she treats it as that layer's settings, not a code bug (the cliff part is closed; the patch-edge lighting seams above still wait on a test). The cause is not yet found: `voronoiNoise3D`'s nearest-point distance is continuous, so a cliff has to come from another step (a layer's transform, fractal type or mask, or modifiers).
 
+- The regular stripe and dimple pattern on the ground (2026-10-27) is its own entry, `[B66]`.
+- 💡 Hypothesis (2026-10-27), to check after the `[B63]` fix: camera collision read the mirrored coarse copy, so close to the ground the camera could sink inside a real hill and show its inside face as a wall.
 - 🔴 Reopened 2026-10-27 (Dana, screenshot): close to the ground on the chunk, a tall vertical wall still cuts across the terrain, its face streaked in vertical stripes (the texture stretched down a near-vertical drop). So the cliff part is not closed by hiding one layer. Cause still unknown; next step is data, not a guess: tint the bake by layer or log the height on both sides of the wall to find which step makes the jump.
 
 **Fix**
@@ -576,6 +644,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 **Fix**
 - Not planned yet. An erosion run lives on one fixed grid, so the patches need a way to show it. Next after `[B55]`.
+- Seen again by Dana, 2026-10-27 ("erosion not working for the chunk"): this bug, not a new break.
 
 ### [B53] The land chunk stays faceted when zoomed in, whatever the Resolution · `wrong but workable`
 **🔴 Open:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `voxel/landChunk.ts`

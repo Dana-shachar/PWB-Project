@@ -51,6 +51,7 @@ export function AtmospherePanel({ atmosphere, onAtmosphereChange }: AtmospherePa
         <Accordion title="Moon">
           <Toggle label="Moon" value={atmosphere.moon} onChange={(moon) => onAtmosphereChange({ moon })} description="A moon or second planet in the land chunk's sky." />
           <Slider label="Size" unit="°" value={atmosphere.moonSize} onChange={(moonSize) => onAtmosphereChange({ moonSize })} min={1} max={40} step={0.5} precision={1} disabled={off || !atmosphere.moon} description="How large the moon looks, in degrees across." />
+          <Slider label="Height" unit="°" value={atmosphere.moonHeight} onChange={(moonHeight) => onAtmosphereChange({ moonHeight })} min={0} max={90} step={1} precision={0} disabled={off || !atmosphere.moon} description="How high the moon sits above the horizon, in degrees." />
           <ColorPicker label="Color" value={atmosphere.moonColor} onChange={(moonColor) => onAtmosphereChange({ moonColor })} />
         </Accordion>
       </div>

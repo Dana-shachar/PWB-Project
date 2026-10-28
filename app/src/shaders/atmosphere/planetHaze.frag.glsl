@@ -1,8 +1,12 @@
-// The haze over the planet's surface: the horizon color, as thick as the air the view ray crosses, from entering a thin
-// air layer to reaching the ground (Beer-Lambert, 1 - e^(-density * path)), so it thickens smoothly toward the edges
-// and never bands. Lit by the sun (softly wrapped, dim on the night side). Light amounts inferred.
+// The haze over the planet's surface: the horizon color, as thick as the air the view ray crosses (Beer-Lambert,
+// 1 - e^(-optical depth)). The air thins exponentially with height (scale height uScaleHeight, as in O'Neil's GPU Gems 2
+// atmosphere), summed in a few steps along the ray, so it is one gradient with no top edge. Lit by the sun (softly
+// wrapped, dim on the night side). Step count, cap and light amounts inferred, TUNABLE.
+const int HAZE_STEPS = 8;
+const float HAZE_MAX_OPACITY = 0.85;
 uniform vec3 hazeColor;
-uniform float uDensity; // per air-layer thickness of path
+uniform float uDensity; // optical depth straight down from the ground, per scale height
+uniform float uScaleHeight;
 uniform vec3 uCenter;
 uniform float uRadius; // the ground
 uniform float uAirRadius; // the top of the air layer
@@ -28,8 +32,14 @@ void main() {
   vec2 ground = sphereHits(uCameraPosition, rayDirection, uRadius);
   float enter = max(air.x, 0.0);
   float leave = ground.x <= ground.y && ground.x > 0.0 ? ground.x : air.y;
-  float path = max(leave - enter, 0.0) / max(uAirRadius - uRadius, 1e-6);
-  float opacity = 1.0 - exp(-uDensity * path);
+  float stepLength = max(leave - enter, 0.0) / float(HAZE_STEPS);
+  float depth = 0.0;
+  for (int i = 0; i < HAZE_STEPS; i++) {
+    vec3 point = uCameraPosition + rayDirection * (enter + (float(i) + 0.5) * stepLength);
+    float height = max(length(point - uCenter) - uRadius, 0.0);
+    depth += exp(-height / uScaleHeight) * stepLength;
+  }
+  float opacity = min(1.0 - exp(-uDensity * depth / uScaleHeight), HAZE_MAX_OPACITY);
   float sunlit = clamp((dot(normalize(vWorldNormal), normalize(uLightDirection)) + 0.5) / 1.5, 0.0, 1.0);
   gl_FragColor = vec4(hazeColor * (uAmbient + sunlit), opacity);
 }

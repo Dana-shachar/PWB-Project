@@ -112,9 +112,6 @@ interface PanelProps {
   // Planet Resolution: a detail bias, 1 is automatic (planet/planetPatches.ts).
   maxErrorPixels: number;
   onMaxErrorPixelsChange: (value: number) => void;
-  // Planet fine detail, appears as you zoom in (planet/planetControls.ts).
-  detailAmount: number;
-  onDetailAmountChange: (value: number) => void;
   // Planet display detail: automatic, or the Resolution slider when off.
   autoDetail: boolean;
   onAutoDetailChange: (value: boolean) => void;
@@ -264,8 +261,6 @@ export function Panel({
   chunkElevationRange,
   maxErrorPixels,
   onMaxErrorPixelsChange,
-  detailAmount,
-  onDetailAmountChange,
   autoDetail,
   onAutoDetailChange,
   activeStage,
@@ -577,17 +572,6 @@ export function Panel({
                 description="How finely the land chunk's own ground is measured. Independent of Size above, so you can zoom into a low-resolution patch and still see it as low-resolution."
               />
             )}
-            <Slider
-              label="Roughness"
-              value={detailAmount}
-              onChange={onDetailAmountChange}
-              min={0}
-              max={1}
-              step={0.005}
-              precision={3}
-              disabled={activeViewContext === null}
-              description="Small-scale bumps added to the terrain's shape under your layers. Part of the terrain itself, not display quality: it shows up as you zoom in close enough to see it. 0 turns it off."
-            />
             {/* The land's colors, a plain title matching the Water section's (Dana, 2026-10-27); Randomize colors covers both. */}
             <div className="panel-section-divider" />
             <span className="panel-section-title">Color</span>

@@ -30,10 +30,10 @@ const PICK_REFINE_STEPS = 12;
 const TRANSITION_SECONDS = 1.5;
 // A click walks toward the clicked spot but stops after this far (Dana, 2026-10-26: walks ran too far). Inferred, TUNABLE.
 const CLICK_WALK_MAX_METERS = 100;
-// No walking on water (Dana, 2026-10-27): a spot in water moves to the nearest shore, found on the coarse height copy
+// No walking on water (Dana, 2026-10-27): walking stops at the shore, and entering over water starts on the nearest shore, found on the coarse height copy
 // (as Unity's NavMesh.SamplePosition finds the nearest walkable point), then stepped this far inland. Inferred, TUNABLE.
 const SHORE_INLAND_METERS = 2;
-const SHORE_REFINE_STEPS = 12;
+const SHORE_VERIFY_ATTEMPTS = 8;
 
 const FORWARD_KEYS = ['KeyW', 'ArrowUp'];
 const BACK_KEYS = ['KeyS', 'ArrowDown'];
@@ -76,6 +76,7 @@ export class WalkMode {
   private lastPointer = { x: 0, y: 0 };
   private dragged = false;
   private lastWaterLog = 0; // TEMP
+  private noShoreHeights: ChunkGround['heights'] | null = null;
   private transition: { startPosition: THREE.Vector3; startQuaternion: THREE.Quaternion; endQuaternion: THREE.Quaternion; endX: number; endZ: number; elapsed: number } | null = null;
 
   constructor(
@@ -98,17 +99,33 @@ export class WalkMode {
     return this.getGroundHeight(x, z) ?? groundHeightAt(ground, x, z) ?? 0;
   }
 
-  // The nearest dry point to (x, z): rings of coarse samples outward until no closer one can exist, then the
-  // waterline found by bisection toward the start, stepped inland. Returns the point itself when it is dry.
+  // The nearest dry point to (x, z). Candidates come from rings of coarse samples above a level; each is checked against
+  // the drawn ground (one GPU read), and when the coarse copy reads too high there, the level rises by the gap and the
+  // search runs again. Returns the point itself when it is dry.
   private nearestShore(ground: ChunkGround, x: number, z: number): THREE.Vector2 {
     const sea = this.getSeaHeight();
-    const coarseHeight = (px: number, pz: number) => groundHeightAt(ground, px, pz) ?? 0;
-    if (sea === null || coarseHeight(x, z) >= sea) return new THREE.Vector2(x, z);
+    const isDry = (px: number, pz: number) => (this.getGroundHeight(px, pz) ?? groundHeightAt(ground, px, pz) ?? 0) >= sea!;
+    console.log('[TEMP water] start', { drawnM: (this.getGroundHeight(x, z) ?? NaN) * METERS_PER_UNIT, coarseM: (groundHeightAt(ground, x, z) ?? NaN) * METERS_PER_UNIT });
+    if (sea === null || isDry(x, z)) return new THREE.Vector2(x, z);
+    let level = sea;
+    for (let attempt = 0; attempt < SHORE_VERIFY_ATTEMPTS; attempt++) {
+      const candidate = this.nearestCoarseAbove(ground, x, z, level);
+      if (!candidate) break;
+      const drawn = this.getGroundHeight(candidate.x, candidate.y);
+      console.log('[TEMP water] shore try', attempt, { levelM: level * METERS_PER_UNIT, candidate: candidate.toArray(), drawnM: drawn === null ? null : drawn * METERS_PER_UNIT });
+      if (drawn === null || drawn >= sea + SHORE_INLAND_METERS / METERS_PER_UNIT) return candidate;
+      level += sea - drawn + SHORE_INLAND_METERS / METERS_PER_UNIT;
+    }
+    return new THREE.Vector2(this.camera.position.x, this.camera.position.z); // no dry land found: stay put
+  }
+
+  // The nearest coarse sample to (x, z) whose height is at least `level`, searched in rings outward, or null.
+  private nearestCoarseAbove(ground: ChunkGround, x: number, z: number, level: number): THREE.Vector2 | null {
     const { heights, chunkSize, maxHeight } = ground;
     const cellX = chunkSize / (heights.width - 1);
     const cellZ = chunkSize / (heights.height - 1);
     const startX = Math.round((x / chunkSize + 0.5) * (heights.width - 1));
-    const startY = Math.round((z / chunkSize + 0.5) * (heights.height - 1));
+    const startY = Math.round((0.5 - z / chunkSize) * (heights.height - 1)); // rows run opposite to z (groundHeightAt)
     let best: THREE.Vector2 | null = null;
     let bestDistance = Infinity;
     const maxRing = Math.max(heights.width, heights.height);
@@ -119,9 +136,9 @@ export class WalkMode {
           const px = startX + dx;
           const py = startY + dy;
           if (px < 0 || py < 0 || px >= heights.width || py >= heights.height) continue;
-          if (Math.max(0, heights.data[py * heights.width + px] + 0.5) * maxHeight < sea) continue;
+          if (Math.max(0, heights.data[py * heights.width + px] + 0.5) * maxHeight < level) continue;
           const sampleX = (px / (heights.width - 1) - 0.5) * chunkSize;
-          const sampleZ = (py / (heights.height - 1) - 0.5) * chunkSize;
+          const sampleZ = (0.5 - py / (heights.height - 1)) * chunkSize;
           const distance = Math.hypot(sampleX - x, sampleZ - z);
           if (distance < bestDistance) {
             bestDistance = distance;
@@ -130,16 +147,7 @@ export class WalkMode {
         }
       }
     }
-    if (!best) return new THREE.Vector2(x, z); // no land on the chunk
-    let wet = 0;
-    let dry = 1;
-    for (let i = 0; i < SHORE_REFINE_STEPS; i++) {
-      const middle = (wet + dry) / 2;
-      if (coarseHeight(x + (best.x - x) * middle, z + (best.y - z) * middle) >= sea) dry = middle;
-      else wet = middle;
-    }
-    const inland = Math.min(1, dry + SHORE_INLAND_METERS / METERS_PER_UNIT / Math.max(bestDistance, 1e-9));
-    return new THREE.Vector2(x + (best.x - x) * inland, z + (best.y - z) * inland);
+    return best;
   }
 
   // Flies the camera from where it is to standing at (endX, endZ), level, facing `yaw`.
@@ -149,6 +157,20 @@ export class WalkMode {
     this.camera.up.set(0, 1, 0);
     const limit = (ground.chunkSize / 2) * EDGE_MARGIN;
     const shore = this.nearestShore(ground, endX, endZ);
+    // TEMP: coarse copy vs drawn ground on a 5x5 grid, 100 m apart, around the shore point: a steady offset means a
+    // conversion bug, scattered differences mean missing detail.
+    const gridRows: { dxM: number; dzM: number; coarseM: number; drawnM: number; diffM: number }[] = [];
+    for (let gz = -2; gz <= 2; gz++) {
+      for (let gx = -2; gx <= 2; gx++) {
+        const px = shore.x + (gx * 100) / METERS_PER_UNIT;
+        const pz = shore.y + (gz * 100) / METERS_PER_UNIT;
+        const coarseM = (groundHeightAt(ground, px, pz) ?? NaN) * METERS_PER_UNIT;
+        const drawnM = (this.getGroundHeight(px, pz) ?? NaN) * METERS_PER_UNIT;
+        gridRows.push({ dxM: gx * 100, dzM: gz * 100, coarseM: Math.round(coarseM), drawnM: Math.round(drawnM), diffM: Math.round(coarseM - drawnM) });
+      }
+    }
+    console.log('[TEMP water] coarse vs drawn, maxHeight km', ground.maxHeight, 'samples', ground.heights.width);
+    console.table(gridRows);
     console.log('[TEMP water] enter', { from: [endX, endZ], shore: shore.toArray(), seaM: (this.getSeaHeight() ?? NaN) * METERS_PER_UNIT, coarseAtShoreM: (groundHeightAt(ground, shore.x, shore.y) ?? NaN) * METERS_PER_UNIT, drawnAtShoreM: (this.getGroundHeight(shore.x, shore.y) ?? NaN) * METERS_PER_UNIT });
     endX = shore.x;
     endZ = shore.y;
@@ -262,9 +284,9 @@ export class WalkMode {
     const hit = this.pickGround(this.raycaster.ray, ground);
     console.log('[TEMP walk] pick', { rayPitchDeg: THREE.MathUtils.radToDeg(Math.asin(this.raycaster.ray.direction.y)), hitMetersAway: hit ? hit.distanceTo(this.camera.position) * METERS_PER_UNIT : null, hit: hit?.toArray(), camera: this.camera.position.toArray(), eyeGround: this.getGroundHeight(this.camera.position.x, this.camera.position.z), travelScale: this.travelScale });
     if (!hit) return;
-    const dry = this.nearestShore(ground, hit.x, hit.z);
-    const toX = dry.x - this.camera.position.x;
-    const toZ = dry.y - this.camera.position.z;
+    // Walks toward the clicked spot; water on the way stops the walk at the shore (update).
+    const toX = hit.x - this.camera.position.x;
+    const toZ = hit.z - this.camera.position.z;
     const maxDistance = CLICK_WALK_MAX_METERS / METERS_PER_UNIT;
     const scale = Math.min(1, maxDistance / Math.max(Math.hypot(toX, toZ), 1e-9));
     this.walkTarget = new THREE.Vector2(this.camera.position.x + toX * scale, this.camera.position.z + toZ * scale);
@@ -365,7 +387,17 @@ export class WalkMode {
       this.walkTarget = null;
       groundHeight = this.heightAt(ground, fromX, fromZ);
     }
-    const eyeHeight = groundHeight + EYE_HEIGHT_METERS / METERS_PER_UNIT;
+    // Never under water: if the ground under the walker is now below the sea (the terrain or sea level changed), move
+    // to the nearest shore; the eye never drops below the water's surface either way.
+    if (sea !== null && groundHeight < sea && ground.heights !== this.noShoreHeights) {
+      const shore = this.nearestShore(ground, this.camera.position.x, this.camera.position.z);
+      // No land at all: don't search again every frame until the terrain changes.
+      if (shore.x === this.camera.position.x && shore.y === this.camera.position.z) this.noShoreHeights = ground.heights;
+      this.camera.position.x = shore.x;
+      this.camera.position.z = shore.y;
+      groundHeight = this.heightAt(ground, shore.x, shore.y);
+    }
+    const eyeHeight = Math.max(groundHeight, sea ?? -Infinity) + EYE_HEIGHT_METERS / METERS_PER_UNIT;
     if (sea !== null && this.camera.position.y < sea && performance.now() - this.lastWaterLog > 1000) { // TEMP
       this.lastWaterLog = performance.now();
       console.log('[TEMP water] eye under the sea', { eyeM: this.camera.position.y * METERS_PER_UNIT, groundM: groundHeight * METERS_PER_UNIT, seaM: sea * METERS_PER_UNIT, coarseM: (groundHeightAt(ground, this.camera.position.x, this.camera.position.z) ?? NaN) * METERS_PER_UNIT, moved: moveX !== 0 || moveZ !== 0 });

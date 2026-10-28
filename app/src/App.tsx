@@ -196,8 +196,6 @@ function App() {
         onMaxErrorPixelsChange={planetControls.setMaxErrorPixels}
         autoDetail={planetControls.autoDetail}
         onAutoDetailChange={planetControls.setAutoDetail}
-        detailAmount={planetControls.detailAmount}
-        onDetailAmountChange={planetControls.setDetailAmount}
         chunkSize={landChunk.chunkSize}
         onChunkSizeChange={landChunk.setChunkSize}
         heightScale={planetControls.heightScale}
@@ -374,6 +372,8 @@ function App() {
         paintVersion={brush.paintVersion}
         heightScale={planetControls.heightScale}
         onHeightScaleChange={planetControls.setHeightScale}
+        detailAmount={planetControls.detailAmount}
+        onDetailAmountChange={planetControls.setDetailAmount}
         isMapExpanded={isMapExpanded}
         onMapExpandedChange={setIsMapExpanded}
         erosion={erosion}

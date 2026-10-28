@@ -158,6 +158,39 @@ float fullSeriesAmplitude(float octaves, float persistence) {
   return max(total, 0.0001);
 }
 
+// The extra fine octaves of a Voronoi layer ("detail by level", past the layer's own octaves), guarded so cells don't
+// stack into a regular egg-crate up close (Dana, 2026-10-27). Each gets its own seed, as FastNoiseLite advances the seed
+// every octave (seed++), and its own small warp (FastNoiseLite's independent per-octave warp), so the levels' lattices
+// never line up; and it is blended in lightly, as xarray-spatial blends Worley noise for micro-texture (0.1 to 0.3).
+// Warp amount inferred, TUNABLE.
+const float VORONOI_DETAIL_BLEND = 0.2;
+const float VORONOI_DETAIL_WARP = 0.35; // in lattice cells
+// Every octave's lattice is lined up with the same axes, so octaves that scale by exactly 2 nest and their alignment adds
+// up into regular rows. Extra fine octaves are rotated before scaling, with Quilez's orthonormal fbm matrix and a step
+// just off 2 (p = m*p*2.02, as in his fbm shaders), so no two share axes. The layer's own octaves are untouched.
+const mat3 OCTAVE_ROTATION = mat3(0.00, 0.80, 0.60, -0.80, 0.36, -0.48, -0.60, -0.48, 0.64);
+const float DEEP_LACUNARITY_NUDGE = 1.01; // 2 becomes 2.02
+vec3 nextOctavePoint(vec3 point, int i, float octaves, float lacunarity) {
+  return i + 1 >= int(octaves) ? OCTAVE_ROTATION * point * (lacunarity * DEEP_LACUNARITY_NUDGE) : point * lacunarity;
+}
+
+// Extra fine octaves of any type get their own seed (FastNoiseLite's seed++), so their lattices don't line up with the
+// coarser ones into regular ripples; the layer's own octaves keep its seed, so the large shapes don't change.
+float octaveSeed(float seed, int i, float octaves) {
+  return i >= int(octaves) ? seed + float(i) : seed;
+}
+bool isDeepCellOctave(int i, float octaves, float baseType) {
+  return i >= int(octaves) && baseType > 2.5;
+}
+float deepCellOctave(vec3 point, float seed, int i, float baseType) {
+  float octaveSeed = seed + float(i);
+  vec3 warp = vec3(
+    perlinNoise3D(point + vec3(5.2, 1.3, 2.8), octaveSeed),
+    perlinNoise3D(point + vec3(1.7, 9.2, 4.1), octaveSeed),
+    perlinNoise3D(point + vec3(8.3, 2.8, 6.5), octaveSeed));
+  return VORONOI_DETAIL_BLEND * evalBaseGenerator(point + warp * VORONOI_DETAIL_WARP, octaveSeed, baseType);
+}
+
 // fBm (fractal Brownian motion): sums several octaves of the base generator
 // at increasing frequency (lacunarity) and decreasing amplitude
 // (persistence). Standard formula — verified against
@@ -183,8 +216,9 @@ float fbm3D(vec3 p, float seed, float baseType, float octaves, float persistence
     if (i >= int(octaves) && !deepOn) break;
     float fade = octaveFade(spacing);
     if (fade <= 0.0) break; // every finer octave is faded out too
-    value += amplitude * fade * evalBaseGenerator(samplePoint, seed, baseType);
-    samplePoint *= lacunarity;
+    float octaveNoise = isDeepCellOctave(i, octaves, baseType) ? deepCellOctave(samplePoint, seed, i, baseType) : evalBaseGenerator(samplePoint, octaveSeed(seed, i, octaves), baseType);
+    value += amplitude * fade * octaveNoise;
+    samplePoint = nextOctavePoint(samplePoint, i, octaves, lacunarity);
     amplitude *= persistence;
     spacing *= lacunarity;
   }
@@ -220,11 +254,12 @@ float ridgedFbm3D(vec3 p, float seed, float baseType, float octaves, float persi
     if (i >= int(octaves) && !deepOn) break;
     float fade = octaveFade(spacing);
     if (i >= int(octaves) && fade <= 0.0) break; // no finer octave can show either
-    float raw = fade > 0.0 ? fade * evalBaseGenerator(samplePoint, seed, baseType) : 0.0; // skips the noise call once faded out
+    float octaveNoise = fade <= 0.0 ? 0.0 : isDeepCellOctave(i, octaves, baseType) ? deepCellOctave(samplePoint, seed, i, baseType) : evalBaseGenerator(samplePoint, octaveSeed(seed, i, octaves), baseType);
+    float raw = fade * octaveNoise; // skips the noise call once faded out
     float folded = mix(raw, ridge(raw, gRidgeOffset), ridgeAmount) * weight;
     value += amplitude * folded;
     weight = clamp(abs(folded) * gRidgeGain, 0.0, 1.0);
-    samplePoint *= lacunarity;
+    samplePoint = nextOctavePoint(samplePoint, i, octaves, lacunarity);
     amplitude *= persistence;
     spacing *= lacunarity;
   }
@@ -259,7 +294,7 @@ float fractalNoise3D(vec3 p, float seed, float baseType, float fractalType, floa
     if (i >= int(octaves) && !deepOn) break;
     float fade = octaveFade(spacing);
     if (fade <= 0.0) break; // every finer octave is faded out too
-    float n = fade * evalBaseGenerator(samplePoint, seed, baseType);
+    float n = fade * (isDeepCellOctave(i, octaves, baseType) ? deepCellOctave(samplePoint, seed, i, baseType) : evalBaseGenerator(samplePoint, octaveSeed(seed, i, octaves), baseType));
     if (fractalType < 1.5) {
       value *= pwr * n + 1.0; // multifractal
     } else if (fractalType < 2.5) {
@@ -277,7 +312,7 @@ float fractalNoise3D(vec3 p, float seed, float baseType, float fractalType, floa
       if (i > 0) signal *= weight;
       value += signal * pwr * fade;
     }
-    samplePoint *= lacunarity;
+    samplePoint = nextOctavePoint(samplePoint, i, octaves, lacunarity);
     pwr *= persistence;
     spacing *= lacunarity;
   }
@@ -453,7 +488,7 @@ float planetDetail(vec3 position, float sampleSpacing) {
   for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
     float fade = octaveFade(sampleSpacing * frequency);
     if (fade <= 0.0) break; // every finer octave is faded out too
-    value += amplitude * fade * evalBaseGenerator(position * frequency, DETAIL_SEED, 1.0);
+    value += amplitude * fade * evalBaseGenerator(position * frequency, DETAIL_SEED + float(i), 1.0); // own seed per octave (FastNoiseLite's seed++)
     amplitude *= 0.5;
     frequency *= 2.0;
   }
