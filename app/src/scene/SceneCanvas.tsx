@@ -16,7 +16,7 @@ import { createPlanetGlow, updatePlanetGlow, updatePlanetGlowFrame } from '../at
 import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame } from '../atmosphere/cloudLayer';
 import { createPlanetHaze, updatePlanetHaze } from '../atmosphere/planetHaze';
 import { isRippleMapReady } from '../planet/rippleMap';
-import { WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
+import { KM_PER_SCENE_UNIT, WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { ElevationData } from '../voxel/chunkGrid';
 import { clampPatchSamples, clampPatchTextureResolution, faceIndex, PATCH_BORDER_TEXELS, patchContaining, type TerrainPatch } from '../planet/patch';
 import { PlanetPatchRenderer } from '../planet/PlanetPatchRenderer';
@@ -108,7 +108,7 @@ export interface SceneCanvasHandle {
   getPatchRegionTexture(patch: TerrainPatch, resolution: number): { texture: THREE.Texture; resolution: number } | null;
   // Bakes a patch into a target the caller owns, for the chunk's patches
   // (voxel/ChunkPatchRenderer.ts). False if the pipeline isn't ready.
-  bakePatchInto(patch: TerrainPatch, target: THREE.WebGLRenderTarget): boolean;
+  bakePatchInto(patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch): boolean;
   // Bakes one patch, runs the erosion simulation over it, and hands back the
   // eroded heights in the same shape getPatchElevationData returns, so
   // whatever shows terrain cannot tell which of the two it was given, plus
@@ -141,6 +141,11 @@ export interface SceneCanvasHandle {
 // happens only in the GPU vertex shader, so this overlay won't track the
 // actual bumpy noise-displaced surface. Fine for now (surface is flat),
 // revisit once real terrain height makes this mismatch visible.
+// The land chunk's center on its face, where its fine detail is measured from ([B66]).
+function chunkCenter(patch: TerrainPatch): THREE.Vector2 {
+  return new THREE.Vector2((patch.min.x + patch.max.x) / 2, (patch.min.y + patch.max.y) / 2);
+}
+
 function buildWireframeOverlay(geometry: THREE.BufferGeometry): THREE.LineSegments {
   const wireframeGeometry = new THREE.WireframeGeometry(geometry);
   const material = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.3 });
@@ -450,6 +455,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
           face: faceIndex(patch.face),
           min: patch.min,
           max: patch.max,
+          localOrigin: chunkCenter(patch),
           resolution: clampPatchSamples(samples),
         });
         return heightmapPipeline.getRegionElevationData(webglRenderer, target);
@@ -465,6 +471,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
           face: faceIndex(patch.face),
           min: patch.min,
           max: patch.max,
+          localOrigin: chunkCenter(patch),
           resolution: clampPatchSamples(samples),
         });
         return heightmapPipeline.getRegionMinMaxAsync(webglRenderer, target);
@@ -479,6 +486,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
           face: faceIndex(patch.face),
           min: patch.min,
           max: patch.max,
+          localOrigin: chunkCenter(patch),
           resolution: clampPatchSamples(samples),
         });
         return heightmapPipeline.getRegionPercentileRangeAsync(webglRenderer, target);
@@ -486,15 +494,18 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
       getElevationRange() {
         return { min: sharedUniformsRef.current.elevationMin, max: sharedUniformsRef.current.elevationMax };
       },
-      bakePatchInto(patch, target) {
+      bakePatchInto(patch, target, root) {
         const webglRenderer = webglRendererRef.current;
         const heightmapPipeline = heightmapPipelineRef.current;
         if (!webglRenderer || !heightmapPipeline) return false;
+        heightmapPipeline.ensureChunkBase(webglRenderer, layersRef.current, faceIndex(root.face), root.min, root.max, chunkCenter(root));
         heightmapPipeline.bakeRegionToTarget(webglRenderer, {
           layers: layersRef.current,
           face: faceIndex(patch.face),
           min: patch.min,
           max: patch.max,
+          localOrigin: chunkCenter(root),
+          fromChunkBase: true,
           resolution: target.width,
           borderTexels: PATCH_BORDER_TEXELS,
         }, target);
@@ -514,6 +525,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
           face: faceIndex(patch.face),
           min: patch.min,
           max: patch.max,
+          localOrigin: chunkCenter(patch),
           resolution: clampedResolution,
         });
         return { texture: target.texture, resolution: clampedResolution };
@@ -529,6 +541,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
           face: faceIndex(patch.face),
           min: patch.min,
           max: patch.max,
+          localOrigin: chunkCenter(patch),
           resolution,
         });
         // Read before the simulation touches it, so what the run changed can
@@ -677,6 +690,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     wireframeOverlayRef.current = wireframeOverlay;
     gridMeshRef.current = gridMesh;
     heightmapPipelineRef.current = new HeightmapPipeline();
+    heightmapPipelineRef.current.setPlanetRadiusMeters(radius * KM_PER_SCENE_UNIT * 1000);
     // Beside the heightmap pipeline for the same reason it sits here: its
     // render targets belong to this renderer and cannot be shared with
     // another one. See erosion/erosionEngine.ts.
@@ -876,6 +890,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
 
       // updatePatches picks the radius up on the next animate() frame; materials no longer refresh every frame.
       sharedUniformsRef.current.radius = radius;
+      heightmapPipelineRef.current?.setPlanetRadiusMeters(radius * KM_PER_SCENE_UNIT * 1000);
       planetPatchRendererRef.current?.applyShared(sharedUniformsRef.current);
     }, 150);
     return () => clearTimeout(timeoutId);

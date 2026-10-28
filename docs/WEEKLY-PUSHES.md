@@ -1,11 +1,33 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-10-26`
+`Last updated: 2026-10-28`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
 
 > [!NOTE]
 > **How the entries are numbered.** By the syllabus's own sessions (`Syllabus-FA26-DESIGN6197-SEM130-DRAFT.pdf`, in the course folder): the class meets on Wednesdays, and each weekly report is committed by the start of that Wednesday's class (10:10 am). Work stays in the earlier session's entry until it is committed: the first commit after a class starts the next session's entry. Two entries in one session are marked "part 1 of 2". Sessions 1 and 2 (Aug 26, Sep 2) are left empty, before the project started. The next sessions are pre-built at the end of this file: fill one in, then move it to the top.
+
+---
+
+## Session 11 · Wed 2026-11-04
+
+`Covers 2026-10-28 to 2026-11-04 · Due: start of class, 10:10 am`
+
+*Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map.*
+
+![Walk mode on the land chunk after the fix: smooth slopes down to the water, no stripes.](screenshots/2026-10-28-ground-smooth-after.png)
+
+### 🛠️ Done
+- **Ground pattern fixed (`[B66]`, 2026-10-28):** up close the chunk showed stripes and stair-stepped ridges, because its heights were computed as points on the whole 6000 km planet, where floats round to about 0.6 m. The chunk now bakes its own 4096 height map from the planet's noise and resamples it smoothly; finer texture comes from Roughness. Before and after screenshots are in the issue.
+
+### 🤖 AI process
+- **A day lost to theories:** three fixes were built on unproven causes (octave tweaks, local coordinates for fine detail, smoothing) before Dana's own idea, a dedicated height map resampled at higher resolution, solved it. New working rules: check Dana's proposed mechanism against established tools first, build only on a measured cause, and edit docs only at commit.
+- **Measured, finally:** a readout of identical neighboring heights proved the rounding, after a day of guessing.
+
+### 📊 Worked / didn't / next
+- ✅ The chunk's own height map, resampled: the established terrain approach.
+- ❌ Fixes built on theories: removed.
+- ⏭️ The moon, simple and quick; then terrain shading.
 
 ---
 

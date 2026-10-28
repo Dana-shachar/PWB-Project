@@ -60,6 +60,7 @@ uniform float uLayerMaskMax[MAX_LAYERS];
 // GLSL ES 1.00 (this material's default) requires constant indices for
 // sampler arrays, so each layer gets its own named uniform instead of a
 // true array — see samplePaintTexture() below.
+#ifndef CHUNK_PATCH_PASS
 uniform sampler2D uLayerPaintTexture0;
 uniform sampler2D uLayerPaintTexture1;
 uniform sampler2D uLayerPaintTexture2;
@@ -76,10 +77,19 @@ uniform sampler2D uLayerPaintTexture12;
 uniform sampler2D uLayerPaintTexture13;
 uniform sampler2D uLayerPaintTexture14;
 uniform sampler2D uLayerPaintTexture15;
+#else
+// [B66] A chunk patch reads its height from the chunk's own base map instead of running the layers.
+uniform sampler2D uChunkBase;
+#endif
 
 // Selects among the 16 named paint-texture uniforms above by constant
 // comparison. Returns (value, mask) — mask 0 = untouched (procedural shows
 // through), mask 1 = fully painted (value replaces it).
+#ifdef CHUNK_PATCH_PASS
+vec2 samplePaintTexture(int index, vec2 uv) {
+  return vec2(0.0);
+}
+#else
 vec2 samplePaintTexture(int index, vec2 uv) {
   if (index == 0) return texture2D(uLayerPaintTexture0, uv).rg;
   if (index == 1) return texture2D(uLayerPaintTexture1, uv).rg;
@@ -98,6 +108,7 @@ vec2 samplePaintTexture(int index, vec2 uv) {
   if (index == 14) return texture2D(uLayerPaintTexture14, uv).rg;
   return texture2D(uLayerPaintTexture15, uv).rg;
 }
+#endif
 
 const int MAX_OCTAVES = 12; // loop upper bound — actual count is octaves, via the break below
 // Patch bakes may continue a layer's octave series past its Octaves setting,
@@ -137,6 +148,22 @@ float gFractalType = 0.0;
 float gFractalOffset = 0.0;
 float gFractalGain = 1.0;
 
+// [B66] On a land chunk the fine octaves read chunk-local coordinates (small numbers, so full float precision)
+// instead of planet-wide ones, which at centimeter scale run into the millions and break into regular steps.
+float gLocalOn = 0.0;
+vec3 gLocalDelta = vec3(0.0); // this texel's offset from the chunk's center, in unit-sphere units
+vec3 gLocalStart = vec3(0.0); // the same offset in the current layer's noise units
+float gOctaveScale = 0.0;     // the current layer's noise cells per planet radius
+// Past 2^15 cells per radius a float places a point only to about 1/256 of a cell, so finer octaves go local.
+const float LOCAL_DETAIL_SCALE = 32768.0;
+bool useLocalDetail(float octaveScale) {
+  return gLocalOn > 0.5 && octaveScale > LOCAL_DETAIL_SCALE;
+}
+// Shifts each local octave so their lattices don't all share a corner at the chunk's center.
+vec3 localOctaveShift(int i) {
+  return vec3(13.7, 41.3, 27.1) * float(i + 1);
+}
+
 // 1 while an octave's lattice is well resolved by the sample grid, 0 once its
 // features are smaller than the grid can show.
 float octaveFade(float latticeSpacing) {
@@ -156,39 +183,6 @@ float fullSeriesAmplitude(float octaves, float persistence) {
     amplitude *= persistence;
   }
   return max(total, 0.0001);
-}
-
-// The extra fine octaves of a Voronoi layer ("detail by level", past the layer's own octaves), guarded so cells don't
-// stack into a regular egg-crate up close (Dana, 2026-10-27). Each gets its own seed, as FastNoiseLite advances the seed
-// every octave (seed++), and its own small warp (FastNoiseLite's independent per-octave warp), so the levels' lattices
-// never line up; and it is blended in lightly, as xarray-spatial blends Worley noise for micro-texture (0.1 to 0.3).
-// Warp amount inferred, TUNABLE.
-const float VORONOI_DETAIL_BLEND = 0.2;
-const float VORONOI_DETAIL_WARP = 0.35; // in lattice cells
-// Every octave's lattice is lined up with the same axes, so octaves that scale by exactly 2 nest and their alignment adds
-// up into regular rows. Extra fine octaves are rotated before scaling, with Quilez's orthonormal fbm matrix and a step
-// just off 2 (p = m*p*2.02, as in his fbm shaders), so no two share axes. The layer's own octaves are untouched.
-const mat3 OCTAVE_ROTATION = mat3(0.00, 0.80, 0.60, -0.80, 0.36, -0.48, -0.60, -0.48, 0.64);
-const float DEEP_LACUNARITY_NUDGE = 1.01; // 2 becomes 2.02
-vec3 nextOctavePoint(vec3 point, int i, float octaves, float lacunarity) {
-  return i + 1 >= int(octaves) ? OCTAVE_ROTATION * point * (lacunarity * DEEP_LACUNARITY_NUDGE) : point * lacunarity;
-}
-
-// Extra fine octaves of any type get their own seed (FastNoiseLite's seed++), so their lattices don't line up with the
-// coarser ones into regular ripples; the layer's own octaves keep its seed, so the large shapes don't change.
-float octaveSeed(float seed, int i, float octaves) {
-  return i >= int(octaves) ? seed + float(i) : seed;
-}
-bool isDeepCellOctave(int i, float octaves, float baseType) {
-  return i >= int(octaves) && baseType > 2.5;
-}
-float deepCellOctave(vec3 point, float seed, int i, float baseType) {
-  float octaveSeed = seed + float(i);
-  vec3 warp = vec3(
-    perlinNoise3D(point + vec3(5.2, 1.3, 2.8), octaveSeed),
-    perlinNoise3D(point + vec3(1.7, 9.2, 4.1), octaveSeed),
-    perlinNoise3D(point + vec3(8.3, 2.8, 6.5), octaveSeed));
-  return VORONOI_DETAIL_BLEND * evalBaseGenerator(point + warp * VORONOI_DETAIL_WARP, octaveSeed, baseType);
 }
 
 // fBm (fractal Brownian motion): sums several octaves of the base generator
@@ -211,14 +205,19 @@ float fbm3D(vec3 p, float seed, float baseType, float octaves, float persistence
   float amplitude = 1.0;
   float spacing = latticeSpacing;
   vec3 samplePoint = p;
+  vec3 localPoint = gLocalStart;
+  float octaveScale = gOctaveScale;
   bool deepOn = allowDeep && latticeSpacing > 0.0 && persistence < 1.0 && lacunarity > 1.0;
   for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
     if (i >= int(octaves) && !deepOn) break;
     float fade = octaveFade(spacing);
+    vec3 octavePoint = useLocalDetail(octaveScale) ? localPoint + localOctaveShift(i) : samplePoint;
     if (fade <= 0.0) break; // every finer octave is faded out too
-    float octaveNoise = isDeepCellOctave(i, octaves, baseType) ? deepCellOctave(samplePoint, seed, i, baseType) : evalBaseGenerator(samplePoint, octaveSeed(seed, i, octaves), baseType);
+    float octaveNoise = evalBaseGenerator(octavePoint, seed, baseType);
     value += amplitude * fade * octaveNoise;
-    samplePoint = nextOctavePoint(samplePoint, i, octaves, lacunarity);
+    samplePoint *= lacunarity;
+    localPoint *= lacunarity;
+    octaveScale *= lacunarity;
     amplitude *= persistence;
     spacing *= lacunarity;
   }
@@ -249,17 +248,22 @@ float ridgedFbm3D(vec3 p, float seed, float baseType, float octaves, float persi
   float weight = 1.0;
   float spacing = latticeSpacing;
   vec3 samplePoint = p;
+  vec3 localPoint = gLocalStart;
+  float octaveScale = gOctaveScale;
   bool deepOn = latticeSpacing > 0.0 && persistence < 1.0 && lacunarity > 1.0; // extra octaves for deep patches, see fbm3D
   for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
     if (i >= int(octaves) && !deepOn) break;
     float fade = octaveFade(spacing);
+    vec3 octavePoint = useLocalDetail(octaveScale) ? localPoint + localOctaveShift(i) : samplePoint;
     if (i >= int(octaves) && fade <= 0.0) break; // no finer octave can show either
-    float octaveNoise = fade <= 0.0 ? 0.0 : isDeepCellOctave(i, octaves, baseType) ? deepCellOctave(samplePoint, seed, i, baseType) : evalBaseGenerator(samplePoint, octaveSeed(seed, i, octaves), baseType);
+    float octaveNoise = fade <= 0.0 ? 0.0 : evalBaseGenerator(octavePoint, seed, baseType);
     float raw = fade * octaveNoise; // skips the noise call once faded out
     float folded = mix(raw, ridge(raw, gRidgeOffset), ridgeAmount) * weight;
     value += amplitude * folded;
     weight = clamp(abs(folded) * gRidgeGain, 0.0, 1.0);
-    samplePoint = nextOctavePoint(samplePoint, i, octaves, lacunarity);
+    samplePoint *= lacunarity;
+    localPoint *= lacunarity;
+    octaveScale *= lacunarity;
     amplitude *= persistence;
     spacing *= lacunarity;
   }
@@ -289,12 +293,15 @@ float fractalNoise3D(vec3 p, float seed, float baseType, float fractalType, floa
   float signal = 0.0;
   float spacing = latticeSpacing;
   vec3 samplePoint = p;
+  vec3 localPoint = gLocalStart;
+  float octaveScale = gOctaveScale;
   bool deepOn = latticeSpacing > 0.0 && persistence < 1.0 && lacunarity > 1.0; // extra octaves for deep patches, see fbm3D
   for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
     if (i >= int(octaves) && !deepOn) break;
     float fade = octaveFade(spacing);
+    vec3 octavePoint = useLocalDetail(octaveScale) ? localPoint + localOctaveShift(i) : samplePoint;
     if (fade <= 0.0) break; // every finer octave is faded out too
-    float n = fade * (isDeepCellOctave(i, octaves, baseType) ? deepCellOctave(samplePoint, seed, i, baseType) : evalBaseGenerator(samplePoint, octaveSeed(seed, i, octaves), baseType));
+    float n = fade * evalBaseGenerator(octavePoint, seed, baseType);
     if (fractalType < 1.5) {
       value *= pwr * n + 1.0; // multifractal
     } else if (fractalType < 2.5) {
@@ -312,7 +319,9 @@ float fractalNoise3D(vec3 p, float seed, float baseType, float fractalType, floa
       if (i > 0) signal *= weight;
       value += signal * pwr * fade;
     }
-    samplePoint = nextOctavePoint(samplePoint, i, octaves, lacunarity);
+    samplePoint *= lacunarity;
+    localPoint *= lacunarity;
+    octaveScale *= lacunarity;
     pwr *= persistence;
     spacing *= lacunarity;
   }
@@ -376,6 +385,14 @@ uniform float uRegionMode; // 0 = whole globe, 1 = the region below
 uniform float uRegionFace; // 0..5, matching CUBE_FACES in planet/mesh.ts
 uniform vec2 uRegionMin;   // face-local coordinates, each in [-1, 1]
 uniform vec2 uRegionMax;
+uniform float uLocalDetailOn; // [B66] 1 on land chunk bakes, see gLocalOn
+uniform vec2 uLocalMin;       // the region's corners minus the chunk's center, in face coordinates
+uniform vec2 uLocalMax;
+uniform vec2 uChunkBaseMin;      // [B66] the base map's first and last texel centers, minus the chunk's center, face coords
+uniform vec2 uChunkBaseMax;
+uniform float uChunkBaseSamples; // texels across the base map, border included
+uniform float uChunkBaseSpacing; // between base map texels, face coords: Roughness octaves coarser than this are in the map
+uniform float uElevationInRed;   // 1 when baking the base map, a height-only (single channel) target
 uniform float uRegionSamples; // the bake target's own resolution, see below
 
 // Mirrors cubeFacePoint() in planet/mesh.ts. Kept deliberately identical:
@@ -429,6 +446,7 @@ float evalLayerNoise(
   float warpScale, float warpOctaves
 ) {
   vec3 samplePoint = domainWarpOn ? domainWarpedPosition(p, seed, noiseType, poleFalloff, warpStrength, warpScale, warpOctaves) : p;
+  gLocalOn = uLocalDetailOn; // only the layer's own octaves, not the warp's
 
   // Ridging several octaves needs its own accumulation (ridgedFbm3D folds
   // each octave before summing, see its own comment above) — folding a
@@ -448,6 +466,7 @@ float evalLayerNoise(
     if (ridgedOn) value = mix(value, ridge(value, gRidgeOffset), ridgeAmount);
   }
   if (terraceOn) value = terrace(value, terraceSteps);
+  gLocalOn = 0.0;
 
   return value;
 }
@@ -481,19 +500,49 @@ float applyBlendMode(float composite, float layerHeight, float blendMode) {
 // The starting frequency and the amount are inferred, TUNABLE ([B51]).
 const float DETAIL_BASE_FREQUENCY = 64.0;
 const float DETAIL_SEED = 17.0;
-float planetDetail(vec3 position, float sampleSpacing) {
+float planetDetail(vec3 position, float sampleSpacing, float coveredSpacing) {
   float value = 0.0;
   float amplitude = 1.0;
   float frequency = DETAIL_BASE_FREQUENCY;
   for (int i = 0; i < MAX_DEEP_OCTAVES; i++) {
     float fade = octaveFade(sampleSpacing * frequency);
     if (fade <= 0.0) break; // every finer octave is faded out too
-    value += amplitude * fade * evalBaseGenerator(position * frequency, DETAIL_SEED + float(i), 1.0); // own seed per octave (FastNoiseLite's seed++)
+    // On a chunk patch, the share of this octave the base map already holds is left out, so each counts once.
+    if (coveredSpacing > 0.0) fade -= octaveFade(coveredSpacing * frequency);
+    value += amplitude * fade * evalBaseGenerator(uLocalDetailOn > 0.5 && frequency > LOCAL_DETAIL_SCALE ? gLocalDelta * frequency + localOctaveShift(i) : position * frequency, DETAIL_SEED, 1.0);
     amplitude *= 0.5;
     frequency *= 2.0;
   }
   return value;
 }
+
+#ifdef CHUNK_PATCH_PASS
+// Cubic B-spline weights for the 4 texels around a point t of the way between the middle two (Sigg and Hadwiger,
+// GPU Gems 2 ch. 20, "Fast Third-Order Texture Filtering"): smooth everywhere, so the map never shows its grid.
+vec4 bsplineWeights(float t) {
+  float t2 = t * t;
+  float t3 = t2 * t;
+  return vec4((1.0 - t) * (1.0 - t) * (1.0 - t), 3.0 * t3 - 6.0 * t2 + 4.0, -3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0, t3) / 6.0;
+}
+float chunkBaseTexel(vec2 idx) {
+  vec2 clamped = clamp(idx, vec2(0.0), vec2(uChunkBaseSamples - 1.0));
+  return texture2D(uChunkBase, (clamped + 0.5) / uChunkBaseSamples).r;
+}
+float chunkBaseRow(vec2 cell, float rowOffset, vec4 weightsX) {
+  return weightsX.x * chunkBaseTexel(cell + vec2(-1.0, rowOffset)) + weightsX.y * chunkBaseTexel(cell + vec2(0.0, rowOffset))
+       + weightsX.z * chunkBaseTexel(cell + vec2(1.0, rowOffset)) + weightsX.w * chunkBaseTexel(cell + vec2(2.0, rowOffset));
+}
+// localFace is measured from the chunk's center, so the lookup keeps full precision however deep the patch.
+float chunkBaseElevation(vec2 localFace) {
+  vec2 texelPos = (localFace - uChunkBaseMin) / (uChunkBaseMax - uChunkBaseMin) * (uChunkBaseSamples - 1.0);
+  vec2 cell = floor(texelPos);
+  vec2 frac = texelPos - cell;
+  vec4 weightsX = bsplineWeights(frac.x);
+  vec4 weightsY = bsplineWeights(frac.y);
+  return weightsY.x * chunkBaseRow(cell, -1.0, weightsX) + weightsY.y * chunkBaseRow(cell, 0.0, weightsX)
+       + weightsY.z * chunkBaseRow(cell, 1.0, weightsX) + weightsY.w * chunkBaseRow(cell, 2.0, weightsX);
+}
+#endif
 
 void main() {
   // Only these two lines differ between a whole-globe bake and a region
@@ -518,7 +567,20 @@ void main() {
     basePosition = normalize(cubePoint);
     // A step across the cube face is shorter on the sphere by about 1/|cubePoint|.
     sampleSpacing = uSampleSpacing / length(cubePoint);
+    // Measured from the chunk's center in face coordinates, so it keeps every digit; the face is flat, so this is exact.
+    vec2 localFace = mix(uLocalMin, uLocalMax, edgeAlignedUV);
+    gLocalDelta = (cubeFacePoint(uRegionFace, localFace.x, localFace.y) - cubeFacePoint(uRegionFace, 0.0, 0.0)) / length(cubePoint);
     paintUV = spherePositionToPaintUv(basePosition);
+#ifdef CHUNK_PATCH_PASS
+    // The chunk's base map, resampled, plus only the Roughness octaves finer than the map.
+    float baseElevation = chunkBaseElevation(localFace);
+    if (uDetailAmount > 0.0) {
+      float baseShoreFade = uShoreEnabled > 0.5 ? clamp((baseElevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
+      baseElevation += uDetailAmount * baseShoreFade * planetDetail(basePosition, sampleSpacing, uChunkBaseSpacing / length(cubePoint));
+    }
+    gl_FragColor = vec4(0.5, baseElevation, 0.0, 1.0);
+    return;
+#endif
   } else {
     basePosition = uvToSpherePosition(vUv);
     // Pole rows converge to one 3D point but keep varying U — force U to a
@@ -563,6 +625,8 @@ void main() {
     // The sample spacing in this layer's lattice cells, using its widest
     // axis so a stretched layer is faded conservatively.
     gLatticeSpacing = sampleSpacing * uLayerFrequency[i] * max(stretch.x, max(stretch.y, stretch.z));
+    gLocalStart = gLocalDelta * uLayerFrequency[i] * stretch;
+    gOctaveScale = uLayerFrequency[i] * max(stretch.x, max(stretch.y, stretch.z));
     gVoronoiJitter = uLayerVoronoiJitter[i];
     gVoronoiDistance = uLayerVoronoiDistance[i];
     gRidgeOffset = uLayerRidgeOffset[i];
@@ -636,7 +700,7 @@ void main() {
     // None below sea level, then linear over twice the detail's largest swing (its octaves sum below 2), so a dip
     // never reaches the sea and the coastline never moves (Dana: no rough patches where there's water).
     float shoreFade = uShoreEnabled > 0.5 ? clamp((elevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
-    elevation += uDetailAmount * shoreFade * planetDetail(basePosition, sampleSpacing);
+    elevation += uDetailAmount * shoreFade * planetDetail(basePosition, sampleSpacing, 0.0);
   }
-  gl_FragColor = vec4(clamp(composite, 0.0, 1.0), elevation, 0.0, 1.0);
+  gl_FragColor = uElevationInRed > 0.5 ? vec4(elevation, 0.0, 0.0, 1.0) : vec4(clamp(composite, 0.0, 1.0), elevation, 0.0, 1.0);
 }

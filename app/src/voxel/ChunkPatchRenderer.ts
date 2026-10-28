@@ -5,7 +5,7 @@ import { chunkPatchBox, chunkPatchInView,chunkPatchPixelWidth, chunkPatchWorldSi
 import { buildChunkBaseGeometry, buildFlatPatchGeometry } from './chunkPatchMesh';
 
 // Bakes one patch's heightmap into a target; false if the planet view isn't ready.
-export type BakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget) => boolean;
+export type BakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch) => boolean;
 
 // Per-frame build limits, so a big change spreads over frames instead of stalling one.
 const MAX_BUILDS_PER_FRAME = 4;
@@ -66,7 +66,9 @@ export class ChunkPatchRenderer {
 
   // After a layer or detail change: every built patch bakes again in place.
   rebakeAll(bake: BakeChunkPatch): void {
-    for (const entry of this.entries.values()) bake(entry.patch, entry.target);
+    const root = this.root;
+    if (!root) return;
+    for (const entry of this.entries.values()) bake(entry.patch, entry.target, root);
   }
 
   update(camera: THREE.PerspectiveCamera, detail: ChunkDetail, bake: BakeChunkPatch, maxTextureSize: number): void {
@@ -125,7 +127,7 @@ export class ChunkPatchRenderer {
         if (samples > entry.bakeSamples) {
           entry.target.dispose();
           entry.target = createPatchTarget(samples);
-          if (!bake(patch, entry.target)) return;
+          if (!bake(patch, entry.target, root)) return;
           entry.bakeSamples = samples;
           this.setTextureUniforms(entry.material, entry.target, samples);
           builds++;
@@ -134,7 +136,7 @@ export class ChunkPatchRenderer {
         continue;
       }
       const target = createPatchTarget(samples);
-      if (!bake(patch, target)) {
+      if (!bake(patch, target, root)) {
         target.dispose();
         return;
       }
@@ -155,31 +157,6 @@ export class ChunkPatchRenderer {
   // patch's bake, as Cesium reads terrain height from the most detailed loaded
   // tile. Null off the chunk or before a patch shows. Same texel mapping as chunk.vert.glsl.
   lastSampleDepth = -1; // TEMP [B55]
-  // TEMP: one full row of baked heights (raw elevation) through the point, from the deepest shown patch there.
-  readPatchRow(renderer: THREE.WebGLRenderer, x: number, z: number): { depth: number; samples: number; patchMeters: number; row: number[] } | null {
-    const root = this.root;
-    if (!root) return null;
-    const chunkU = x / this.chunkSize + 0.5;
-    const chunkV = z / this.chunkSize + 0.5;
-    let best: ChunkPatchEntry | null = null;
-    for (const key of this.shown) {
-      const entry = this.entries.get(key);
-      if (!entry) continue;
-      const fractions = rootFractions(root, entry.patch);
-      if (chunkU < fractions.minU || chunkU > fractions.maxU || chunkV < fractions.minV || chunkV > fractions.maxV) continue;
-      if (!best || entry.patch.depth > best.patch.depth) best = entry;
-    }
-    if (!best) return null;
-    const fractions = rootFractions(root, best.patch);
-    const size = best.bakeSamples + 2 * PATCH_BORDER_TEXELS;
-    const rowY = Math.round(PATCH_BORDER_TEXELS + ((chunkV - fractions.minV) / (fractions.maxV - fractions.minV)) * (best.bakeSamples - 1));
-    const buffer = new Float32Array(size * 4);
-    renderer.readRenderTargetPixels(best.target, 0, rowY, size, 1, buffer);
-    const row: number[] = [];
-    for (let i = PATCH_BORDER_TEXELS; i < PATCH_BORDER_TEXELS + best.bakeSamples; i++) row.push(+buffer[i * 4 + 1].toFixed(7));
-    return { depth: best.patch.depth, samples: best.bakeSamples, patchMeters: (fractions.maxU - fractions.minU) * this.chunkSize * 1000, row };
-  }
-  lastTexelMeters = 0; // TEMP: spacing between height samples of the patch under a point
   sampleHeight(renderer: THREE.WebGLRenderer, x: number, z: number, maxHeight: number): number | null {
     const root = this.root;
     if (!root) return null;
@@ -196,7 +173,6 @@ export class ChunkPatchRenderer {
     if (!best) return null;
     this.lastSampleDepth = best.patch.depth; // TEMP [B55]
     const fractions = rootFractions(root, best.patch);
-    this.lastTexelMeters = ((fractions.maxU - fractions.minU) * this.chunkSize * 1000) / Math.max(1, best.bakeSamples - 1); // TEMP
     const size = best.bakeSamples + 2 * PATCH_BORDER_TEXELS;
     const texelAt = (fraction: number, min: number, max: number) =>
       Math.min(size - 1, Math.max(0, PATCH_BORDER_TEXELS + ((fraction - min) / (max - min)) * (best!.bakeSamples - 1)));

@@ -58,7 +58,7 @@ function App() {
     planetControls.shoreSeaLevel,
   );
   // The chunk's patches bake through the planet view's heightmap pipeline.
-  const bakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget) => sceneHandleRef.current?.bakePatchInto(patch, target) ?? false;
+  const bakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch) => sceneHandleRef.current?.bakePatchInto(patch, target, root) ?? false;
   // Declared after erosion/landChunk, which it persists alongside layers and
   // paint — see projectSettings/saveProject.ts.
   const project = useSaveProject({

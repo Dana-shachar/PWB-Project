@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-10-27`
+`Last updated: 2026-10-28`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -11,11 +11,11 @@
 > Bugs only. Architecture and the decisions behind it are in `SPEC.md`. Status by stage is in `ROADMAP.md`.
 
 ```
-🔴 Open      12
+🔴 Open      11
 🟡 Partial   22
 ❓ Decision   1
 📋 Tracked    4
-✅ Fixed     31
+✅ Fixed     32
 ```
 
 <details>
@@ -565,165 +565,39 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - 📚 Now Cesium's convention (`minimumPickingTerrainHeight`, `enableCollisionDetection`): a CPU copy of the chunk's heights (`groundHeightAt`, `raycastGround` in `voxel/chunkGround.ts`); before a drag or wheel zoom the pivot moves to the ground under the cursor, and the camera stays `MIN_CAMERA_ALTITUDE` of the chunk's size above the ground under it (`keepAboveFlatGround`).
 - Map-style navigation: `zoomToCursor` with `screenSpacePanning = false`, which keeps the orbit target on the ground plane (checked in three.js r185's OrbitControls source; with screen-space panning, zoom-to-cursor pulls the target off the ground). Panning now slides along the ground, as in `MapControls`.
 
-### [B66] A regular stripe, dimple or knit pattern on the ground up close · `wrong but workable`
-**🔴 Open, cause not found** · **Found:** 2026-10-27 · **Where:** the terrain bake, `shaders/heightmap/heightmap.frag.glsl` and `noise.glsl` (suspected, not proven)
+### [B66] A regular stripe, ridge or knit pattern on the ground up close · `wrong but workable`
+**✅ Fixed:** 2026-10-28, after three wrong fixes · **Found:** 2026-10-27 · **Where:** the land chunk's bake, `map/heightmap.ts` (`ensureChunkBase`), `shaders/heightmap/heightmap.frag.glsl` (`CHUNK_PATCH_PASS`)
 
-**What happens**
-- Dana, 2026-10-27: on the land chunk, close to the ground (walk mode and low orbit), the ground shows a very regular pattern: an egg-crate of square bumps, rows of stripes running along the x and z axes, or a fine "knit" weave. Clearest on flat or smooth ground (near water, snow slopes), also visible from orbit (screenshots 2026-10-27, 19:41 to 21:51).
-- It changes look with the noise settings but never goes away: Voronoi (all distances), simplex (bright axis lines), Perlin (faint), random (completely smooth, no texture at all).
-- In one screenshot the pattern stops at a straight patch border (smooth on one side, dimpled on the other).
+**What happened**
+- Dana, 2026-10-27: close to the ground on the land chunk (walk mode, low orbit), the terrain showed a very regular pattern: rows of stripes, square dimples, a fine knit, and later hard parallel ridges with stair-stepped edges.
+- It changed look with every noise type and setting but never went away, and it was clearest on flat ground near the water and on snow.
 
-**Checked and ruled out (with the test used)**
-1. Shadows: "Cast shadows" was already off.
-2. The patch sample grid: logged spacing under the walker is 12 cm once refined (depth 12; 7.8 to 15.6 m only in the first second after entering).
-3. Patch borders: a temporary per-patch color tint showed the stripes running inside a single patch.
-4. Terrace modifier: off.
-5. Voronoi Jitter alone: at Jitter 0 every distance type is a perfect grid by design, but raising Jitter (0.21, then 0.76) did not remove the fine pattern.
-6. The octave fade limits (`NYQUIST_FADE_MIN`/`MAX`): a one-variable test (0.25/0.95 → 1.0/2.0) left the pattern unchanged; reverted.
-7. Float32 precision in the noise input: a float32 simulation of the bake's position math showed many 12 cm samples collapsing on a 6000 km planet, and Dana's 1000 km test was inconclusive (badly designed: walking-scale numbers stay in the millions at both radii). A float32 simulation of the Voronoi octave sum along the measured row did NOT reproduce the measured sawtooth, and a relative-to-center version changed nothing. Not proven, not built.
+![Before: walk mode on the land chunk, the ground covered in long, evenly spaced parallel stripes.](screenshots/2026-10-27-ground-stripes-before.png)
+*Before, 2026-10-27: parallel stripes up close.*
 
-**Measured**
-- Alt+click raw row readout (depth-10 patch, 129 samples, 0.49 m apart, Voronoi Manhattan Jitter 0.21, Hybrid, 2 octaves, lacunarity 2.4, persistence 0.43, radius probably 1000 km): a repeat every 7 samples (3.4 m) and a sample-to-sample sawtooth (lag-1 curvature correlation −0.58).
-- On that row, a 0.5 m Gaussian softening removed the sawtooth (−0.58 → +0.35) while keeping about 99% of the 8 to 40 m texture; it did not remove the 3.4 m repeat.
+**Cause**
+- The chunk computed every height as a point on the whole planet, a sphere of radius 1 scaled to 6000 km. A 32-bit float there only tells points apart about every 0.3 to 0.6 m, so the ground was really computed on a grid of about 0.6 m while being drawn every 12 cm.
+- Measured: at 12 cm spacing, 52 of 128 neighboring heights came out exactly identical, which noise can only do when the positions given to it are identical. Any sharp feature then became a staircase of 0.6 m steps, and the lighting turned the steps into stripes.
 
-**Research done**
-- Voronoi at small scale: Gaea (Voronoi for structure, cut by warped Perlin), xarray-spatial (Worley blended at 0.1 to 0.3 as micro-texture, read verbatim), Wysilab (per-level attenuation), FastNoiseLite (seed++ per octave, read verbatim; independent per-octave warp, summary only), World Creator (recursive warp).
-- Octave alignment: Quilez's rotated octaves, `p = m*p*2.02` with `mat3(0.00,0.80,0.60,-0.80,0.36,-0.48,-0.60,-0.48,0.64)` (verbatim in Dana's pasted Shadertoys).
-- Planet-scale precision: relative-to-center (Cesium; Ohlarik 2008), Unreal Engine 5 Large World Coordinates (not read).
+![Midway: the same kind of ground after the smoothing pass, the ridges still drawn as blurry diagonal staircases.](screenshots/2026-10-28-ground-staircase-ridges.png)
+*Midway, 2026-10-28: the lines were gone, but the ridges were still a low-resolution staircase.*
 
-**Code changed while chasing it (uncommitted, none proven to help)**
-- Voronoi's extra fine octaves: own seed, small warp, 20% blend (`isDeepCellOctave`, `deepCellOctave`, `VORONOI_DETAIL_BLEND`, `VORONOI_DETAIL_WARP`).
-- Every type's extra fine octaves and Roughness: own seed per octave (`octaveSeed`; `DETAIL_SEED + float(i)`).
-- Extra fine octaves rotated with Quilez's matrix and lacunarity × 1.01 (`OCTAVE_ROTATION`, `nextOctavePoint`); Roughness not rotated yet.
-- ❓ Keep or revert all three: Dana's call.
+**Fix (Dana's approach)**
+- The land chunk gets its own height map: the whole chunk is baked once from the planet's noise, height only, 4096 by 4096 (about 4 m apart on a 16 km chunk, about 64 MB). At that spacing every point is distinct, so nothing rounds. It re-bakes only when the chunk, the layers, paint or the planet settings change.
+- Every close-up patch resamples that map with a cubic B-spline instead of recomputing the noise, so ridges stay smooth at any zoom. The lookup is measured from the chunk's center, so it keeps full precision at any depth.
+- Detail finer than the map comes from Roughness only, computed in the chunk's own small numbers, with each octave counted once (the share the map already holds is left out).
+- 📚 Upsample the coarser level and add detail: geometry clipmaps (Losasso and Hoppe 2004) and Proland (Bruneton and Neyret 2008). B-spline weights: GPU Gems 2, ch. 20 (Sigg and Hadwiger). Keeping GPU numbers small around a nearby origin: the planet-rendering threads on gamedev.net and the Godot forum. All from search summaries, not read in full.
+- Tradeoff: the noise layers' own shapes are only as fine as the map; finer texture is Roughness. ⚠️ A layer change re-bakes the whole 4096 map, which may pause for a moment.
 
-**Next (agreed method: one toggle at a time on the same view, no theories)**
-1. Roughness → 0. 2. Domain warp → off. 3. Octaves modifier → off. 4. Fractal type → fBm instead of Hybrid. 5. Blend mode → Normal instead of Multiply.
-- Whichever removes the pattern names the step; read only that code, propose a fix, and get a go first.
+![After: walk mode on the same chunk, smooth natural slopes down to the water, no stripes or ridges.](screenshots/2026-10-28-ground-smooth-after.png)
+*After, 2026-10-28: smooth slopes, no pattern.*
 
-**Every log, test and computation for this bug, in order (2026-10-27)**
-
-*What each one was, where it lives, what it printed, and what that showed.*
-
-**1. Patch detail under the walker (`[TEMP ground]`)**
-- What: the patch depth and the spacing between its height samples, under the walker's eye.
-- Where: `voxel/LandChunkCanvas.tsx` (frame loop, every 2 s in walk mode); `lastSampleDepth`, `lastTexelMeters` in `voxel/ChunkPatchRenderer.ts`.
-- First version printed only when leaving walk mode through the person button, so pressing Esc never showed it (a mistake); moved to print every 2 s.
-- Found: in the first second after entering, depth 4 to 5 (15.63 m and 7.81 m between samples); from then on depth 12, **0.12 m** between samples. Ruled out a coarse sample grid as the cause.
-
-**2. Shadows check (Dana's settings)**
-- What: whether "Cast shadows" was on.
-- Found: it was already **off**. Ruled out shadow acne from the coarse shadow map (`CHUNK_SHADOW_SAMPLES` 1025, `heightmapShadow` in `terrain.glsl`), which had been the leading suspect.
-
-**3. Patch tint (temporary visual debug)**
-- What: each patch tinted its own color, from its `uPatchUvMin`/`uPatchUvMax`, in `shaders/terrain/chunk.frag.glsl`. Removed afterwards.
-- Found (screenshot 21:23): the stripes run straight through the middle of one patch. Ruled out patch-border seams as the cause of the stripes.
-
-**4. Terrace check (Dana's settings)**
-- What: whether the Terrace modifier was on, since the stripes ran parallel to the shoreline like contour steps.
-- Found: **off**. Ruled out.
-
-**5. Jitter and distance tests (Dana's settings)**
-- What: Voronoi at Jitter 0 with each distance type, then Jitter 0.16, 0.21, 0.38 and 0.76.
-- Found: at Jitter 0 every distance type forms a regular grid (by design; Manhattan reads less obvious). Raising Jitter did not remove the fine pattern; at 0.76 a fine "knit" weave remained (screenshot 21:51). Ruled out Jitter as the only cause.
-
-**6. Noise type comparison (Dana's screenshots 21:18 to 21:19)**
-- What: same place with simplex, Perlin, Voronoi and random.
-- Found: simplex shows bright lines along the x and z axes; Perlin only faint lines; Voronoi rows; random completely smooth with no texture. So the noise type changes the look, but simplex (built on a slanted lattice) still made axis-aligned lines.
-
-**7. Float32 position simulation (offline, numpy)**
-- What: the bake's position math (`mix` of `uRegionMin`/`uRegionMax`, cube point, normalize) in 32-bit floats, for a 31 m patch of 257 samples on a 6000 km planet.
-- Found: 31 to 58% of neighboring 12 cm samples land on the identical position, the rest jump 0.18 to 0.76 m. A real precision limit, but see 8 and 12.
-
-**8. Radius test (Dana)**
-- What: planet radius 6000 → 1000 km, same spot, to see whether the stripes shrink.
-- Found: unchanged. Inconclusive, the test was badly designed: at walking scale the noise coordinates stay in the millions at both radii. The radius may still be 1000 km.
-
-**9. Voronoi hash simulation (offline)**
-- What: `hash3_3d` in float32 at octave scales 10, 14, 18 and 21 (coordinates up to about 700,000).
-- Found: neighboring cells still get different feature points; the hash itself does not collapse at those sizes.
-
-**10. Fade-limit test (temporary code change, reverted)**
-- What: `NYQUIST_FADE_MIN`/`MAX` from 0.25/0.95 to 1.0/2.0, so fine octaves fade out fully at 2 samples per cell.
-- Found (screenshot 21:41): the pattern was unchanged. Ruled out the fade limits; reverted.
-
-**11. Raw height row readout (`[TEMP pattern]`, Alt+click)**
-- What: one full row of baked heights (green channel) through the clicked point, from the deepest shown patch, plus its depth, sample count and width. `readPatchRow` in `voxel/ChunkPatchRenderer.ts`, called from `logCliffRow` in `LandChunkCanvas.tsx`.
-- Found (settings: Voronoi Manhattan, Jitter 0.21, Hybrid, 2 octaves, lacunarity 2.4, persistence 0.43, gain 1.70, offset 0.82, Multiply 0.47): depth 10, 129 samples, 62.5 m wide (0.49 m apart). A repeat every 7 samples (3.4 m; FFT peaks at 31.5, 21.0, 12.6, 10.5 and 7.9 m) and a sample-to-sample sawtooth (lag-1 curvature correlation −0.58); neighbor height steps from +0.12 to −0.71 m on a gentle slope.
-
-**12. Precision simulation along the row (offline, run without approval)**
-- What: the Voronoi octave sum with Dana's Jitter, lacunarity and persistence on a 1000 km planet, in float32 versus a relative-to-center version.
-- Found: neither reproduced the measured sawtooth (correlation 0.01 and −0.01). Weak evidence against precision, because the simulation left out Hybrid, domain warp and the real position.
-
-**13. Softening check on the measured row (offline)**
-- What: Gaussian softening of 0.5 to 2 m applied to the row from 11.
-- Found: 0.5 m removes the sawtooth (−0.58 → +0.35) and keeps about 99% of the 8 to 40 m texture; it does not remove the 3.4 m repeat. The band percentages went above 100% at 2 m, an edge effect of the short row, so only the direction is reliable.
-
-**14. Code changes tried on theory (still in the code, none proven)**
-- Voronoi's extra octaves guarded (own seed, warp, 20% blend), every type's extra octaves and Roughness given their own seed, and the extra octaves rotated (Quilez's matrix, lacunarity × 1.01). The pattern stayed after each.
-
-**15. Alt+click cliff row (`[TEMP B55]`)**
-- What: 21 heights across the cursor, about 320 m wide, with the drawn height, its patch depth and the coarse copy's height. In `logCliffRow`, `voxel/LandChunkCanvas.tsx`.
-- Found: so far only used incidentally (drawn and coarse agree within a few meters after the `[B63]` mirror fix). Still waiting to be used on the `[B55]` wall.
-
-**Untested leads, to check next session**
-
-*Each lead: the idea, the evidence for and against, the test step by step, what each result means, and the code involved. Every test needs Dana's go first, including log-only ones.*
-
-**Lead 1: the pattern depends on the patch's detail level**
-- Idea: each patch adds as many extra fine octaves as its own sample spacing allows (`octaveFade` with the patch's `latticeSpacing`, in `fbm3D`, `ridgedFbm3D` and the Musgrave loop of `heightmap.frag.glsl`). If the pattern comes from one particular fine octave, only patches deep enough to include it would show it, and the boundary between two depths would be a straight line with the pattern on one side only.
-- Evidence for: Dana's screenshot (2026-10-27 21:41, snow slope, Voronoi Manhattan Jitter 0.21) shows the dimples stopping at a straight vertical patch border, smooth on the left, dimpled on the right. The walker log showed depth 12 near the eye, so neighbors at depths 10 to 12 sit side by side.
-- Evidence against: none yet; not tested.
-- Test: on that kind of view, Alt+click once on the smooth side and once on the dimpled side, right next to the border. Each click prints `[TEMP pattern]` with the patch `depth`, `samples` and `patchMeters`. Paste both lines.
-- Reading the result: different depths, with the pattern on the deeper (or shallower) side, means the cause is an octave that only exists at some depths; then compute which octave index first appears at that depth from the layer's frequency and lacunarity. Same depth on both sides means this lead is wrong.
-- Code involved: `octaveFade`, `NYQUIST_FADE_MIN`/`MAX`, the `deepOn` octave loops in `shaders/heightmap/heightmap.frag.glsl`; `readPatchRow` in `voxel/ChunkPatchRenderer.ts` for the readout.
-
-**Lead 2: the slope calculation turns a tiny height ripple into a strong light pattern**
-- Idea: the lighting's slope (normal) comes from the height of the immediate neighbors, one texel apart (`heightfieldNormal` in `shaders/terrain/terrain.glsl`, step `texelStepUv`). A sawtooth of a few centimeters between samples becomes a large alternating slope, so the lighting shows a strong regular pattern even if the heights are almost flat.
-- Evidence for: the measured row (depth 10, 0.49 m samples) has a sample-to-sample sawtooth (lag-1 curvature correlation −0.58); the height steps between neighbors vary from +0.12 to −0.71 m on a gentle slope. Visible mostly where the ground is flat or bright (snow, the shore), where lighting differences show most.
-- Evidence against: none yet.
-- Test (log only): from the same `[TEMP pattern]` row, compute the slope with a 1-texel step and with a 3-texel step and compare how much each swings. Or, as a one-variable visual test, temporarily widen the slope step to 3 texels in `chunk.frag.glsl` and look at the same view.
-- Reading the result: if the pattern fades a lot with the wider step, the heights carry a tiny ripple and the slope magnifies it; the fix is then in the source of the ripple, and a wider slope step only as a sourced secondary measure. If nothing changes, this lead is wrong.
-- Code involved: `heightfieldNormal`, `texelStepUv`, `borderedTextureUv` in `shaders/terrain/terrain.glsl`; the call in `shaders/terrain/chunk.frag.glsl`.
-
-**Lead 3: the Hybrid fractal boosts the fine octaves**
-- Idea: Dana's layer uses the Octaves modifier with Fractal type Hybrid, offset 0.82, gain 1.70. In Blender's Hybrid multifractal (which our Musgrave loop follows) each octave is weighted by the signal of the previous ones times the gain; with gain above 1 the weight can stay at its maximum of 1 for every fine octave instead of shrinking, so the finest octaves (the ones near the sample limit) keep full strength.
-- Evidence for: the pattern survived every change made to the seeds, rotation and fade of the extra octaves; Hybrid's weighting happens after those. Gain 1.70 is high.
-- Evidence against: the pattern was also seen with other noise types, settings unknown (possibly not Hybrid).
-- Test: on the same view, switch Fractal type from Hybrid to plain fBm (Modifiers → Octaves), change nothing else, screenshot. Then back to Hybrid with gain 1.0, screenshot.
-- Reading the result: the pattern gone with fBm and with gain 1.0 means Hybrid's feedback is the cause; the fix is in how the extra fine octaves are weighted in the Hybrid branch of the Musgrave loop. Unchanged means this lead is wrong.
-- Code involved: the `fractalType` branch for hybrid multifractal (`signal`, `weight`, `gain`) in `shaders/heightmap/heightmap.frag.glsl`; Blender's `gpu_shader_material_tex_musgrave.glsl` as the source.
-
-**Lead 4: Multiply blend sharpens small dips into regular pits**
-- Idea: the layer's Blend mode is Multiply at Opacity 0.47. Multiplying a noise into the base turns small negative dips into proportionally deeper pits where the base is high, which on bright, flat ground can read as a regular grid of holes.
-- Evidence for: the "holes" are dark pits on high, smooth areas (snow).
-- Evidence against: there is only one layer, so Multiply has little base to multiply against; weak lead.
-- Test: Blend mode → Normal, nothing else changed, same view, screenshot.
-- Reading the result: pattern gone means `applyBlendMode`'s multiply path is involved. Unchanged means wrong.
-- Code involved: `applyBlendMode` in `shaders/heightmap/heightmap.frag.glsl`.
-
-**Lead 5: number precision at the finest octaves (sub-meter holes only)**
-- Idea: at walking scale the finest octaves are computed at coordinates in the millions, where 32-bit floats can only place a few positions per noise cell, making a staircase.
-- Evidence for: arithmetic: on a 1000 km planet, cells of about half a meter sit at coordinates around 2 million, about 4 to 8 positions per cell.
-- Evidence against: a float32 simulation of the Voronoi octave sum along a row did not reproduce the measured sawtooth, and a relative-to-center version changed nothing. But that simulation was simplified: plain fBm instead of Hybrid, no domain warp, an arbitrary spot on the sphere, numpy's float32 instead of the GPU's. So the negative result is weak.
-- Test (only if leads 1 to 4 come up empty, and with a go): repeat the simulation with Dana's exact settings (Hybrid, warp on, the clicked spot's real position from the Alt+click log), and compare with the measured row.
-- Code involved: `basePosition`, `cubeFacePoint`, `faceCoord` and the octave loops in `heightmap.frag.glsl`; `bakeRegionInto` in `map/heightmap.ts`.
-
-**Lead 6: Roughness's own octaves**
-- Idea: Roughness (`planetDetail`) adds fine octaves stepping by exactly 2 in frequency, all on axis-aligned lattices, and is faded out near sea level (`shoreFade`). Its lattices nest and could form a grid.
-- Evidence for: its octaves are not rotated (the rotation added for `[B66]` covers the layer's octaves only).
-- Evidence against: Dana reported the pattern near water, where Roughness is faded to nothing; but it was also seen on snow slopes, where Roughness is full.
-- Test: Roughness → 0 (right panel, Terrain), nothing else changed, same snow view, screenshot.
-- Reading the result: pattern gone on the snow means Roughness is involved there. Unchanged means wrong for that area.
-- Code involved: `planetDetail`, `DETAIL_BASE_FREQUENCY`, `DETAIL_SEED`, `shoreFade` in `heightmap.frag.glsl`; `detailAmount` in `planet/planetControls.ts`.
-
-**Order for next session**
-1. Lead 6, 3 and 4 first: one toggle each, no code, about a minute each.
-2. Then lead 1 (two Alt+clicks) and lead 2 (computed from the same readout).
-3. Lead 5 only if all of these come up empty.
-- Before any test: confirm the planet's Radius (it may still be 1000 km from the test; the planet's normal radius is 6000) and note the layer's full settings, so every screenshot is comparable.
-
-- 💡 Dana's softening idea (average out the holes, a Gaussian over about 0.5 m after each patch bake, like Gaea's Blur node) is verified on the measured row to remove the fine holes and keep the texture. A mask, not a root fix; proposed as an optional Soften control.
+**What was tried first and did not fix it**
+1. Changes to the extra fine octaves (own seeds, a small warp, rotated lattices) and to their fade limits, each on a theory and none measured. Removed.
+2. Measuring only the octaves finer than about 180 m from the chunk's center. Kept, the base map's own bake uses it, but the larger octaves still rounded.
+3. Smooth Voronoi (Quilez) on those octaves, then a 1 m Gaussian blur over every patch. Both only softened the staircase. Removed.
+- Ruled out by test along the way: shadows, Terrace, Jitter alone, patch borders, low-precision storage, the sample grid itself.
+- The lesson is now a working rule (`.claude/CLAUDE.md`, "How to fix bugs"): check a proposed mechanism against how established tools work before inventing one, and build only on a measured cause.
 
 ### [B67] From walk mode the water is barely visible · `minor`
 **🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`

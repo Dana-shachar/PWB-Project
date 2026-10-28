@@ -10,17 +10,15 @@
 > [!IMPORTANT]
 > **Start from here (2026-10-27 night, sixth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Last commit `80f5d70` (not pushed): soft planet glow and haze, layered hued chunk haze, two-toned clouds, wind to 40, walk-mode water rules (first version). **Uncommitted since, all in the working tree:** glow rebuilt as an edge-distance fade; planet haze as air thinning with height; the walk-mode ground mirror fix (tested) and the normal-walking water rule (tested); the never-under-water clamp (untested); Roughness moved next to Height in the right panel's Terrain section; the moon rebuilt in the No Man's Sky style with a Height slider (Dana: still not good, see below); the noise changes from the `[B66]` hunt (unproven, keep or revert is open). Three reference images added in `docs/references/`. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed: hot reload kept stale code twice today.
+> **State (2026-10-28).** `[B66]` fixed and committed: the land chunk bakes its own 4096 height map from the planet's noise and every close-up patch resamples it (see `ISSUES.md`). The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed.
 >
-> **Right now: `[B66]`, the regular pattern on the ground up close.** Its entry in `ISSUES.md` has every stage: what was checked and how, the measurements, the research, the code changed. Continue with its one-toggle-at-a-time list on the same view (Roughness, Domain warp, Octaves, Hybrid, Multiply), read only the code that toggle names, then propose. **No theories presented as causes; measure first.**
+> **Right now: the moon** (step 2 below), simple and quick (Dana, 2026-10-28).
 >
 > **Temporary diagnostics still in the code (remove when their bugs close):**
 > - `[TEMP water]` logs and the shore-search logs in `scene/walkMode.ts`; `[TEMP walk]` click logs there too.
-> - `[TEMP ground]` (detail under the walker, every 2 s) in `voxel/LandChunkCanvas.tsx`; `lastSampleDepth`, `lastTexelMeters`, `readPatchRow` in `voxel/ChunkPatchRenderer.ts`.
-> - Alt+click on the chunk: `[TEMP B55]` height row table and `[TEMP pattern]` raw patch row (`logCliffRow` in `LandChunkCanvas.tsx`).
+> - Alt+click on the chunk: the `[TEMP B55]` height row table (`logCliffRow` in `LandChunkCanvas.tsx`, `lastSampleDepth` in `ChunkPatchRenderer.ts`).
 >
 > **Open decisions for Dana**
-> - ❓ `[B66]`: keep or revert the unproven noise changes; whether to add Dana's softening as a Soften control.
 > - ❓ **Moon:** rebuild with the noise engine (Dana: "obviously use the engine"; a second `useNoiseLayers` stack and a second `HeightmapPipeline` baking a moon texture). Pick where its layers are edited: (a) an Edit texture button under Moon that switches the right panel, or (b) a Terrain | Moon switch in the layer panel. Also wanted: half fades into the sky, no halo or inner glow, two colors, a soft gradient. References: the No Man's Sky moons in `REFERENCES.md`.
 > - ❓ **Planet spin** (Dana's idea, proposed, not approved): spin speed, axis tilt 0 to 180° (Uranus about 98°), axis direction; planet, clouds and haze turn, sun stays, chunk doesn't move.
 > - ❓ **Endless-looking chunk:** (a) fade its edges into the haze, now; (b) real terrain to the horizon at lower detail, later.
@@ -58,6 +56,8 @@
 > - 📌 **Deploy host,** if there is one: set the six `VITE_FIREBASE_*` values there.
 > - 📌 **Before submitting for class:** add a copy of the user-scoped `ui-design` skill to the repo, placement Dana's call.
 > - ⏸️ **Run instructions** belong in the final README the syllabus requires.
+> - 📌 **README opening** (Dana, 2026-10-28): the README opens with an intro to the project, its concept and its inspiration. A placeholder section waits at the top for it.
+> - 📌 **Doc navigation** (Dana, 2026-10-28): every doc opens with a row of links to the other docs, for easy review.
 >
 > **Known risks.** No GLSL compiler on this machine: shader changes are only checked on screen, so a blank view usually means a shader compile error in the console. The planet's cloud shader samples noise up to about 18 times a pixel; lower Detail if it lags. Many atmosphere and water values are inferred and tunable (marked in the code). Planet waves use meter-scale coordinates across the whole planet, so very close up they may show float precision blockiness.
 

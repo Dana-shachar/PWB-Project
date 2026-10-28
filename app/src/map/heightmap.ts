@@ -314,6 +314,10 @@ export interface HeightmapParams {
 // the same way a subdividing patch is described, so per-patch terrain can
 // reuse this untouched. `face` indexes CUBE_FACES in planet/mesh.ts, and
 // `resolution` is the baked texture's size per axis.
+// [B66] Texels across the chunk's base map (height only, about 64 MB): about 4 m apart on a 16 km chunk.
+const CHUNK_BASE_SAMPLES = 4096;
+const CHUNK_BASE_BORDER = 2; // texels past each edge, so the cubic read at the chunk's rim has real ground
+
 export interface RegionParams {
   layers: NoiseLayer[];
   face: number;
@@ -322,6 +326,10 @@ export interface RegionParams {
   resolution: number;
   // Texels baked past each edge (a patch's border), default 0.
   borderTexels?: number;
+  // A land chunk's center on the same face: its fine octaves are measured from here ([B66]). Unset for the planet.
+  localOrigin?: THREE.Vector2;
+  // A land chunk patch: resample the chunk base map (ensureChunkBase) instead of running the layers ([B66]).
+  fromChunkBase?: boolean;
 }
 
 // Raw single-channel elevation, real unclamped height rather than a display
@@ -409,6 +417,15 @@ export class HeightmapPipeline {
   private activeStroke: { layerId: string; baseIndex: number; points: UV[]; radius: number; feather: number; brushValue: number } | null;
   // One level of the min/max reduction pyramid — reused every pass/every
   // call, only its uniforms change. See getRegionMinMaxAsync().
+  // [B66] The land chunk's own height map: the whole chunk baked once at high resolution, height only. Chunk patches
+  // resample it (chunkPatchMaterial) instead of recomputing the layers, which round to about 0.6 m up close.
+  private chunkPatchMaterial: THREE.ShaderMaterial;
+  private chunkBaseTarget: THREE.WebGLRenderTarget | null = null;
+  private chunkBase: { face: number; min: THREE.Vector2; max: THREE.Vector2; origin: THREE.Vector2; spacing: number } | null = null;
+  private chunkBaseKey = '';
+  private chunkBaseLayers: NoiseLayer[] | null = null;
+  private paintRevision = 0;
+  private planetRadiusMeters = 6_000_000;
   private reduceScene: THREE.Scene;
   private reduceCamera: THREE.OrthographicCamera;
   private reduceMaterial: THREE.ShaderMaterial;
@@ -422,6 +439,41 @@ export class HeightmapPipeline {
   private histogramCamera: THREE.Camera;
   private histogramMaterial: THREE.ShaderMaterial;
   private readonly histogramSampleCount: number;
+
+  // [B66] Bakes the land chunk's base map when the chunk, layers, paint or planet settings changed since the last one.
+  ensureChunkBase(renderer: THREE.WebGLRenderer, layers: NoiseLayer[], face: number, min: THREE.Vector2, max: THREE.Vector2, origin: THREE.Vector2): void {
+    const key = [face, min.x, min.y, max.x, max.y, this.detailAmount, this.shoreSeaLevel, this.planetRadiusMeters, this.paintRevision].join(',');
+    if (key === this.chunkBaseKey && layers === this.chunkBaseLayers && this.chunkBaseTarget) return;
+    const size = CHUNK_BASE_SAMPLES + 2 * CHUNK_BASE_BORDER;
+    if (!this.chunkBaseTarget) {
+      this.chunkBaseTarget = new THREE.WebGLRenderTarget(size, size, {
+        type: THREE.FloatType,
+        format: THREE.RedFormat,
+        minFilter: THREE.NearestFilter, // read only at texel centers, by the cubic read in heightmap.frag.glsl
+        magFilter: THREE.NearestFilter,
+      });
+    }
+    this.material.uniforms.uElevationInRed.value = 1;
+    this.bakeRegionInto(renderer, { layers, face, min, max, resolution: size, borderTexels: CHUNK_BASE_BORDER, localOrigin: origin }, this.chunkBaseTarget);
+    this.material.uniforms.uElevationInRed.value = 0;
+    // The map's first and last texel centers, the same widening bakeRegionInto applies.
+    const spacingX = (max.x - min.x) / (CHUNK_BASE_SAMPLES - 1);
+    const spacingY = (max.y - min.y) / (CHUNK_BASE_SAMPLES - 1);
+    this.chunkBase = {
+      face,
+      min: new THREE.Vector2(min.x - CHUNK_BASE_BORDER * spacingX, min.y - CHUNK_BASE_BORDER * spacingY),
+      max: new THREE.Vector2(max.x + CHUNK_BASE_BORDER * spacingX, max.y + CHUNK_BASE_BORDER * spacingY),
+      origin: origin.clone(),
+      spacing: spacingX,
+    };
+    this.chunkBaseKey = key;
+    this.chunkBaseLayers = layers;
+  }
+
+  // Part of the chunk base map's key, so a radius change re-bakes it.
+  setPlanetRadiusMeters(meters: number): void {
+    this.planetRadiusMeters = meters;
+  }
 
   setDetailAmount(amount: number): void {
     this.detailAmount = amount;
@@ -512,11 +564,27 @@ export class HeightmapPipeline {
         // correct for sampling each texel at its center rather than its
         // edge, see heightmap.frag.glsl and bakeRegionInto() below, [B28].
         uRegionSamples: { value: 65 },
+        uLocalDetailOn: { value: 0 },
+        uLocalMin: { value: new THREE.Vector2() },
+        uLocalMax: { value: new THREE.Vector2() },
+        uChunkBase: { value: null },
+        uChunkBaseMin: { value: new THREE.Vector2() },
+        uChunkBaseMax: { value: new THREE.Vector2() },
+        uChunkBaseSamples: { value: 1 },
+        uChunkBaseSpacing: { value: 0 },
+        uElevationInRed: { value: 0 },
         ...paintTextureUniforms,
       },
     });
     const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.material);
     this.scene.add(quad);
+    // Same shader and the same uniforms, compiled without paint so the base map gets a texture slot ([B66]).
+    this.chunkPatchMaterial = new THREE.ShaderMaterial({
+      vertexShader: heightmapBrushVertexGlsl,
+      fragmentShader: noiseGlsl + heightmapFragmentGlsl,
+      defines: { CHUNK_PATCH_PASS: '' },
+      uniforms: this.material.uniforms,
+    });
 
     this.strokePathScene = new THREE.Scene();
     this.strokePathCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -538,6 +606,7 @@ export class HeightmapPipeline {
     this.strokePathScene.add(strokePathQuad);
 
     this.activeStroke = null;
+
 
     this.reduceScene = new THREE.Scene();
     this.reduceCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -652,6 +721,7 @@ export class HeightmapPipeline {
   ): void {
     const pair = this.paintTargets.get(layerId);
     if (!pair || !this.activeStroke || this.activeStroke.layerId !== layerId) return;
+    this.paintRevision++; // the chunk base map holds paint too, so it re-bakes
 
     if (this.activeStroke.points.length < MAX_STROKE_POINTS) {
       this.activeStroke.points.push(uv);
@@ -851,19 +921,39 @@ export class HeightmapPipeline {
     (uniforms.uRegionMin.value as THREE.Vector2).set(min.x, min.y);
     (uniforms.uRegionMax.value as THREE.Vector2).set(max.x, max.y);
     uniforms.uRegionSamples.value = target.width;
+    const origin = params.localOrigin;
+    uniforms.uLocalDetailOn.value = origin ? 1 : 0;
+    // Subtracted here in 64-bit, so the shader only ever sees small numbers.
+    if (origin) {
+      (uniforms.uLocalMin.value as THREE.Vector2).set(min.x - origin.x, min.y - origin.y);
+      (uniforms.uLocalMax.value as THREE.Vector2).set(max.x - origin.x, max.y - origin.y);
+    }
     // Octaves finer than this grid can show are faded out (heightmap.frag.glsl).
     uniforms.uSampleSpacing.value = (max.x - min.x) / Math.max(1, target.width - 1);
     uniforms.uDetailAmount.value = this.detailAmount;
     uniforms.uShoreEnabled.value = this.shoreSeaLevel === null ? 0 : 1;
     uniforms.uShoreSeaLevel.value = this.shoreSeaLevel ?? 0;
 
+    const base = params.fromChunkBase && this.chunkBase && this.chunkBase.face === face ? this.chunkBase : null;
+    const quad = this.scene.children[0] as THREE.Mesh;
+    if (base && origin && this.chunkBaseTarget) {
+      uniforms.uChunkBase.value = this.chunkBaseTarget.texture;
+      (uniforms.uChunkBaseMin.value as THREE.Vector2).set(base.min.x - origin.x, base.min.y - origin.y);
+      (uniforms.uChunkBaseMax.value as THREE.Vector2).set(base.max.x - origin.x, base.max.y - origin.y);
+      uniforms.uChunkBaseSamples.value = this.chunkBaseTarget.width;
+      uniforms.uChunkBaseSpacing.value = base.spacing;
+      quad.material = this.chunkPatchMaterial;
+    }
     renderer.setRenderTarget(target);
     renderer.render(this.scene, this.camera);
     renderer.setRenderTarget(null);
+    quad.material = this.material;
+    uniforms.uChunkBase.value = null;
     // Left off so the next whole-globe render() isn't silently still in
     // region mode (or fading octaves) if it forgets to reset them.
     uniforms.uRegionMode.value = 0;
     uniforms.uSampleSpacing.value = 0;
+    uniforms.uLocalDetailOn.value = 0;
   }
 
   // Reused while the size matches, so panning or re-meshing doesn't
@@ -1321,6 +1411,8 @@ export class HeightmapPipeline {
     this.paintPlaceholder.dispose();
     this.strokePathMaterial.dispose();
     this.strokePathScene.remove(this.strokePathScene.children[0]);
+    this.chunkPatchMaterial.dispose();
+    this.chunkBaseTarget?.dispose();
     this.reduceMaterial.dispose();
     this.reduceScene.remove(this.reduceScene.children[0]);
     this.histogramMaterial.dispose();

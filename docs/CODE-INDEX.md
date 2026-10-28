@@ -84,7 +84,7 @@
 
 **map/heightmap.ts**
 - What it is: the layer type, its migrations, and the pipeline that bakes layers into a heightmap on the GPU.
-- Key names: `NoiseLayer`, `NOISE_TYPE_OPTIONS`, `FRACTAL_TYPE_OPTIONS`, `VORONOI_DISTANCE_OPTIONS`, `BLEND_MODE_OPTIONS`, `hasMask`, `quantileOf`, `createDefaultLayer`, `migrateLegacyLayers`, `HeightmapPipeline` (`beginStroke`, `endStroke`, `replayLayerHistory`, `bakeRegionToTarget`, `getRegionElevationData`, `setDetailAmount`, `bakeRegionInto`, `maskSortedValues`, `resolveMaskBand`), `syncLayerUniforms`.
+- Key names: `NoiseLayer`, `NOISE_TYPE_OPTIONS`, `FRACTAL_TYPE_OPTIONS`, `VORONOI_DISTANCE_OPTIONS`, `BLEND_MODE_OPTIONS`, `hasMask`, `quantileOf`, `createDefaultLayer`, `migrateLegacyLayers`, `HeightmapPipeline` (`beginStroke`, `endStroke`, `replayLayerHistory`, `bakeRegionToTarget`, `getRegionElevationData`, `setDetailAmount`, `setPlanetRadiusMeters`, `bakeRegionInto`, `ensureChunkBase`: the land chunk's own 4096 height map, `chunkPatchMaterial`: the bake compiled as `CHUNK_PATCH_PASS` to resample it, `maskSortedValues`, `resolveMaskBand`), `RegionParams` (`localOrigin`, `fromChunkBase`), `CHUNK_BASE_SAMPLES`, `syncLayerUniforms`.
 - Talks to: `shaders/heightmap/heightmap.frag.glsl`, `SceneCanvas`, the patch renderer.
 
 **map/noiseRanges.ts**
@@ -188,7 +188,7 @@
 
 **scene/SceneCanvas.tsx**
 - What it is: the planet view and its imperative handle.
-- Key names: `SceneCanvas`, `SceneCanvasHandle` (incl. `bakePatchInto`), `updateElevationRange`, `replayAndRecomposite`, `buildWireframeOverlay`.
+- Key names: `SceneCanvas`, `SceneCanvasHandle` (incl. `bakePatchInto`, which first calls `ensureChunkBase`), `chunkCenter`, `updateElevationRange`, `replayAndRecomposite`, `buildWireframeOverlay`.
 - Talks to: `heightmap.ts`, `PlanetPatchRenderer`, `sharedViewportRenderer`.
 
 **scene/sharedViewportRenderer.ts**
@@ -226,7 +226,7 @@
 
 **voxel/ChunkPatchRenderer.ts**
 - What it is: bakes, builds and swaps the chunk's patches; each patch material shares the chunk material's uniforms.
-- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`, `fitBounds`, `sampleHeight`: the drawn ground height read from the deepest shown patch's bake), `BakeChunkPatch`.
+- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`, `fitBounds`, `sampleHeight`: the drawn ground height read from the deepest shown patch's bake), `BakeChunkPatch` (patch, target, root).
 - Talks to: `bakePatchInto` on `SceneCanvasHandle`, `chunkPatchMesh.ts`.
 
 **voxel/chunkPatchMesh.ts**
@@ -312,7 +312,7 @@
 
 **heightmap/** (`heightmap.frag.glsl`, `noise.glsl`, `heightmapBrush.vert.glsl`, `strokePath.frag.glsl`, `elevationHistogram`, `minMaxReduce.frag.glsl`)
 - What it is: the height bakes, the noise functions, brush strokes and the height statistics.
-- Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `planetDetail`, `DETAIL_BASE_FREQUENCY`, `shoreFade`, `NYQUIST_FADE_MIN`/`MAX`; unproven `[B66]` changes: `isDeepCellOctave`, `deepCellOctave`, `octaveSeed`, `nextOctavePoint`, `OCTAVE_ROTATION`; in `noise.glsl`: `hash1`, `perlinNoise3D`, `simplexNoise3D`, `voronoiNoise3D`, `voronoiMetric`, `ridge`, `terrace`.
+- Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `planetDetail`, `DETAIL_BASE_FREQUENCY`, `shoreFade`, `NYQUIST_FADE_MIN`/`MAX`; chunk-local fine octaves: `useLocalDetail`, `LOCAL_DETAIL_SCALE`, `gLocalDelta`; the chunk patch pass (`CHUNK_PATCH_PASS`): `chunkBaseElevation`, `bsplineWeights`; in `noise.glsl`: `hash1`, `perlinNoise3D`, `simplexNoise3D`, `voronoiNoise3D`, `voronoiMetric`, `ridge`, `terrace`.
 
 **terrain/** (`terrain.glsl`, `planetPatch.frag.glsl`, `chunk.frag.glsl`, `chunk.vert.glsl`, `vertex.glsl`, `fragment.glsl`)
 - What it is: the land surfaces (planet patches, chunk, old globe) and the pieces they share. Lighting is in world space; `heightfieldNormal` always faces outward (`faceforward`).
