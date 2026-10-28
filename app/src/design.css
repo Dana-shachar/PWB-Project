@@ -1287,6 +1287,15 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   opacity: 0.6;
 }
 
+/* Note: a short dimmed line of text under a control, saying what something is or its state rather than offering a
+   control (e.g. what a moon's surface is made of). The general form of .erosion-note above, same look. */
+.ui-note {
+  margin: 0;
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  opacity: 0.6;
+}
+
 /* What the last erosion run measured (ui/panels/ErosionPanel.tsx). A label
    on the left and its value on the right, the same two-column shape the
    slider rows read as, so it sits in the panel rather than on top of it. */
@@ -1730,8 +1739,22 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   border: 0.25px solid var(--color-input-stroke);
   border-radius: 2px;
 }
-.noise-add-layer-btn:hover {
+.noise-add-layer-btn:hover:not(:disabled) {
   background: rgba(242, 242, 247, 0.25); /* one step up from --color-input-fill's 0.15 alpha */
+}
+/* Pressed: one step back down, below the resting fill, so a click reads. */
+.noise-add-layer-btn:active:not(:disabled) {
+  background: rgba(242, 242, 247, 0.08);
+}
+/* Focus: the accent border, as every other control (no browser outline). */
+.noise-add-layer-btn:focus-visible {
+  outline: none;
+  border-color: var(--color-accent);
+}
+/* Disabled: the same opacity dip as the panel's text buttons, no hover or press. */
+.noise-add-layer-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 /* A row of buttons filling the panel's width evenly, with gaps — e.g. the

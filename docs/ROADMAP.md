@@ -27,7 +27,6 @@
 > - ❓ **Endless-looking chunk:** (a) fade its edges into the haze, now; (b) real terrain to the horizon at lower detail, later.
 > - ❓ Swirl as Musgrave's Coriolis twist (researched, waiting).
 > - 📌 The Texture slider's hover text still says "above 1 the pattern grows stronger"; Texture now scales the contrast from 0. Rewording waits for Dana's yes.
-> - 📌 The small text under the moon's Randomize reuses `.erosion-note`; a general design-system name for a dimmed note is Dana's call.
 >
 > **Working rules (Dana; most are saved as memories).** A numbered plan and an explicit go before any change (temporary console logs excepted, `console-logs-need-no-permission`); an answer or "ok" to a question is not a go (`strict-confirm-before-acting`; Dana, 2026-10-27: unapproved actions will be blocked). Measure before naming a cause, and say plainly how sure a claim is. Build new visuals on the app's own engines, never hand-rolled or copied (`reuse-app-systems`). Fix structural bugs at the root. Sourced methods only, verified by reading the source; say when only a summary was read. Docs change only in the docs pass that goes with a commit, recording the final result (`docs-only-final`). Check Dana's proposed mechanism against established tools before inventing one, and build only on a measured cause (`.claude/CLAUDE.md`, "How to fix bugs"). No attribution anywhere. No agents without a yes and a cost; page readers are reported with their tokens.
 >

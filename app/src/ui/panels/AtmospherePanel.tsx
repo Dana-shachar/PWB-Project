@@ -80,7 +80,7 @@ export function AtmospherePanel({ atmosphere, onAtmosphereChange }: AtmospherePa
           <Slider label="Halo" value={atmosphere.moonHalo} onChange={(moonHalo) => onAtmosphereChange({ moonHalo })} min={0} max={3} step={0.01} precision={2} disabled={moonOff} description="A soft light around each moon. Meant to stay subtle; the sky's haze softens it further." />
           <Slider label="Inner glow" value={atmosphere.moonGlow} onChange={(moonGlow) => onAtmosphereChange({ moonGlow })} min={0} max={3} step={0.01} precision={2} disabled={moonOff} description="A soft brightening just inside each moon's lit edge." />
           <Toggle label="Lock colors" value={atmosphere.moonColorsLocked} onChange={(moonColorsLocked) => onAtmosphereChange({ moonColorsLocked })} description="Keeps every moon's colors when Randomize picks new moons." />
-          <p className="erosion-note">{describeMoonLayers(moon.layers)}</p>
+          <p className="ui-note">{describeMoonLayers(moon.layers)}</p>
           <Slider label="Size" unit="°" value={moon.size} onChange={(size) => updateMoon({ size })} min={1} max={90} step={0.5} precision={1} disabled={moonOff} description="How large this moon looks, in degrees across." />
           <Slider label="Height" unit="°" value={moon.height} onChange={(height) => updateMoon({ height })} min={0} max={90} step={1} precision={0} disabled={moonOff} description="How high this moon sits above the horizon, in degrees." />
           <Slider label="Direction" unit="°" value={moon.azimuth} onChange={(azimuth) => updateMoon({ azimuth })} min={0} max={360} step={1} precision={0} disabled={moonOff} description="Which way this moon sits around the horizon, in compass degrees." />
