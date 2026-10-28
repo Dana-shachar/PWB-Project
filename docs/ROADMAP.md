@@ -12,9 +12,21 @@
 >
 > **State.** Everything is committed and pushed: stage 1 of the land shader layers (colored shadows: `fillLight` in `shaders/terrain/landLayers.glsl`, `fillColorFor` in `scene/fillLight.ts`), the planet flicker fix (`[B72]`), walk mode's long-press, Speed slider and eye floor (`[B73]`), the Scene section grouped, and the terrain-look references. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
 >
-> **Right now:** the Shadow hue control becomes a hue slider that shows its color (Dana chose this 2026-10-28 over a color picker, since it keeps the shadows following the sky). It is a new design-system component: plan its states, icon and `ui-design` skill entry first, wait for Dana's go. Then stage 2, slope rock (plan under step 3 below).
+> **Right now:** the Shadow hue control becomes a hue slider that shows its color (Dana chose this 2026-10-28 over a Shadow color picker, since it keeps the shadows following the sky). Spec: the track is a rainbow hue gradient, and a small swatch shows the resulting shadow color (`fillColorFor`'s output, so it changes with the sky too). It is a new design-system component: plan its states (default, hover, active, disabled, focus), icon and `ui-design` skill entry first, wait for Dana's go. Then stage 2, slope rock.
+>
+> **Stage 2 plan, as given to Dana (needs her go before building):**
+> 1. `shaders/terrain/landLayers.glsl`: add `landSurfaceColor(rampColor, normal, up, elevationFraction)`. Rock blends in by `1 − dot(normal, up)` through a `smoothstep`, colored by the rock ramp by height (`terrainRampColor`, reused). Optional height term so flat summits can be rocky.
+> 2. `planetPatch.frag.glsl` and `chunk.frag.glsl`: call it right after the ramp color.
+> 3. `planet/planetControls.ts`: `rockStops`, `slopeStart`, `slopeSoftness` in `PlanetSettings`, plus `migrateRock` for old saves (these are saved, unlike Scene settings).
+> 4. `planet/planetPatchMesh.ts` and `voxel/LandChunkCanvas.tsx`: uniforms `uRockColors`, `uRockPositions`, `uRockCount`, `uSlopeStart`, `uSlopeSoftness`, filled through `buildPatchRampArrays`, set only on change.
+> 5. `ui/Panel.tsx`: a "Rock" group in the Color section: a second `ColorRampEditor` plus Slope and Softness sliders.
+> - Test: the chunk on a mountain spot (cliffs turn to rock, Slope moves where it starts); the planet zoomed into a range (less rock than the chunk, since the planet draws coarser shapes).
+>
+> **Open questions for later stages:** stage 3 measures first that the height texture's blue channel survives every texture the land reads (planet patches, the chunk's 4096 map, the patch resample), or it is re-planned; stage 4, whether the palette rule gets its own control (a "Rule" select next to Randomize colors) or only works inside Randomize; stage 5, live or baked ambient occlusion.
 >
 > **Not retested by Dana:** `[B73]`'s eye floor (walk uphill at Speed ×5; no clipping expected). Stage 1's brighter fill (scaled to white's luminance, Ambient light up to 1): Dana liked the colors, wants it brighter; check after the hue slider.
+> - ⚠️ The luminance scaling can push shadows strongly toward a very saturated sky color (a pure blue sky makes very blue shadows).
+> - Expected, not a bug: steep shaded faces get half the fill of flat ground (Quilez's sky term), so cliffs in shadow read darker.
 >
 > **Agreed, queued:**
 > - 📌 Water reads as water from walk mode: Fresnel on the chunk water's opacity, sky reflection and sun highlight (`[B67]`, `waterFresnel` exists in `water.glsl`), after the land shader plan.
