@@ -8,16 +8,20 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-28 evening, eighth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-10-28 night, ninth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Everything from today is committed and pushed: `[B66]` (the chunk's own 4096 height map, also feeding the water and shadows), the moons (`[S44]`), tides, the autosave fix (`[B70]`), the `Dial` component, *Everything* in the references. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
+> **State.** Everything is committed and pushed: stage 1 of the land shader layers (colored shadows: `fillLight` in `shaders/terrain/landLayers.glsl`, `fillColorFor` in `scene/fillLight.ts`), the planet flicker fix (`[B72]`), walk mode's long-press, Speed slider and eye floor (`[B73]`), the Scene section grouped, and the terrain-look references. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
 >
-> **Right now:** land shader layers, stage 1 (colored shadows) is built and Dana likes the colors; its Shadow hue control still needs a hue slider that shows the color (a new design-system component, plan first). Then stage 2, slope rock. `[B71]` walk mode is deferred (Dana, 2026-10-28).
+> **Right now:** the Shadow hue control becomes a hue slider that shows its color (Dana chose this 2026-10-28 over a color picker, since it keeps the shadows following the sky). It is a new design-system component: plan its states, icon and `ui-design` skill entry first, wait for Dana's go. Then stage 2, slope rock (plan under step 3 below).
+>
+> **Not retested by Dana:** `[B73]`'s eye floor (walk uphill at Speed ×5; no clipping expected). Stage 1's brighter fill (scaled to white's luminance, Ambient light up to 1): Dana liked the colors, wants it brighter; check after the hue slider.
 >
 > **Agreed, queued:**
 > - 📌 Water reads as water from walk mode: Fresnel on the chunk water's opacity, sky reflection and sun highlight (`[B67]`, `waterFresnel` exists in `water.glsl`), after the land shader plan.
-> - 📌 Moon look (Dana, 2026-10-28, "good enough" with room to improve): a more intense glow, less halo distance, more inner glow. A six-constant plan for `drawMoon` waits for Dana's go.
-> - 📌 Dana's 10 terrain-look reference images (No Man's Sky, Sable, Gris, Monument Valley) go into `docs/references/` and a "Terrain shading look" group in `REFERENCES.md`; the images are in the 2026-10-28 chat, not yet saved.
+> - 📌 Moon look (Dana, 2026-10-28, "good enough" with room to improve): a more intense glow, less halo distance, more inner glow. A plan waits for Dana's go: in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`), `MOON_HALO_STRENGTH` 0.6 to 1.0, `MOON_HALO_MIN_SHARE` 0.17 to 0.10, `MOON_HALO_SHARE_PER_UNIT` 0.33 to 0.20, `MOON_HALO_MIN_ANGLE` 0.03 to 0.02, `MOON_GLOW_SHARE_PER_UNIT` 0.12 to 0.25, `MOON_GLOW_STRENGTH` 0.8 to 1.2; and maybe reword Halo's hover text ("meant to stay subtle").
+> - 💡 From Quilez's rig, not planned: a warm bounce light opposite the sun (brightens steep shaded faces), and colored shadow edges.
+>
+> **Interaction notes (Dana, 2026-10-28).** Dana uses a trackpad, no mouse: a two-finger scroll still sends wheel events, which change walk speed (`travelScale`). Keep chat answers short and precise: no repeated questions she already answered, exact token counts (an estimate is labeled as one), and logs are added without asking.
 >
 > **Moons, how they stand** (so tuning doesn't restart from zero): the target spec Dana approved, built in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`): color clearly visible and never bleached by the glow; texture as gentle tone; a full moon solid to its edge; the shadow (Crescent) dissolving fully into the sky, with no outline; one rounded glow across the edge, lit side only (all round at Crescent 0); Texture 0 translucent, 1 solid, 2 strongest; split toning (Second color the darks by multiply, Color the brights by screen). Change only what Dana approves: tuning by screenshot made colors swing neon and pale.
 >

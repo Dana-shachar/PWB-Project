@@ -105,6 +105,26 @@
 - The moon style Dana wants, a mix of a flat glowing disc and a textured planet: a thin bright rim along the edge, strongest on the sun's side; washed toward the sky color so the sky shows through; bumpy, cracked relief that catches the light; soft, low-contrast lighting; high in the sky. Several bodies of different sizes and a ringed planet (image 2) are for planets in the sky later.
 - ![](references/nms-moon-rim.png) ![](references/nms-ringed-moons.png) ![](references/nms-textured-moon.png)
 
+### Terrain shading look
+
+*Dana's reference images for the land shader layers, 2026-10-28.*
+
+**No Man's Sky, terrain color per planet** · `reference`
+- Terrain color sets each planet apart: one dominant hue per world, with accents by rule. Dana finds the colors a bit too strong, which is where the softness of Gris and Sable comes in.
+- ![](references/nms-planet-collage.png) ![](references/nms-red-volcanoes.png) ![](references/nms-red-plains.png) ![](references/nms-orange-haze.png)
+
+**Sable, layered haze** · `reference`
+- Gentle, overlaid landscapes: haze and distance coloring stack the land in soft layers.
+- ![](references/sable-pink-desert.png) ![](references/sable-violet-cliffs.png)
+
+**Gris, gentle layers** · `reference`
+- The gentle, overlaid style of the landscape, not its hand-painted watercolor technique.
+- ![](references/gris-red-mountains.png)
+
+**Monument Valley, unexpected shading colors** · `reference`
+- Shadow colors that are harmonious yet unexpected set the scene. Monument Valley picks them by hand; here they come from a procedural rule (the Shadow hue, then the palette stage).
+- ![](references/monument-valley-palette.png) ![](references/monument-valley-fog.png) ![](references/monument-valley-violet-shadows.png)
+
 ---
 
 ## ⚙️ Computational
