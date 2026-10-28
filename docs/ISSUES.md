@@ -15,7 +15,7 @@
 🟡 Partial   22
 ❓ Decision   1
 📋 Tracked    4
-✅ Fixed     33
+✅ Fixed     35
 ```
 
 <details>
@@ -329,6 +329,12 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 *How surfaces are shaded.*
 
+### [B72] The planet flickered while dragging a light slider · `wrong but workable`
+**✅ Fixed:** 2026-10-28 · **Found:** 2026-10-28 · **Where:** `scene/SceneCanvas.tsx`
+- Dana: the planet view flickered while dragging Ambient light, Wrap, Light elevation or the Shine sliders; the chunk did not.
+- Cause, measured: an ordering bug. Each slider rerun set the shared light to its raw direction, and the next frame's haze and clouds read it before it was turned to follow the camera, so for one frame they were lit 0.806 rad (46°) off. An A/B test with the old ambient ruled out the new colored fill.
+- Fixed: each frame turns the light first, before anything reads it, and the sliders set only the raw base direction.
+
 ### [B06] Terrain bumps didn't show in lighting · `wrong but workable`
 **✅ Fixed:** 2026-09-16 · **Found:** 2026-09-16
 
@@ -438,6 +444,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
   5. `[TEMP water] start` and `shore try`: each attempt of the shore search. Found: candidates rising level by level; once the attempts ran out and the walker was put back in the water (that fallback now keeps the walker in place).
   6. After the mirror fix: the grid gap is 0 to 2 m everywhere.
 - The water seen from walk mode, the straight shoreline and the color line at the shore are their own entries: `[B67]`, `[B68]`, `[B69]`.
+- 🧭 Dana, 2026-10-28: click-to-walk is replaced by long-press to walk, so the click pick (log 1's misses) is gone.
 
 ### [B62] Every slider lags · `wrong but workable`
 **✅ Fixed 2026-10-26, Dana: "good enough"** · **Where:** `scene/SceneCanvas.tsx`, `map/heightmap.ts`, `planet/planetPatchMesh.ts`, `planet/PlanetPatchRenderer.ts`
@@ -606,8 +613,14 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Fixed: all three are on the list now.
 
 ### [B71] After clicking a setting, walk mode sometimes doesn't respond · `wrong but workable`
-**🔴 Open** · **Found:** 2026-10-28 · **Where:** `scene/walkMode.ts` (suspected)
+**🔴 Open, ⏸️ deferred (Dana, 2026-10-28)** · **Found:** 2026-10-28 · **Where:** `scene/walkMode.ts` (suspected)
 - Dana: walking stops answering the keys after clicking a control in the panel. Not measured; the guess is that the clicked control keeps keyboard focus. Next: log where the walking keys land (a temporary log in `handleKeyDown`).
+
+### [B73] Walk mode's eye sank into the ground after a sudden rise · `wrong but workable`
+**✅ Fixed:** 2026-10-28 · **Found:** 2026-10-28 · **Where:** `scene/walkMode.ts`
+- Dana: at high walk speed, walking uphill clipped into the hill.
+- Cause, measured: the eye height eases toward the ground at a fixed rate, so any fast rise left it under the ground. The log showed 19.15 m below after a 20.8 m shore move, catching up over about 12 frames.
+- Fixed: the eye never goes below the ground (or the sea) plus 0.5 m; the smoothing still eases it down. Not yet retested by Dana.
 
 ### [B67] From walk mode the water is barely visible · `minor`
 **🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`

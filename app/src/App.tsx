@@ -138,6 +138,8 @@ function App() {
       <Panel
         ambientLight={sceneControls.ambientLight}
         onAmbientLightChange={sceneControls.setAmbientLight}
+        shadowHue={sceneControls.shadowHue}
+        onShadowHueChange={sceneControls.setShadowHue}
         lightDirX={sceneControls.lightDirX}
         onLightDirXChange={sceneControls.setLightDirX}
         lightFollowsCamera={sceneControls.lightFollowsCamera}
@@ -269,6 +271,7 @@ function App() {
                 maxErrorPixels={planetControls.effectiveMaxErrorPixels}
                 baseColor={planetControls.baseColor}
                 ambientLight={sceneControls.ambientLight}
+                shadowHue={sceneControls.shadowHue}
                 lightDirX={sceneControls.lightDirX}
                 lightDirY={sceneControls.lightDirY}
                 lightDirZ={sceneControls.lightDirZ}
@@ -308,6 +311,7 @@ function App() {
                 sharedRenderer={sharedViewportRenderer}
                 geometry={landChunk.geometry}
                 ambientLight={sceneControls.ambientLight}
+                shadowHue={sceneControls.shadowHue}
                 lightDirX={sceneControls.lightDirX}
                 lightDirY={sceneControls.lightDirY}
                 lightDirZ={sceneControls.chunkLightDirZ}

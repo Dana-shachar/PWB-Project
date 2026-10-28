@@ -170,6 +170,19 @@
 - Used for the land chunk's own diffuse term (`shaders/chunk.frag.glsl`): it's a flat patch always facing one fixed direction, so a grazing or unfavorable light angle can leave it looking fully unlit with plain Lambert, this softens that without overriding any of Dana's own lighting controls.
 - *[Half Lambert, Valve Developer Community](https://developer.valvesoftware.com/wiki/Half_Lambert) · [Mitchell, "Shading in Valve's Source Engine," SIGGRAPH 2006](https://advances.realtimerendering.com/s2006/Mitchell-ShadingInValvesSourceEngine.pdf). Verified 2026-10-20.*
 
+**Outdoor three-light rig, for colored shadows** · Quilez, three.js · `method used`
+- The land's ambient is Quilez's sky fill: one light straight down, `clamp(0.5 + 0.5 * nor.y)`, tinted, so shadows take the sky's color. three.js's hemisphere light (`getHemisphereLightIrradiance`) is the same weighting with a black ground.
+- Also from the article, for the coming stages: ambient occlusion only on the fill lights, never the sun; a warm bounce light opposite the sun at about 0.3; colored shadow edges by `pow(shadow, vec3(1.0, 1.2, 1.5))`; a color-rich fog rather than a flat one.
+- *[Quilez, outdoor lighting](https://iquilezles.org/articles/outdoorslighting/) (text pasted by Dana; the page would not load for fetching) · three.js `lights_pars_begin.glsl.js`, read in `node_modules`. Read 2026-10-28.*
+
+**Cosine palettes** · Quilez · `considered`, for the palette stage
+- `color(t) = a + b · cos(2π(c · t + d))`: `a` and `b` set brightness and contrast, `c` how many times the colors cycle, `d` the phase. A low `b` gives the soft range of Gris and Sable, a wide one No Man's Sky's punch.
+- *[Quilez, palettes](https://iquilezles.org/articles/palettes/) (text pasted by Dana). Read 2026-10-28.*
+
+**Distance fog as the biggest single improvement** · Shedworks, *Sable* · `reference`
+- Sable builds on flat shading by adding lighting, fog and lines; distant fog, tuned per biome, "had the biggest impact overall" and frames the day and night cycle.
+- *[Game Developer, how Shedworks refined the art of Sable](https://www.gamedeveloper.com/marketing/how-shedworks-refined-the-art-of-sable-in-pursuit-of-readability). Read 2026-10-28.*
+
 ### Erosion
 
 **Hydraulic erosion, droplet-based** · Sebastian Lague · `considered` · MIT

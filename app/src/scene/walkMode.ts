@@ -15,21 +15,18 @@ const MIN_TRAVEL_SCALE = 1;
 const MAX_TRAVEL_SCALE = 2000;
 const WHEEL_TRAVEL_FACTOR = 1.25;
 const HEIGHT_SMOOTHING_PER_SECOND = 10;
+// The eye never sinks below the ground plus this, so the height smoothing can't lag it into a rise. Inferred, TUNABLE.
+const MIN_EYE_CLEARANCE_METERS = 0.5;
 const EDGE_MARGIN = 0.999;
-const ARRIVE_DISTANCE_STEPS = 1;
 const LOOK_RADIANS_PER_PIXEL = 0.0025;
 const MAX_PITCH = Math.PI / 2 - 0.02;
-// A press that moves less than this many pixels is a click, not a drag.
+// A press that moves less than this many pixels is a hold, not a drag.
 const CLICK_MAX_PIXELS = 5;
-// A click's ray is marched against the drawn ground in steps that grow with distance
-// (each step 5% of the distance so far, at least 1 m), then narrowed by bisection.
-const PICK_MIN_STEP = 1 / METERS_PER_UNIT;
-const PICK_STEP_FRACTION = 0.05;
-const PICK_REFINE_STEPS = 12;
+// Long-press to walk: a still press this long starts walking; a drag before then only looks (Android's long press is
+// 400 to 500 ms; shorter here so walking feels quick). Inferred, TUNABLE.
+const HOLD_TO_WALK_MS = 250;
 // The fly-in from the orbit view to the person view, eased in and out. Inferred, TUNABLE.
 const TRANSITION_SECONDS = 1.5;
-// A click walks toward the clicked spot but stops after this far (Dana, 2026-10-26: walks ran too far). Inferred, TUNABLE.
-const CLICK_WALK_MAX_METERS = 100;
 // No walking on water (Dana, 2026-10-27): walking stops at the shore, and entering over water starts on the nearest shore, found on the coarse height copy
 // (as Unity's NavMesh.SamplePosition finds the nearest walkable point), then stepped this far inland. Inferred, TUNABLE.
 const SHORE_INLAND_METERS = 2;
@@ -57,6 +54,7 @@ const RUN_KEYS = ['ShiftLeft', 'ShiftRight'];
 export class WalkMode {
   active = false;
   travelScale = DEFAULT_TRAVEL_SCALE;
+  speedMultiplier = 1; // the gumball's walk Speed slider, ×0.5 to ×5
   // 0 at the start of the fly-in, 1 once arrived (and for the whole walk after).
   progress = 1;
 
@@ -70,8 +68,8 @@ export class WalkMode {
   private readonly onExit: () => void;
   private readonly keys = new Set<string>();
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
-  private readonly raycaster = new THREE.Raycaster();
-  private walkTarget: THREE.Vector2 | null = null;
+  private holding = false; // a long press is walking forward until release; dragging then steers (Dana, 2026-10-28)
+  private pressTime = 0;
   private pressStart: { x: number; y: number } | null = null;
   private lastPointer = { x: 0, y: 0 };
   private dragged = false;
@@ -184,7 +182,7 @@ export class WalkMode {
     };
     this.progress = 0;
     this.active = true;
-    this.walkTarget = null;
+    this.holding = false;
     this.domElement.style.cursor = 'grab';
     document.addEventListener('keydown', this.handleKeyDown);
     document.addEventListener('keyup', this.handleKeyUp);
@@ -200,7 +198,7 @@ export class WalkMode {
     this.progress = 1;
     this.transition = null;
     this.keys.clear();
-    this.walkTarget = null;
+    this.holding = false;
     this.pressStart = null;
     this.domElement.style.cursor = '';
     document.removeEventListener('keydown', this.handleKeyDown);
@@ -221,7 +219,6 @@ export class WalkMode {
     if (SLOWER_KEYS.includes(event.code)) this.scaleTravel(1 / WHEEL_TRAVEL_FACTOR);
     this.keys.add(event.code);
     if ([...FORWARD_KEYS, ...BACK_KEYS, ...LEFT_KEYS, ...RIGHT_KEYS, ...TURN_LEFT_KEYS, ...TURN_RIGHT_KEYS, ...LOOK_UP_KEYS, ...LOOK_DOWN_KEYS].includes(event.code)) {
-      this.walkTarget = null;
       event.preventDefault(); // arrows would otherwise scroll the page
     }
   };
@@ -244,15 +241,16 @@ export class WalkMode {
     this.pressStart = { x: event.clientX, y: event.clientY };
     this.lastPointer = { x: event.clientX, y: event.clientY };
     this.dragged = false;
+    this.holding = false;
+    this.pressTime = performance.now();
     this.domElement.setPointerCapture(event.pointerId);
   };
 
-  // Dragging turns the view: the world follows the cursor.
+  // Dragging turns the view (the world follows the cursor), steering the walk while held.
   private readonly handlePointerMove = (event: PointerEvent) => {
     if (!this.pressStart) return;
     if (!this.dragged && Math.hypot(event.clientX - this.pressStart.x, event.clientY - this.pressStart.y) > CLICK_MAX_PIXELS) {
       this.dragged = true;
-      this.walkTarget = null; // looking around stops a click walk
       this.domElement.style.cursor = 'grabbing';
     }
     if (!this.dragged) return;
@@ -263,66 +261,13 @@ export class WalkMode {
     this.lastPointer = { x: event.clientX, y: event.clientY };
   };
 
-  // A press without a drag is a click: walk to the ground under the cursor.
-  private readonly handlePointerUp = (event: PointerEvent) => {
-    console.log('[TEMP walk] pointerup', { hasPress: !!this.pressStart, dragged: this.dragged, walkTarget: this.walkTarget?.toArray(), detail: event.detail });
+  // Releasing stops the walk.
+  private readonly handlePointerUp = () => {
     if (!this.pressStart) return;
-    const wasClick = !this.dragged;
     this.pressStart = null;
+    this.holding = false;
     this.domElement.style.cursor = 'grab';
-    if (!wasClick) return;
-    // A click during a walk only stops it.
-    if (this.walkTarget) {
-      this.walkTarget = null;
-      return;
-    }
-    const ground = this.getGround();
-    if (!ground) return;
-    const rect = this.domElement.getBoundingClientRect();
-    const pointer = new THREE.Vector2(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
-    this.raycaster.setFromCamera(pointer, this.camera);
-    const hit = this.pickGround(this.raycaster.ray, ground);
-    console.log('[TEMP walk] pick', { rayPitchDeg: THREE.MathUtils.radToDeg(Math.asin(this.raycaster.ray.direction.y)), hitMetersAway: hit ? hit.distanceTo(this.camera.position) * METERS_PER_UNIT : null, hit: hit?.toArray(), camera: this.camera.position.toArray(), eyeGround: this.getGroundHeight(this.camera.position.x, this.camera.position.z), travelScale: this.travelScale });
-    if (!hit) return;
-    // Walks toward the clicked spot; water on the way stops the walk at the shore (update).
-    const toX = hit.x - this.camera.position.x;
-    const toZ = hit.z - this.camera.position.z;
-    const maxDistance = CLICK_WALK_MAX_METERS / METERS_PER_UNIT;
-    const scale = Math.min(1, maxDistance / Math.max(Math.hypot(toX, toZ), 1e-9));
-    this.walkTarget = new THREE.Vector2(this.camera.position.x + toX * scale, this.camera.position.z + toZ * scale);
-    console.log('[TEMP walk] target set, meters away:', Math.hypot(toX, toZ) * scale * METERS_PER_UNIT);
   };
-
-  // Where a ray first meets the drawn ground (the same height the eye follows), or null.
-  private pickGround(ray: THREE.Ray, ground: ChunkGround): THREE.Vector3 | null {
-    const half = ground.chunkSize / 2;
-    const point = new THREE.Vector3();
-    const isBelow = (distance: number): boolean => {
-      ray.at(distance, point);
-      const height = this.getGroundHeight(point.x, point.z);
-      return height !== null && point.y <= height;
-    };
-    let above = 0;
-    let distance = PICK_MIN_STEP;
-    let nullHeights = 0; // TEMP
-    while (distance <= ground.chunkSize * 2) {
-      ray.at(distance, point);
-      if (Math.abs(point.x) > half || Math.abs(point.z) > half) { console.log('[TEMP walk] pick left the chunk at', distance * METERS_PER_UNIT, 'm, null heights:', nullHeights); return null; } // left the chunk
-      if (this.getGroundHeight(point.x, point.z) === null) nullHeights++; // TEMP
-      if (isBelow(distance)) {
-        let below = distance;
-        for (let i = 0; i < PICK_REFINE_STEPS; i++) {
-          const middle = (above + below) / 2;
-          if (isBelow(middle)) below = middle;
-          else above = middle;
-        }
-        return ray.at(below, new THREE.Vector3());
-      }
-      above = distance;
-      distance += Math.max(PICK_MIN_STEP, distance * PICK_STEP_FRACTION);
-    }
-    return null;
-  }
 
   private clampToChunk(position: THREE.Vector3, ground: ChunkGround): void {
     const limit = (ground.chunkSize / 2) * EDGE_MARGIN;
@@ -338,8 +283,9 @@ export class WalkMode {
       this.flyIn(ground, deltaSeconds);
       return;
     }
+    if (this.pressStart && !this.holding && !this.dragged && performance.now() - this.pressTime >= HOLD_TO_WALK_MS) this.holding = true;
     const isRunning = RUN_KEYS.some((code) => this.keys.has(code));
-    const step = (WALK_SPEED_MPS / METERS_PER_UNIT) * this.travelScale * (isRunning ? RUN_MULTIPLIER : 1) * deltaSeconds;
+    const step = ((WALK_SPEED_MPS * this.speedMultiplier) / METERS_PER_UNIT) * this.travelScale * (isRunning ? RUN_MULTIPLIER : 1) * deltaSeconds;
 
     this.euler.setFromQuaternion(this.camera.quaternion, 'YXZ');
     const turn = Number(TURN_LEFT_KEYS.some((code) => this.keys.has(code))) - Number(TURN_RIGHT_KEYS.some((code) => this.keys.has(code)));
@@ -351,7 +297,7 @@ export class WalkMode {
     }
     const forwardX = -Math.sin(this.euler.y);
     const forwardZ = -Math.cos(this.euler.y);
-    const axisForward = Number(FORWARD_KEYS.some((code) => this.keys.has(code))) - Number(BACK_KEYS.some((code) => this.keys.has(code)));
+    const axisForward = Number(this.holding || FORWARD_KEYS.some((code) => this.keys.has(code))) - Number(BACK_KEYS.some((code) => this.keys.has(code)));
     const axisRight = Number(RIGHT_KEYS.some((code) => this.keys.has(code))) - Number(LEFT_KEYS.some((code) => this.keys.has(code)));
     let moveX = forwardX * axisForward - forwardZ * axisRight;
     let moveZ = forwardZ * axisForward + forwardX * axisRight;
@@ -359,18 +305,6 @@ export class WalkMode {
     if (length > 0) {
       moveX = (moveX / length) * step;
       moveZ = (moveZ / length) * step;
-    } else if (this.walkTarget) {
-      const toX = this.walkTarget.x - this.camera.position.x;
-      const toZ = this.walkTarget.y - this.camera.position.z;
-      const distance = Math.hypot(toX, toZ);
-      if (distance <= step * ARRIVE_DISTANCE_STEPS) {
-        moveX = toX;
-        moveZ = toZ;
-        this.walkTarget = null;
-      } else {
-        moveX = (toX / distance) * step;
-        moveZ = (toZ / distance) * step;
-      }
     }
     const fromX = this.camera.position.x;
     const fromZ = this.camera.position.z;
@@ -384,7 +318,6 @@ export class WalkMode {
     if (sea !== null && groundHeight < sea && (moveX !== 0 || moveZ !== 0)) {
       this.camera.position.x = fromX;
       this.camera.position.z = fromZ;
-      this.walkTarget = null;
       groundHeight = this.heightAt(ground, fromX, fromZ);
     }
     // Never under water: if the ground under the walker is now below the sea (the terrain or sea level changed), move
@@ -404,6 +337,7 @@ export class WalkMode {
     }
     const blend = 1 - Math.exp(-HEIGHT_SMOOTHING_PER_SECOND * deltaSeconds);
     this.camera.position.y += (eyeHeight - this.camera.position.y) * blend;
+    this.camera.position.y = Math.max(this.camera.position.y, Math.max(groundHeight, sea ?? -Infinity) + MIN_EYE_CLEARANCE_METERS / METERS_PER_UNIT);
   }
 
   // The fly-in: position and facing ease from the orbit view to the standing spot.

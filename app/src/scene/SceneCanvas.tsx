@@ -12,6 +12,7 @@ import { percentileRangeFromBins } from '../map/elevationRange';
 import { buildHeightDistribution, type HeightDistribution } from '../planet/seaLevel';
 import { MAX_WAVE_WIND, windTimeScale } from '../planet/oceanSpectrum';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
+import { fillColorFor } from './fillLight';
 import { createPlanetGlow, updatePlanetGlow, updatePlanetGlowFrame } from '../atmosphere/planetGlow';
 import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame } from '../atmosphere/cloudLayer';
 import { createPlanetHaze, updatePlanetHaze } from '../atmosphere/planetHaze';
@@ -181,6 +182,7 @@ interface SceneCanvasProps {
   maxErrorPixels: number; // the Resolution slider: the largest screen error in pixels before a patch splits, lower is sharper (see planet/planetPatches.ts)
   baseColor: string; // hex string, e.g. "#3a7bd5"
   ambientLight: number;
+  shadowHue: number; // the fill's hue turn, degrees (scene/fillLight.ts)
   lightDirX: number;
   lightDirY: number;
   lightDirZ: number;
@@ -230,6 +232,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     maxErrorPixels,
     baseColor,
     ambientLight,
+    shadowHue,
     lightDirX,
     lightDirY,
     lightDirZ,
@@ -282,6 +285,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     baseColor: new THREE.Color(0x3a7bd5),
     lightDirection: new THREE.Vector3(1, 1, 1),
     ambient: 0.15,
+    fillColor: new THREE.Color(1, 1, 1),
     lightIntensity: 1,
     specularStrength: 0.3,
     shininess: 24,
@@ -766,10 +770,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         updatePlanetGlow(planetGlow, atmosphereRef.current, shared.radius + terrainReach);
         updatePlanetGlowFrame(planetGlow, perspectiveCamera.position);
         updateCloudLayer(cloudLayer, atmosphereRef.current, shared.radius, terrainReach);
-        updatePlanetHaze(planetHaze, atmosphereRef.current, shared.radius + terrainReach, perspectiveCamera.position, shared.lightDirection, shared.ambient);
-        updateCloudLayerFrame(cloudLayer, atmosphereRef.current.wind, seaStep, shared.lightDirection, shared.ambient, perspectiveCamera.position);
+        // The light, turned with the camera when it follows it, first: the haze, clouds and land all read it this frame.
         sharedUniformsRef.current.lightDirection.copy(lightBaseRef.current);
         if (lightFollowsCameraRef.current) sharedUniformsRef.current.lightDirection.applyQuaternion(perspectiveCamera.quaternion);
+        updatePlanetHaze(planetHaze, atmosphereRef.current, shared.radius + terrainReach, perspectiveCamera.position, shared.lightDirection, shared.ambient);
+        updateCloudLayerFrame(cloudLayer, atmosphereRef.current.wind, seaStep, shared.lightDirection, shared.ambient, perspectiveCamera.position);
         sharedUniformsRef.current.rippleEnabled = isRippleMapReady() ? 1 : 0;
         sharedUniformsRef.current.viewWidthPixels = Math.max(1, (viewportElement?.clientWidth ?? 1) * window.devicePixelRatio);
         planetPatches.applyFrame(sharedUniformsRef.current);
@@ -946,8 +951,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shared.specularStrength = specularStrength;
     shared.shininess = shininess;
     shared.diffuseWrap = diffuseWrap;
-    shared.lightDirection.set(lightDirX, lightDirY, lightDirZ);
-    lightBaseRef.current.set(lightDirX, lightDirY, lightDirZ);
+    lightBaseRef.current.set(lightDirX, lightDirY, lightDirZ); // onFrame turns it into shared.lightDirection
     shared.displacementAmplitude = (heightScale / 100) * radius;
     shared.colorByElevation = colorByElevation ? 1 : 0;
     shared.colorStops = colorStops;
@@ -967,6 +971,13 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     colorByElevation,
     colorStops,
   ]);
+
+  // The sky fill's color, from the sky and Shadow hue.
+  useEffect(() => {
+    const shared = sharedUniformsRef.current;
+    shared.fillColor.copy(fillColorFor(atmosphere.enabled, atmosphere.zenithColor, shadowHue));
+    planetPatchRendererRef.current?.applyShared(shared);
+  }, [atmosphere.enabled, atmosphere.zenithColor, shadowHue]);
 
   // Sea level and water look, on the patches and on the old single mesh's vertex shader.
   useEffect(() => {

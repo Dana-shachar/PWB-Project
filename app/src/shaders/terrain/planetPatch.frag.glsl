@@ -19,6 +19,7 @@
 uniform vec3 uBaseColor;
 uniform vec3 uLightDirection;
 uniform float uAmbient;
+uniform vec3 uFillColor; // the sky fill's color (scene/fillLight.ts)
 uniform float uLightIntensity;
 uniform float uSpecularStrength;
 uniform float uShininess;
@@ -149,6 +150,7 @@ void main() {
 
   vec3 surfaceColor = uBaseColor;
   float ambient = uAmbient;
+  vec3 fill = fillLight(normal, normalize(mat3(modelMatrix) * localNormal), uFillColor, uAmbient);
   float elevationRaw = texture2D(uHeightMap, textureUv).g;
   if (uColorByElevation > 0.5) {
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
@@ -156,7 +158,7 @@ void main() {
     surfaceColor = ramp;
   }
 
-  vec3 litColor = surfaceColor * (ambient + diffuse) + specular;
+  vec3 litColor = surfaceColor * (fill + diffuse) + specular;
   // The ocean: Seascape's waves and sea color (shaders/water/oceanWaves.glsl) at a planet scale, in each point's own
   // frame (x along the face, y up), smoothed with distance into a soft glare, with sporadic whitecaps that read from
   // orbit, the seabed showing through the shallows (shaders/water/water.glsl), and ripples and shore foam up close.
@@ -210,7 +212,7 @@ void main() {
     float dayLight = ambient + softDiffuse(sphereNormal, lightDir, uDiffuseWrap);
     vec3 sea = seaColor(surfacePoint, seaNormal, sunLocal, eyeLocal, distOcean, seaBase, seaWaterColor, uSkyColor, far, seaSlopeVariance(fetch)) * uLightIntensity * dayLight;
     float transmittance = waterTransmittance(depthShare, uWaterClarity);
-    vec3 seabed = surfaceColor * (ambient + diffuse) * waterFilter(depthShare, uWaterClarity, seaBase);
+    vec3 seabed = surfaceColor * (fill + diffuse) * waterFilter(depthShare, uWaterClarity, seaBase);
     litColor = mix(seabed, sea, 1.0 - transmittance);
     float foamLight = (ambient + seaDiffuse(seaNormal, sunLocal, 1.0)) * uLightIntensity;
     // Foam from the wave crests at every distance (averaged far away); shore foam and breaking bands only up close

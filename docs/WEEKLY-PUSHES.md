@@ -23,6 +23,8 @@
 - **Tides (2026-10-28):** the chunk's water rises and falls every two minutes by the moons' sizes cubed (the tidal-force rule, exaggerated and capped); walk mode pushes the walker to dry ground as it rises.
 - **Saving fixed (`[B70]`):** atmosphere changes, Roughness and Auto detail were never autosaved.
 - **Concept:** *Everything* (David OReilly) added as an inspiration.
+- **Colored shadows (2026-10-28):** the first land shader layer. The flat gray ambient became a sky fill, tinted by the sky's color and a Shadow hue, following Quilez's outdoor lighting rig: No Man's Sky's strong color, softened toward Gris and Sable, with unexpected shading colors set by rule.
+- **Walk mode and panel (2026-10-28):** long-press to walk with a Speed slider; the eye no longer sinks into the ground; the planet's flicker while dragging light sliders fixed (`[B72]`); the Scene section grouped into Light, Shadows, Shine, Grid and View.
 
 ### 🤖 AI process
 - **A day lost to theories:** three fixes were built on unproven causes (octave tweaks, local coordinates for fine detail, smoothing) before Dana's own idea, a dedicated height map resampled at higher resolution, solved it. New working rules: check Dana's proposed mechanism against established tools first, build only on a measured cause, and edit docs only at commit.
@@ -34,7 +36,8 @@
 - ❌ Fixes built on theories: removed.
 - ✅ A target spec written from the references, then built in one pass.
 - ❌ Tuning by screenshot, and unapproved extras.
-- ⏭️ Walk mode not answering after a click (`[B71]`), then terrain shading.
+- ✅ Measured before fixing: an A/B test and a log proved the flicker's cause in one round.
+- ⏭️ The Shadow hue color slider, then slope rock; walk mode's `[B71]` is deferred.
 
 ---
 

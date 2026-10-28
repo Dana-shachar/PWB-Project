@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import vertexShader from '../shaders/terrain/vertex.glsl?raw';
 import patchFragmentShaderBody from '../shaders/terrain/planetPatch.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
+import landLayersGlsl from '../shaders/terrain/landLayers.glsl?raw';
 import waterGlsl from '../shaders/water/water.glsl?raw';
 import oceanWavesGlsl from '../shaders/water/oceanWaves.glsl?raw';
 import { KM_PER_SCENE_UNIT } from './planetControls';
@@ -31,7 +32,7 @@ import { faceIndex, PATCH_BORDER_TEXELS, type TerrainPatch } from './patch';
 import type { EdgeStitchFlags } from './planetPatches';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from './colorRamp';
 
-const patchFragmentShader = terrainGlsl + waterGlsl + oceanWavesGlsl + patchFragmentShaderBody;
+const patchFragmentShader = terrainGlsl + landLayersGlsl + waterGlsl + oceanWavesGlsl + patchFragmentShaderBody;
 
 // How far inward (as a fraction of radius) a patch's outer edge drops to
 // form its skirt — a thin wall hiding any sliver left where this patch meets
@@ -269,6 +270,7 @@ export interface PlanetSharedUniforms {
   baseColor: THREE.Color;
   lightDirection: THREE.Vector3;
   ambient: number;
+  fillColor: THREE.Color; // the sky fill's color, scene/fillLight.ts
   lightIntensity: number;
   specularStrength: number;
   shininess: number;
@@ -339,6 +341,7 @@ export function createPatchMaterial(
       uBaseColor: { value: shared.baseColor.clone() },
       uLightDirection: { value: shared.lightDirection.clone() },
       uAmbient: { value: shared.ambient },
+      uFillColor: { value: shared.fillColor.clone() },
       uLightIntensity: { value: shared.lightIntensity },
       uSpecularStrength: { value: shared.specularStrength },
       uShininess: { value: shared.shininess },
@@ -416,6 +419,7 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   (u.uBaseColor.value as THREE.Color).copy(shared.baseColor);
   (u.uLightDirection.value as THREE.Vector3).copy(shared.lightDirection);
   u.uAmbient.value = shared.ambient;
+  (u.uFillColor.value as THREE.Color).copy(shared.fillColor);
   u.uLightIntensity.value = shared.lightIntensity;
   u.uSpecularStrength.value = shared.specularStrength;
   u.uShininess.value = shared.shininess;

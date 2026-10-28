@@ -29,10 +29,14 @@ export interface GumballTarget {
   toggleWalkMode?: () => boolean;
   // Whether it is walking now, so Esc leaving walk mode also resets the button.
   isWalking?: () => boolean;
+  // Sets walk mode's speed, a multiple of a person's walking pace.
+  setWalkSpeed?: (multiplier: number) => void;
 }
 
 const MIN_ZOOM_LEVEL = 10;
 const MAX_ZOOM_LEVEL = 400;
+const MIN_WALK_SPEED = 0.5;
+const MAX_WALK_SPEED = 5;
 
 // Zoom level to distance. Without a surface it is a percent of the reference
 // distance; with one, height above the surface steps evenly on a log scale
@@ -115,6 +119,8 @@ export class Gumball {
   private readonly snapSpeed = 0.08;
   private zoomLevel: number;
   private zoomInput: HTMLInputElement | null = null;
+  private walkSpeedRow: HTMLDivElement | null = null;
+  private walkSpeedInput: HTMLInputElement | null = null;
   private walkBtn: HTMLButtonElement | null = null;
   private walking = false;
   private container: HTMLDivElement;
@@ -214,6 +220,26 @@ export class Gumball {
     zoomRow.appendChild(this.zoomInput);
     container.appendChild(zoomRow);
 
+    // Walk speed, under Zoom, shown only while walking (Dana, 2026-10-28).
+    this.walkSpeedRow = document.createElement('div');
+    this.walkSpeedRow.className = 'gumball-zoom-row';
+    this.walkSpeedRow.style.display = 'none';
+    const walkSpeedLabel = document.createElement('span');
+    walkSpeedLabel.textContent = 'Speed';
+    walkSpeedLabel.className = 'gumball-zoom-label';
+    this.walkSpeedInput = document.createElement('input');
+    this.walkSpeedInput.type = 'range';
+    this.walkSpeedInput.min = String(MIN_WALK_SPEED);
+    this.walkSpeedInput.max = String(MAX_WALK_SPEED);
+    this.walkSpeedInput.step = '0.1';
+    this.walkSpeedInput.value = '1';
+    this.walkSpeedInput.className = 'gumball-zoom-input';
+    this.walkSpeedInput.title = 'Walk speed, ×0.5 to ×5';
+    this.walkSpeedInput.addEventListener('input', this.handleWalkSpeedInput);
+    this.walkSpeedRow.appendChild(walkSpeedLabel);
+    this.walkSpeedRow.appendChild(this.walkSpeedInput);
+    container.appendChild(this.walkSpeedRow);
+
     // View preset dropdown — was 4 separate buttons, took up too much
     // screen space (Dana, 2026-09-14).
     const viewSelect = document.createElement('select');
@@ -263,7 +289,14 @@ export class Gumball {
     if (!this.walkBtn) return;
     this.walkBtn.disabled = !(this.targets.length === 1 && this.targets[0].toggleWalkMode);
     this.walkBtn.classList.toggle('gumball-btn--active', this.walking);
+    if (this.walkSpeedRow) this.walkSpeedRow.style.display = this.walking ? '' : 'none';
   }
+
+  private handleWalkSpeedInput = () => {
+    if (!this.walkSpeedInput) return;
+    const multiplier = parseFloat(this.walkSpeedInput.value);
+    for (const target of this.targets) target.setWalkSpeed?.(multiplier);
+  };
 
   private handleWalkClick = () => {
     const toggle = this.targets.length === 1 ? this.targets[0].toggleWalkMode : undefined;

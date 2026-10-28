@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import chunkVertexGlsl from '../shaders/terrain/chunk.vert.glsl?raw';
 import chunkFragmentBody from '../shaders/terrain/chunk.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
+import landLayersGlsl from '../shaders/terrain/landLayers.glsl?raw';
 import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
 import { camera, defaultCameraPosition } from '../scene/camera';
 import { controls, keepAboveFlatGround } from '../scene/controls';
@@ -20,12 +21,13 @@ import { createChunkWater, setChunkWaterLight, setChunkWaterSky, setChunkWaterTi
 import { tideHeight } from '../atmosphere/tides';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
+import { fillColorFor } from '../scene/fillLight';
 import { createSkyDome, setSkyDomeLight, setSkyDomeMoonTexture, updateSkyDome, updateSkyDomeFrame, type SkyDome } from '../atmosphere/skyDome';
 import { HeightmapPipeline } from '../map/heightmap';
 import { landRampFloor } from '../planet/seaLevel';
 import { MAX_WAVE_WIND } from '../planet/oceanSpectrum';
 
-const chunkFragmentGlsl = terrainGlsl + hazeGlsl + chunkFragmentBody;
+const chunkFragmentGlsl = terrainGlsl + landLayersGlsl + hazeGlsl + chunkFragmentBody;
 
 // For the single shared gumball (scene/sharedGumball.ts) to target this
 // view's camera when the land-chunk pane is selected — see ISSUES.md,
@@ -41,6 +43,7 @@ interface LandChunkCanvasProps {
   // component's own state. Used raw, not tied to this patch's real position
   // on the sphere — see the lighting effect below.
   ambientLight: number;
+  shadowHue: number; // the fill's hue turn, degrees (scene/fillLight.ts)
   lightDirX: number;
   lightDirY: number;
   lightDirZ: number;
@@ -118,6 +121,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   {
     geometry,
     ambientLight,
+    shadowHue,
     lightDirX,
     lightDirY,
     lightDirZ,
@@ -224,6 +228,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         return enterWalk();
       },
       isWalking: () => walkMode.active,
+      setWalkSpeed: (multiplier) => {
+        walkMode.speedMultiplier = multiplier;
+      },
     };
 
     // Walk mode ([walkMode.ts]): entering saves the orbit camera and turns orbit off; leaving restores it.
@@ -360,6 +367,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uBaseColor: { value: new THREE.Color(baseColor) },
         uLightDirection: { value: new THREE.Vector3(lightDirX, lightDirY, lightDirZ) },
         uAmbient: { value: ambientLight },
+        uFillColor: { value: fillColorFor(atmosphere.enabled, atmosphere.zenithColor, shadowHue) },
         uLightIntensity: { value: lightIntensity },
         uSpecularStrength: { value: specularStrength },
         uShininess: { value: shininess },
@@ -523,6 +531,13 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     if (waterRef.current) setChunkWaterLight(waterRef.current, new THREE.Vector3(lightDirX, lightDirY, lightDirZ), ambientLight, lightIntensity);
     if (skyRef.current) setSkyDomeLight(skyRef.current, ambientLight, lightIntensity, diffuseWrap);
   }, [ambientLight, lightIntensity, specularStrength, shininess, diffuseWrap, lightDirX, lightDirY, lightDirZ]);
+
+  // The sky fill's color, from the sky and Shadow hue.
+  useEffect(() => {
+    const material = materialRef.current;
+    if (!material) return;
+    (material.uniforms.uFillColor.value as THREE.Color).copy(fillColorFor(atmosphere.enabled, atmosphere.zenithColor, shadowHue));
+  }, [atmosphere.enabled, atmosphere.zenithColor, shadowHue]);
 
   // Base color — shared with the planet's own ColorPicker, not a separate
   // hardcoded placeholder.

@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-10-27`
+`Last updated: 2026-10-28`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -12,12 +12,17 @@
 >
 > **State.** Everything from today is committed and pushed: `[B66]` (the chunk's own 4096 height map, also feeding the water and shadows), the moons (`[S44]`), tides, the autosave fix (`[B70]`), the `Dial` component, *Everything* in the references. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
 >
-> **Right now:** Dana called the moons "good enough" (2026-10-28). Next open bug: `[B71]` walk mode not answering after a click in the panel (unmeasured; measure first). Then the roadmap's next step, terrain shading.
+> **Right now:** land shader layers, stage 1 (colored shadows) is built and Dana likes the colors; its Shadow hue control still needs a hue slider that shows the color (a new design-system component, plan first). Then stage 2, slope rock. `[B71]` walk mode is deferred (Dana, 2026-10-28).
+>
+> **Agreed, queued:**
+> - 📌 Water reads as water from walk mode: Fresnel on the chunk water's opacity, sky reflection and sun highlight (`[B67]`, `waterFresnel` exists in `water.glsl`), after the land shader plan.
+> - 📌 Moon look (Dana, 2026-10-28, "good enough" with room to improve): a more intense glow, less halo distance, more inner glow. A six-constant plan for `drawMoon` waits for Dana's go.
+> - 📌 Dana's 10 terrain-look reference images (No Man's Sky, Sable, Gris, Monument Valley) go into `docs/references/` and a "Terrain shading look" group in `REFERENCES.md`; the images are in the 2026-10-28 chat, not yet saved.
 >
 > **Moons, how they stand** (so tuning doesn't restart from zero): the target spec Dana approved, built in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`): color clearly visible and never bleached by the glow; texture as gentle tone; a full moon solid to its edge; the shadow (Crescent) dissolving fully into the sky, with no outline; one rounded glow across the edge, lit side only (all round at Crescent 0); Texture 0 translucent, 1 solid, 2 strongest; split toning (Second color the darks by multiply, Color the brights by screen). Change only what Dana approves: tuning by screenshot made colors swing neon and pale.
 >
 > **Temporary diagnostics still in the code (remove when their bugs close):**
-> - `[TEMP water]` logs and the shore-search logs in `scene/walkMode.ts`; `[TEMP walk]` click logs there too.
+> - `[TEMP water]` logs and the shore-search logs in `scene/walkMode.ts`.
 > - Alt+click on the chunk: the `[TEMP B55]` height row table (`logCliffRow` in `LandChunkCanvas.tsx`, `lastSampleDepth` in `ChunkPatchRenderer.ts`).
 >
 > **Open decisions for Dana**
@@ -45,11 +50,14 @@
 > 3. **Terrain shading and volcanoes:** rock by slope, snow by height and latitude (poles), glowing lava, cones placed at Voronoi cell centers, rock strata on cliffs (Sable).
 >    - 🧭 Art direction (Dana, 2026-10-27): 2.5D, real 3D but flatter: soft wrapped light, little shine, depth from haze layers, limited palettes; between No Man's Sky and Sable, not toon. Images in `docs/references/`, listed under 🎨 Visual in `REFERENCES.md` (No Man's Sky, Sable, Outer Wilds, Gris, Monument Valley).
 >    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.
->    - ⚪ **Land shader layers**, on top of the height ramp, in this order (Dana agreed 2026-10-26, plan to follow):
->      1. Slope layer: steep faces get their own color (rock), from how far the surface tilts from "up". 📚 Tuts+ terrain texturing, UPenn CIS 566 planets.
->      2. Large-scale color variation: a slow noise shifting hue and lightness so no region is one flat band. 📚 Same sources.
->      3. Rule-based alien palettes, borrowed from No Man's Sky's color-theory system (e.g. accents complementary to the base), with Inigo Quilez's cosine palettes as the generator, tied into Randomize colors. 📚 Kill Screen and Engadget on Grant Duncan's GDC talk; iquilezles.org/articles/palettes.
->      4. Ambient occlusion, to help stylize (Dana, 2026-10-27): darkens only the ambient light, never the sun. 📚 Quilez's multiresolution ambient occlusion. Candidate shaders for ice, lava and trees are under "Stylized sky, planet and terrain shaders" in `REFERENCES.md`.
+>    - 🧭 Look (Dana, 2026-10-28): No Man's Sky's one strong hue per planet, softened by the gentle layered landscapes of Gris and Sable, with unexpected shading colors (Monument Valley) set by procedural rules, not a hand-picked palette.
+>    - 🟡 **Land shader layers** (plan agreed 2026-10-28), each built, tested by Dana and committed before the next. All live in one shared land-layers shader used by both the planet and the chunk.
+>      1. 🟡 Colored shadows (built 2026-10-28): the ambient is a sky fill, brighter on faces turned up to the sky, tinted by the sky's color turned by Shadow hue (Scene > Shadows) and kept at white's brightness. The sun is untouched; Ambient light now reaches 1. 📌 Shadow hue becomes a hue slider showing its color. 💡 From Quilez, not planned: a warm bounce light opposite the sun, and colored shadow edges. 📚 three.js hemisphere light; Quilez, outdoor lighting.
+>      2. ⚪ Slope rock: steep faces blend to a rock ramp of their own, by height (room for Sable's strata later), with Slope and Softness sliders. 📚 Slope by the normal against "up", the standard terrain method.
+>      3. ⚪ Large-scale variation: a slow noise from the app's own noise engine, baked into the height texture's free blue channel, shifts hue and lightness. Measure first that the channel survives every texture the land reads.
+>      4. ⚪ Rule-based palettes: Quilez's cosine palette plus No Man's Sky style rules (complementary, analogous, split-complementary), each also choosing the shadow hue. Randomize colors sets the land ramp, rock, variation and shadow hue from one rule; a Softness slider lowers contrast toward Gris and Sable. 📚 Quilez, palettes; Kill Screen and Engadget on Grant Duncan's talk.
+>      5. ⚪ Ambient occlusion on the fill light only, never the sun. ❓ Computed live or baked with the height map (the performance rules favor baked). 📚 Quilez.
+>      6. 💡 Layered haze per planet: the chunk's haze takes its colors from the palette (Sable called distance fog its biggest single improvement).
 > 4. **Planet types** (desert, forest, water, volcano, ice, each with variations): a tuned start plus "reroll within this type" (Dana chose option C). 🧭 Moved after terrain shading (Dana, 2026-10-27): profiles save every look setting, so they come once those exist. Profiles: save a planet you like, "Generate" makes variations within ranges around it.
 > 5. **Storms** (dust storms, hurricanes, ash plumes, blizzards); the base clouds are now part of step 2. 📌 Storm spirals (Dana, 2026-10-27): a local swirl of the clouds around each storm's eye; research a sourced method here. 📌 Look at the day-and-night Shadertoy's layered snow and aurora first (under Shadertoy candidates in `REFERENCES.md`).
 > 6. **Evolving plants on the land chunk:** 📚 parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*) and space colonization for coral, genes mutated per Sims 1991. One shared visual style across all plants. EZ-Tree considered for earth-like trees.
@@ -372,6 +380,8 @@ A detail view into one piece of the planet, shown beside the globe, with a block
 > - **Two more from the same pass:**
 >   - The format selector's own displayed value rendered in the browser's native text color instead of this design system's white, a real cross-browser `<select>` quirk affecting *every* dropdown in the app, not just this one, fixed at the shared `.ui-select` rule (`appearance: none` plus an explicit custom dropdown arrow, since that property removes the native one too), not patched locally.
 >   - The position column had no label at all, Dana: "i'm also missing an indication for the elevation of the color." Added a small "Elevation" header above it.
+> - **Scene section grouped** (2026-10-28): Light, Shadows, Shine, Grid and View, each under a bold title and a hairline divider.
+> - **Walk mode, 2026-10-28:** long-press to walk (a still press of 250 ms walks forward, dragging then steers; a quick drag only looks), replacing click-to-walk; a Speed slider (×0.5 to ×5) under the gumball's Zoom, shown only while walking; the eye never sinks below the ground (`[B73]`).
 > - **A column list of every color, plus pin-style indicators** (2026-10-21, Dana: "i would want to see all picked colors in a column with their color code," then, from a reference screenshot, "turn the color circles into ramp indicators, so they double as a color and adjusting the ramp... clicking on them the color picker should pop up"):
 >   - New `.ui-ramp-list` below the bar: one row per color (base + every stop, ascending by position), each showing a swatch, its code (hex/RGB/HSL, picked via a shared format selector, `formatColorCode()`), and its position. Clicking a row selects that stop, same selection the bar's own pins use.
 >   - The old plain circular handles are now Figma-style pins: a rounded-square head (filled with that stop's real color, not a generic indicator) with a small pointed tail touching the bar, sitting above it instead of hanging below. Selected pin gets an accent ring plus a light inset square.

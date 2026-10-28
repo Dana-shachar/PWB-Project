@@ -17,6 +17,7 @@
 uniform vec3 uBaseColor;
 uniform vec3 uLightDirection;
 uniform float uAmbient;
+uniform vec3 uFillColor; // the sky fill's color (scene/fillLight.ts)
 uniform float uLightIntensity;
 uniform float uSpecularStrength;
 uniform float uShininess;
@@ -138,7 +139,7 @@ void main() {
   }
 
   vec3 surfaceColor = uBaseColor;
-  float ambient = uAmbient;
+  vec3 fill = fillLight(normal, normalize(mat3(modelMatrix) * vec3(0.0, 1.0, 0.0)), uFillColor, uAmbient);
   if (uColorByElevation > 0.5) {
     // Top surface: elevationRaw, sampled from the heightmap, full detail.
     // Walls/bottom cap: a plain mapping of the fragment's own real world
@@ -151,6 +152,6 @@ void main() {
     surfaceColor = ramp;
   }
 
-  vec3 litColor = surfaceColor * (ambient + diffuse) + specular;
+  vec3 litColor = surfaceColor * (fill + diffuse) + specular;
   gl_FragColor = vec4(applyHaze(litColor, vWorldPosition, uCameraPosition, uLightDirection), 1.0);
 }

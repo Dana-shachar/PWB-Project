@@ -23,6 +23,8 @@ interface PanelProps {
   // Scene controls
   ambientLight: number;
   onAmbientLightChange: (value: number) => void;
+  shadowHue: number;
+  onShadowHueChange: (value: number) => void;
   lightDirX: number;
   onLightDirXChange: (value: number) => void;
   lightFollowsCamera: boolean;
@@ -195,6 +197,8 @@ function PipelineStageRow({
 export function Panel({
   ambientLight,
   onAmbientLightChange,
+  shadowHue,
+  onShadowHueChange,
   lightDirX,
   onLightDirXChange,
   lightFollowsCamera,
@@ -367,15 +371,8 @@ export function Panel({
 
         <div className="panel-section">
           <Accordion title="Scene">
-            <Slider
-              label="Ambient light"
-              value={ambientLight}
-              onChange={onAmbientLightChange}
-              min={0}
-              max={0.5}
-              step={0.01}
-              description="The fill light. How bright the unlit side stays. Lower means deeper shadows; 0 makes anything facing away from the light go black."
-            />
+            {/* Grouped by a bold title and a hairline divider, the design system's rule for parts inside one accordion. */}
+            <span className="panel-section-title">Light</span>
             <Slider
               label="Light intensity"
               value={lightIntensity}
@@ -384,6 +381,12 @@ export function Panel({
               max={3}
               step={0.05}
               description="The key light's own strength. Raising this while Ambient light stays low is what separates a lit surface from shadow — the standard key-against-fill ratio."
+            />
+            <Toggle
+              label="Light follows camera"
+              value={lightFollowsCamera}
+              onChange={onLightFollowsCameraChange}
+              description="On: the light turns with the camera, so whatever you look at is lit. Off: the light stays fixed like a distant sun, so the planet has a day side and a night side."
             />
             <Slider
               label="X pos light"
@@ -410,12 +413,6 @@ export function Panel({
                 sphere always faces the light) can leave it dim; everything
                 else above/below still rebinds to the same shared value
                 either way. */}
-            <Toggle
-              label="Light follows camera"
-              value={lightFollowsCamera}
-              onChange={onLightFollowsCameraChange}
-              description="On: the light turns with the camera, so whatever you look at is lit. Off: the light stays fixed like a distant sun, so the planet has a day side and a night side."
-            />
             <Slider
               label="Light elevation"
               value={activeViewContext === 'landChunk' ? chunkLightDirZ : lightDirZ}
@@ -424,25 +421,6 @@ export function Panel({
               max={10}
               step={0.1}
               description="How high the light sits above the terrain. Near 0 is a grazing, low sun, which casts the longest shadows and shows the most relief — the look of a landscape photo near sunrise."
-            />
-            <Slider
-              label="Specular"
-              value={specularStrength}
-              onChange={onSpecularStrengthChange}
-              min={0}
-              max={1}
-              step={0.01}
-              description="How bright the highlight is where the surface catches the light directly. 0 removes it."
-            />
-            <Slider
-              label="Shininess"
-              value={shininess}
-              onChange={onShininessChange}
-              min={2}
-              max={128}
-              step={1}
-              precision={0}
-              description="How tight the highlight is. Low values spread it into a soft sheen; high values pull it into a small, sharp glint."
             />
             <Slider
               label="Wrap"
@@ -464,6 +442,50 @@ export function Panel({
               onChange={onShadowsEnabledChange}
               description="Terrain blocks the light from reaching terrain behind it, the way real relief does. Land chunk only for now — the planet's curved surface is a separate follow-up."
             />
+            <div className="panel-section-divider" />
+            <span className="panel-section-title">Shadows</span>
+            <Slider
+              label="Ambient light"
+              value={ambientLight}
+              onChange={onAmbientLightChange}
+              min={0}
+              max={1}
+              step={0.01}
+              description="The fill light. How bright the unlit side stays. Lower means deeper shadows; 0 makes anything facing away from the light go black."
+            />
+            <Slider
+              label="Shadow hue"
+              value={shadowHue}
+              onChange={onShadowHueChange}
+              min={-180}
+              max={180}
+              step={1}
+              description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. White when the atmosphere is off."
+            />
+            <div className="panel-section-divider" />
+            <span className="panel-section-title">Shine</span>
+            <Slider
+              label="Specular"
+              value={specularStrength}
+              onChange={onSpecularStrengthChange}
+              min={0}
+              max={1}
+              step={0.01}
+              description="How bright the highlight is where the surface catches the light directly. 0 removes it."
+            />
+            <Slider
+              label="Shininess"
+              value={shininess}
+              onChange={onShininessChange}
+              min={2}
+              max={128}
+              step={1}
+              precision={0}
+              description="How tight the highlight is. Low values spread it into a soft sheen; high values pull it into a small, sharp glint."
+            />
+            <div className="panel-section-divider" />
+            <span className="panel-section-title">Grid</span>
+            <Toggle label="Grid lines" value={gridVisible} onChange={onGridVisibleChange} />
             {/* TODO(DS): grid spacing range not borrowed from active-geometry — it has no shader-plane grid */}
             <Slider
               label="Grid spacing"
@@ -474,7 +496,8 @@ export function Panel({
               step={1}
               precision={0}
             />
-            <Toggle label="Grid lines" value={gridVisible} onChange={onGridVisibleChange} />
+            <div className="panel-section-divider" />
+            <span className="panel-section-title">View</span>
             {/* Walk mode's vertical view angle; 20 to 150 is Unity's documented sample slider range. */}
             <Slider
               label="Walk field of view"

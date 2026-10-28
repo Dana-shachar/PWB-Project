@@ -20,7 +20,8 @@
 | Change a layer's mask | `ui/MaskControls.tsx`, `map/heightmap.ts` (`hasMask`, `quantileOf`), the mask code in `shaders/heightmap/heightmap.frag.glsl` |
 | Change which patches the planet shows | `planet/planetPatches.ts`, `planet/PlanetPatchRenderer.ts`, `planet/patchLifecycle.ts` |
 | Change patch bake size or depth limits | `planet/patch.ts`, then `PlanetPatchRenderer.ts` |
-| Change planet lighting or color | `shaders/terrain/terrain.glsl`, `shaders/terrain/planetPatch.frag.glsl`, `shaders/terrain/chunk.frag.glsl` |
+| Change planet lighting or color | `shaders/terrain/landLayers.glsl` (the land's shared layers), `shaders/terrain/terrain.glsl`, `shaders/terrain/planetPatch.frag.glsl`, `shaders/terrain/chunk.frag.glsl` |
+| Change the shadows' color (the sky fill) | `fillLight` in `shaders/terrain/landLayers.glsl`, `fillColorFor` in `scene/fillLight.ts`, `shadowHue` in `scene/sceneControls.ts`, `uFillColor` in `planet/planetPatchMesh.ts` and `voxel/LandChunkCanvas.tsx` |
 | Change the atmosphere (sky, haze, glow, clouds, wind) | `atmosphere/`, `shaders/atmosphere/`, `ui/panels/AtmospherePanel.tsx`, the Atmosphere section of `ui/Panel.tsx` |
 | Change water (sea level, color, transparency, waves) | `shaders/water/water.glsl` and `shaders/terrain/planetPatch.frag.glsl` (planet ocean), `voxel/chunkWater.ts`, `shaders/water/chunkWater.frag.glsl` and `shaders/water/oceanWaves.glsl` (chunk, Seascape), `WaterSettings` in `planet/planetControls.ts`, the water rows and Color section of `ui/Panel.tsx` |
 | Change the planet's height statistics (ramp range, % land) | `updateElevationRange` in `scene/SceneCanvas.tsx`, `getRegionHistogramAsync` in `map/heightmap.ts`, `percentileRangeFromBins` in `map/elevationRange.ts`, `planet/seaLevel.ts` |
@@ -31,7 +32,7 @@
 | Change erosion | `erosion/erosionEngine.ts`, `shaders/erosion/`, `ui/panels/ErosionPanel.tsx` |
 | Change the land chunk | `voxel/landChunk.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`, `shaders/chunk.vert.glsl`, `shaders/terrain/chunk.frag.glsl` |
 | Change which patches the chunk shows | `voxel/chunkPatches.ts` (`selectChunkPatches`), `voxel/ChunkPatchRenderer.ts`, `voxel/chunkPatchMesh.ts` |
-| Change walk mode (person view): keys, speed, look, click-to-walk, fly-in | `scene/walkMode.ts` (`WalkMode`), its wiring in the setup effect of `voxel/LandChunkCanvas.tsx` (`enterWalk`), the person button in `scene/Gumball.tsx` (`toggleWalkMode`, `isWalking`) |
+| Change walk mode (person view): keys, speed, look, long-press to walk, fly-in | `scene/walkMode.ts` (`WalkMode`), its wiring in the setup effect of `voxel/LandChunkCanvas.tsx` (`enterWalk`), the person button and Speed slider in `scene/Gumball.tsx` (`toggleWalkMode`, `isWalking`, `setWalkSpeed`) |
 | Change the chunk camera's ground picking or collision | `voxel/chunkGround.ts` (`groundHeightAt`, `raycastGround`), `keepAboveFlatGround` in `scene/controls.ts`, `pivotAtScreenPoint` and the setup effect of `voxel/LandChunkCanvas.tsx`, `pivotToGround` in `scene/Gumball.tsx` |
 | Change patch texture borders or slope reading | `PATCH_BORDER_TEXELS`, `createPatchTarget` in `planet/patch.ts`, `borderTexels` in `map/heightmap.ts`, `borderedTextureUv` and `texelStepUv` in `shaders/terrain/terrain.glsl` |
 | Change how the camera moves or zooms | `scene/controls.ts` (`applyAltitudeRates`), `scene/camera.ts` (`MIN_CAMERA_ALTITUDE`), `scene/Gumball.tsx` (`levelToDistance`, `distanceToLevel`) |
@@ -204,12 +205,16 @@
 - Key names: `useSharedViewportRenderer`, `registerView`.
 
 **scene/sceneControls.ts**
-- What it is: lighting and grid state, including whether the light follows the camera (on by default).
-- Key names: `useSceneControls`, `lightFollowsCamera`.
+- What it is: lighting and grid state, including whether the light follows the camera (on by default) and the shadows' hue turn. Not saved with projects.
+- Key names: `useSceneControls`, `lightFollowsCamera`, `shadowHue`.
+
+**scene/fillLight.ts**
+- What it is: the sky fill's color: the sky's top color turned by Shadow hue, scaled to white's luminance; white with no atmosphere.
+- Key names: `fillColorFor`.
 
 **scene/Gumball.tsx**, **scene/sharedGumball.ts**
 - What it is: the navigation widget, and its shared control of one or two cameras. A target with a `surface` zooms by log height above the ground.
-- Key names: `Gumball`, `GumballTarget` (`surface`), `levelToDistance`, `distanceToLevel`, `zoomAnchors`, `useSharedGumball`.
+- Key names: `Gumball`, `GumballTarget` (`surface`, `setWalkSpeed`), the walk Speed row (`walkSpeedRow`, `handleWalkSpeedInput`, shown only while walking), `levelToDistance`, `distanceToLevel`, `zoomAnchors`, `useSharedGumball`.
 
 **scene/camera.ts**, **controls.ts**
 - What it is: the camera and its orbit controls. Every frame the planet view scales rotate, pan and zoom speed, and the near and far planes, by height above the surface.
@@ -242,8 +247,8 @@
 - Key names: `buildFlatPatchGeometry`, `buildChunkBaseGeometry`, `chunkBaseDepth`.
 
 **scene/walkMode.ts**
-- What it is: the chunk's person view. Drag to look, click to walk (the click ray is marched against the drawn ground, `pickGround`), WASD or arrows to move, arrows turn, R/F look up and down, Shift runs, `[` `]` or the wheel scale speed (default 10x), Esc leaves. A 1.5 s fly-in eases the camera from the orbit view.
-- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `pickGround`, `flyIn`; water rules `getSeaHeight`, `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
+- What it is: the chunk's person view. Drag to look, long-press to walk forward (`HOLD_TO_WALK_MS`; dragging then steers), WASD or arrows to move, arrows turn, R/F look up and down, Shift runs, `[` `]` or the wheel scale speed (default 10x), Esc leaves. A 1.5 s fly-in eases the camera from the orbit view.
+- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`, `speedMultiplier`, `holding`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `HOLD_TO_WALK_MS`, `MIN_EYE_CLEARANCE_METERS` (the eye's floor above the ground), `flyIn`; water rules `getSeaHeight`, `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
 - Talks to: `LandChunkCanvas.tsx` (saves and restores the orbit camera, eases fov/near/far with `progress`), `ChunkPatchRenderer.sampleHeight` for the eye height.
 
 **voxel/chunkWater.ts**
@@ -322,9 +327,9 @@
 - What it is: the height bakes, the noise functions, brush strokes and the height statistics.
 - Key names: `evalLayerNoise`, `evalBaseGenerator`, `fbm3D`, `fractalNoise3D`, `ridgedFbm3D`, `octaveFade`, `domainWarpedPosition`, `applyBlendMode`, `planetDetail`, `DETAIL_BASE_FREQUENCY`, `shoreFade`, `NYQUIST_FADE_MIN`/`MAX`; chunk-local fine octaves: `useLocalDetail`, `LOCAL_DETAIL_SCALE`, `gLocalDelta`; the chunk patch pass (`CHUNK_PATCH_PASS`): `chunkBaseElevation`, `bsplineWeights`; in `noise.glsl`: `hash1`, `perlinNoise3D`, `simplexNoise3D`, `voronoiNoise3D`, `voronoiMetric`, `ridge`, `terrace`.
 
-**terrain/** (`terrain.glsl`, `planetPatch.frag.glsl`, `chunk.frag.glsl`, `chunk.vert.glsl`, `vertex.glsl`, `fragment.glsl`)
+**terrain/** (`terrain.glsl`, `landLayers.glsl`, `planetPatch.frag.glsl`, `chunk.frag.glsl`, `chunk.vert.glsl`, `vertex.glsl`, `fragment.glsl`)
 - What it is: the land surfaces (planet patches, chunk, old globe) and the pieces they share. Lighting is in world space; `heightfieldNormal` always faces outward (`faceforward`).
-- Key names: `terrainRampColor`, `borderedTextureUv`, `texelStepUv`, `heightfieldNormal`, `softDiffuse`, `heightmapShadow`; the chunk's haze `uHazeColor`, `uHazeDensity`, `uHazeStart`; the planet ocean block in `planetPatch.frag.glsl` (triplanar waves, `wavesVisible`, `dayLight`).
+- Key names: `fillLight` (`landLayers.glsl`, the sky fill both land shaders use in place of a flat ambient), `terrainRampColor`, `borderedTextureUv`, `texelStepUv`, `heightfieldNormal`, `softDiffuse`, `heightmapShadow`; the chunk's haze `uHazeColor`, `uHazeDensity`, `uHazeStart`; the planet ocean block in `planetPatch.frag.glsl` (triplanar waves, `wavesVisible`, `dayLight`).
 
 **water/oceanWaves.glsl** (CC BY-NC-SA 3.0, TDM's Seascape, with additions)
 - What it is: the sea for both views: Seascape's waves and color, plus the project's additions.
