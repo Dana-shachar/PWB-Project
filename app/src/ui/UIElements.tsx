@@ -197,6 +197,127 @@ export function Slider({
   );
 }
 
+interface DialProps {
+  label: string;
+  value: number; // degrees, 0 to 360
+  onChange: (value: number) => void;
+  disabled?: boolean;
+  description?: string;
+}
+
+const DIAL_SNAP_DEGREES = 15; // Cmd/Ctrl while dragging, Shift with the arrow keys
+const DIAL_SCRUB_SENSITIVITY = 1; // degrees per pixel dragged on the number field
+
+// A round angle control (Dana, 2026-10-28): drag around the circle to point its line at an angle, with the same number
+// field as the slider rows (drag to scrub, click to type). Photoshop's angle controls follow this convention.
+export function Dial({ label, value, onChange, disabled = false, description }: DialProps) {
+  const [dragging, setDragging] = useState(false);
+  const fieldRef = useRef<HTMLInputElement>(null);
+  const wrap = (degrees: number) => ((Math.round(degrees) % 360) + 360) % 360;
+
+  function angleFromPointer(event: { clientX: number; clientY: number }, element: HTMLElement): number {
+    const box = element.getBoundingClientRect();
+    // Screen y points down, so it is flipped: 0 degrees points right, angles turn counterclockwise.
+    return (Math.atan2(box.top + box.height / 2 - event.clientY, event.clientX - (box.left + box.width / 2)) * 180) / Math.PI;
+  }
+
+  function handleDialPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    if (disabled || event.button !== 0) return;
+    const element = event.currentTarget;
+    element.setPointerCapture(event.pointerId);
+    setDragging(true);
+    const apply = (pointer: PointerEvent | React.PointerEvent) => {
+      const angle = angleFromPointer(pointer, element);
+      onChange(wrap(pointer.metaKey || pointer.ctrlKey ? Math.round(angle / DIAL_SNAP_DEGREES) * DIAL_SNAP_DEGREES : angle));
+    };
+    apply(event);
+    const onMove = (moveEvent: PointerEvent) => apply(moveEvent);
+    const onUp = () => {
+      element.removeEventListener('pointermove', onMove);
+      element.removeEventListener('pointerup', onUp);
+      setDragging(false);
+    };
+    element.addEventListener('pointermove', onMove);
+    element.addEventListener('pointerup', onUp);
+  }
+
+  function handleDialKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const step = event.shiftKey ? DIAL_SNAP_DEGREES : 1;
+    if (event.key === 'ArrowRight' || event.key === 'ArrowUp') onChange(wrap(value + step));
+    else if (event.key === 'ArrowLeft' || event.key === 'ArrowDown') onChange(wrap(value - step));
+    else return;
+    event.preventDefault();
+  }
+
+  function handleFieldCommit() {
+    const field = fieldRef.current;
+    if (!field) return;
+    const parsed = parseFloat(field.value);
+    if (!Number.isNaN(parsed)) onChange(wrap(parsed));
+    else field.value = String(value);
+  }
+
+  // Click-drag to scrub, click-without-drag to focus for typing, as the slider rows' number field does.
+  function handleFieldMouseDown(event: React.MouseEvent<HTMLInputElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    let hasMoved = false;
+    let current = value;
+    const onMove = (moveEvent: MouseEvent) => {
+      hasMoved = true;
+      current += moveEvent.movementX * DIAL_SCRUB_SENSITIVITY;
+      onChange(wrap(moveEvent.metaKey || moveEvent.ctrlKey ? Math.round(current / DIAL_SNAP_DEGREES) * DIAL_SNAP_DEGREES : current));
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      if (!hasMoved) {
+        fieldRef.current?.focus();
+        fieldRef.current?.select();
+      }
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+
+  return (
+    <div className={'ui-slider-row ui-tooltip-anchor' + (disabled ? ' ui-slider-row--disabled' : '')}>
+      {description && <span className="ui-tooltip">{description}</span>}
+      <label className="ui-slider-label">{label} (°)</label>
+      <div className="ui-dial-track">
+        <div
+          className={'ui-dial' + (dragging ? ' ui-dial--active' : '')}
+          role="slider"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={360}
+          aria-valuenow={value}
+          aria-disabled={disabled}
+          tabIndex={disabled ? -1 : 0}
+          onPointerDown={handleDialPointerDown}
+          onKeyDown={handleDialKeyDown}
+        >
+          <span className="ui-dial-line" style={{ transform: `rotate(${-value}deg)` }} />
+        </div>
+      </div>
+      <input
+        ref={fieldRef}
+        type="text"
+        className="ui-slider-field"
+        defaultValue={String(value)}
+        key={value}
+        onMouseDown={handleFieldMouseDown}
+        onBlur={handleFieldCommit}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') { handleFieldCommit(); fieldRef.current?.blur(); }
+          if (event.key === 'Escape') { if (fieldRef.current) fieldRef.current.value = String(value); fieldRef.current?.blur(); }
+        }}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
 interface ColorPickerProps {
   label: string;
   value: string; // hex string, e.g. "#3a7bd5"

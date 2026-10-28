@@ -402,3 +402,11 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - The chunk's terrain is baked once from the planet's noise into its own 4096 by 4096 height map, and every close-up patch resamples it smoothly (cubic B-spline). Finer detail comes from Roughness, computed in the chunk's own local numbers.
 - Why: a 32-bit float can't place points on a 6000 km planet closer than about 0.5 m, so computing the noise per patch up close made a regular staircase (`[B66]`). The established approach (geometry clipmaps, Proland) upsamples a coarser level and adds detail.
 - Tradeoff: the noise layers' shapes are only as fine as the map (about 4 m on a 16 km chunk).
+
+### [S44] Moons are randomized landscape elements, baked by the noise engine · `decided`
+**Decided:** 2026-10-28
+
+- One to five moons in the chunk's sky, each with its own size, place, two colors, crescent angle and simple noise layers baked by the engine. Randomize is the main control; per-moon controls are there only for adjusting (Dana: not a burden on the user).
+- The look (Dana's references, No Man's Sky and moon photos): screened over the sky so the shadow dissolves into it, split-toned (Second color tints the darks, Color the brights), a crescent turned from the sun's side, and one soft glow across the edge on the lit side.
+- Their sizes set the chunk's tides (size cubed, after the tidal-force rule, exaggerated and capped).
+

@@ -199,6 +199,9 @@ export function useSaveProject({
     planetControls.colorStops,
     planetControls.shadowsEnabled,
     planetControls.water,
+    planetControls.atmosphere,
+    planetControls.detailAmount,
+    planetControls.autoDetail,
   ]);
 
   // Shared by handleNewProject() and handleReset() — clears the canvas to

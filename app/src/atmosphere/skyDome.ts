@@ -2,18 +2,21 @@ import * as THREE from 'three';
 import vertexShader from '../shaders/atmosphere/skyDome.vert.glsl?raw';
 import fragmentShader from '../shaders/atmosphere/skyDome.frag.glsl?raw';
 import type { AtmosphereSettings } from './atmosphereSettings';
+import { MAX_MOONS } from './moonTexture';
 
 // The chunk's sky: three.js's hemisphere-lights sky dome (MIT; offset 33 and exponent 0.6 on a 4000-radius sphere),
 // drawn from inside, following the camera, behind everything else, sized just inside the camera's far plane.
 const EXAMPLE_RADIUS = 4000;
 const EXAMPLE_OFFSET = 33;
-// The moon's compass direction (its height comes from the Moon Height setting). Inferred, TUNABLE.
-const MOON_AZIMUTH = Math.atan2(-0.7, -0.6);
 // How fast the clouds drift at force 4, in noise units per second (Dana, 2026-10-27: 3x, was too slow). Inferred, TUNABLE.
 const CLOUD_DRIFT = 0.12;
 
 export interface SkyDome {
   mesh: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
+  // Each moon's baked surface by its index in the settings, and the draw order (smallest first, so larger moons,
+  // read as closer, are drawn in front): slot i of the shader's arrays holds moon moonOrder[i].
+  moonTextures: (THREE.Texture | null)[];
+  moonOrder: number[];
   dispose: () => void;
 }
 
@@ -36,9 +39,18 @@ export function createSkyDome(): SkyDome {
       uLightIntensity: { value: 1 },
       uDiffuseWrap: { value: 0 },
       uMoonEnabled: { value: 0 },
-      uMoonDirection: { value: new THREE.Vector3(0, 1, 0) },
-      uMoonColor: { value: new THREE.Color() },
-      uMoonSize: { value: 0.1 },
+      uMoonCount: { value: 0 },
+      uMoonDirections: { value: Array.from({ length: MAX_MOONS }, () => new THREE.Vector3(0, 1, 0)) },
+      uMoonSizes: { value: new Array(MAX_MOONS).fill(0.1) },
+      uMoonColors: { value: Array.from({ length: MAX_MOONS }, () => new THREE.Color()) },
+      uMoonColors2: { value: Array.from({ length: MAX_MOONS }, () => new THREE.Color()) },
+      uMoonHasTexture: { value: new Array(MAX_MOONS).fill(0) },
+      uMoonCrescentAngles: { value: new Array(MAX_MOONS).fill(0) },
+      ...Object.fromEntries(Array.from({ length: MAX_MOONS }, (_, i) => [`uMoonTexture${i}`, { value: null }])),
+      uMoonTextureAmount: { value: 0.45 },
+      uMoonHalo: { value: 0 },
+      uMoonGlow: { value: 0 },
+      uMoonCrescent: { value: 0.5 },
       uCloudCoverage: { value: 0 },
       uCloudColor: { value: new THREE.Color() },
       uCloudColor2: { value: new THREE.Color() },
@@ -55,11 +67,27 @@ export function createSkyDome(): SkyDome {
   mesh.frustumCulled = false;
   return {
     mesh,
+    moonTextures: new Array(MAX_MOONS).fill(null),
+    moonOrder: Array.from({ length: MAX_MOONS }, (_, i) => i),
     dispose() {
       geometry.dispose();
       material.dispose();
     },
   };
+}
+
+// A moon's surface, baked from its noise layers (moonTexture.ts) by the chunk's own pipelines; null draws it flat.
+export function setSkyDomeMoonTexture(sky: SkyDome, moonIndex: number, texture: THREE.Texture | null): void {
+  sky.moonTextures[moonIndex] = texture;
+  applyMoonTextures(sky);
+}
+function applyMoonTextures(sky: SkyDome): void {
+  const uniforms = sky.mesh.material.uniforms;
+  sky.moonOrder.forEach((moonIndex, slot) => {
+    const texture = sky.moonTextures[moonIndex];
+    uniforms[`uMoonTexture${slot}`].value = texture;
+    (uniforms.uMoonHasTexture.value as number[])[slot] = texture ? 1 : 0;
+  });
 }
 
 export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void {
@@ -68,10 +96,27 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
   (uniforms.topColor.value as THREE.Color).set(settings.zenithColor);
   (uniforms.bottomColor.value as THREE.Color).set(settings.horizonColor);
   uniforms.uMoonEnabled.value = settings.moon ? 1 : 0;
-  (uniforms.uMoonColor.value as THREE.Color).set(settings.moonColor);
-  uniforms.uMoonSize.value = THREE.MathUtils.degToRad(settings.moonSize);
-  const elevation = THREE.MathUtils.degToRad(settings.moonHeight);
-  (uniforms.uMoonDirection.value as THREE.Vector3).set(Math.cos(elevation) * Math.cos(MOON_AZIMUTH), Math.sin(elevation), Math.cos(elevation) * Math.sin(MOON_AZIMUTH));
+  uniforms.uMoonHalo.value = settings.moonHalo;
+  uniforms.uMoonCrescent.value = settings.moonCrescent / 100;
+  uniforms.uMoonGlow.value = settings.moonGlow;
+  uniforms.uMoonTextureAmount.value = settings.moonTexture;
+  const count = Math.min(settings.moonCount, settings.moons.length);
+  uniforms.uMoonCount.value = count;
+  // Smallest first, so the larger moons are drawn over them; the hidden ones keep their places after.
+  const shown = Array.from({ length: count }, (_, i) => i).sort((a, b) => settings.moons[a].size - settings.moons[b].size);
+  sky.moonOrder = [...shown, ...Array.from({ length: MAX_MOONS }, (_, i) => i).filter((i) => !shown.includes(i))];
+  sky.moonOrder.forEach((moonIndex, slot) => {
+    const moon = settings.moons[moonIndex];
+    if (!moon) return;
+    (uniforms.uMoonSizes.value as number[])[slot] = THREE.MathUtils.degToRad(moon.size);
+    const elevation = THREE.MathUtils.degToRad(moon.height);
+    const azimuth = THREE.MathUtils.degToRad(moon.azimuth);
+    (uniforms.uMoonDirections.value as THREE.Vector3[])[slot].set(Math.cos(elevation) * Math.cos(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.sin(azimuth));
+    (uniforms.uMoonColors.value as THREE.Color[])[slot].set(moon.color);
+    (uniforms.uMoonColors2.value as THREE.Color[])[slot].set(moon.color2);
+    (uniforms.uMoonCrescentAngles.value as number[])[slot] = THREE.MathUtils.degToRad(moon.crescentAngle ?? 0);
+  });
+  applyMoonTextures(sky);
   uniforms.uGlow.value = settings.glow;
   uniforms.uCloudCoverage.value = settings.cloudCoverage;
   (uniforms.uCloudColor.value as THREE.Color).set(settings.cloudColor);
@@ -91,8 +136,26 @@ export function setSkyDomeLight(sky: SkyDome, ambient: number, intensity: number
 }
 
 // Every frame: the dome follows the camera and stays inside its far plane, and the clouds drift with the wind.
+// Where the chunk's camera last looked, so Randomize can place the moon inside the visible sky (moonTexture.ts).
+export interface SkyView {
+  azimuth: number; // degrees, the same compass convention as the moon's Direction
+  pitch: number; // degrees above the horizon
+  halfHeight: number; // half the vertical field of view, degrees
+  halfWidth: number; // half the horizontal field of view, degrees
+}
+const lastView: SkyView = { azimuth: 229, pitch: 0, halfHeight: 30, halfWidth: 45 };
+const viewDirection = new THREE.Vector3();
+export function getSkyView(): SkyView {
+  return lastView;
+}
+
 export function updateSkyDomeFrame(sky: SkyDome, camera: THREE.PerspectiveCamera, sunDirection: THREE.Vector3, wind: number, deltaSeconds: number): void {
   const uniforms = sky.mesh.material.uniforms;
+  camera.getWorldDirection(viewDirection);
+  lastView.azimuth = (THREE.MathUtils.radToDeg(Math.atan2(viewDirection.z, viewDirection.x)) + 360) % 360;
+  lastView.pitch = THREE.MathUtils.radToDeg(Math.asin(THREE.MathUtils.clamp(viewDirection.y, -1, 1)));
+  lastView.halfHeight = camera.fov / 2;
+  lastView.halfWidth = THREE.MathUtils.radToDeg(Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect));
   const cameraPosition = camera.position;
   const radius = camera.far * 0.9;
   sky.mesh.position.copy(cameraPosition);

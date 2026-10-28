@@ -1,6 +1,6 @@
 // The chunk's sky: three.js's hemisphere-lights sky dome (MIT): mix(bottomColor, topColor, pow(max(h, 0), exponent))
 // with h = normalize(position + offset).y, here around the camera (uCenter) and scaled to the dome's radius.
-// Additions for this project, inferred and TUNABLE: a soft sun halo, an optional moon disc, and soft flat clouds
+// Additions for this project, inferred and TUNABLE: a soft sun halo, an optional textured moon, and soft flat clouds
 // (Sable's simple shapes) drifting with the wind.
 uniform vec3 topColor;
 uniform vec3 bottomColor;
@@ -13,9 +13,24 @@ uniform float uAmbient; // the Scene lighting, for the moon
 uniform float uLightIntensity;
 uniform float uDiffuseWrap;
 uniform float uMoonEnabled;
-uniform vec3 uMoonDirection;
-uniform vec3 uMoonColor;
-uniform float uMoonSize; // radians across
+// Up to five moons, in draw order (smallest first); each surface is a globe-style height map (R).
+const int MAX_MOON_SLOTS = 5;
+uniform float uMoonCount;
+uniform vec3 uMoonDirections[MAX_MOON_SLOTS];
+uniform float uMoonSizes[MAX_MOON_SLOTS]; // radians across
+uniform vec3 uMoonColors[MAX_MOON_SLOTS];
+uniform vec3 uMoonColors2[MAX_MOON_SLOTS];
+uniform float uMoonHasTexture[MAX_MOON_SLOTS];
+uniform float uMoonCrescentAngles[MAX_MOON_SLOTS]; // radians the crescent turns from the sun's side
+uniform sampler2D uMoonTexture0;
+uniform sampler2D uMoonTexture1;
+uniform sampler2D uMoonTexture2;
+uniform sampler2D uMoonTexture3;
+uniform sampler2D uMoonTexture4;
+uniform float uMoonTextureAmount; // 0 to 2: the texture's contrast for both tones, and up to 1 the solid layer
+uniform float uMoonHalo;
+uniform float uMoonGlow;
+uniform float uMoonCrescent; // 0 full moon, 1 thinnest crescent
 uniform float uCloudCoverage;
 uniform vec3 uCloudColor;
 uniform vec3 uCloudColor2;
@@ -52,71 +67,108 @@ float skyFbm(vec2 p) {
   return sum / max(norm, 0.0001);
 }
 
-// The moon, after Dana's No Man's Sky references (REFERENCES.md): a disc washed toward the sky so the sky shows through,
-// bumpy cracked relief from cellular noise (Worley F1, The Book of Shaders ch. 12) used as a bump map so it catches the
-// light, soft low-contrast light (the land's wrapped light, lifted), a thin bright rim strongest toward the sun, sturm_trouper's
-// crisp edge (CC0) and a two-term halo (DimensionAlmios's sky, MIT). Strengths inferred, TUNABLE.
-const float MOON_OPACITY = 0.75;
-const float MOON_SKY_TINT = 0.25;
-const float MOON_LIGHT_LIFT = 0.45; // extra fill light, so the dark side fades instead of going black
-const float MOON_BUMP = 0.35;
-const float MOON_RIM = 0.8;
+// The moon, after Dana's No Man's Sky references (REFERENCES.md, docs/references/nms-*.png). It only adds light to the
+// sky (a screen blend), so its dark side is the sky itself; the surface is nearly flat, its pattern a brightness tone
+// over a diagonal two-color overlay; the light swings behind it by Crescent, so the lit part is a curved crescent with
+// a soft, height-roughened terminator (after sturm_trouper's moon, CC0); a halo and an inner edge glow, also screened.
+// Screen blend: W3C Compositing and Blending Level 1. Strengths inferred, TUNABLE.
+const float MOON_BUMP = 1.0;                  // soft relief, readable as a surface
+const float MOON_PATTERN = 1.0;               // how strongly the texture's contrast drives the split toning
+const float MOON_BRIGHTNESS = 0.85;           // the glow screened over the sky at Texture 0 (a translucent moon)
+const float MOON_SOLID_GLOW = 0.15;           // the glow that remains at Texture 1 and above: luminous, never bleaching
+const float MOON_SKY_TINT = 0.2;              // how much the solid surface is washed toward the sky
+const float MOON_TERMINATOR_SOFTNESS = 0.5;   // how wide the lit side melts into the sky
+const float MOON_TERMINATOR_ROUGHNESS = 0.15; // how much the surface breaks up that edge
+const float MOON_MAX_PHASE = 2.9;             // radians the light swings behind the moon at Crescent 100
+const float MOON_DARK_DEPTH = 0.55;           // how deep the darks go under their Second color tint
+// The glow around and inside the edge, sized like the planet's glow (planetGlow.frag.glsl): outward, a minimum share of
+// the moon's radius plus a part that grows with Halo, never under MOON_HALO_MIN_ANGLE so far, small moons still get
+// distance and feather; inward, a share that grows with Inner glow. Tone mapped, lit side only.
+const float MOON_HALO_MIN_SHARE = 0.17;
+const float MOON_HALO_SHARE_PER_UNIT = 0.33;
+const float MOON_HALO_MIN_ANGLE = 0.03; // radians, about 1.7 degrees
+const float MOON_HALO_STRENGTH = 0.6;
+const float MOON_GLOW_MIN_SHARE = 0.04;
+const float MOON_GLOW_SHARE_PER_UNIT = 0.12;
+const float MOON_GLOW_STRENGTH = 0.8;
+vec3 blendScreen(vec3 backdrop, vec3 source) {
+  return backdrop + source - backdrop * source;
+}
 float moonDiffuse(vec3 normal, vec3 lightDir, float wrap) {
   float wrapped = clamp((dot(normal, lightDir) + wrap) / (1.0 + wrap), 0.0, 1.0);
   return pow(wrapped, 1.0 + wrap);
 }
-// Distance to the nearest of one random point per cell (Worley F1).
-float moonCells(vec2 p) {
-  vec2 cell = floor(p);
-  vec2 local = fract(p);
-  float nearest = 1.0;
-  for (int y = -1; y <= 1; y++) {
-    for (int x = -1; x <= 1; x++) {
-      vec2 neighbor = vec2(float(x), float(y));
-      vec2 point = vec2(skyHash(cell + neighbor), skyHash(cell + neighbor + 17.3));
-      nearest = min(nearest, length(neighbor + point - local));
-    }
-  }
-  return nearest;
+// The surface height at a point of the unit ball (z toward the viewer), read from the globe-style map with its seam
+// turned to the back. Flat until the first bake.
+float moonSurface(int slot, vec3 ball) {
+  if (uMoonHasTexture[slot] < 0.5) return 0.5;
+  vec3 sphere = normalize(vec3(ball.z, ball.y, ball.x));
+  vec2 uv = vec2(atan(sphere.z, sphere.x) / 6.28318531 + 0.5, asin(clamp(sphere.y, -1.0, 1.0)) / 3.14159265 + 0.5);
+  if (slot == 0) return texture2D(uMoonTexture0, uv).r;
+  if (slot == 1) return texture2D(uMoonTexture1, uv).r;
+  if (slot == 2) return texture2D(uMoonTexture2, uv).r;
+  if (slot == 3) return texture2D(uMoonTexture3, uv).r;
+  return texture2D(uMoonTexture4, uv).r;
 }
-// Relief: rounded bumps from two cell sizes plus soft mottling.
-float moonRelief(vec2 uv) {
-  return 0.6 * (1.0 - moonCells(uv * 7.0)) + 0.3 * (1.0 - moonCells(uv * 17.0 + 5.1)) + 0.1 * skyNoise(uv * 30.0);
-}
-vec3 drawMoon(vec3 sky, vec3 dir) {
-  vec3 moonDir = normalize(uMoonDirection);
-  float radius = uMoonSize * 0.5;
+vec3 drawMoon(vec3 sky, vec3 dir, int slot) {
+  vec3 moonDir = normalize(uMoonDirections[slot]);
+  float radius = uMoonSizes[slot] * 0.5;
   float moonAngle = acos(clamp(dot(dir, moonDir), -1.0, 1.0));
-  // Halo: a tight and a wide falloff around the disc.
-  float halo = max(moonAngle - radius, 0.0);
-  sky += uMoonColor * (exp(-halo * 12.0) * 0.22 + exp(-halo * 3.5) * 0.06) * uMoonEnabled;
-  if (moonAngle > radius * 1.05 || uMoonEnabled < 0.5) return sky;
-
   vec3 right = normalize(cross(abs(moonDir.y) > 0.99 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0), moonDir));
   vec3 up = cross(moonDir, right);
   vec3 offsetDir = dir - moonDir * dot(dir, moonDir);
   vec2 disc = vec2(dot(offsetDir, right), dot(offsetDir, up)) / sin(radius);
   float discRadius = length(disc);
+  // The light comes from the sun's side of the disc, swung behind the moon by Crescent (0 full, 1 thinnest).
+  vec3 sun = normalize(uSunDirection);
+  vec2 sunOnDisc = vec2(dot(sun, right), dot(sun, up));
+  vec2 side = length(sunOnDisc) > 1e-3 ? normalize(sunOnDisc) : vec2(1.0, 0.0);
+  // Each moon's Crescent angle turns its lit side round from the sun's.
+  float turn = uMoonCrescentAngles[slot];
+  side = vec2(side.x * cos(turn) - side.y * sin(turn), side.x * sin(turn) + side.y * cos(turn));
+
+  // One glow across the edge (Dana: no stripe where halo and inner glow meet): a rounded peak at the edge, spreading
+  // outward by Halo's distance and inward by Inner glow's, on the lit side only so nothing outlines the dark half.
+  float offAngle = moonAngle - radius;
+  float haloWidth = max(radius * (MOON_HALO_MIN_SHARE + uMoonHalo * MOON_HALO_SHARE_PER_UNIT), MOON_HALO_MIN_ANGLE);
+  float glowWidth = radius * (MOON_GLOW_MIN_SHARE + uMoonGlow * MOON_GLOW_SHARE_PER_UNIT);
+  float across = offAngle / (offAngle > 0.0 ? haloWidth : max(glowWidth, 1e-5));
+  float rounded = 1.0 / (1.0 + across * across); // flat at the edge itself, so no line forms there
+  float strength = mix(uMoonGlow * MOON_GLOW_STRENGTH, uMoonHalo * MOON_HALO_STRENGTH, smoothstep(-0.5, 0.5, across));
+  float litSide = mix(1.0, smoothstep(-0.1, 0.6, dot(disc / max(discRadius, 1e-4), side)), smoothstep(0.0, 0.15, uMoonCrescent));
+  vec3 glow = mix(uMoonColors[slot], vec3(1.0), 0.3) * (1.0 - exp(-rounded * litSide * strength));
+  if (offAngle > 0.0) return blendScreen(sky, glow);
+
   vec3 ball = vec3(disc, sqrt(max(1.0 - discRadius * discRadius, 0.0)));
   vec3 normal = normalize(right * ball.x + up * ball.y - moonDir * ball.z);
-  vec3 sun = normalize(uSunDirection);
+  float phase = uMoonCrescent * MOON_MAX_PHASE;
+  vec3 light = normalize((right * side.x + up * side.y) * sin(phase) - moonDir * cos(phase));
 
-  // Relief on longitude and latitude, so it bunches toward the edge like a ball's; its slope tilts the normal.
-  vec2 surfaceUv = vec2(atan(ball.x, max(ball.z, 1e-3)), asin(clamp(ball.y, -1.0, 1.0)));
-  float relief = moonRelief(surfaceUv);
+  float height = moonSurface(slot, ball);
   float delta = 0.01;
-  vec2 slope = vec2(moonRelief(surfaceUv + vec2(delta, 0.0)) - relief, moonRelief(surfaceUv + vec2(0.0, delta)) - relief) / delta;
-  vec3 bumped = normalize(normal - (right * slope.x + up * slope.y) * MOON_BUMP * 0.1);
+  float slopeX = (moonSurface(slot, normalize(ball + vec3(delta, 0.0, 0.0))) - height) / delta;
+  float slopeY = (moonSurface(slot, normalize(ball + vec3(0.0, delta, 0.0))) - height) / delta;
+  vec3 bumped = normalize(normal - (right * slopeX + up * slopeY) * MOON_BUMP * 0.1);
 
-  float light = uAmbient + MOON_LIGHT_LIFT + moonDiffuse(bumped, sun, uDiffuseWrap) * uLightIntensity * (1.0 - MOON_LIGHT_LIFT);
-  vec3 surface = mix(uMoonColor * (0.85 + 0.25 * relief) * light, bottomColor, MOON_SKY_TINT);
-  vec3 moon = mix(sky, surface, smoothstep(1.0, 0.98, discRadius) * MOON_OPACITY);
+  float facing = dot(normal, light) + (height - 0.5) * MOON_TERMINATOR_ROUGHNESS;
+  // The fade narrows as the light goes behind the moon, so a thin crescent's whole edge doesn't stay half lit.
+  float lit = smoothstep(-max(MOON_TERMINATOR_SOFTNESS * sin(phase), 0.02), 0.0, facing);
 
-  // Rim: a thin bright line inside the edge, strongest on the side facing the sun.
-  vec2 sunOnDisc = vec2(dot(sun, right), dot(sun, up));
-  float sunSide = length(sunOnDisc) > 1e-4 ? 0.5 + 0.5 * dot(disc / max(discRadius, 1e-4), normalize(sunOnDisc)) : 0.5;
-  float rim = smoothstep(0.9, 0.985, discRadius) * smoothstep(1.0, 0.985, discRadius);
-  return moon + mix(uMoonColor, vec3(1.0), 0.5) * rim * mix(0.25, 1.0, sunSide) * MOON_RIM;
+  float shade = mix(0.8, 1.0, moonDiffuse(bumped, light, uDiffuseWrap));
+  // Split toning (Lightroom's Split Toning / Color Grading): the surface's brightness, from its texture and shading, is
+  // tinted twice. Multiply tints the darks with Second color, screen tints the brights with Color. Texture scales the
+  // texture's contrast for both together (0 flat, 2 strongest); the shadow (Crescent) then dissolves both alike.
+  float tone = clamp(0.5 + (height - 0.5) * MOON_PATTERN * 2.0 * min(uMoonTextureAmount, 2.0), 0.0, 1.0) * shade;
+  vec3 darks = uMoonColors2[slot] * mix(MOON_DARK_DEPTH, 1.0, tone);
+  vec3 surface = blendScreen(darks, uMoonColors[slot] * tone);
+  float edge = smoothstep(1.0, 0.99, discRadius);
+  // Layered like an image editor's stack: the textured surface as a normal layer at Texture's opacity (lit side only),
+  // then the light screened over it, so the pattern shows while the moon still melts into the sky.
+  float solid = min(uMoonTextureAmount, 1.0);
+  // The dark side is the sky itself (Dana): only the lit part is drawn.
+  vec3 layered = mix(sky, mix(surface, sky, MOON_SKY_TINT), solid * lit * edge);
+  vec3 moonLight = surface * lit * mix(MOON_BRIGHTNESS, MOON_SOLID_GLOW, solid);
+  return blendScreen(blendScreen(layered, moonLight * edge), glow);
 }
 
 void main() {
@@ -130,7 +182,12 @@ void main() {
   float sun = max(dot(dir, normalize(uSunDirection)), 0.0);
   sky += vec3(1.0, 0.96, 0.88) * (pow(sun, 12.0 / (1.0 + uGlow)) * 0.3 * (1.0 + uGlow) + smoothstep(0.9993, 0.9998, sun));
 
-  sky = drawMoon(sky, dir);
+  if (uMoonEnabled > 0.5) {
+    for (int i = 0; i < MAX_MOON_SLOTS; i++) {
+      if (float(i) >= uMoonCount) break;
+      sky = drawMoon(sky, dir, i);
+    }
+  }
 
   // Clouds: soft flat shapes on a plane above, thinning toward the horizon.
   if (dir.y > 0.0) {

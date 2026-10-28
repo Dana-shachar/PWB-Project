@@ -16,10 +16,12 @@ import { ChunkPatchRenderer, type BakeChunkPatch } from './ChunkPatchRenderer';
 import { chunkBaseDepth } from './chunkPatchMesh';
 import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
 import type { ElevationData } from './chunkGrid';
-import { createChunkWater, setChunkWaterLight, setChunkWaterSky, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
+import { createChunkWater, setChunkWaterLight, setChunkWaterSky, setChunkWaterTide, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
+import { tideHeight } from '../atmosphere/tides';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
-import { createSkyDome, setSkyDomeLight, updateSkyDome, updateSkyDomeFrame, type SkyDome } from '../atmosphere/skyDome';
+import { createSkyDome, setSkyDomeLight, setSkyDomeMoonTexture, updateSkyDome, updateSkyDomeFrame, type SkyDome } from '../atmosphere/skyDome';
+import { HeightmapPipeline } from '../map/heightmap';
 import { landRampFloor } from '../planet/seaLevel';
 import { MAX_WAVE_WIND } from '../planet/oceanSpectrum';
 
@@ -101,6 +103,8 @@ interface LandChunkCanvasProps {
 // TODO(DS): arbitrary — framing distance for a ~16-unit chunk, unrelated to
 // the planet's own DEFAULT_CAMERA_DISTANCE (calibrated for a much bigger scene).
 const CHUNK_CAMERA_DISTANCE = 40;
+// Each moon's surface map, wider than the planet's 1024 so a large moon stays sharp (about 32 MB a moon). TUNABLE.
+const MOON_TEXTURE_WIDTH = 2048;
 
 // A second, independent 3D view for inspecting one voxel land-cube chunk,
 // alongside the planet — reuses the same renderer/camera/controls helpers
@@ -154,6 +158,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   const meshRef = useRef<THREE.Mesh | null>(null);
   const materialRef = useRef<THREE.ShaderMaterial | null>(null);
   const skyRef = useRef<SkyDome | null>(null);
+  // Bakes the moon's surface from its own noise layers (atmosphere/moonTexture.ts), on the shared renderer.
+  const moonPipelinesRef = useRef<(HeightmapPipeline | null)[]>([]);
+  const moonBakedLayersRef = useRef<unknown[]>([]); // the layers each moon's texture was last baked from
   // Read every frame by the sky (wind and sun), so it follows the latest settings without rebuilding the scene.
   const atmosphereRef = useRef(atmosphere);
   atmosphereRef.current = atmosphere;
@@ -478,6 +485,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       waterRef.current = null;
       sky.dispose();
       skyRef.current = null;
+      moonPipelinesRef.current.forEach((pipeline) => pipeline?.dispose());
+      moonPipelinesRef.current = [];
+      moonBakedLayersRef.current = [];
       patchRendererRef.current = null;
       sceneRef.current = null;
       gridMeshRef.current = null;
@@ -587,6 +597,36 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     }
     if (waterRef.current) setChunkWaterSky(waterRef.current, atmosphere.enabled ? atmosphere.horizonColor : WATER_SKY_COLOR, atmosphere.horizonColor, atmosphere.zenithColor, hazeDensity);
   }, [atmosphere, chunkSize]);
+
+  // Tides: the moon's size sets how far the water rises and falls (atmosphere/tides.ts). Walk mode reads the water's
+  // live height, so a rising tide pushes the walker to the nearest dry ground.
+  useEffect(() => {
+    const sizes = atmosphere.moons.slice(0, atmosphere.moonCount).map((moon) => moon.size);
+    if (waterRef.current) setChunkWaterTide(waterRef.current, tideHeight(atmosphere.enabled && atmosphere.moon, sizes));
+  }, [atmosphere.enabled, atmosphere.moon, atmosphere.moons, atmosphere.moonCount]);
+
+  // Each shown moon's surface, one pipeline per moon (each bake has its own target): re-baked only when that moon's
+  // layers change (Randomize), and only while the moons are shown.
+  useEffect(() => {
+    if (!atmosphere.moon) return;
+    let frameId = 0;
+    const bake = () => {
+      const renderer = sharedRendererRef.current.renderer;
+      const sky = skyRef.current;
+      if (!renderer || !sky) {
+        frameId = requestAnimationFrame(bake); // the shared renderer can arrive a frame after mount
+        return;
+      }
+      atmosphere.moons.slice(0, atmosphere.moonCount).forEach((moon, i) => {
+        if (moonBakedLayersRef.current[i] === moon.layers) return;
+        const pipeline = (moonPipelinesRef.current[i] ??= new HeightmapPipeline(MOON_TEXTURE_WIDTH, MOON_TEXTURE_WIDTH / 2));
+        setSkyDomeMoonTexture(sky, i, pipeline.render(renderer, { layers: moon.layers }));
+        moonBakedLayersRef.current[i] = moon.layers;
+      });
+    };
+    bake();
+    return () => cancelAnimationFrame(frameId);
+  }, [atmosphere.moon, atmosphere.moons, atmosphere.moonCount]);
 
   // Grid spacing/visibility — mirrors SceneCanvas's own grid effect (rebuild
   // on spacing change, since cell size is baked into a shader uniform).

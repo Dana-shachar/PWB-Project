@@ -1,5 +1,8 @@
-import { Accordion, ColorPicker, Slider, Toggle } from '../UIElements';
+import { useState } from 'react';
+import { Accordion, ColorPicker, Dial, IconButton, Select, Slider, Toggle } from '../UIElements';
 import type { AtmosphereSettings } from '../../atmosphere/atmosphereSettings';
+import { describeMoonLayers, MAX_MOONS, randomMoonLayers, randomMoons, type MoonSettings } from '../../atmosphere/moonTexture';
+import { DiceIcon } from '../icons';
 
 // The atmosphere's detail controls on the right panel: wind, cloud shape and distribution, and the moon. The general
 // ones (sky colors, haze, glow) stay in the left panel's Atmosphere section (Dana, 2026-10-27).
@@ -10,6 +13,17 @@ interface AtmospherePanelProps {
 
 export function AtmospherePanel({ atmosphere, onAtmosphereChange }: AtmospherePanelProps) {
   const off = !atmosphere.enabled;
+  const moonOff = off || !atmosphere.moon;
+  // Which moon the per-moon controls below edit; Randomize sets them all.
+  const [selectedMoon, setSelectedMoon] = useState(0);
+  const moonIndex = Math.min(selectedMoon, atmosphere.moonCount - 1);
+  const moon = atmosphere.moons[moonIndex];
+  const updateMoon = (changes: Partial<MoonSettings>) =>
+    onAtmosphereChange({ moons: atmosphere.moons.map((each, i) => (i === moonIndex ? { ...each, ...changes } : each)) });
+  // New moons: sizes, places in view, surfaces, and colors that go with the sky unless they're locked.
+  const randomizeMoons = () =>
+    onAtmosphereChange({ moons: randomMoons(atmosphere.moonCount, atmosphere.moons, atmosphere.moonColorsLocked, atmosphere.horizonColor, atmosphere.zenithColor) });
+  const moonOptions = Array.from({ length: atmosphere.moonCount }, (_, i) => ({ value: String(i), label: `Moon ${i + 1}` }));
   return (
     <>
       <div className="panel-section">
@@ -49,10 +63,29 @@ export function AtmospherePanel({ atmosphere, onAtmosphereChange }: AtmospherePa
       <div className="panel-section-divider" />
       <div className="panel-section">
         <Accordion title="Moon">
-          <Toggle label="Moon" value={atmosphere.moon} onChange={(moon) => onAtmosphereChange({ moon })} description="A moon or second planet in the land chunk's sky." />
-          <Slider label="Size" unit="°" value={atmosphere.moonSize} onChange={(moonSize) => onAtmosphereChange({ moonSize })} min={1} max={40} step={0.5} precision={1} disabled={off || !atmosphere.moon} description="How large the moon looks, in degrees across." />
-          <Slider label="Height" unit="°" value={atmosphere.moonHeight} onChange={(moonHeight) => onAtmosphereChange({ moonHeight })} min={0} max={90} step={1} precision={0} disabled={off || !atmosphere.moon} description="How high the moon sits above the horizon, in degrees." />
-          <ColorPicker label="Color" value={atmosphere.moonColor} onChange={(moonColor) => onAtmosphereChange({ moonColor })} />
+          <Toggle label="Moon" value={atmosphere.moon} onChange={(moon) => onAtmosphereChange({ moon })} description="Moons or other planets in the land chunk's sky." />
+          <div className="panel-btn-row">
+            <button type="button" className="noise-add-layer-btn" onClick={randomizeMoons} disabled={moonOff}>
+              <DiceIcon /> Randomize
+            </button>
+            <IconButton icon={<DiceIcon />} label="Randomize this moon's texture only" onClick={() => updateMoon({ layers: randomMoonLayers() })} disabled={moonOff} />
+          </div>
+          <Slider label="Moons" value={atmosphere.moonCount} onChange={(moonCount) => onAtmosphereChange({ moonCount })} min={1} max={MAX_MOONS} step={1} precision={0} disabled={moonOff} description="How many moons are in the sky, 1 to 5. Randomize gives them clearly different sizes and surfaces." />
+          {atmosphere.moonCount > 1 && (
+            <Select label="Moon" value={String(moonIndex)} onChange={(value) => setSelectedMoon(Number(value))} options={moonOptions} description="Which moon the controls below adjust." />
+          )}
+          <Slider label="Crescent" unit="%" value={atmosphere.moonCrescent} onChange={(moonCrescent) => onAtmosphereChange({ moonCrescent })} min={0} max={100} step={1} precision={0} disabled={moonOff} description="How much of each moon is in shadow: 0 is a full moon, 100 the thinnest crescent." />
+          <Dial label="Crescent angle" value={moon.crescentAngle} onChange={(crescentAngle) => updateMoon({ crescentAngle })} disabled={moonOff} description="Turns this moon's crescent round from the sun's side: 0 is lit from the sun." />
+          <Slider label="Texture" value={atmosphere.moonTexture} onChange={(moonTexture) => onAtmosphereChange({ moonTexture })} min={0} max={2} step={0.01} precision={2} disabled={moonOff} description="How clearly the surface shows: 0 is pure glow melting into the sky, 1 a solid moon, and above 1 the pattern grows stronger too." />
+          <Slider label="Halo" value={atmosphere.moonHalo} onChange={(moonHalo) => onAtmosphereChange({ moonHalo })} min={0} max={3} step={0.01} precision={2} disabled={moonOff} description="A soft light around each moon. Meant to stay subtle; the sky's haze softens it further." />
+          <Slider label="Inner glow" value={atmosphere.moonGlow} onChange={(moonGlow) => onAtmosphereChange({ moonGlow })} min={0} max={3} step={0.01} precision={2} disabled={moonOff} description="A soft brightening just inside each moon's lit edge." />
+          <Toggle label="Lock colors" value={atmosphere.moonColorsLocked} onChange={(moonColorsLocked) => onAtmosphereChange({ moonColorsLocked })} description="Keeps every moon's colors when Randomize picks new moons." />
+          <p className="erosion-note">{describeMoonLayers(moon.layers)}</p>
+          <Slider label="Size" unit="°" value={moon.size} onChange={(size) => updateMoon({ size })} min={1} max={90} step={0.5} precision={1} disabled={moonOff} description="How large this moon looks, in degrees across." />
+          <Slider label="Height" unit="°" value={moon.height} onChange={(height) => updateMoon({ height })} min={0} max={90} step={1} precision={0} disabled={moonOff} description="How high this moon sits above the horizon, in degrees." />
+          <Slider label="Direction" unit="°" value={moon.azimuth} onChange={(azimuth) => updateMoon({ azimuth })} min={0} max={360} step={1} precision={0} disabled={moonOff} description="Which way this moon sits around the horizon, in compass degrees." />
+          <ColorPicker label="Color" value={moon.color} onChange={(color) => updateMoon({ color })} />
+          <ColorPicker label="Second color" value={moon.color2} onChange={(color2) => updateMoon({ color2 })} />
         </Accordion>
       </div>
     </>

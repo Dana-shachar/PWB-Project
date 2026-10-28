@@ -519,16 +519,13 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         // the land chunk's own material, valid now that both panes share one
         // renderer/context. A real GPU-only resolution budget, not the CPU
         // readback-cost ceiling getPatchElevationData above still needs.
-        const clampedResolution = clampPatchTextureResolution(resolution);
-        const target = heightmapPipeline.renderDisplayRegion(webglRenderer, {
-          layers: layersRef.current,
-          face: faceIndex(patch.face),
-          min: patch.min,
-          max: patch.max,
-          localOrigin: chunkCenter(patch),
-          resolution: clampedResolution,
-        });
-        return { texture: target.texture, resolution: clampedResolution };
+        // [B66] The chunk's own 4096 height map, the same source its patches resample, so the water and shadows match.
+        heightmapPipeline.ensureChunkBase(webglRenderer, layersRef.current, faceIndex(patch.face), patch.min, patch.max, chunkCenter(patch));
+        return heightmapPipeline.getChunkBaseTexture() ?? (() => {
+          const clampedResolution = clampPatchTextureResolution(resolution);
+          const target = heightmapPipeline.renderDisplayRegion(webglRenderer, { layers: layersRef.current, face: faceIndex(patch.face), min: patch.min, max: patch.max, resolution: clampedResolution });
+          return { texture: target.texture, resolution: clampedResolution };
+        })();
       },
       erodePatch(patch, gridResolution, run) {
         const webglRenderer = webglRendererRef.current;

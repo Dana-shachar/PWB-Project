@@ -1,5 +1,8 @@
+import type { NoiseLayer } from '../map/heightmap';
+import { DEFAULT_MOONS, MAX_MOONS, type MoonSettings } from './moonTexture';
+
 // The planet's atmosphere: sky colors, haze, the planet's glow, clouds, the wind (which also drives the water's
-// waves) and an optional moon in the chunk's sky. Saved with the planet (planet/planetControls.ts).
+// waves) and optional moons in the chunk's sky. Saved with the planet (planet/planetControls.ts).
 export interface AtmosphereSettings {
   enabled: boolean;
   // The sky's gradient from the horizon up (three.js's sky dome, shaders/atmosphere/skyDome.frag.glsl).
@@ -31,9 +34,18 @@ export interface AtmosphereSettings {
   // How windy, as a Beaufort force: 0 is calm, 12 a storm. Moves the clouds and sets the water's waves.
   wind: number;
   moon: boolean;
-  moonColor: string;
-  moonSize: number; // degrees across
-  moonHeight: number; // degrees above the horizon
+  // How many moons show (1 to 5), and all five, so changing the count never loses one (atmosphere/moonTexture.ts).
+  moonCount: number;
+  moons: MoonSettings[];
+  // How much of each moon is in shadow: 0 full, 100 the thinnest crescent. Shared: one sun lights them all.
+  moonCrescent: number;
+  // How much of the surface shows as a solid layer under the glow: 0 pure glow, 1 a solid moon.
+  moonTexture: number;
+  // Keeps every moon's colors when Randomize picks new moons.
+  moonColorsLocked: boolean;
+  // A soft halo around each moon and a glow inside its lit edge; meant to be subtle, under the sky's haze.
+  moonHalo: number;
+  moonGlow: number;
 }
 
 // Inferred, TUNABLE: a soft, pale default between the references (Sable, Gris, No Man's Sky).
@@ -59,14 +71,43 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   cloudDistributionStrength: 0.6,
   wind: 4,
   moon: false,
-  moonColor: '#e9d2c4',
-  moonSize: 8,
-  moonHeight: 40,
+  moonCount: 1,
+  moons: DEFAULT_MOONS,
+  moonCrescent: 50,
+  moonTexture: 1,
+  moonColorsLocked: false,
+  moonHalo: 0.15,
+  moonGlow: 0.15,
 };
 
 // Older saves have no atmosphere; their wind lived in the water settings.
 export function migrateAtmosphere(saved: Partial<AtmosphereSettings> | undefined, legacyWind: number | undefined): AtmosphereSettings {
   const wind = saved?.wind ?? legacyWind ?? DEFAULT_ATMOSPHERE_SETTINGS.wind;
   const cloudColor2 = saved?.cloudColor2 ?? saved?.cloudColor ?? DEFAULT_ATMOSPHERE_SETTINGS.cloudColor2;
-  return { ...DEFAULT_ATMOSPHERE_SETTINGS, ...saved, wind, cloudColor2 };
+  return { ...DEFAULT_ATMOSPHERE_SETTINGS, ...saved, wind, cloudColor2, moons: migrateMoons(saved) };
+}
+
+// Saves from before there were several moons kept one moon's fields flat; they become moon 1.
+interface LegacyMoonFields {
+  moonColor?: string;
+  moonColor2?: string;
+  moonSize?: number;
+  moonHeight?: number;
+  moonAzimuth?: number;
+  moonLayers?: NoiseLayer[];
+}
+function migrateMoons(saved: (Partial<AtmosphereSettings> & LegacyMoonFields) | undefined): MoonSettings[] {
+  const moons = saved?.moons ?? DEFAULT_MOONS;
+  const first = moons[0] ?? DEFAULT_MOONS[0];
+  const legacyFirst: MoonSettings = {
+    size: saved?.moonSize ?? first.size,
+    height: saved?.moonHeight ?? first.height,
+    azimuth: saved?.moonAzimuth ?? first.azimuth,
+    color: saved?.moonColor ?? first.color,
+    color2: saved?.moonColor2 ?? first.color2,
+    layers: saved?.moonLayers ?? first.layers,
+    crescentAngle: first.crescentAngle ?? 0,
+  };
+  const all = [saved?.moons ? first : legacyFirst, ...moons.slice(1)];
+  return Array.from({ length: MAX_MOONS }, (_, i) => ({ ...(all[i] ?? DEFAULT_MOONS[i]), crescentAngle: all[i]?.crescentAngle ?? 0 }));
 }

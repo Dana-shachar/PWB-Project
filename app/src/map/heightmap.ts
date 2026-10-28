@@ -314,9 +314,10 @@ export interface HeightmapParams {
 // the same way a subdividing patch is described, so per-patch terrain can
 // reuse this untouched. `face` indexes CUBE_FACES in planet/mesh.ts, and
 // `resolution` is the baked texture's size per axis.
-// [B66] Texels across the chunk's base map (height only, about 64 MB): about 4 m apart on a 16 km chunk.
+// [B66] Texels across the chunk's base map (height in R and G, about 134 MB): about 4 m apart on a 16 km chunk. It also
+// serves the water and shadows (getChunkBaseTexture), so all of the chunk's terrain comes from one smooth source.
 const CHUNK_BASE_SAMPLES = 4096;
-const CHUNK_BASE_BORDER = 2; // texels past each edge, so the cubic read at the chunk's rim has real ground
+const CHUNK_BASE_BORDER = 0; // edge texels sit exactly on the chunk's edges, as the water and shadows expect
 
 export interface RegionParams {
   layers: NoiseLayer[];
@@ -448,9 +449,9 @@ export class HeightmapPipeline {
     if (!this.chunkBaseTarget) {
       this.chunkBaseTarget = new THREE.WebGLRenderTarget(size, size, {
         type: THREE.FloatType,
-        format: THREE.RedFormat,
-        minFilter: THREE.NearestFilter, // read only at texel centers, by the cubic read in heightmap.frag.glsl
-        magFilter: THREE.NearestFilter,
+        format: THREE.RGFormat,
+        minFilter: THREE.LinearFilter, // smooth for the water and shadows; the patches' cubic read uses texel centers
+        magFilter: THREE.LinearFilter,
       });
     }
     this.material.uniforms.uElevationInRed.value = 1;
@@ -470,6 +471,11 @@ export class HeightmapPipeline {
     this.chunkBaseLayers = layers;
   }
 
+  // The chunk base map, for the chunk's water and shadows: height in G, as the chunk's shaders read it.
+  getChunkBaseTexture(): { texture: THREE.Texture; resolution: number } | null {
+    return this.chunkBaseTarget ? { texture: this.chunkBaseTarget.texture, resolution: this.chunkBaseTarget.width } : null;
+  }
+
   // Part of the chunk base map's key, so a radius change re-bakes it.
   setPlanetRadiusMeters(meters: number): void {
     this.planetRadiusMeters = meters;
@@ -484,7 +490,8 @@ export class HeightmapPipeline {
     this.shoreSeaLevel = seaLevel;
   }
 
-  constructor() {
+  // The globe map's size can be set per pipeline: the moons bake theirs larger, so they stay sharp in the sky.
+  constructor(globeWidth = HEIGHTMAP_WIDTH, globeHeight = HEIGHTMAP_HEIGHT) {
     // FloatType, not the default byte texture — G now carries real,
     // unclamped elevation (can exceed 1 or go negative), not a 0..255
     // color value; R (shape) still only ever holds 0..1, same precision as
@@ -493,7 +500,7 @@ export class HeightmapPipeline {
     // Float32Array via readRenderTargetPixels — the standard Three.js
     // GPGPU-style compute-in-shader/read-on-CPU pattern. See ISSUES.md,
     // 2026-09-24.
-    this.renderTarget = new THREE.WebGLRenderTarget(HEIGHTMAP_WIDTH, HEIGHTMAP_HEIGHT, { type: THREE.FloatType });
+    this.renderTarget = new THREE.WebGLRenderTarget(globeWidth, globeHeight, { type: THREE.FloatType });
     // Repeat U so u=1.0 samples the same texel as u=0.0 — avoids a seam
     // crack at the sphere's duplicated-vertex UV wrap.
     this.renderTarget.texture.wrapS = THREE.RepeatWrapping;

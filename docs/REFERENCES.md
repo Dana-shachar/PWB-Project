@@ -44,6 +44,13 @@
 - The second anchor reference, for the evolving plants planned on the land chunk.
 - *[Panspermia](https://www.karlsims.com/panspermia.html). Read 2026-10-26*
 
+**Being anything, at any scale** · David OReilly, *Everything* (2017) · `framing`
+- A simulation game where you can become any of its lifeforms and objects, from sand grains to whole galaxies, moving between scales. It plays itself when left alone, and is narrated by Alan Watts's lectures.
+- Its look: simple low-poly models in soft, warm light and hazy pastel skies, and animals that roll end over end instead of walking. Its scattered objects on open, soft-colored ground sit close to this project's 2.5D direction.
+- An inspiration for the concept (Dana, 2026-10-28): a world that runs on its own, seen at every scale from the planet down to the ground.
+- ![](references/everything-objects.png) ![](references/everything-deer.png)
+- *[Wikipedia, Everything (video game)](https://en.wikipedia.org/wiki/Everything_(video_game)); [CBC Tapestry, playing Everything](https://www.cbc.ca/radio/tapestry/philosophy-and-tech-1.4659355/playing-everything-a-video-game-explores-your-place-in-the-universe-1.4659366). Search summaries 2026-10-28, not read in full*
+
 **Seed-driven worlds that stay coherent** · Sean Murray · `framing`
 - One system producing wildly different but coherent worlds, which is the basis for generating themes from continuous axes rather than authoring them.
 - ⚠️ On GDC Vault; no stable direct link found.
@@ -638,6 +645,40 @@
 **Land share weighted by area** · `method used`
 - On a latitude-by-longitude map each row covers cos(latitude) of the sphere's area, so the "% land" readout weights rows by it.
 - ⚠️ Standard sphere geometry, no source fetched.
+
+### Close-up terrain, moons and tides
+
+*Collected 2026-10-28 for `[B66]`, the moons and the tides. All from search summaries, not read in full.*
+
+**Upsample a coarser level and add detail** · geometry clipmaps (Losasso and Hoppe 2004), Proland (Bruneton and Neyret 2008) · `method used`
+- Each finer terrain level is the coarser one smoothly upsampled, plus added detail.
+- The land chunk's own 4096 height map, resampled by every close-up patch, with Roughness on top (`[S43]`).
+
+**Cubic B-spline texture sampling** · Sigg and Hadwiger, GPU Gems 2, ch. 20 · `method used`
+- Four weights per axis from a cubic B-spline, smooth everywhere, so a magnified map never shows its grid.
+- The chunk patches' read of the height map (`chunkBaseElevation`).
+
+**Keep GPU numbers small around a nearby origin** · gamedev.net and Godot forum planet threads · `background`
+- A 32-bit float can't place points on a planet-sized sphere finely; compute offsets on the CPU in 64-bit and send small numbers. Explains `[B66]`.
+- *[gamedev.net, imprecision problem on planet](https://gamedev.net/forums/topic/621554-imprecision-problem-on-planet/) · [Godot forum, procedural planets](https://forum.godotengine.org/t/help-with-procedural-planets/139951)*
+
+**Screen blend** · W3C Compositing and Blending Level 1 · `method used`
+- `backdrop + source − backdrop × source`: only adds light, so the moons' shadowed side is the sky itself.
+- *[W3C Compositing and Blending Level 1](https://www.w3.org/tr/compositing-1/)*
+
+**Split toning** · Lightroom's Split Toning (now Color Grading), Dana's moon photo references · `method used`
+- Shadows tinted one color (multiply), highlights another (screen). Each moon's Second color tints its darks, Color its brights.
+
+**A moon's dark-side falloff and roughened terminator** · Godot stylized-sky shaders (`dark_falloff`), sturm_trouper's moon shader · `method used`
+- The lit side fades into the shadow over a set falloff, the edge broken up by the surface height. The moons' crescent.
+- *[Godot Shaders, stylized sky with procedural sun and moon](https://godotshaders.com/shader/stylized-sky-with-procedural-sun-and-moon/)*
+
+**Tidal pull scales with density times apparent size cubed** · arXiv 1406.0323; Stony Brook tide notes · `method used`
+- A moon twice as big in the sky pulls eight times as hard. The chunk's tides follow each moon's size cubed, summed, exaggerated and capped.
+- *[arXiv 1406.0323](https://arxiv.org/pdf/1406.0323) · [Stony Brook, sun and moon tides](https://math.stonybrook.edu/~tony/tides/sun-moon.html)*
+
+**Angle dial** · Photoshop's angle controls · `convention`
+- A circle with a line pointing at the angle, plus a number field. The design system's `Dial`.
 
 ### Stylized sky, planet and terrain shaders (candidates)
 

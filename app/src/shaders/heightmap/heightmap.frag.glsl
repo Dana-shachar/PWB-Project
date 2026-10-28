@@ -392,7 +392,7 @@ uniform vec2 uChunkBaseMin;      // [B66] the base map's first and last texel ce
 uniform vec2 uChunkBaseMax;
 uniform float uChunkBaseSamples; // texels across the base map, border included
 uniform float uChunkBaseSpacing; // between base map texels, face coords: Roughness octaves coarser than this are in the map
-uniform float uElevationInRed;   // 1 when baking the base map, a height-only (single channel) target
+uniform float uElevationInRed;   // 1 when baking the base map: height in R and G
 uniform float uRegionSamples; // the bake target's own resolution, see below
 
 // Mirrors cubeFacePoint() in planet/mesh.ts. Kept deliberately identical:
@@ -702,5 +702,5 @@ void main() {
     float shoreFade = uShoreEnabled > 0.5 ? clamp((elevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
     elevation += uDetailAmount * shoreFade * planetDetail(basePosition, sampleSpacing, 0.0);
   }
-  gl_FragColor = uElevationInRed > 0.5 ? vec4(elevation, 0.0, 0.0, 1.0) : vec4(clamp(composite, 0.0, 1.0), elevation, 0.0, 1.0);
+  gl_FragColor = uElevationInRed > 0.5 ? vec4(elevation, elevation, 0.0, 1.0) : vec4(clamp(composite, 0.0, 1.0), elevation, 0.0, 1.0);
 }

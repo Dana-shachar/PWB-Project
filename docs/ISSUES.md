@@ -11,11 +11,11 @@
 > Bugs only. Architecture and the decisions behind it are in `SPEC.md`. Status by stage is in `ROADMAP.md`.
 
 ```
-🔴 Open      11
+🔴 Open      12
 🟡 Partial   22
 ❓ Decision   1
 📋 Tracked    4
-✅ Fixed     32
+✅ Fixed     33
 ```
 
 <details>
@@ -588,6 +588,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Detail finer than the map comes from Roughness only, computed in the chunk's own small numbers, with each octave counted once (the share the map already holds is left out).
 - 📚 Upsample the coarser level and add detail: geometry clipmaps (Losasso and Hoppe 2004) and Proland (Bruneton and Neyret 2008). B-spline weights: GPU Gems 2, ch. 20 (Sigg and Hadwiger). Keeping GPU numbers small around a nearby origin: the planet-rendering threads on gamedev.net and the Godot forum. All from search summaries, not read in full.
 - Tradeoff: the noise layers' own shapes are only as fine as the map; finer texture is Roughness. ⚠️ A layer change re-bakes the whole 4096 map, which may pause for a moment.
+- Follow-up (2026-10-28): the pattern still showed under the water, because the water and the shadows read a separate, older 1025 bake. Both now read the chunk's 4096 map (`getChunkBaseTexture`, height in R and G, about 134 MB), so all of the chunk's terrain comes from one smooth source.
 
 ![After: walk mode on the same chunk, smooth natural slopes down to the water, no stripes or ridges.](screenshots/2026-10-28-ground-smooth-after.png)
 *After, 2026-10-28: smooth slopes, no pattern.*
@@ -598,6 +599,15 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 3. Smooth Voronoi (Quilez) on those octaves, then a 1 m Gaussian blur over every patch. Both only softened the staircase. Removed.
 - Ruled out by test along the way: shadows, Terrace, Jitter alone, patch borders, low-precision storage, the sample grid itself.
 - The lesson is now a working rule (`.claude/CLAUDE.md`, "How to fix bugs"): check a proposed mechanism against how established tools work before inventing one, and build only on a measured cause.
+
+### [B70] Atmosphere changes were never autosaved · `wrong but workable`
+**✅ Fixed:** 2026-10-28 · **Found:** 2026-10-28 · **Where:** `projectSettings/saveProject.ts`
+- Dana: a run of moon changes was lost on reload. The autosave fires 3 s after a change on its trigger list, and the list left out the atmosphere (sky, haze, clouds, wind, moons), Roughness and Auto detail, so they were only written when something else changed.
+- Fixed: all three are on the list now.
+
+### [B71] After clicking a setting, walk mode sometimes doesn't respond · `wrong but workable`
+**🔴 Open** · **Found:** 2026-10-28 · **Where:** `scene/walkMode.ts` (suspected)
+- Dana: walking stops answering the keys after clicking a control in the panel. Not measured; the guess is that the clicked control keeps keyboard focus. Next: log where the walking keys land (a temporary log in `handleKeyDown`).
 
 ### [B67] From walk mode the water is barely visible · `minor`
 **🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`

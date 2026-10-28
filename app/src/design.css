@@ -480,6 +480,49 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 
 /* ── Toggle (ui/UIElements.tsx) ────────────────────────────── */
 
+/* Dial (ui/UIElements.tsx): a round angle control sitting where a slider row's track would, with the same number
+   field after it. Default in the input fill with a text-colored line; hover lighter; dragging puts the line in the
+   accent; focus shows the accent border like the toggle; disabled fades with the row (.ui-slider-row--disabled). */
+.ui-dial-track {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+.ui-dial {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-input-fill);
+  border: 0.25px solid var(--color-input-stroke);
+  cursor: pointer;
+  outline: none;
+  touch-action: none;
+  transition: opacity 0.15s ease;
+}
+.ui-dial:hover {
+  opacity: 0.85;
+}
+.ui-dial:focus-visible {
+  border-color: var(--color-accent);
+}
+.ui-dial-line {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 11px;
+  height: 1.5px;
+  margin-top: -0.75px;
+  background: var(--color-text);
+  border-radius: 1px;
+  transform-origin: 0 50%;
+}
+.ui-dial--active .ui-dial-line {
+  background: var(--color-accent);
+}
+
 .ui-toggle-row {
   display: flex;
   align-items: center;

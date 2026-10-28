@@ -84,7 +84,7 @@
 
 **map/heightmap.ts**
 - What it is: the layer type, its migrations, and the pipeline that bakes layers into a heightmap on the GPU.
-- Key names: `NoiseLayer`, `NOISE_TYPE_OPTIONS`, `FRACTAL_TYPE_OPTIONS`, `VORONOI_DISTANCE_OPTIONS`, `BLEND_MODE_OPTIONS`, `hasMask`, `quantileOf`, `createDefaultLayer`, `migrateLegacyLayers`, `HeightmapPipeline` (`beginStroke`, `endStroke`, `replayLayerHistory`, `bakeRegionToTarget`, `getRegionElevationData`, `setDetailAmount`, `setPlanetRadiusMeters`, `bakeRegionInto`, `ensureChunkBase`: the land chunk's own 4096 height map, `chunkPatchMaterial`: the bake compiled as `CHUNK_PATCH_PASS` to resample it, `maskSortedValues`, `resolveMaskBand`), `RegionParams` (`localOrigin`, `fromChunkBase`), `CHUNK_BASE_SAMPLES`, `syncLayerUniforms`.
+- Key names: `NoiseLayer`, `NOISE_TYPE_OPTIONS`, `FRACTAL_TYPE_OPTIONS`, `VORONOI_DISTANCE_OPTIONS`, `BLEND_MODE_OPTIONS`, `hasMask`, `quantileOf`, `createDefaultLayer`, `migrateLegacyLayers`, `HeightmapPipeline` (`beginStroke`, `endStroke`, `replayLayerHistory`, `bakeRegionToTarget`, `getRegionElevationData`, `setDetailAmount`, `setPlanetRadiusMeters`, `getChunkBaseTexture` (the 4096 map for the chunk's water and shadows), the globe size option in the constructor, `bakeRegionInto`, `ensureChunkBase`: the land chunk's own 4096 height map, `chunkPatchMaterial`: the bake compiled as `CHUNK_PATCH_PASS` to resample it, `maskSortedValues`, `resolveMaskBand`), `RegionParams` (`localOrigin`, `fromChunkBase`), `CHUNK_BASE_SAMPLES`, `syncLayerUniforms`.
 - Talks to: `shaders/heightmap/heightmap.frag.glsl`, `SceneCanvas`, the patch renderer.
 
 **map/noiseRanges.ts**
@@ -167,15 +167,23 @@
 
 ## ☁️ Atmosphere (`atmosphere/`)
 
-*The sky, haze, glow, clouds, wind and moon, saved with the planet.*
+*The sky, haze, glow, clouds, wind, moons and tides, saved with the planet.*
 
 **atmosphere/atmosphereSettings.ts**
 - What it is: the settings and their defaults; older saves take their wind from the water.
-- Key names: `AtmosphereSettings` (incl. `cloudColor2`, `moonHeight`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`.
+- Key names: `AtmosphereSettings` (incl. `cloudColor2`, `moonCount`, `moons`, `moonCrescent`, `moonTexture`, `moonHalo`, `moonGlow`, `moonColorsLocked`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
+
+**atmosphere/moonTexture.ts**
+- What it is: the moons: their settings, simple noise layers, Randomize (sizes, places in view, colors from the sky, textures), and the five defaults.
+- Key names: `MoonSettings` (incl. `crescentAngle`), `MAX_MOONS`, `randomMoons`, `randomMoonLayers`, `moonColorsForSky`, `randomHueTurns`, `COLOR_RULES`, `randomSizes`, `describeMoonLayers`, `DEFAULT_MOONS`.
+
+**atmosphere/tides.ts**
+- What it is: how far the chunk's water rises and falls with the moons (size cubed, summed, capped).
+- Key names: `tideHeight`, `TIDE_PERIOD_SECONDS`, `TIDE_MAX_SHARE`.
 
 **atmosphere/skyDome.ts**, **planetGlow.ts**, **planetHaze.ts**, **cloudLayer.ts**
 - What it is: the chunk's sky, the planet's rim glow, surface haze and cloud shell.
-- Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`, `setSkyDomeLight` (the Scene light for the moon), `MOON_AZIMUTH`, `CLOUD_DRIFT`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`, `GLOW_MIN_WIDTH`, `GLOW_WIDTH_PER_UNIT`, `GLOW_SHELL_WIDTHS`; `createPlanetHaze`, `updatePlanetHaze`, `HAZE_SCALE_HEIGHT`, `HAZE_DENSITY_PER_UNIT`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`, `CLOUD_TIME_PER_WIND`.
+- Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`, `setSkyDomeLight` (the Scene light for the moons), `setSkyDomeMoonTexture`, `getSkyView` (where the camera last looked, for Randomize), `CLOUD_DRIFT`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`, `GLOW_MIN_WIDTH`, `GLOW_WIDTH_PER_UNIT`, `GLOW_SHELL_WIDTHS`; `createPlanetHaze`, `updatePlanetHaze`, `HAZE_SCALE_HEIGHT`, `HAZE_DENSITY_PER_UNIT`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`, `CLOUD_TIME_PER_WIND`.
 
 **ui/panels/AtmospherePanel.tsx**
 - What it is: the right panel's Wind, Clouds and Moon controls, shown when Atmosphere is selected.
@@ -240,7 +248,7 @@
 
 **voxel/chunkWater.ts**
 - What it is: the chunk's water, TDM's Seascape on a flat sheet, recolored by the water ramp, see-through in the shallows, with shore and crest foam.
-- Key names: `ChunkWater`, `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame`, `setChunkWaterLight`.
+- Key names: `ChunkWater`, `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.
@@ -248,7 +256,7 @@
 
 **voxel/LandChunkCanvas.tsx**
 - What it is: the chunk view, its chunk material (shared by the voxel mesh and every patch), map-style orbit (`zoomToCursor`, pivot on the ground under the cursor) and the patch renderer.
-- Key names: `LandChunkCanvas`, `LandChunkCanvasHandle`, `pivotAtScreenPoint` (screen point to ground pivot), `pivotOnGround` (mouse handler), `currentGround`.
+- Key names: `LandChunkCanvas`, `LandChunkCanvasHandle`, `pivotAtScreenPoint` (screen point to ground pivot), `pivotOnGround` (mouse handler), `currentGround`; one `HeightmapPipeline` per moon (`moonPipelinesRef`, `MOON_TEXTURE_WIDTH`).
 
 **voxel/smoothMesh.ts**, **meshWorker.ts**, **density.ts**, **chunkGrid.ts**
 - What it is: smooth and blocky meshing, and the chunk's grid constants.
@@ -279,7 +287,7 @@
 
 **ui/UIElements.tsx**
 - What it is: the design-system components.
-- Key names: `Slider` (log and reversed scales), `Toggle`, `Select`, `ColorPicker`, `EditableText`, `Accordion`, `IconButton`, `Popup`, `placeTooltip`.
+- Key names: `Slider` (log and reversed scales), `Dial` (round angle control), `Toggle`, `Select`, `ColorPicker`, `EditableText`, `Accordion`, `IconButton`, `Popup`, `placeTooltip`.
 
 **ui/icons.tsx**
 - What it is: flat line-art icons.
@@ -328,7 +336,7 @@
 
 **atmosphere/** (`skyDome`, `planetGlow`, `planetHaze`, `clouds`, `haze.glsl`)
 - What it is: the chunk's sky dome, the planet's rim glow and surface haze, the planet's cloud shell, and the chunk haze shared by ground and water.
-- Key names: sky dome `topColor`, `bottomColor`, `uGlow`, sun halo, `skyFbm`, `drawMoon`, `moonCells`, `moonRelief`; glow `uWidth`, `uStrength`, edge-distance fade; haze `sphereHits`, `uScaleHeight`, `HAZE_STEPS`; clouds `cloudShape` (Swirl, Feather erosion), `cloudFbm`, `cloudTone`, `toneBands`, `bandSpeed`, `GLOBAL_DRIFT`, `BAND_SWING`, Beer and powder lighting; `haze.glsl` `applyHaze` (Quilez height fog, sun and sky hues), `interleavedGradientNoise`, `HAZE_FALLOFF`, `HAZE_GRAIN`.
+- Key names: sky dome `topColor`, `bottomColor`, `uGlow`, sun halo, `skyFbm`, `drawMoon` (screen blend, split toning, crescent, one rounded glow across the edge), `moonSurface`, `blendScreen`, `MOON_HALO_*`, `MOON_GLOW_*`; glow `uWidth`, `uStrength`, edge-distance fade; haze `sphereHits`, `uScaleHeight`, `HAZE_STEPS`; clouds `cloudShape` (Swirl, Feather erosion), `cloudFbm`, `cloudTone`, `toneBands`, `bandSpeed`, `GLOBAL_DRIFT`, `BAND_SWING`, Beer and powder lighting; `haze.glsl` `applyHaze` (Quilez height fog, sun and sky hues), `interleavedGradientNoise`, `HAZE_FALLOFF`, `HAZE_GRAIN`.
 
 **erosion/**, **scene/** (the grid)
 - What it is: the erosion passes and the ground grid.
@@ -341,7 +349,7 @@
 
 **projectSettings/saveProject.ts**
 - What it is: autosave, load, new and reset.
-- Key names: `useSaveProject`, `createFreshProject`, `handleReset`.
+- Key names: `useSaveProject` (the autosave's trigger list includes the atmosphere, `[B70]`), `createFreshProject`, `handleReset`.
 
 **firebase/storage.ts**, **client.ts**, **currentUser.ts**
 - What it is: Firestore access and the anonymous user. `client.ts` reads its config from the `VITE_FIREBASE_*` env vars (`app/.env.local`), with a placeholder key when they're missing so the app still loads.

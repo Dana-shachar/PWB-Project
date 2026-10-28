@@ -13,21 +13,28 @@
 
 `Covers 2026-10-28 to 2026-11-04 · Due: start of class, 10:10 am`
 
-*Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map.*
+*Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map, then rebuilt the moons: up to five, randomized, with tides.*
 
 ![Walk mode on the land chunk after the fix: smooth slopes down to the water, no stripes.](screenshots/2026-10-28-ground-smooth-after.png)
 
 ### 🛠️ Done
-- **Ground pattern fixed (`[B66]`, 2026-10-28):** up close the chunk showed stripes and stair-stepped ridges, because its heights were computed as points on the whole 6000 km planet, where floats round to about 0.6 m. The chunk now bakes its own 4096 height map from the planet's noise and resamples it smoothly; finer texture comes from Roughness. Before and after screenshots are in the issue.
+- **Ground pattern fixed (`[B66]`, 2026-10-28):** up close the chunk showed stripes and stair-stepped ridges, because its heights were computed as points on the whole 6000 km planet, where floats round to about 0.6 m. The chunk now bakes its own 4096 height map from the planet's noise and resamples it smoothly; finer texture comes from Roughness. Before and after screenshots are in the issue. The water and shadows now read the same map, so the seabed is smooth too.
+- **Moons (2026-10-28):** one to five moons in the chunk's sky, each with its own surface baked by the noise engine, two colors, size, place and crescent angle. Randomize sets them all (clearly different sizes, spread across the visible sky, colors that go with the sky, different textures), with a texture-only button and a dropdown for adjusting one moon. Screened over the sky so the shadow dissolves, split-toned (one color for the darks, one for the brights), a soft glow across the edge. A new design-system control, the Dial, sets each crescent's angle.
+- **Tides (2026-10-28):** the chunk's water rises and falls every two minutes by the moons' sizes cubed (the tidal-force rule, exaggerated and capped); walk mode pushes the walker to dry ground as it rises.
+- **Saving fixed (`[B70]`):** atmosphere changes, Roughness and Auto detail were never autosaved.
+- **Concept:** *Everything* (David OReilly) added as an inspiration.
 
 ### 🤖 AI process
 - **A day lost to theories:** three fixes were built on unproven causes (octave tweaks, local coordinates for fine detail, smoothing) before Dana's own idea, a dedicated height map resampled at higher resolution, solved it. New working rules: check Dana's proposed mechanism against established tools first, build only on a measured cause, and edit docs only at commit.
 - **Measured, finally:** a readout of identical neighboring heights proved the rounding, after a day of guessing.
+- **The moon, round after round:** Claude tuned by reacting to each screenshot, so colors went neon, then pale, then neon again, and added changes Dana hadn't approved (a faint dark side, an edge overlap, renamed labels). It also built fixes straight after bug reports without a go. What worked: writing a target spec from the references once, approved by Dana, then building only that. Rule reinforced: change only what was approved, no cleanup or extras.
 
 ### 📊 Worked / didn't / next
 - ✅ The chunk's own height map, resampled: the established terrain approach.
 - ❌ Fixes built on theories: removed.
-- ⏭️ The moon, simple and quick; then terrain shading.
+- ✅ A target spec written from the references, then built in one pass.
+- ❌ Tuning by screenshot, and unapproved extras.
+- ⏭️ Walk mode not answering after a click (`[B71]`), then terrain shading.
 
 ---
 

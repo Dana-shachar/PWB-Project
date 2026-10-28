@@ -8,23 +8,28 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-27 night, sixth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-10-28 evening, eighth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State (2026-10-28).** `[B66]` fixed and committed: the land chunk bakes its own 4096 height map from the planet's noise and every close-up patch resamples it (see `ISSUES.md`). The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed.
+> **State.** Everything from today is committed and pushed: `[B66]` (the chunk's own 4096 height map, also feeding the water and shadows), the moons (`[S44]`), tides, the autosave fix (`[B70]`), the `Dial` component, *Everything* in the references. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
 >
-> **Right now: the moon** (step 2 below), simple and quick (Dana, 2026-10-28).
+> **Right now:** Dana called the moons "good enough" (2026-10-28). Next open bug: `[B71]` walk mode not answering after a click in the panel (unmeasured; measure first). Then the roadmap's next step, terrain shading.
+>
+> **Moons, how they stand** (so tuning doesn't restart from zero): the target spec Dana approved, built in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`): color clearly visible and never bleached by the glow; texture as gentle tone; a full moon solid to its edge; the shadow (Crescent) dissolving fully into the sky, with no outline; one rounded glow across the edge, lit side only (all round at Crescent 0); Texture 0 translucent, 1 solid, 2 strongest; split toning (Second color the darks by multiply, Color the brights by screen). Change only what Dana approves: tuning by screenshot made colors swing neon and pale.
 >
 > **Temporary diagnostics still in the code (remove when their bugs close):**
 > - `[TEMP water]` logs and the shore-search logs in `scene/walkMode.ts`; `[TEMP walk]` click logs there too.
 > - Alt+click on the chunk: the `[TEMP B55]` height row table (`logCliffRow` in `LandChunkCanvas.tsx`, `lastSampleDepth` in `ChunkPatchRenderer.ts`).
 >
 > **Open decisions for Dana**
-> - ❓ **Moon:** rebuild with the noise engine (Dana: "obviously use the engine"; a second `useNoiseLayers` stack and a second `HeightmapPipeline` baking a moon texture). Pick where its layers are edited: (a) an Edit texture button under Moon that switches the right panel, or (b) a Terrain | Moon switch in the layer panel. Also wanted: half fades into the sky, no halo or inner glow, two colors, a soft gradient. References: the No Man's Sky moons in `REFERENCES.md`.
-> - ❓ **Planet spin** (Dana's idea, proposed, not approved): spin speed, axis tilt 0 to 180° (Uranus about 98°), axis direction; planet, clouds and haze turn, sun stays, chunk doesn't move.
+> - ❓ **A real moon orbiting the planet** (plan given, waiting for a go): a 3D moon sharing the sky moons' texture and look, orbiting slowly (`atmosphere/planetMoon.ts`, `shaders/atmosphere/planetMoon.frag.glsl`); later the chunk's sky moons following the orbit, and tides that follow it.
+> - ❓ **General undo history** for every setting (Dana asked 2026-10-28; undo now covers paint strokes only; undo/redo is paused on the roadmap, so un-pausing it is her call).
+> - ❓ **Planet spin** (Dana's idea, proposed, not approved): spin speed, axis tilt 0 to 180° (Uranus about 98°), axis direction.
 > - ❓ **Endless-looking chunk:** (a) fade its edges into the haze, now; (b) real terrain to the horizon at lower detail, later.
-> - ❓ Swirl as Musgrave's Coriolis twist (researched, waiting since earlier today).
+> - ❓ Swirl as Musgrave's Coriolis twist (researched, waiting).
+> - 📌 The Texture slider's hover text still says "above 1 the pattern grows stronger"; Texture now scales the contrast from 0. Rewording waits for Dana's yes.
+> - 📌 The small text under the moon's Randomize reuses `.erosion-note`; a general design-system name for a dimmed note is Dana's call.
 >
-> **Working rules (Dana; most are saved as memories).** A numbered plan and an explicit go before any change, **including diagnostics, simulations and test changes**; an answer or "ok" to a question is not a go (`strict-confirm-before-acting`; Dana, 2026-10-27: unapproved actions will be blocked). Measure before naming a cause, and say plainly how sure a claim is. Build new visuals on the app's own engines, never hand-rolled or copied (`reuse-app-systems`). Fix structural bugs at the root. Sourced methods only, verified by reading the source; say when only a summary was read. Docs record only approved work. No attribution anywhere. No agents without a yes and a cost; page readers are reported with their tokens.
+> **Working rules (Dana; most are saved as memories).** A numbered plan and an explicit go before any change (temporary console logs excepted, `console-logs-need-no-permission`); an answer or "ok" to a question is not a go (`strict-confirm-before-acting`; Dana, 2026-10-27: unapproved actions will be blocked). Measure before naming a cause, and say plainly how sure a claim is. Build new visuals on the app's own engines, never hand-rolled or copied (`reuse-app-systems`). Fix structural bugs at the root. Sourced methods only, verified by reading the source; say when only a summary was read. Docs change only in the docs pass that goes with a commit, recording the final result (`docs-only-final`). Check Dana's proposed mechanism against established tools before inventing one, and build only on a measured cause (`.claude/CLAUDE.md`, "How to fix bugs"). No attribution anywhere. No agents without a yes and a cost; page readers are reported with their tokens.
 >
 > **Also open:** `[B67]` water barely visible from walk mode; `[B68]` straight shoreline; `[B69]` color line at the shore; `[B55]` a wall seen close to the ground (hypothesis: the old mirrored camera collision, check now that it's fixed); `[B54]` the smooth chunk never shows erosion; `[B64]` timeline panel; `[B59]`; `[B60]`; `[B57]`; `[B58]` stalling.
 >
@@ -37,7 +42,7 @@
 > 1. ✅ **Sea level and water** (2026-10-27). Sea level is a raw height so both views share the coastline; the water ramp is spaced by light remaining; Seascape waves on both views.
 > 2. 🟡 **Atmosphere** (replaces the Climate stage): built 2026-10-27, being tested. Left: on/off, Horizon and Sky colors, Haze, Glow. Right panel (select the Atmosphere header): Wind, Clouds (coverage, softness, color, scale, detail, feather, banding, latitude distribution), Moon. 📌 Still to do: Swirl as Musgrave's Coriolis twist (researched, waiting for Dana's go); rain or snow particles (copy a tested library such as three.quarks, verify first); poles' ice belongs to step 3.
 >    - 🟡 Reworked after Dana's tests (2026-10-27): the planet glow is an edge-distance fade sized by Glow; the planet haze thins with height (no rim); the chunk haze is Quilez's height fog with sky and sun hues and a fine grain, Haze up to 10; Wind up to 40 (waves stop at 12); clouds have a second color. Waiting on Dana's retest of the glow and haze.
-   - 🔴 Moon: Dana dislikes both tries; next is the noise-engine moon (see the open decisions above).
+   - ✅ Moons and tides (2026-10-28): one to five randomized moons baked by the noise engine, split-toned, with a crescent dial; the chunk's water rises and falls with their size (`[S44]`).
 > 3. **Terrain shading and volcanoes:** rock by slope, snow by height and latitude (poles), glowing lava, cones placed at Voronoi cell centers, rock strata on cliffs (Sable).
 >    - 🧭 Art direction (Dana, 2026-10-27): 2.5D, real 3D but flatter: soft wrapped light, little shine, depth from haze layers, limited palettes; between No Man's Sky and Sable, not toon. Images in `docs/references/`, listed under 🎨 Visual in `REFERENCES.md` (No Man's Sky, Sable, Outer Wilds, Gris, Monument Valley).
 >    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.
