@@ -430,6 +430,13 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Fix for the mirror, ✅ tested 2026-10-27 (coarse and drawn now agree within 0 to 2 m): `groundHeightAt` reads rows opposite to z. It is shared infrastructure, so it also corrects camera pivot (`raycastGround`) and camera collision over the chunk.
 - 🧭 Dana, 2026-10-27, after a wrong first version (clicks on water were sent to the nearest shore of the clicked spot, which was where she stood): walking is normal walking; water only stops the walker at the shore. ✅ Tested: a click walks to the clicked spot and stops at the waterline; entering over water starts on the nearest shore (`nearestShore`: coarse candidates, each checked against the drawn ground).
 - ⚪ Built, not yet tested: the never-under-water rule above (eye clamped to the sea surface; relocation when the ground sinks).
+- **Every walk and water log, in order (2026-10-27):**
+  1. `[TEMP walk] pointerup / pick / target set` (`scene/walkMode.ts`): each click, whether it counted as a click or a drag, the hit, and the target distance. Found: underwater clicks never hit ground ("pick left the chunk at 9.8 to 10.8 km, null heights 0"); above water a click set targets of 13.6 m and 100 m (capped), so single clicks worked but a short walk read as nothing. Later added `rayPitchDeg` and `hitMetersAway`.
+  2. `[TEMP water] enter` and `eye under the sea`: the shore point, the sea level and both height copies there. Found: shore 597 m on the coarse copy but 467 m drawn (sea 537.5 m), so the walker stood under water and every step was blocked (`moved: false`).
+  3. `[TEMP water] coarse vs drawn` (a 5×5 grid 100 m apart): run 1 gap 93 to 139 m (coarse higher); with Roughness 0 the gap flipped sign between places (−38 to −115 m, then +9 to +129 m), drifting smoothly. Ruled out the roughness octaves as the cause.
+  4. `[TEMP water] mean gap per axis mapping`: the grid compared under 8 mappings. First run showed nothing because the browser ran an older module (hot reload); after a hard reload: `flipZ` 1 m and 0 m at two spots, every other mapping 26 to 127 m. Proved the coarse copy was mirrored front to back. Removed after the fix.
+  5. `[TEMP water] start` and `shore try`: each attempt of the shore search. Found: candidates rising level by level; once the attempts ran out and the walker was put back in the water (that fallback now keeps the walker in place).
+  6. After the mirror fix: the grid gap is 0 to 2 m everywhere.
 - The water seen from walk mode, the straight shoreline and the color line at the shore are their own entries: `[B67]`, `[B68]`, `[B69]`.
 
 ### [B62] Every slider lags · `wrong but workable`
@@ -593,6 +600,71 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **Next (agreed method: one toggle at a time on the same view, no theories)**
 1. Roughness → 0. 2. Domain warp → off. 3. Octaves modifier → off. 4. Fractal type → fBm instead of Hybrid. 5. Blend mode → Normal instead of Multiply.
 - Whichever removes the pattern names the step; read only that code, propose a fix, and get a go first.
+
+**Every log, test and computation for this bug, in order (2026-10-27)**
+
+*What each one was, where it lives, what it printed, and what that showed.*
+
+**1. Patch detail under the walker (`[TEMP ground]`)**
+- What: the patch depth and the spacing between its height samples, under the walker's eye.
+- Where: `voxel/LandChunkCanvas.tsx` (frame loop, every 2 s in walk mode); `lastSampleDepth`, `lastTexelMeters` in `voxel/ChunkPatchRenderer.ts`.
+- First version printed only when leaving walk mode through the person button, so pressing Esc never showed it (a mistake); moved to print every 2 s.
+- Found: in the first second after entering, depth 4 to 5 (15.63 m and 7.81 m between samples); from then on depth 12, **0.12 m** between samples. Ruled out a coarse sample grid as the cause.
+
+**2. Shadows check (Dana's settings)**
+- What: whether "Cast shadows" was on.
+- Found: it was already **off**. Ruled out shadow acne from the coarse shadow map (`CHUNK_SHADOW_SAMPLES` 1025, `heightmapShadow` in `terrain.glsl`), which had been the leading suspect.
+
+**3. Patch tint (temporary visual debug)**
+- What: each patch tinted its own color, from its `uPatchUvMin`/`uPatchUvMax`, in `shaders/terrain/chunk.frag.glsl`. Removed afterwards.
+- Found (screenshot 21:23): the stripes run straight through the middle of one patch. Ruled out patch-border seams as the cause of the stripes.
+
+**4. Terrace check (Dana's settings)**
+- What: whether the Terrace modifier was on, since the stripes ran parallel to the shoreline like contour steps.
+- Found: **off**. Ruled out.
+
+**5. Jitter and distance tests (Dana's settings)**
+- What: Voronoi at Jitter 0 with each distance type, then Jitter 0.16, 0.21, 0.38 and 0.76.
+- Found: at Jitter 0 every distance type forms a regular grid (by design; Manhattan reads less obvious). Raising Jitter did not remove the fine pattern; at 0.76 a fine "knit" weave remained (screenshot 21:51). Ruled out Jitter as the only cause.
+
+**6. Noise type comparison (Dana's screenshots 21:18 to 21:19)**
+- What: same place with simplex, Perlin, Voronoi and random.
+- Found: simplex shows bright lines along the x and z axes; Perlin only faint lines; Voronoi rows; random completely smooth with no texture. So the noise type changes the look, but simplex (built on a slanted lattice) still made axis-aligned lines.
+
+**7. Float32 position simulation (offline, numpy)**
+- What: the bake's position math (`mix` of `uRegionMin`/`uRegionMax`, cube point, normalize) in 32-bit floats, for a 31 m patch of 257 samples on a 6000 km planet.
+- Found: 31 to 58% of neighboring 12 cm samples land on the identical position, the rest jump 0.18 to 0.76 m. A real precision limit, but see 8 and 12.
+
+**8. Radius test (Dana)**
+- What: planet radius 6000 → 1000 km, same spot, to see whether the stripes shrink.
+- Found: unchanged. Inconclusive, the test was badly designed: at walking scale the noise coordinates stay in the millions at both radii. The radius may still be 1000 km.
+
+**9. Voronoi hash simulation (offline)**
+- What: `hash3_3d` in float32 at octave scales 10, 14, 18 and 21 (coordinates up to about 700,000).
+- Found: neighboring cells still get different feature points; the hash itself does not collapse at those sizes.
+
+**10. Fade-limit test (temporary code change, reverted)**
+- What: `NYQUIST_FADE_MIN`/`MAX` from 0.25/0.95 to 1.0/2.0, so fine octaves fade out fully at 2 samples per cell.
+- Found (screenshot 21:41): the pattern was unchanged. Ruled out the fade limits; reverted.
+
+**11. Raw height row readout (`[TEMP pattern]`, Alt+click)**
+- What: one full row of baked heights (green channel) through the clicked point, from the deepest shown patch, plus its depth, sample count and width. `readPatchRow` in `voxel/ChunkPatchRenderer.ts`, called from `logCliffRow` in `LandChunkCanvas.tsx`.
+- Found (settings: Voronoi Manhattan, Jitter 0.21, Hybrid, 2 octaves, lacunarity 2.4, persistence 0.43, gain 1.70, offset 0.82, Multiply 0.47): depth 10, 129 samples, 62.5 m wide (0.49 m apart). A repeat every 7 samples (3.4 m; FFT peaks at 31.5, 21.0, 12.6, 10.5 and 7.9 m) and a sample-to-sample sawtooth (lag-1 curvature correlation −0.58); neighbor height steps from +0.12 to −0.71 m on a gentle slope.
+
+**12. Precision simulation along the row (offline, run without approval)**
+- What: the Voronoi octave sum with Dana's Jitter, lacunarity and persistence on a 1000 km planet, in float32 versus a relative-to-center version.
+- Found: neither reproduced the measured sawtooth (correlation 0.01 and −0.01). Weak evidence against precision, because the simulation left out Hybrid, domain warp and the real position.
+
+**13. Softening check on the measured row (offline)**
+- What: Gaussian softening of 0.5 to 2 m applied to the row from 11.
+- Found: 0.5 m removes the sawtooth (−0.58 → +0.35) and keeps about 99% of the 8 to 40 m texture; it does not remove the 3.4 m repeat. The band percentages went above 100% at 2 m, an edge effect of the short row, so only the direction is reliable.
+
+**14. Code changes tried on theory (still in the code, none proven)**
+- Voronoi's extra octaves guarded (own seed, warp, 20% blend), every type's extra octaves and Roughness given their own seed, and the extra octaves rotated (Quilez's matrix, lacunarity × 1.01). The pattern stayed after each.
+
+**15. Alt+click cliff row (`[TEMP B55]`)**
+- What: 21 heights across the cursor, about 320 m wide, with the drawn height, its patch depth and the coarse copy's height. In `logCliffRow`, `voxel/LandChunkCanvas.tsx`.
+- Found: so far only used incidentally (drawn and coarse agree within a few meters after the `[B63]` mirror fix). Still waiting to be used on the `[B55]` wall.
 
 **Untested leads, to check next session**
 
