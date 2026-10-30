@@ -165,11 +165,11 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
   - The white-noise type and random blend modes are never picked. Ranges are inferred, tunable.
 - Earlier rule, kept for the sliders:
 - Every noise control's minimum, maximum, step and scale lives in one shared table. The sliders and Randomize both read it, so a range is changed in one place.
-- Randomize is never hardcoded. It picks from whatever each range allows, on the control's own scale, so a log slider such as Frequency is sampled logarithmically.
+- Randomize reads the same table (its own narrower range per control), on the control's own scale, so a log slider such as Frequency is sampled logarithmically.
 - Why: the sliders were too tight to show what the shader can resolve (Frequency stopped at 20), and Randomize had copied those limits.
 - Ranges set 2026-10-21: Frequency 0.1 to 500 (log), Octaves 1 to 12, Persistence 0 to 1.5, Lacunarity 1 to 6, Warp 0 to 10, Terrace 2 to 64, layer Height -10 to 10. The seed range stays 0 to 1000 even with the new hash.
 - The table gained seven keys for the new per-layer controls (see `[S36]`). The Slider gained a log scale option.
-- Layer Height -10 to 10 is our own audit recommendation, not a sourced range. Negative values carve, and Dana accepted that for Randomize. Revisit it when the bounded-heights step normalizes the total.
+- Layer Height -10 to 10 is our own audit recommendation, not a sourced range; negative values carve. Revisit it when the bounded-heights step normalizes the total.
 
 ### [S36] The noise engine fades detail by sample spacing, with a better hash · `decided`
 **Decided:** 2026-10-21 · **Built:** 2026-10-21, untested on screen
