@@ -5,7 +5,8 @@ import type { AtmosphereSettings } from './atmosphereSettings';
 
 // The haze over the planet: air thinning with height drawn over the ground in the horizon color, as thick as the air each
 // view ray crosses (planetHaze.frag.glsl). Haze 1 is about 5% looking straight down. Scale height inferred, TUNABLE.
-const HAZE_SCALE_HEIGHT = 0.007; // share of the radius
+// Share of the radius: deep and soft rather than Earth-thin, so the rim reads as a glow, not a stripe (Dana, 2026-10-30).
+const HAZE_SCALE_HEIGHT = 0.03;
 const HAZE_SHELL_HEIGHTS = 5; // the shell reaches this many scale heights up, where the air is nearly gone
 const HAZE_DENSITY_PER_UNIT = 0.05;
 

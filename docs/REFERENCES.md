@@ -1,6 +1,6 @@
 # 📚 References
 
-`Last updated: 2026-10-26`
+`Last updated: 2026-10-30`
 
 *Every outside source this project relies on, with what it is and what was taken from it. Cited once here, linked from everywhere else.*
 
@@ -713,6 +713,10 @@
 **Angle dial** · Photoshop's angle controls · `convention`
 - A circle with a line pointing at the angle, plus a number field. The design system's `Dial`.
 
+**Pan with a held key** · Figma and Photoshop (Space + drag, the hand tool); Blender on a trackpad (Shift + two-finger scroll) · `convention`
+- Holding a key turns a drag into a pan. Space + drag added to both views; Shift + drag is three.js OrbitControls' own default ("left mouse + ctrl/meta/shiftKey", read in its source 2026-10-30).
+- ⚠️ The app conventions are recalled, not checked against each app's docs.
+
 ### Stylized sky, planet and terrain shaders (candidates)
 
 *Collected 2026-10-27 for the moon, haze, clouds and later terrain shading. Most need stylizing to fit the art direction.*
@@ -800,6 +804,15 @@
 **Exponential air density** · O'Neil, *GPU Gems 2* ch. 16 (scale height); the Mie scale height of about 1.2 km common in sky scattering · `method used`
 - Air thinning as e^(−height / scale height), summed along the view ray.
 - The planet haze (`planetHaze.frag.glsl`) and the chunk haze's height falloff (`HAZE_FALLOFF`). ⚠️ Not re-read today; values recalled and marked tunable.
+- The planet's scale height is 0.03 of the radius, about four times Earth's in proportion, chosen by eye so the rim reads soft (`[B74]`, `[S46]`).
+
+**Ray stopped at the scene's depth** · Sebastian Lague, "Coding Adventure: Atmosphere" · `considered`
+- The atmosphere ray ends where the depth buffer says the drawn surface is, rather than at an analytic ground sphere.
+- Logged for the planet haze over mountains (`[B74]`). ⚠️ Only a summary read so far.
+
+**Camera far plane** · three.js `PerspectiveCamera` (`far`) · `method used`
+- Nothing farther than the far plane is drawn, so it must contain everything visible.
+- The planet camera's far plane reaches past the glow's sphere, measured from the planet's center (`applyAltitudeRates`, `[B75]`).
 
 ### Plants (planned, not built)
 

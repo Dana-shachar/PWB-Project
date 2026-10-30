@@ -1,3 +1,5 @@
+import { Accordion } from '../UIElements';
+
 interface StagePlaceholderProps {
   label: string;
 }
@@ -9,8 +11,9 @@ interface StagePlaceholderProps {
 export function StagePlaceholder({ label }: StagePlaceholderProps) {
   return (
     <div className="panel-section">
-      <div className="panel-section-title">{label}</div>
-      <p className="stage-placeholder-text">Nothing built here yet.</p>
+      <Accordion title={label}>
+        <p className="stage-placeholder-text">Nothing built here yet.</p>
+      </Accordion>
     </div>
   );
 }

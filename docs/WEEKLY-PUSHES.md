@@ -1,6 +1,6 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-10-28`
+`Last updated: 2026-10-30`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
 
@@ -13,7 +13,7 @@
 
 `Covers 2026-10-28 to 2026-11-04 · Due: start of class, 10:10 am`
 
-*Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map, then rebuilt the moons: up to five, randomized, with tides.*
+*Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map, rebuilt the moons (up to five, randomized, with tides), then made every panel follow one hierarchy and softened the planet's haze into a rim.*
 
 ![Walk mode on the land chunk after the fix: smooth slopes down to the water, no stripes.](screenshots/2026-10-28-ground-smooth-after.png)
 
@@ -25,11 +25,21 @@
 - **Concept:** *Everything* (David OReilly) added as an inspiration.
 - **Colored shadows (2026-10-28):** the first land shader layer. The flat gray ambient became a sky fill, tinted by the sky's color and a Shadow hue, following Quilez's outdoor lighting rig: No Man's Sky's strong color, softened toward Gris and Sable, with unexpected shading colors set by rule.
 - **Walk mode and panel (2026-10-28):** long-press to walk with a Speed slider; the eye no longer sinks into the ground; the planet's flicker while dragging light sliders fixed (`[B72]`); the Scene section grouped into Light, Shadows, Shine, Grid and View.
+- **One panel hierarchy (2026-10-30, `[S47]`):** every section an accordion, closed by default; on/off switches in the headers; the noise modifiers as nested sections instead of tabs; swatches lined up on the right. New design-system pieces: a hue slider (Shadow hue, now saved per planet), a lock icon, a bare switch.
+- **Randomize the atmosphere (2026-10-30, `[S45]`):** one button changes the whole atmosphere; locked colors stay and the rest are built around them. Moons are added and removed like layers, each with its own Crescent and color locks.
+- **Haze as a soft rim (`[B74]`):** a stripe floated off the planet's edge because the haze's ground sat at the tallest peak; it now starts at the sea, and the air is deeper on purpose, so the rim reads as a glow. The glow's cut-out up close was the camera's far limit (`[B75]`).
+
+![The planet with the deeper haze: a soft rim instead of a stripe.](screenshots/2026-10-30-haze-soft-rim.png)
+
+- **Navigation:** Space + drag pans, beside Shift + drag; walk speed reaches ×10.
 
 ### 🤖 AI process
 - **A day lost to theories:** three fixes were built on unproven causes (octave tweaks, local coordinates for fine detail, smoothing) before Dana's own idea, a dedicated height map resampled at higher resolution, solved it. New working rules: check Dana's proposed mechanism against established tools first, build only on a measured cause, and edit docs only at commit.
 - **Measured, finally:** a readout of identical neighboring heights proved the rounding, after a day of guessing.
 - **The moon, round after round:** Claude tuned by reacting to each screenshot, so colors went neon, then pale, then neon again, and added changes Dana hadn't approved (a faint dark side, an edge overlap, renamed labels). It also built fixes straight after bug reports without a go. What worked: writing a target spec from the references once, approved by Dana, then building only that. Rule reinforced: change only what was approved, no cleanup or extras.
+
+- **Guessing again on the haze and glow:** Claude offered causes and fixes before measuring (a draw-order change that altered the colors and fixed nothing, then a wrong reading of Dana's description). What worked: logs that printed the measured numbers (the haze's ground 0.31 units above the sea; the far limit at 40 against a glow reaching 65), and a test switch Dana could compare on her own planet. A frozen test copy on another port loaded a different planet, so that test meant nothing.
+- **Unapproved style again:** the first moon sections carried a nested style Dana hadn't seen; now written into the design system so it can't drift.
 
 ### 📊 Worked / didn't / next
 - ✅ The chunk's own height map, resampled: the established terrain approach.
@@ -37,7 +47,9 @@
 - ✅ A target spec written from the references, then built in one pass.
 - ❌ Tuning by screenshot, and unapproved extras.
 - ✅ Measured before fixing: an A/B test and a log proved the flicker's cause in one round.
-- ⏭️ The Shadow hue color slider, then slope rock; walk mode's `[B71]` is deferred.
+- ✅ Measured numbers proved two causes in one round each, once logged.
+- ❌ A fix tried before measuring: reverted.
+- ⏭️ Randomize's drivers (related sliders set together), then slope rock; walk mode's `[B71]` is deferred.
 
 ---
 

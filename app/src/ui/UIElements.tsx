@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
+import { LockIcon } from './icons';
 
 const TOOLTIP_MARGIN = 8;
 const TOOLTIP_GAP = 6;
@@ -48,6 +49,10 @@ interface SliderProps {
   sensitivity?: number; // value change per pixel dragged, default 0.1
   snapIncrement?: number; // value snapped to when Cmd/Ctrl is held, default 1
   trackClassName?: string; // extra class on the range track, e.g. for a custom gradient
+  trackBackground?: string; // a CSS background for the track that changes with other settings, e.g. HueSlider's gradient
+  swatchColor?: string; // a color square at the row's end, lined up with the color pickers' swatches (HueSlider)
+  locked?: boolean; // shows a lock before the swatch when given
+  onLockChange?: (locked: boolean) => void;
   disabled?: boolean; // e.g. a view-specific control while both viewport panes are selected, see ui/Panel.tsx
   // What the control does and what its number means, shown on hover. A label
   // and a number alone do not say what unit something is in or what moving it
@@ -83,6 +88,10 @@ export function Slider({
   sensitivity = 0.1,
   snapIncrement = 1,
   trackClassName,
+  trackBackground,
+  swatchColor,
+  locked,
+  onLockChange,
   disabled = false,
   description,
   fieldWidth,
@@ -174,6 +183,7 @@ export function Slider({
       <input
         type="range"
         className={'ui-slider-track' + (trackClassName ? ` ${trackClassName}` : '')}
+        style={trackBackground ? { background: trackBackground } : undefined}
         min={isLog ? 0 : min}
         max={isLog ? 1 : max}
         step={isLog ? 0.001 : step}
@@ -193,7 +203,43 @@ export function Slider({
         onKeyDown={handleFieldKeyDown}
         disabled={disabled}
       />
+      {swatchColor && (
+        <span className="ui-color-end">
+          {locked !== undefined && onLockChange && <LockButton locked={locked} onChange={onLockChange} />}
+          <span className="ui-hue-swatch" style={{ background: swatchColor }} />
+        </span>
+      )}
     </div>
+  );
+}
+
+interface HueSliderProps {
+  label: string;
+  value: number; // degrees, -180 to 180
+  onChange: (value: number) => void;
+  trackBackground: string; // the color at each hue turn, left to right
+  swatchColor: string; // the resulting color at the current value
+  locked?: boolean;
+  onLockChange?: (locked: boolean) => void;
+  disabled?: boolean;
+  description?: string;
+}
+
+// A hue slider (Dana, 2026-10-28): the track shows the color each position gives, and a swatch shows the current
+// result, so a hue turn reads as a color rather than a number.
+export function HueSlider({ trackBackground, swatchColor, ...rest }: HueSliderProps) {
+  return (
+    <Slider
+      {...rest}
+      min={-180}
+      max={180}
+      step={1}
+      precision={0}
+      unit="°"
+      trackClassName="ui-slider-track--hue"
+      trackBackground={trackBackground}
+      swatchColor={swatchColor}
+    />
   );
 }
 
@@ -318,24 +364,53 @@ export function Dial({ label, value, onChange, disabled = false, description }: 
   );
 }
 
+interface LockButtonProps {
+  locked: boolean;
+  onChange: (locked: boolean) => void;
+  disabled?: boolean;
+}
+
+// A padlock with no button frame (Dana, 2026-10-30): shut, Randomize keeps the value; open, Randomize may change it.
+// Every lock in the app is this icon, never a toggle.
+export function LockButton({ locked, onChange, disabled = false }: LockButtonProps) {
+  return (
+    <button
+      type="button"
+      className={'panel-text-btn ui-lock-btn ui-tooltip-anchor' + (locked ? ' ui-lock-btn--locked' : '')}
+      onClick={() => onChange(!locked)}
+      disabled={disabled}
+      aria-pressed={locked}
+      aria-label={locked ? 'Unlock' : 'Lock'}
+    >
+      <LockIcon open={!locked} />
+      <span className="ui-tooltip">{locked ? 'Locked: Randomize keeps it' : 'Unlocked: Randomize may change it'}</span>
+    </button>
+  );
+}
+
 interface ColorPickerProps {
   label: string;
   value: string; // hex string, e.g. "#3a7bd5"
   onChange: (value: string) => void;
+  locked?: boolean; // shows a lock before the swatch when given
+  onLockChange?: (locked: boolean) => void;
 }
 
 // Not ported from active-geometry — it has no color-picker convention.
 // Plain native <input type="color">, styled to match the rest of the panel.
-export function ColorPicker({ label, value, onChange }: ColorPickerProps) {
+export function ColorPicker({ label, value, onChange, locked, onLockChange }: ColorPickerProps) {
   return (
     <div className="ui-color-row">
       <label className="ui-color-label">{label}</label>
-      <input
-        type="color"
-        className="ui-color-swatch"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      <span className="ui-color-end">
+        {locked !== undefined && onLockChange && <LockButton locked={locked} onChange={onLockChange} />}
+        <input
+          type="color"
+          className="ui-color-swatch"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </span>
     </div>
   );
 }
@@ -356,13 +431,43 @@ export function Toggle({ label, value, onChange, description }: ToggleProps) {
     <div className="ui-toggle-row ui-tooltip-anchor">
       {description && <span className="ui-tooltip">{description}</span>}
       <label className="ui-toggle-label">{label}</label>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={value}
-        className={'ui-toggle-button' + (value ? ' ui-toggle-button--on' : '')}
-        onClick={() => onChange(!value)}
-      />
+      <Switch value={value} onChange={onChange} />
+    </div>
+  );
+}
+
+interface SwitchProps {
+  value: boolean;
+  onChange: (value: boolean) => void;
+  label?: string; // the accessible name, when no visible label sits beside it
+}
+
+// The toggle's bare switch, for a header or title line that turns its whole section on or off (Dana, 2026-10-30).
+export function Switch({ value, onChange, label }: SwitchProps) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={value}
+      aria-label={label}
+      className={'ui-toggle-button' + (value ? ' ui-toggle-button--on' : '')}
+      onClick={() => onChange(!value)}
+    />
+  );
+}
+
+interface SectionTitleProps {
+  title: string;
+  headerSwitch?: { value: boolean; onChange: (value: boolean) => void; label: string };
+}
+
+// A part's small bold title inside an accordion, with an optional on/off switch for that part at the line's end.
+export function SectionTitle({ title, headerSwitch }: SectionTitleProps) {
+  if (!headerSwitch) return <span className="panel-section-title">{title}</span>;
+  return (
+    <div className="panel-section-title-row">
+      <span className="panel-section-title">{title}</span>
+      <Switch value={headerSwitch.value} onChange={headerSwitch.onChange} label={headerSwitch.label} />
     </div>
   );
 }
@@ -461,6 +566,10 @@ interface AccordionProps {
   active?: boolean;
   // What the section is for, shown on hover like a Slider's description.
   description?: string;
+  // Small buttons before the header's title, like a layer row's ×; beside the header, so clicking them never opens or closes it.
+  actions?: ReactNode;
+  // The section's on/off switch, just before the chevron; beside the header, like actions, so it never opens or closes it.
+  headerSwitch?: { value: boolean; onChange: (value: boolean) => void; label: string };
   children: ReactNode;
 }
 
@@ -469,22 +578,37 @@ interface AccordionProps {
 // (Dana, 2026-09-22). `nested` styles it as a subordinate of its parent
 // section rather than a peer category (Dana, 2026-09-23 — "Project Settings"
 // and "My Projects" read as equal-weight siblings with no `nested` variant).
-export function Accordion({ title, defaultOpen = false, nested = false, onHeaderClick, active = false, description, children }: AccordionProps) {
+export function Accordion({ title, defaultOpen = false, nested = false, onHeaderClick, active = false, description, actions, headerSwitch, children }: AccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const header = (
+    <button
+      type="button"
+      className={'ui-accordion-header' + (active ? ' ui-accordion-header--active' : '') + (description ? ' ui-tooltip-anchor ui-accordion-header--described' : '')}
+      onClick={() => {
+        setIsOpen(!isOpen);
+        onHeaderClick?.();
+      }}
+    >
+      <span>{title}</span>
+      {description && <span className="ui-tooltip">{description}</span>}
+      <span className={'ui-accordion-chevron' + (isOpen ? ' ui-accordion-chevron--open' : '')}>▾</span>
+    </button>
+  );
   return (
     <div className={'ui-accordion' + (nested ? ' ui-accordion--nested' : '')}>
-      <button
-        type="button"
-        className={'ui-accordion-header' + (active ? ' ui-accordion-header--active' : '') + (description ? ' ui-tooltip-anchor ui-accordion-header--described' : '')}
-        onClick={() => {
-          setIsOpen(!isOpen);
-          onHeaderClick?.();
-        }}
-      >
-        <span>{title}</span>
-        {description && <span className="ui-tooltip">{description}</span>}
-        <span className={'ui-accordion-chevron' + (isOpen ? ' ui-accordion-chevron--open' : '')}>▾</span>
-      </button>
+      {actions || headerSwitch ? (
+        <div className="ui-accordion-header-row">
+          {actions && <span className="ui-accordion-actions">{actions}</span>}
+          {header}
+          {headerSwitch && (
+            <span className="ui-accordion-trailing">
+              <Switch value={headerSwitch.value} onChange={headerSwitch.onChange} label={headerSwitch.label} />
+            </span>
+          )}
+        </div>
+      ) : (
+        header
+      )}
       {isOpen && <div className="ui-accordion-content">{children}</div>}
     </div>
   );

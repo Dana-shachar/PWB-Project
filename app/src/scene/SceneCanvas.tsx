@@ -13,9 +13,10 @@ import { buildHeightDistribution, type HeightDistribution } from '../planet/seaL
 import { MAX_WAVE_WIND, windTimeScale } from '../planet/oceanSpectrum';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { fillColorFor } from './fillLight';
-import { createPlanetGlow, updatePlanetGlow, updatePlanetGlowFrame } from '../atmosphere/planetGlow';
+import { createPlanetGlow, glowOuterRadius, updatePlanetGlow, updatePlanetGlowFrame } from '../atmosphere/planetGlow';
 import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame } from '../atmosphere/cloudLayer';
 import { createPlanetHaze, updatePlanetHaze } from '../atmosphere/planetHaze';
+
 import { isRippleMapReady } from '../planet/rippleMap';
 import { KM_PER_SCENE_UNIT, WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { ElevationData } from '../voxel/chunkGrid';
@@ -739,7 +740,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // neither is this effect's job anymore.
     function onFrame() {
       const { planetRadius, surfaceRadius } = planetSurface();
-      applyAltitudeRates(orbitControls, perspectiveCamera, planetRadius, surfaceRadius);
+      applyAltitudeRates(orbitControls, perspectiveCamera, planetRadius, surfaceRadius, Math.max(surfaceRadius, glowOuterRadius(planetGlow)));
       orbitControls.update(); // required every frame — damping is enabled, see controls.ts
       // The specular term needs the eye position and the camera moves every
       // frame via orbit controls, so this is read fresh rather than set once.
@@ -773,7 +774,10 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         // The light, turned with the camera when it follows it, first: the haze, clouds and land all read it this frame.
         sharedUniformsRef.current.lightDirection.copy(lightBaseRef.current);
         if (lightFollowsCameraRef.current) sharedUniformsRef.current.lightDirection.applyQuaternion(perspectiveCamera.quaternion);
-        updatePlanetHaze(planetHaze, atmosphereRef.current, shared.radius + terrainReach, perspectiveCamera.position, shared.lightDirection, shared.ambient);
+        // The haze's ground is the lowest visible surface (the sea, or the deepest ground with water off), not the tallest
+        // peak: a ground above the visible edge drew a stripe floating off the planet (Dana, 2026-10-30).
+        const hazeGround = shared.radius + (shared.waterEnabled ? shared.seaLevel : shared.elevationMin) * shared.displacementAmplitude;
+        updatePlanetHaze(planetHaze, atmosphereRef.current, hazeGround, perspectiveCamera.position, shared.lightDirection, shared.ambient);
         updateCloudLayerFrame(cloudLayer, atmosphereRef.current.wind, seaStep, shared.lightDirection, shared.ambient, perspectiveCamera.position);
         sharedUniformsRef.current.rippleEnabled = isRippleMapReady() ? 1 : 0;
         sharedUniformsRef.current.viewWidthPixels = Math.max(1, (viewportElement?.clientWidth ?? 1) * window.devicePixelRatio);

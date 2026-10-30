@@ -54,6 +54,11 @@ export function updatePlanetGlow(glow: PlanetGlow, settings: AtmosphereSettings,
   uniforms.uWidth.value = width;
 }
 
+// How far the glow's sphere reaches from the center, 0 when hidden: the camera's far limit must contain it.
+export function glowOuterRadius(glow: PlanetGlow): number {
+  return glow.mesh.visible ? glow.mesh.scale.x : 0;
+}
+
 // Every frame: the camera and the planet's center, for the view rays.
 export function updatePlanetGlowFrame(glow: PlanetGlow, cameraPosition: THREE.Vector3): void {
   const uniforms = glow.mesh.material.uniforms;

@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-10-28`
+`Last updated: 2026-10-30`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -15,7 +15,7 @@
 🟡 Partial   22
 ❓ Decision   1
 📋 Tracked    4
-✅ Fixed     35
+✅ Fixed     37
 ```
 
 <details>
@@ -328,6 +328,20 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ## 💡 Lighting
 
 *How surfaces are shaded.*
+
+### [B75] Close up, the planet's glow was cut out off-center · `wrong but workable`
+**✅ Fixed:** 2026-10-30 · **Found:** 2026-10-30 · **Where:** `scene/controls.ts`, `applyAltitudeRates`
+- Dana: from a certain zoom, a planet-shaped gap in the glow sat beside the planet; dragging made it worse, and rotating left it in place. Glow changed its size.
+- Cause, measured: a structural bug. Close to the surface the camera's far limit shrank to the planet's horizon (40 to 44 units) while the glow's sphere reached 65 to 67, so its far side was cut off. The limit was also measured from the orbit point (32.5 away) instead of the planet's center (34.6), so after a pan the cut sat off-center.
+- Fixed: the far limit is measured from the planet's center and always reaches past the glow's sphere. 📚 three.js: nothing beyond a camera's far limit is drawn.
+- ⚠️ A farther far limit means slightly coarser depth precision up close; watch for surface flicker.
+
+### [B74] A stripe floated just off the planet's edge · `wrong but workable`
+**✅ Fixed:** 2026-10-30 · **Found:** 2026-10-28 · **Where:** `scene/SceneCanvas.tsx`, `atmosphere/planetHaze.ts`
+- Dana: a thin peach line ran around the planet with a dark gap between it and the edge; it should read as a soft haze, not a stripe.
+- Cause, measured: the haze treated the ground as a sphere at the tallest peak, 0.31 units (1.6% of the radius) above the sea, more than twice the air's own thickness (0.7%). The thickest air sat at that invisible edge, and sight lines just inside it stopped early, leaving the gap. Moving the ground to the sea surface moved the line onto the planet's edge (a test switch, Dana's screenshot).
+- Fixed: the haze's ground is the lowest visible surface (the sea, or the deepest ground with water off), and the air is deeper (0.03 of the radius instead of 0.007), so the rim reads as a soft glow. Not realistic on purpose (Dana).
+- 💡 Exact alternative, not built: stop each sight line at the real surface through the depth buffer, so mountains get the right haze too (Sebastian Lague's atmosphere; only a summary read so far).
 
 ### [B72] The planet flickered while dragging a light slider · `wrong but workable`
 **✅ Fixed:** 2026-10-28 · **Found:** 2026-10-28 · **Where:** `scene/SceneCanvas.tsx`

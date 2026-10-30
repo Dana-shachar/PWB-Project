@@ -50,7 +50,7 @@ export function createSkyDome(): SkyDome {
       uMoonTextureAmount: { value: 0.45 },
       uMoonHalo: { value: 0 },
       uMoonGlow: { value: 0 },
-      uMoonCrescent: { value: 0.5 },
+      uMoonCrescents: { value: new Array(MAX_MOONS).fill(0.5) },
       uCloudCoverage: { value: 0 },
       uCloudColor: { value: new THREE.Color() },
       uCloudColor2: { value: new THREE.Color() },
@@ -97,7 +97,6 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
   (uniforms.bottomColor.value as THREE.Color).set(settings.horizonColor);
   uniforms.uMoonEnabled.value = settings.moon ? 1 : 0;
   uniforms.uMoonHalo.value = settings.moonHalo;
-  uniforms.uMoonCrescent.value = settings.moonCrescent / 100;
   uniforms.uMoonGlow.value = settings.moonGlow;
   uniforms.uMoonTextureAmount.value = settings.moonTexture;
   const count = Math.min(settings.moonCount, settings.moons.length);
@@ -115,6 +114,7 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
     (uniforms.uMoonColors.value as THREE.Color[])[slot].set(moon.color);
     (uniforms.uMoonColors2.value as THREE.Color[])[slot].set(moon.color2);
     (uniforms.uMoonCrescentAngles.value as number[])[slot] = THREE.MathUtils.degToRad(moon.crescentAngle ?? 0);
+    (uniforms.uMoonCrescents.value as number[])[slot] = moon.crescent / 100;
   });
   applyMoonTextures(sky);
   uniforms.uGlow.value = settings.glow;

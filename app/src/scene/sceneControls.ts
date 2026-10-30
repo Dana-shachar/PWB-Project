@@ -5,8 +5,6 @@ import { useState } from 'react';
 // around it. See ISSUES.md, 2026-09-22.
 export function useSceneControls() {
   const [ambientLight, setAmbientLight] = useState(0.26); // the fill — lower means deeper shadow
-  // Turns the fill's sky color round the hue wheel (degrees), so shadows can take an unexpected color (scene/fillLight.ts).
-  const [shadowHue, setShadowHue] = useState(0);
   const [lightDirX, setLightDirX] = useState(1.6);
   const [lightDirY, setLightDirY] = useState(1);
   // The light's elevation. Was hardcoded to 1 (uLightDirection.set(x, y, 1)
@@ -52,8 +50,6 @@ export function useSceneControls() {
     setLightFollowsCamera,
     ambientLight,
     setAmbientLight,
-    shadowHue,
-    setShadowHue,
     lightDirX,
     setLightDirX,
     lightDirY,

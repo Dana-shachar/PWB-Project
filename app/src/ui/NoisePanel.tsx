@@ -1,5 +1,5 @@
-import { useRef, useState, type RefObject } from 'react';
-import { Slider, Select, Toggle, Accordion, EditableText } from './UIElements';
+import { useRef, useState, type ReactNode, type RefObject } from 'react';
+import { Slider, Select, Accordion, EditableText } from './UIElements';
 import { LayerMaskButton } from './MaskControls';
 import { MapView } from '../map/MapView';
 import {
@@ -48,6 +48,30 @@ const MODIFIERS = [
     tooltip: 'Quantizes the noise into flat steps, giving terrain a stepped, terraced look instead of a smooth continuous slope.',
   },
 ] as const;
+
+// One modifier's section: its name and hover text from MODIFIERS, its on/off switch in the header.
+function ModifierSection({ modifierKey, selectedLayer, onUpdateSelectedLayer, children }: {
+  modifierKey: (typeof MODIFIERS)[number]['key'];
+  selectedLayer: NoiseLayer;
+  onUpdateSelectedLayer: (patch: Partial<NoiseLayer>) => void;
+  children: ReactNode;
+}) {
+  const modifier = MODIFIERS.find((each) => each.key === modifierKey)!;
+  return (
+    <Accordion
+      title={modifier.label}
+      nested
+      description={modifier.tooltip}
+      headerSwitch={{
+        value: selectedLayer[modifier.enabledField] ?? false,
+        onChange: (value) => onUpdateSelectedLayer({ [modifier.enabledField]: value }),
+        label: `${modifier.label} on or off`,
+      }}
+    >
+      {children}
+    </Accordion>
+  );
+}
 
 interface NoisePanelProps {
   layers: NoiseLayer[];
@@ -137,7 +161,6 @@ export function NoisePanel({
   // exactly as it already did.
   // Which modifier's params are currently shown — exclusive across the 4,
   // independent of each one's own enabled state (Dana, 2026-09-30).
-  const [expandedModifier, setExpandedModifier] = useState<(typeof MODIFIERS)[number]['key'] | null>(null);
   const [draggedLayerId, setDraggedLayerId] = useState<string | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const dragGrabOffsetRef = useRef({ x: 0, y: 0 }); // cursor's position within the row at mousedown, so it doesn't jump to the row's corner
@@ -492,196 +515,126 @@ export function NoisePanel({
         </Accordion>
       </div>
 
-      {/* Independent, composable toggles layered onto the base generator
-          above, not separate noise types (Dana, 2026-09-30: "Modifiers as
-          toggles, not types"). One section, not one accordion per modifier
-          — 4 tabs, all in one row (Dana, 2026-09-30: "when i say tabs i
-          mean all in the same row"). Tabs are plain labels, selecting which
-          ONE modifier's params are shown below (exclusive — "so you dont
-          see them all at once"); the enable checkbox lives inside the
-          expanded panel itself, not on the tab (Dana, 2026-09-30: "get rid
-          of the check box in the tab and move it inside of each modifier as
-          'enable'") — any combination of modifiers can still be enabled at
-          once, independent of which one is currently being viewed. A tab
-          still shows whether its modifier is enabled (accent-filled), just
-          not via a checkbox control. Hidden entirely for 'none' (no
-          generator content to modify). See ISSUES.md. */}
+      {/* Independent, composable toggles layered onto the base generator, not separate noise types (Dana, 2026-09-30).
+          One nested accordion per modifier with its on/off switch in the header, like every other section (Dana,
+          2026-10-30, replacing the tab row). Hidden for 'none' (no generator content to modify). */}
       {selectedLayer.noiseType !== 'none' && (
         <>
           <div className="panel-section-divider" />
           <div className="panel-section">
             <Accordion title="Modifiers">
-              {/* One group, not two separately-spaced elements — the active
-                  tab's bottom edge and the panel's top edge need to sit
-                  flush with zero gap to read as one connected shape (Dana,
-                  2026-09-30: "connect the tabs head to the body"). */}
-              <div className="modifier-tab-group">
-              <div className="modifier-tabs">
-                {MODIFIERS.map((modifier) => {
-                  const enabled = selectedLayer[modifier.enabledField] ?? false;
-                  return (
-                    <button
-                      key={modifier.key}
-                      type="button"
-                      className={
-                        'modifier-tab ui-tooltip-anchor' +
-                        (expandedModifier === modifier.key ? ' modifier-tab--expanded' : '') +
-                        (enabled ? ' modifier-tab--enabled' : '')
-                      }
-                      onClick={() => setExpandedModifier(expandedModifier === modifier.key ? null : modifier.key)}
-                    >
-                      <span className="modifier-tab-label">{modifier.label}</span>
-                      <span className="ui-tooltip">{modifier.tooltip}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {expandedModifier === 'domainWarp' && (
-                <div className="modifier-params">
-                  <Toggle
-                    label="Enable"
-                    value={selectedLayer.domainWarpEnabled ?? false}
-                    onChange={(value) => onUpdateSelectedLayer({ domainWarpEnabled: value })}
-                    description="Distorts the noise's own coordinates before evaluating it, which bends straight features into swirls instead of adding more detail."
-                  />
+              <ModifierSection modifierKey="domainWarp" selectedLayer={selectedLayer} onUpdateSelectedLayer={onUpdateSelectedLayer}>
+                <Slider
+                  label="Warp strength"
+                  value={selectedLayer.warpStrength}
+                  onChange={(value) => onUpdateSelectedLayer({ warpStrength: value })}
+                  {...sliderRange('warpStrength')}
+                  description="How far the coordinates are pushed before evaluating the noise. Higher values bend features into stronger swirls."
+                />
+                <Slider
+                  label="Warp scale"
+                  value={selectedLayer.warpScale ?? 1}
+                  onChange={(value) => onUpdateSelectedLayer({ warpScale: value })}
+                  {...sliderRange('warpScale')}
+                  description="How fine the warp's own pattern is. Low values give broad, slow bends; high values give tight, choppy ones."
+                />
+                <Slider
+                  label="Warp octaves"
+                  value={selectedLayer.warpOctaves ?? 1}
+                  onChange={(value) => onUpdateSelectedLayer({ warpOctaves: value })}
+                  {...sliderRange('warpOctaves')}
+                  precision={0}
+                  description="How many layered copies the warp is built from. More octaves roughen the bends with finer detail, at a higher cost to compute."
+                />
+              </ModifierSection>
+              <ModifierSection modifierKey="octaves" selectedLayer={selectedLayer} onUpdateSelectedLayer={onUpdateSelectedLayer}>
+                <Slider
+                  label="Octaves"
+                  value={selectedLayer.octaves}
+                  onChange={(value) => onUpdateSelectedLayer({ octaves: value })}
+                  {...sliderRange('octaves')}
+                  precision={0}
+                  description="How many layered copies to sum. More octaves add finer detail at a higher cost to compute. Zooming in on the planet adds finer octaves automatically."
+                />
+                <Select
+                  label="Fractal type"
+                  value={selectedLayer.fractalType ?? 'fbm'}
+                  onChange={(value) => onUpdateSelectedLayer({ fractalType: value as FractalType })}
+                  options={FRACTAL_TYPE_OPTIONS}
+                  description="How the octaves combine. fBm adds them evenly. Multifractal and Hybrid vary the roughness by place. Hetero terrain keeps low ground smooth and high ground rough. Ridged multifractal makes sharp ridges with detail only on them."
+                />
+                {/* Offset applies to every type but fBm and multifractal; Gain only to hybrid and ridged. */}
+                {['hybrid', 'hetero', 'ridgedMulti'].includes(selectedLayer.fractalType ?? 'fbm') && (
                   <Slider
-                    label="Warp strength"
-                    value={selectedLayer.warpStrength}
-                    onChange={(value) => onUpdateSelectedLayer({ warpStrength: value })}
-                    {...sliderRange('warpStrength')}
-                    description="How far the coordinates are pushed before evaluating the noise. Higher values bend features into stronger swirls."
+                    label="Fractal offset"
+                    value={selectedLayer.fractalOffset ?? 0}
+                    onChange={(value) => onUpdateSelectedLayer({ fractalOffset: value })}
+                    {...sliderRange('fractalOffset')}
+                    description="Shifts the noise before the octaves combine (Blender's Offset). It sets the base height the rougher octaves build on, and how much of the ground stays smooth."
                   />
+                )}
+                {['hybrid', 'ridgedMulti'].includes(selectedLayer.fractalType ?? 'fbm') && (
                   <Slider
-                    label="Warp scale"
-                    value={selectedLayer.warpScale ?? 1}
-                    onChange={(value) => onUpdateSelectedLayer({ warpScale: value })}
-                    {...sliderRange('warpScale')}
-                    description="How fine the warp's own pattern is. Low values give broad, slow bends; high values give tight, choppy ones."
+                    label="Fractal gain"
+                    value={selectedLayer.fractalGain ?? 1}
+                    onChange={(value) => onUpdateSelectedLayer({ fractalGain: value })}
+                    {...sliderRange('fractalGain')}
+                    description="How strongly each octave lets the next, finer one show (Blender's Gain). Higher values make rough areas rougher and leave smooth areas smoother."
                   />
-                  <Slider
-                    label="Warp octaves"
-                    value={selectedLayer.warpOctaves ?? 1}
-                    onChange={(value) => onUpdateSelectedLayer({ warpOctaves: value })}
-                    {...sliderRange('warpOctaves')}
-                    precision={0}
-                    description="How many layered copies the warp is built from. More octaves roughen the bends with finer detail, at a higher cost to compute."
-                  />
-                </div>
-              )}
-              {expandedModifier === 'octaves' && (
-                <div className="modifier-params">
-                  <Toggle
-                    label="Enable"
-                    value={selectedLayer.octavesEnabled ?? false}
-                    onChange={(value) => onUpdateSelectedLayer({ octavesEnabled: value })}
-                    description="Layers several copies of the noise at increasing frequency and decreasing strength (fractal Brownian motion), adding fine detail on top of the broad shape."
-                  />
-                  <Slider
-                    label="Octaves"
-                    value={selectedLayer.octaves}
-                    onChange={(value) => onUpdateSelectedLayer({ octaves: value })}
-                    {...sliderRange('octaves')}
-                    precision={0}
-                    description="How many layered copies to sum. More octaves add finer detail at a higher cost to compute. Zooming in on the planet adds finer octaves automatically."
-                  />
-                  <Select
-                    label="Fractal type"
-                    value={selectedLayer.fractalType ?? 'fbm'}
-                    onChange={(value) => onUpdateSelectedLayer({ fractalType: value as FractalType })}
-                    options={FRACTAL_TYPE_OPTIONS}
-                    description="How the octaves combine. fBm adds them evenly. Multifractal and Hybrid vary the roughness by place. Hetero terrain keeps low ground smooth and high ground rough. Ridged multifractal makes sharp ridges with detail only on them."
-                  />
-                  {/* Offset applies to every type but fBm and multifractal; Gain only to hybrid and ridged. */}
-                  {['hybrid', 'hetero', 'ridgedMulti'].includes(selectedLayer.fractalType ?? 'fbm') && (
-                    <Slider
-                      label="Fractal offset"
-                      value={selectedLayer.fractalOffset ?? 0}
-                      onChange={(value) => onUpdateSelectedLayer({ fractalOffset: value })}
-                      {...sliderRange('fractalOffset')}
-                      description="Shifts the noise before the octaves combine (Blender's Offset). It sets the base height the rougher octaves build on, and how much of the ground stays smooth."
-                    />
-                  )}
-                  {['hybrid', 'ridgedMulti'].includes(selectedLayer.fractalType ?? 'fbm') && (
-                    <Slider
-                      label="Fractal gain"
-                      value={selectedLayer.fractalGain ?? 1}
-                      onChange={(value) => onUpdateSelectedLayer({ fractalGain: value })}
-                      {...sliderRange('fractalGain')}
-                      description="How strongly each octave lets the next, finer one show (Blender's Gain). Higher values make rough areas rougher and leave smooth areas smoother."
-                    />
-                  )}
-                  <Slider
-                    label="Persistence"
-                    value={selectedLayer.persistence}
-                    onChange={(value) => onUpdateSelectedLayer({ persistence: value })}
-                    {...sliderRange('persistence')}
-                    description="How much each added octave is scaled down from the last. Higher values keep fine detail loud relative to the broad shape."
-                  />
-                  <Slider
-                    label="Lacunarity"
-                    value={selectedLayer.lacunarity}
-                    onChange={(value) => onUpdateSelectedLayer({ lacunarity: value })}
-                    {...sliderRange('lacunarity')}
-                    description="How much each added octave's frequency increases from the last. Higher values pack detail in tighter."
-                  />
-                </div>
-              )}
-              {expandedModifier === 'ridged' && (
-                <div className="modifier-params">
-                  <Toggle
-                    label="Enable"
-                    value={selectedLayer.ridgedEnabled ?? false}
-                    onChange={(value) => onUpdateSelectedLayer({ ridgedEnabled: value })}
-                    description="Folds the noise around its midpoint so values near zero become peaks, turning smooth rolling hills into sharp mountain ridges."
-                  />
-                  {/* ridge() has no natural continuous parameter of its own
-                      to gate (unlike the other 3 modifiers' existing
-                      sliders) — this blends un-ridged -> fully-ridged
-                      (Dana, 2026-09-30: "how would you control the amount
-                      of it?"). */}
-                  <Slider
-                    label="Ridge amount"
-                    value={selectedLayer.ridgeAmount ?? 1}
-                    onChange={(value) => onUpdateSelectedLayer({ ridgeAmount: value })}
-                    {...sliderRange('ridgeAmount')}
-                    description="Blends between the plain noise and the fully ridged version. 0 is unridged, 1 is fully folded into peaks."
-                  />
-                  <Slider
-                    label="Ridge offset"
-                    value={selectedLayer.ridgeOffset ?? 1}
-                    onChange={(value) => onUpdateSelectedLayer({ ridgeOffset: value })}
-                    {...sliderRange('ridgeOffset')}
-                    description="Where the fold sits (Blender's Offset). Lower values push the ridges down, higher values raise them."
-                  />
-                  <Slider
-                    label="Ridge gain"
-                    value={selectedLayer.ridgeGain ?? 1}
-                    onChange={(value) => onUpdateSelectedLayer({ ridgeGain: value })}
-                    {...sliderRange('ridgeGain')}
-                    description="How strongly a ridge lets the next, finer octave show (Blender's Gain). Higher values give sharper, busier ridges."
-                  />
-                </div>
-              )}
-              {expandedModifier === 'terrace' && (
-                <div className="modifier-params">
-                  <Toggle
-                    label="Enable"
-                    value={selectedLayer.terraceEnabled ?? false}
-                    onChange={(value) => onUpdateSelectedLayer({ terraceEnabled: value })}
-                    description="Quantizes the noise into flat steps, giving terrain a stepped, terraced look instead of a smooth continuous slope."
-                  />
-                  <Slider
-                    label="Terrace steps"
-                    value={selectedLayer.terraceSteps}
-                    onChange={(value) => onUpdateSelectedLayer({ terraceSteps: value })}
-                    {...sliderRange('terraceSteps')}
-                    precision={0}
-                    description="How many flat steps the full height range is divided into. Fewer steps make each terrace taller and more pronounced."
-                  />
-                </div>
-              )}
-              </div>
+                )}
+                <Slider
+                  label="Persistence"
+                  value={selectedLayer.persistence}
+                  onChange={(value) => onUpdateSelectedLayer({ persistence: value })}
+                  {...sliderRange('persistence')}
+                  description="How much each added octave is scaled down from the last. Higher values keep fine detail loud relative to the broad shape."
+                />
+                <Slider
+                  label="Lacunarity"
+                  value={selectedLayer.lacunarity}
+                  onChange={(value) => onUpdateSelectedLayer({ lacunarity: value })}
+                  {...sliderRange('lacunarity')}
+                  description="How much each added octave's frequency increases from the last. Higher values pack detail in tighter."
+                />
+              </ModifierSection>
+              <ModifierSection modifierKey="ridged" selectedLayer={selectedLayer} onUpdateSelectedLayer={onUpdateSelectedLayer}>
+                {/* ridge() has no natural continuous parameter of its own
+                    to gate (unlike the other 3 modifiers' existing
+                    sliders) — this blends un-ridged -> fully-ridged
+                    (Dana, 2026-09-30: "how would you control the amount
+                    of it?"). */}
+                <Slider
+                  label="Ridge amount"
+                  value={selectedLayer.ridgeAmount ?? 1}
+                  onChange={(value) => onUpdateSelectedLayer({ ridgeAmount: value })}
+                  {...sliderRange('ridgeAmount')}
+                  description="Blends between the plain noise and the fully ridged version. 0 is unridged, 1 is fully folded into peaks."
+                />
+                <Slider
+                  label="Ridge offset"
+                  value={selectedLayer.ridgeOffset ?? 1}
+                  onChange={(value) => onUpdateSelectedLayer({ ridgeOffset: value })}
+                  {...sliderRange('ridgeOffset')}
+                  description="Where the fold sits (Blender's Offset). Lower values push the ridges down, higher values raise them."
+                />
+                <Slider
+                  label="Ridge gain"
+                  value={selectedLayer.ridgeGain ?? 1}
+                  onChange={(value) => onUpdateSelectedLayer({ ridgeGain: value })}
+                  {...sliderRange('ridgeGain')}
+                  description="How strongly a ridge lets the next, finer octave show (Blender's Gain). Higher values give sharper, busier ridges."
+                />
+              </ModifierSection>
+              <ModifierSection modifierKey="terrace" selectedLayer={selectedLayer} onUpdateSelectedLayer={onUpdateSelectedLayer}>
+                <Slider
+                  label="Terrace steps"
+                  value={selectedLayer.terraceSteps}
+                  onChange={(value) => onUpdateSelectedLayer({ terraceSteps: value })}
+                  {...sliderRange('terraceSteps')}
+                  precision={0}
+                  description="How many flat steps the full height range is divided into. Fewer steps make each terrace taller and more pronounced."
+                />
+              </ModifierSection>
             </Accordion>
           </div>
         </>

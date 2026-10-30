@@ -30,7 +30,7 @@ uniform sampler2D uMoonTexture4;
 uniform float uMoonTextureAmount; // 0 to 2: the texture's contrast for both tones, and up to 1 the solid layer
 uniform float uMoonHalo;
 uniform float uMoonGlow;
-uniform float uMoonCrescent; // 0 full moon, 1 thinnest crescent
+uniform float uMoonCrescents[MAX_MOON_SLOTS]; // each moon's shadow: 0 full moon, 1 thinnest crescent
 uniform float uCloudCoverage;
 uniform vec3 uCloudColor;
 uniform vec3 uCloudColor2;
@@ -135,13 +135,13 @@ vec3 drawMoon(vec3 sky, vec3 dir, int slot) {
   float across = offAngle / (offAngle > 0.0 ? haloWidth : max(glowWidth, 1e-5));
   float rounded = 1.0 / (1.0 + across * across); // flat at the edge itself, so no line forms there
   float strength = mix(uMoonGlow * MOON_GLOW_STRENGTH, uMoonHalo * MOON_HALO_STRENGTH, smoothstep(-0.5, 0.5, across));
-  float litSide = mix(1.0, smoothstep(-0.1, 0.6, dot(disc / max(discRadius, 1e-4), side)), smoothstep(0.0, 0.15, uMoonCrescent));
+  float litSide = mix(1.0, smoothstep(-0.1, 0.6, dot(disc / max(discRadius, 1e-4), side)), smoothstep(0.0, 0.15, uMoonCrescents[slot]));
   vec3 glow = mix(uMoonColors[slot], vec3(1.0), 0.3) * (1.0 - exp(-rounded * litSide * strength));
   if (offAngle > 0.0) return blendScreen(sky, glow);
 
   vec3 ball = vec3(disc, sqrt(max(1.0 - discRadius * discRadius, 0.0)));
   vec3 normal = normalize(right * ball.x + up * ball.y - moonDir * ball.z);
-  float phase = uMoonCrescent * MOON_MAX_PHASE;
+  float phase = uMoonCrescents[slot] * MOON_MAX_PHASE;
   vec3 light = normalize((right * side.x + up * side.y) * sin(phase) - moonDir * cos(phase));
 
   float height = moonSurface(slot, ball);

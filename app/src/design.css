@@ -109,7 +109,7 @@ body {
 .app-timeline-dock {
   flex-shrink: 0;
   width: 100%;
-  border-top: var(--divider-weight) solid var(--color-divider);
+  border-top: 1px solid var(--color-divider);
   background: var(--color-panel-bg);
   /* Same panel-padding on all sides as the side panels' own .panel-content,
      not a thinner one-off value — the first pass read as flush-to-edge at
@@ -257,6 +257,41 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   border: 1px solid var(--color-track);
 }
 
+/* Hue slider (UIElements.tsx HueSlider): the color ramp's bar (.ui-ramp-bar) as the track, its gradient set inline since
+   it follows other settings, and a handle in the ramp pin's outline, see-through so the color under it shows. */
+input[type='range'].ui-slider-track--hue {
+  height: 20px;
+  border-radius: 2px;
+  border: 0.25px solid var(--color-input-stroke);
+}
+input[type='range'].ui-slider-track--hue::-webkit-slider-thumb {
+  width: 10px;
+  height: 24px;
+  border-radius: 3px;
+  border: 1.5px solid var(--color-input-stroke);
+  background: transparent;
+}
+input[type='range'].ui-slider-track--hue::-moz-range-thumb {
+  width: 10px;
+  height: 24px;
+  border-radius: 3px;
+  border: 1.5px solid var(--color-input-stroke);
+  background: transparent;
+}
+input[type='range'].ui-slider-track--hue:focus-visible::-webkit-slider-thumb {
+  border-color: var(--color-accent);
+}
+input[type='range'].ui-slider-track--hue:focus-visible::-moz-range-thumb {
+  border-color: var(--color-accent);
+}
+/* The result's color, shown only: the color swatch's size and stroke, without its pointer. */
+.ui-hue-swatch {
+  flex: 0 0 28px;
+  height: 20px;
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+}
+
 .ui-slider-field {
   flex: 0 0 36px; /* matches active-geometry's ag-slider-value min-width (the "value next to a track" role) */
   min-width: 0;
@@ -290,6 +325,31 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   color: var(--color-text);
   flex-shrink: 0;
   min-width: 80px;
+}
+
+/* A color row's lock and swatch, pushed to the row's right edge so every swatch lines up in one column (Dana, 2026-10-30). */
+.ui-color-end {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  margin-left: auto;
+}
+
+/* LockButton: a bare padlock. Open is dimmed, shut is full strength; hover dips like any text button. */
+.ui-lock-btn {
+  display: flex;
+  align-items: center;
+  opacity: 0.4;
+}
+.ui-lock-btn--locked {
+  opacity: 1;
+}
+.ui-lock-btn:hover:not(:disabled) {
+  opacity: 0.75;
+}
+.ui-lock-btn:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
 }
 
 .ui-color-swatch {
@@ -996,6 +1056,7 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-right: calc(var(--font-size-sm) + var(--gap-sm)); /* its switch lines up with the accordion headers' switches */
 }
 
 /* ── Editable text (ui/UIElements.tsx) ─────────────────────── */
@@ -1047,135 +1108,54 @@ input[type='range'].ui-slider-track--bw::-moz-range-thumb {
 .ui-accordion-header:hover {
   opacity: 0.75;
 }
-
-/* Subordinate to its parent accordion (e.g. "My Projects" inside "Project
-   Settings") — indented with a left border so the parent/child relationship
-   reads at a glance, header text unbolded (Dana, 2026-09-23: shrinking it
-   first read as "tiny," bold read as a section title again) — same size as
-   a top-level accordion, regular weight, indentation carries the nesting. */
-.ui-accordion--nested {
-  padding-left: var(--gap-md);
-  border-left: 1px solid var(--color-divider);
+/* Keyboard focus: the accent, as on every other control, not the browser's blue ring. */
+.ui-accordion-header:focus {
+  outline: none;
 }
+.ui-accordion-header:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Subordinate to its parent accordion (e.g. "My Projects" inside "Project Settings"): regular weight, same size, and
+   only horizontal dividers, no left line or indent (Dana, 2026-10-30). */
 /* A divider between parts inside an accordion (Color's Land and Water) gets the larger gap on both sides (Dana, 2026-10-26). */
 .ui-accordion-content > .panel-section-divider {
   margin: calc(var(--gap-lg) - var(--gap-md)) 0;
 }
-/* A divider and a larger gap above each nested accordion, so stacked subsections read apart (Dana, 2026-10-26). */
+/* A divider above each nested accordion, at the same gaps as a divider between parts, so it never reads as a box. */
 .ui-accordion-content > .ui-accordion--nested {
   margin-top: calc(var(--gap-lg) - var(--gap-md));
-  padding-top: var(--gap-lg);
+  padding-top: calc(var(--gap-lg) - var(--gap-md));
   border-top: 1px solid var(--color-divider);
 }
 
-/* ── Modifier tabs (ui/NoisePanel.tsx's Modifiers section) ─── */
-/* All 4 in one row (Dana, 2026-09-30: "when i say tabs i mean all in the
-   same row") — plain labels, no checkbox on the tab itself; clicking one
-   selects which ONE modifier's params show below (exclusive). The actual
-   enable/disable checkbox lives inside the expanded panel instead (Dana,
-   2026-09-30: "get rid of the check box in the tab and move it inside of
-   each modifier as 'enable'") — independent of which tab is selected, any
-   combination can still be enabled at once. A tab still shows whether its
-   modifier is enabled via a filled background, so that information isn't
-   lost by moving the checkbox out of the tab row. */
-
-/* The tab row and its panel as one glued-together unit — no gap between
-   them (Dana, 2026-09-30: "connect the tabs head to the body"), so the
-   active tab's bottom edge and the panel's top edge read as one continuous
-   shape instead of two separately-outlined boxes with a visible seam. */
-.modifier-tab-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.modifier-tabs {
-  display: flex;
-  flex-wrap: nowrap;
-  /* No gap — tabs sit edge-to-edge as one segmented strip, not separate
-     floating chips (Dana, 2026-09-30: "the gaps between them"). The
-     group's own left/right border (not each tab's) is what frames the
-     whole strip, so there's no vertical stroke between individual tabs
-     (Dana, 2026-09-30: "get rid of the stroke in between the buttons"). */
-  border-left: 0.25px solid var(--color-input-stroke);
-  border-right: 0.25px solid var(--color-input-stroke);
-}
-
-.modifier-tab {
-  flex: 1;
-  min-width: 0; /* lets the label actually shrink/ellipsize instead of forcing the row wider — see .noise-layer-row-main's same reasoning */
-  padding: 4px 8px;
-  cursor: pointer;
-  background: var(--color-input-fill);
-  border: 0.25px solid var(--color-input-stroke);
-  border-left: none;
-  border-right: none; /* no side borders — .modifier-tabs' own border frames the group instead, see above */
-  font: 300 var(--font-size-sm) var(--font-ui);
-  color: var(--color-text);
-  text-align: center;
-}
-/* The ellipsis truncation moved here, off the button itself — the button is
-   now a .ui-tooltip-anchor, and overflow:hidden on it would clip the
-   tooltip's own absolutely-positioned popup along with any overflowing text. */
-.modifier-tab-label {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.modifier-tab:first-child {
-  border-top-left-radius: 2px;
-}
-.modifier-tab:last-child {
-  border-top-right-radius: 2px;
-}
-.modifier-tab:hover {
-  opacity: 0.85;
-}
-.modifier-tab:focus {
-  /* The browser's default focus outline (usually blue) doesn't belong to
-     this design system — same fix already used everywhere else a focusable
-     control needs one (.ui-select, .ui-slider-field): suppress it, use the
-     accent border as the focus indicator instead (Dana, 2026-09-30: "the
-     stroke around each tab button is very strange"). */
-  outline: none;
-  border-color: var(--color-accent);
-  position: relative;
-  z-index: 1;
-}
-.modifier-tab--expanded {
-  position: relative;
-  z-index: 1; /* sits on top of the panel's own top edge, so removing its bottom border reads as a seamless join, not a gap */
-  border-color: var(--color-accent);
-  border-bottom: none;
-  background: var(--color-input-fill); /* exact match to .modifier-params below, so the join has no visible color seam */
-}
-.modifier-tab--enabled {
-  background: color-mix(in srgb, var(--color-accent) 25%, var(--color-input-fill));
-}
-/* Expanded wins over enabled's tint — the active tab must match
-   .modifier-params's exact background for the seam to actually disappear,
-   regardless of whether it's also enabled. (.a.b beats .a or .b alone on
-   specificity, so this is safe regardless of source order.) */
-.modifier-tab--expanded.modifier-tab--enabled {
-  background: var(--color-input-fill);
-}
-
-/* A contained panel, not a bare slider floating below the tab row — reads
-   as "this box belongs to whichever tab is active" (Dana, 2026-09-30: "the
-   panel should wrap around it"). Flush against the tab row above (no
-   margin, no top border/radius — the active tab supplies that edge). */
-.modifier-params {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-md);
-  padding: var(--gap-md);
-  background: var(--color-input-fill);
-  border: 0.25px solid var(--color-accent);
-  border-top: none;
-  border-radius: 0 0 2px 2px;
-}
-.ui-accordion--nested > .ui-accordion-header {
+.ui-accordion--nested > .ui-accordion-header,
+.ui-accordion--nested > .ui-accordion-header-row > .ui-accordion-header {
   font-weight: 400;
+}
+/* A header with actions (Accordion's actions): the actions come first, like a layer row's ×, and the header takes the rest. */
+.ui-accordion-header-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+/* Over the header's right end, just before its chevron, without being inside the header's button. */
+.ui-accordion-trailing {
+  position: absolute;
+  right: calc(var(--font-size-sm) + var(--gap-sm));
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+}
+.ui-accordion-header-row > .ui-accordion-header {
+  flex: 1;
+  min-width: 0;
+}
+.ui-accordion-actions {
+  display: flex;
+  align-items: center;
 }
 
 .ui-accordion-chevron {

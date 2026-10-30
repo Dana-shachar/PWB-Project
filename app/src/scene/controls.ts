@@ -14,7 +14,57 @@ export function controls(camera: THREE.Camera, domElement: HTMLElement): OrbitCo
     MIDDLE: THREE.MOUSE.DOLLY,
     RIGHT: THREE.MOUSE.PAN,
   };
+  // Shift + drag already pans (OrbitControls' own default); Space + drag does too, as in Figma and Photoshop.
+  const removeSpacePan = holdSpaceToPan(orbitControls, domElement);
+  const baseDispose = orbitControls.dispose.bind(orbitControls);
+  orbitControls.dispose = () => {
+    removeSpacePan();
+    baseDispose();
+  };
   return orbitControls;
+}
+
+// While Space is held, a left drag pans instead of orbiting, with a hand cursor (Dana, 2026-10-30). Ignored while
+// typing or on a focused button, and released if the window loses focus. Returns the cleanup.
+function holdSpaceToPan(orbitControls: OrbitControls, domElement: HTMLElement): () => void {
+  let isHeld = false;
+  const release = () => {
+    if (!isHeld) return;
+    isHeld = false;
+    orbitControls.mouseButtons.LEFT = THREE.MOUSE.ROTATE;
+    domElement.style.cursor = '';
+  };
+  const isTyping = (target: EventTarget | null) =>
+    target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON'].includes(target.tagName));
+  const onKeyDown = (event: KeyboardEvent) => {
+    if (event.code !== 'Space' || isTyping(event.target)) return;
+    event.preventDefault(); // no page scroll
+    if (isHeld) return;
+    isHeld = true;
+    orbitControls.mouseButtons.LEFT = THREE.MOUSE.PAN;
+    domElement.style.cursor = 'grab';
+  };
+  const onKeyUp = (event: KeyboardEvent) => {
+    if (event.code === 'Space') release();
+  };
+  const onPointerDown = () => {
+    if (isHeld) domElement.style.cursor = 'grabbing';
+  };
+  const onPointerUp = () => {
+    if (isHeld) domElement.style.cursor = 'grab';
+  };
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', release);
+  domElement.addEventListener('pointerdown', onPointerDown);
+  window.addEventListener('pointerup', onPointerUp);
+  return () => {
+    window.removeEventListener('keydown', onKeyDown);
+    window.removeEventListener('keyup', onKeyUp);
+    window.removeEventListener('blur', release);
+    domElement.removeEventListener('pointerdown', onPointerDown);
+    window.removeEventListener('pointerup', onPointerUp);
+  };
 }
 
 // OrbitControls' own zoom step per wheel click (0.95 of the distance).
@@ -22,12 +72,14 @@ const WHEEL_STEP = 0.95;
 
 // Speeds scaled by height above the surface, as globe viewers do (Google Earth,
 // Cesium for Unity, A-Terrain): moves shrink near the ground ([B51]).
-// `surfaceRadius` is the planet radius plus its highest terrain.
+// `surfaceRadius` is the planet radius plus its highest terrain; `outerRadius` the farthest-reaching layer around it
+// (the atmosphere's glow), which the far limit must contain.
 export function applyAltitudeRates(
   orbitControls: OrbitControls,
   perspectiveCamera: THREE.PerspectiveCamera,
   planetRadius: number,
   surfaceRadius: number,
+  outerRadius: number,
 ): void {
   const minAltitude = planetRadius * MIN_CAMERA_ALTITUDE;
   const distance = perspectiveCamera.position.distanceTo(orbitControls.target);
@@ -47,9 +99,12 @@ export function applyAltitudeRates(
   let far = DEFAULT_FAR;
   if (altitude < planetRadius) {
     near = Math.min(DEFAULT_NEAR, altitude * 0.25);
-    const horizon = Math.sqrt(Math.max(0, distance * distance - planetRadius * planetRadius));
+    // Measured from the planet's center (the origin), not the orbit target: after a pan they differ, and a far limit
+    // short of the glow cut it off-center (Dana, 2026-10-30).
+    const centerDistance = perspectiveCamera.position.length();
+    const horizon = Math.sqrt(Math.max(0, centerDistance * centerDistance - planetRadius * planetRadius));
     const beyond = Math.sqrt(Math.max(0, surfaceRadius * surfaceRadius - planetRadius * planetRadius));
-    far = Math.min(DEFAULT_FAR, (horizon + beyond) * 1.5);
+    far = Math.min(DEFAULT_FAR, Math.max((horizon + beyond) * 1.5, centerDistance + outerRadius));
   }
   if (perspectiveCamera.near !== near || perspectiveCamera.far !== far) {
     perspectiveCamera.near = near;

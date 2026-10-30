@@ -149,6 +149,16 @@ export function CloseIcon({ className }: IconProps) {
   );
 }
 
+// A padlock, shut or open (LockButton in UIElements.tsx): what Randomize keeps and what it may change.
+export function LockIcon({ className, open = false }: IconProps & { open?: boolean }) {
+  return (
+    <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden="true">
+      <rect x={3.5} y={7} width={9} height={7} rx={1.5} />
+      <path d={open ? 'M5.5 7V4.8a2.5 2.5 0 0 1 4.9-.7' : 'M5.5 7V4.8a2.5 2.5 0 0 1 5 0V7'} />
+    </svg>
+  );
+}
+
 // Undo/Redo in the Edit section (ui/Panel.tsx): a curved arrow, RedoIcon its
 // mirror image.
 export function UndoIcon({ className }: IconProps) {

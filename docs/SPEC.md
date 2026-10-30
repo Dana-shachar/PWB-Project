@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-10-26`
+`Last updated: 2026-10-30`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -276,6 +276,13 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 *How the controls are organized, and the reasoning behind the layout.*
 
+### [S47] Panels: one hierarchy everywhere · `decided`
+**Decided:** 2026-10-30
+
+- Every section is an accordion, closed by default; parts inside it are a divider and a small title, colors last in a "Color" part. Nested sections use horizontal dividers only.
+- A section that can be turned off carries its switch in its header (or its title line), never a separate on/off row. The noise modifiers are nested sections, not tabs.
+- Color swatches line up at the right edge of their rows. The full rules live in the `ui-design` skill.
+
 ### [S24] The left panel is the pipeline · `decided`
 **Decided and built:** 2026-10-07
 
@@ -406,7 +413,21 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 ### [S44] Moons are randomized landscape elements, baked by the noise engine · `decided`
 **Decided:** 2026-10-28
 
-- One to five moons in the chunk's sky, each with its own size, place, two colors, crescent angle and simple noise layers baked by the engine. Randomize is the main control; per-moon controls are there only for adjusting (Dana: not a burden on the user).
+- One to five moons in the chunk's sky, each with its own size, place, two colors, crescent, crescent angle and simple noise layers baked by the engine. Randomize is the main control; per-moon controls are there only for adjusting (Dana: not a burden on the user).
+- Moons are added and removed like layers (2026-10-30): all five are stored, so removing one keeps its settings out of view.
 - The look (Dana's references, No Man's Sky and moon photos): screened over the sky so the shadow dissolves into it, split-toned (Second color tints the darks, Color the brights), a crescent turned from the sun's side, and one soft glow across the edge on the lit side.
 - Their sizes set the chunk's tides (size cubed, after the tidal-force rule, exaggerated and capped).
 
+### [S45] Randomize changes everything; locked colors stay and anchor the palette · `decided`
+**Decided:** 2026-10-30
+
+- The Atmosphere's Randomize changes every atmosphere setting on both panels. A lock icon before a color keeps it, and the unlocked colors are hue turns from a locked one (Sky first), using the moons' color rules.
+- Every lock in the app is this icon, never a "Lock ..." toggle.
+- 💡 Next, agreed with Dana: a few hidden drivers (storminess, air thickness, cloud climate) set related sliders together, so settings work together the way the colors do; at most one driver goes extreme. Sources are checked before the plan. Until then each slider rolls on its own, at most one across its full range.
+
+### [S46] The haze is air from the visible ground up, deep on purpose · `decided`
+**Decided:** 2026-10-30
+
+- Haze is the air's density at the ground, in the Horizon color; the air thins with height (O'Neil, GPU Gems 2), starting at the lowest visible surface.
+- The air is about 4 times deeper than Earth's in proportion (0.03 of the radius), so its rim reads as a soft glow rather than a stripe: these are alien worlds, not realistic ones (Dana). The separate Glow stays, in the Sky color.
+- The camera's far limit always contains the atmosphere (`[B75]`).

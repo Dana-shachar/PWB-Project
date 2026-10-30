@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-10-27`
+`Last updated: 2026-10-30`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -21,7 +21,7 @@
 | Change which patches the planet shows | `planet/planetPatches.ts`, `planet/PlanetPatchRenderer.ts`, `planet/patchLifecycle.ts` |
 | Change patch bake size or depth limits | `planet/patch.ts`, then `PlanetPatchRenderer.ts` |
 | Change planet lighting or color | `shaders/terrain/landLayers.glsl` (the land's shared layers), `shaders/terrain/terrain.glsl`, `shaders/terrain/planetPatch.frag.glsl`, `shaders/terrain/chunk.frag.glsl` |
-| Change the shadows' color (the sky fill) | `fillLight` in `shaders/terrain/landLayers.glsl`, `fillColorFor` in `scene/fillLight.ts`, `shadowHue` in `scene/sceneControls.ts`, `uFillColor` in `planet/planetPatchMesh.ts` and `voxel/LandChunkCanvas.tsx` |
+| Change the shadows' color (the sky fill) | `fillLight` in `shaders/terrain/landLayers.glsl`, `fillColorFor` in `scene/fillLight.ts`, `shadowHue` in `atmosphere/atmosphereSettings.ts` (its `HueSlider` in the Atmosphere section of `ui/Panel.tsx`), `uFillColor` in `planet/planetPatchMesh.ts` and `voxel/LandChunkCanvas.tsx` |
 | Change the atmosphere (sky, haze, glow, clouds, wind) | `atmosphere/`, `shaders/atmosphere/`, `ui/panels/AtmospherePanel.tsx`, the Atmosphere section of `ui/Panel.tsx` |
 | Change water (sea level, color, transparency, waves) | `shaders/water/water.glsl` and `shaders/terrain/planetPatch.frag.glsl` (planet ocean), `voxel/chunkWater.ts`, `shaders/water/chunkWater.frag.glsl` and `shaders/water/oceanWaves.glsl` (chunk, Seascape), `WaterSettings` in `planet/planetControls.ts`, the water rows and Color section of `ui/Panel.tsx` |
 | Change the planet's height statistics (ramp range, % land) | `updateElevationRange` in `scene/SceneCanvas.tsx`, `getRegionHistogramAsync` in `map/heightmap.ts`, `percentileRangeFromBins` in `map/elevationRange.ts`, `planet/seaLevel.ts` |
@@ -171,12 +171,12 @@
 *The sky, haze, glow, clouds, wind, moons and tides, saved with the planet.*
 
 **atmosphere/atmosphereSettings.ts**
-- What it is: the settings and their defaults; older saves take their wind from the water.
-- Key names: `AtmosphereSettings` (incl. `cloudColor2`, `moonCount`, `moons`, `moonCrescent`, `moonTexture`, `moonHalo`, `moonGlow`, `moonColorsLocked`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
+- What it is: the settings and their defaults, the locks, and the Atmosphere's Randomize; older saves take their wind from the water and their shared Crescent and "Lock colors" into each moon.
+- Key names: `AtmosphereSettings` (incl. `shadowHue`, `cloudColor2`, `moonCount`, `moons`, `moonTexture`, `moonHalo`, `moonGlow`, `lockedColors`), `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (`NUMBER_RANGES`, `EXTREME_CHANCE`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
 
 **atmosphere/moonTexture.ts**
 - What it is: the moons: their settings, simple noise layers, Randomize (sizes, places in view, colors from the sky, textures), and the five defaults.
-- Key names: `MoonSettings` (incl. `crescentAngle`), `MAX_MOONS`, `randomMoons`, `randomMoonLayers`, `moonColorsForSky`, `randomHueTurns`, `COLOR_RULES`, `randomSizes`, `describeMoonLayers`, `DEFAULT_MOONS`.
+- Key names: `MoonSettings` (incl. `crescent`, `crescentAngle`, `colorLocked`, `color2Locked`), `MAX_MOONS`, `randomMoons`, `randomMoonLayers`, `moonColorsForSky`, `randomHueTurns`, `COLOR_RULES`, `randomSizes`, `describeMoonLayers`, `DEFAULT_MOONS`.
 
 **atmosphere/tides.ts**
 - What it is: how far the chunk's water rises and falls with the moons (size cubed, summed, capped).
@@ -184,10 +184,11 @@
 
 **atmosphere/skyDome.ts**, **planetGlow.ts**, **planetHaze.ts**, **cloudLayer.ts**
 - What it is: the chunk's sky, the planet's rim glow, surface haze and cloud shell.
-- Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`, `setSkyDomeLight` (the Scene light for the moons), `setSkyDomeMoonTexture`, `getSkyView` (where the camera last looked, for Randomize), `CLOUD_DRIFT`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`, `GLOW_MIN_WIDTH`, `GLOW_WIDTH_PER_UNIT`, `GLOW_SHELL_WIDTHS`; `createPlanetHaze`, `updatePlanetHaze`, `HAZE_SCALE_HEIGHT`, `HAZE_DENSITY_PER_UNIT`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`, `CLOUD_TIME_PER_WIND`.
+- Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`, `setSkyDomeLight` (the Scene light for the moons), `setSkyDomeMoonTexture`, `getSkyView` (where the camera last looked, for Randomize), `CLOUD_DRIFT`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`, `glowOuterRadius` (for the camera's far limit), `GLOW_MIN_WIDTH`, `GLOW_WIDTH_PER_UNIT`, `GLOW_SHELL_WIDTHS`; `createPlanetHaze`, `updatePlanetHaze` (its ground is the lowest visible surface, `hazeGround` in `scene/SceneCanvas.tsx`), `HAZE_SCALE_HEIGHT`, `HAZE_DENSITY_PER_UNIT`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`, `CLOUD_TIME_PER_WIND`.
 
 **ui/panels/AtmospherePanel.tsx**
-- What it is: the right panel's Wind, Clouds and Moon controls, shown when Atmosphere is selected.
+- What it is: the right panel's Clouds (with Wind) and Moons, shown when Atmosphere is selected. Each moon is a nested section, added and removed like layers.
+- Key names: `AtmospherePanel`, `addMoon`, `removeMoon`, `randomizeMoons`, `updateMoon`.
 
 ---
 
@@ -205,20 +206,20 @@
 - Key names: `useSharedViewportRenderer`, `registerView`.
 
 **scene/sceneControls.ts**
-- What it is: lighting and grid state, including whether the light follows the camera (on by default) and the shadows' hue turn. Not saved with projects.
-- Key names: `useSceneControls`, `lightFollowsCamera`, `shadowHue`.
+- What it is: lighting and grid state, including whether the light follows the camera (on by default). Not saved with projects.
+- Key names: `useSceneControls`, `lightFollowsCamera`.
 
 **scene/fillLight.ts**
-- What it is: the sky fill's color: the sky's top color turned by Shadow hue, scaled to white's luminance; white with no atmosphere.
-- Key names: `fillColorFor`.
+- What it is: the sky fill's color: the sky's top color turned by Shadow hue, scaled to white's luminance; white with no atmosphere. Also the Shadow hue slider's track and swatch colors.
+- Key names: `fillColorFor`, `displayColorFor`, `hueTrackGradient`.
 
 **scene/Gumball.tsx**, **scene/sharedGumball.ts**
 - What it is: the navigation widget, and its shared control of one or two cameras. A target with a `surface` zooms by log height above the ground.
 - Key names: `Gumball`, `GumballTarget` (`surface`, `setWalkSpeed`), the walk Speed row (`walkSpeedRow`, `handleWalkSpeedInput`, shown only while walking), `levelToDistance`, `distanceToLevel`, `zoomAnchors`, `useSharedGumball`.
 
 **scene/camera.ts**, **controls.ts**
-- What it is: the camera and its orbit controls. Every frame the planet view scales rotate, pan and zoom speed, and the near and far planes, by height above the surface.
-- Key names: `camera`, `defaultCameraPosition`, `DEFAULT_CAMERA_DISTANCE`, `MIN_CAMERA_ALTITUDE`, `DEFAULT_NEAR`, `DEFAULT_FAR`, `controls`, `applyAltitudeRates`, `keepAboveFlatGround` (the chunk). The gumball's zoom slider and Reset View call the target's `pivotToGround` first (`scene/Gumball.tsx`).
+- What it is: the camera and its orbit controls. Every frame the planet view scales rotate, pan and zoom speed, and the near and far planes, by height above the surface; the far plane always contains the glow (`[B75]`). Space + drag pans, as does Shift + drag.
+- Key names: `camera`, `defaultCameraPosition`, `DEFAULT_CAMERA_DISTANCE`, `MIN_CAMERA_ALTITUDE`, `DEFAULT_NEAR`, `DEFAULT_FAR`, `controls`, `holdSpaceToPan`, `applyAltitudeRates` (`outerRadius`), `keepAboveFlatGround` (the chunk). The gumball's zoom slider and Reset View call the target's `pivotToGround` first (`scene/Gumball.tsx`).
 
 **scene/grid.ts**, **renderer.ts**, **scene.ts**
 - What it is: small Three.js setup modules.
@@ -292,19 +293,19 @@
 
 **ui/UIElements.tsx**
 - What it is: the design-system components.
-- Key names: `Slider` (log and reversed scales), `Dial` (round angle control), `Toggle`, `Select`, `ColorPicker`, `EditableText`, `Accordion`, `IconButton`, `Popup`, `placeTooltip`.
+- Key names: `Slider` (log and reversed scales, `trackBackground`, `swatchColor`), `HueSlider`, `Dial` (round angle control), `Toggle`, `Switch`, `SectionTitle` (a title line with an optional switch), `Select`, `ColorPicker` (optional lock), `LockButton`, `EditableText`, `Accordion` (`actions`, `headerSwitch`), `IconButton`, `Popup`, `placeTooltip`.
 
 **ui/icons.tsx**
 - What it is: flat line-art icons.
-- Key names: `DiceIcon`, `PaletteIcon`, `EyeIcon`, `MaskIcon`, `UndoIcon`, `RedoIcon`, `ResetIcon`, `CloseIcon`.
+- Key names: `DiceIcon`, `PaletteIcon`, `EyeIcon`, `MaskIcon`, `UndoIcon`, `RedoIcon`, `ResetIcon`, `CloseIcon`, `LockIcon`.
 
 **ui/Panel.tsx**
 - What it is: the left panel (Project, Edit, Scene, Planet Terrain, stages).
 - Key names: `Panel`, `PipelineStageRow`.
 
 **ui/RightPanel.tsx**, **ui/NoisePanel.tsx**
-- What it is: the right panel for the active stage, and the Terrain stage's layer controls (its Terrain section holds Height and Roughness).
-- Key names: `RightPanel`, `NoisePanel`.
+- What it is: the right panel for the active stage, and the Terrain stage's layer controls (its Terrain section holds Height and Roughness; each modifier is a nested section with its switch in the header).
+- Key names: `RightPanel`, `NoisePanel`, `MODIFIERS`, `ModifierSection`.
 
 **ui/MaskControls.tsx**
 - What it is: the layer mask popup and its row button.

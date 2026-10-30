@@ -1,14 +1,15 @@
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle } from './UIElements';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
 import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
 import { ColorRampEditor } from './panels/ColorRampEditor';
 import type { ColorStop } from '../planet/colorRamp';
 import type { WaterSettings } from '../planet/planetControls';
-import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
+import { colorLockProps, randomAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { depthToRampPosition, landRampFloor, landShareAt, rampPositionToDepth, type HeightDistribution } from '../planet/seaLevel';
 import { MAX_MAX_ERROR_PIXELS, maxErrorPixelsToResolution, MIN_MAX_ERROR_PIXELS, resolutionToMaxErrorPixels } from '../planet/patch';
+import { displayColorFor, fillColorFor, hueTrackGradient } from '../scene/fillLight';
 
 // 'voxel' only affects the land-chunk view for now — a display style, not a
 // chunk-only feature (Dana, 2026-09-23), but the planet doesn't render
@@ -23,8 +24,6 @@ interface PanelProps {
   // Scene controls
   ambientLight: number;
   onAmbientLightChange: (value: number) => void;
-  shadowHue: number;
-  onShadowHueChange: (value: number) => void;
   lightDirX: number;
   onLightDirXChange: (value: number) => void;
   lightFollowsCamera: boolean;
@@ -197,8 +196,6 @@ function PipelineStageRow({
 export function Panel({
   ambientLight,
   onAmbientLightChange,
-  shadowHue,
-  onShadowHueChange,
   lightDirX,
   onLightDirXChange,
   lightFollowsCamera,
@@ -389,7 +386,7 @@ export function Panel({
               description="On: the light turns with the camera, so whatever you look at is lit. Off: the light stays fixed like a distant sun, so the planet has a day side and a night side."
             />
             <Slider
-              label="X pos light"
+              label="Light X"
               value={lightDirX}
               onChange={onLightDirXChange}
               min={-10}
@@ -398,7 +395,7 @@ export function Panel({
               description="Where the light sits left to right. Low values graze the terrain and cast long shading; high values light it flat on."
             />
             <Slider
-              label="Y pos light"
+              label="Light Y"
               value={lightDirY}
               onChange={onLightDirYChange}
               min={-10}
@@ -453,15 +450,6 @@ export function Panel({
               step={0.01}
               description="The fill light. How bright the unlit side stays. Lower means deeper shadows; 0 makes anything facing away from the light go black."
             />
-            <Slider
-              label="Shadow hue"
-              value={shadowHue}
-              onChange={onShadowHueChange}
-              min={-180}
-              max={180}
-              step={1}
-              description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. White when the atmosphere is off."
-            />
             <div className="panel-section-divider" />
             <span className="panel-section-title">Shine</span>
             <Slider
@@ -484,8 +472,7 @@ export function Panel({
               description="How tight the highlight is. Low values spread it into a soft sheen; high values pull it into a small, sharp glint."
             />
             <div className="panel-section-divider" />
-            <span className="panel-section-title">Grid</span>
-            <Toggle label="Grid lines" value={gridVisible} onChange={onGridVisibleChange} />
+            <SectionTitle title="Grid" headerSwitch={{ value: gridVisible, onChange: onGridVisibleChange, label: 'Grid lines on or off' }} />
             {/* TODO(DS): grid spacing range not borrowed from active-geometry — it has no shader-plane grid */}
             <Slider
               label="Grid spacing"
@@ -648,14 +635,12 @@ export function Panel({
 
         <div className="panel-section">
           {/* Its own section, so the water's controls and colors are easy to find (Dana, 2026-10-27). */}
-          <Accordion title="Water">
+          <Accordion
+            title="Water"
+            description="Fills everything below sea level with water, on the planet and in the land chunk."
+            headerSwitch={{ value: water.enabled, onChange: (enabled) => onWaterChange({ enabled }), label: 'Water on or off' }}
+          >
             {/* Sea level is stored as a raw height so both views share one coastline; shown in planet meters. */}
-            <Toggle
-              label="Water"
-              value={water.enabled}
-              onChange={(enabled) => onWaterChange({ enabled })}
-              description="Fills everything below sea level with water, on the planet and in the land chunk."
-            />
             <Slider
               label={heightDistribution ? `Sea level · ${Math.round(landShareAt(heightDistribution, water.seaLevel) * 100)}% land` : 'Sea level'}
               value={water.seaLevel * planetMetersPerHeight}
@@ -756,21 +741,24 @@ export function Panel({
 
         <div className="panel-section">
           {/* The planet's atmosphere: its general controls here; wind, clouds and the moon on the right (Dana, 2026-10-27). */}
-          <Accordion title="Atmosphere" onHeaderClick={() => onStageChange('atmosphere')} active={activeStage === 'atmosphere'}>
-            <Toggle
-              label="Atmosphere"
-              value={atmosphere.enabled}
-              onChange={(enabled) => onAtmosphereChange({ enabled })}
-              description="A sky, haze and clouds around the planet and over the land chunk, and a glow around the planet from space."
-            />
-            <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} />
-            <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} />
+          <Accordion
+            title="Atmosphere"
+            onHeaderClick={() => onStageChange('atmosphere')}
+            active={activeStage === 'atmosphere'}
+            description="A sky, haze and clouds around the planet and over the land chunk, and a glow around the planet from space."
+            headerSwitch={{ value: atmosphere.enabled, onChange: (enabled) => onAtmosphereChange({ enabled }), label: 'Atmosphere on or off' }}
+          >
+            <div className="panel-btn-row">
+              <button type="button" className="noise-add-layer-btn" onClick={() => onAtmosphereChange(randomAtmosphere(atmosphere))} disabled={!atmosphere.enabled}>
+                <DiceIcon /> Randomize
+              </button>
+            </div>
             <Slider
               label="Haze"
               value={atmosphere.haze}
               onChange={(haze) => onAtmosphereChange({ haze })}
               min={0}
-              max={10}
+              max={6}
               step={0.01}
               precision={2}
               disabled={!atmosphere.enabled}
@@ -781,11 +769,25 @@ export function Panel({
               value={atmosphere.glow}
               onChange={(glow) => onAtmosphereChange({ glow })}
               min={0}
-              max={4}
+              max={6}
               step={0.01}
               precision={2}
               disabled={!atmosphere.enabled}
               description="How strongly the planet's edge glows from space, in the sky color."
+            />
+            <div className="panel-section-divider" />
+            <span className="panel-section-title">Color</span>
+            <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} {...colorLockProps(atmosphere, 'horizonColor', onAtmosphereChange)} />
+            <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} {...colorLockProps(atmosphere, 'zenithColor', onAtmosphereChange)} />
+            <HueSlider
+              label="Shadow hue"
+              value={atmosphere.shadowHue}
+              onChange={(shadowHue) => onAtmosphereChange({ shadowHue })}
+              trackBackground={hueTrackGradient(atmosphere.zenithColor)}
+              swatchColor={displayColorFor(fillColorFor(true, atmosphere.zenithColor, atmosphere.shadowHue)).getStyle()}
+              {...colorLockProps(atmosphere, 'shadowHue', onAtmosphereChange)}
+              disabled={!atmosphere.enabled}
+              description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
             />
           </Accordion>
         </div>

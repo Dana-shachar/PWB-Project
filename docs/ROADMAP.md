@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-10-28`
+`Last updated: 2026-10-30`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,11 +8,13 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-28 night, ninth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-10-30, tenth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Everything is committed and pushed: stage 1 of the land shader layers (colored shadows: `fillLight` in `shaders/terrain/landLayers.glsl`, `fillColorFor` in `scene/fillLight.ts`), the planet flicker fix (`[B72]`), walk mode's long-press, Speed slider and eye floor (`[B73]`), the Scene section grouped, and the terrain-look references. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
+> **State.** Everything is committed and pushed: the Shadow hue slider (now in Atmosphere > Color, saved per planet), the panel cleanup (`[S47]`: accordions everywhere, header switches, modifiers as nested sections, swatches on the right), lock icons and the Atmosphere's Randomize (`[S45]`), per-moon Crescent, moons added and removed like layers, the haze fix (`[B74]`, `[S46]`), the glow cut-out fix (`[B75]`), Space + drag to pan, walk speed up to ×10. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
 >
-> **Right now:** the Shadow hue control becomes a hue slider that shows its color (Dana chose this 2026-10-28 over a Shadow color picker, since it keeps the shadows following the sky). Spec: the track is a rainbow hue gradient, and a small swatch shows the resulting shadow color (`fillColorFor`'s output, so it changes with the sky too). It is a new design-system component: plan its states (default, hover, active, disabled, focus), icon and `ui-design` skill entry first, wait for Dana's go. Then stage 2, slope rock.
+> **Right now:** Randomize's "drivers" (Dana agreed 2026-10-30): a few hidden drivers (storminess, air thickness, cloud climate) set related sliders together, at most one going extreme. Check sources for the method first, then a numbered plan, then her go. After that, stage 2, slope rock (plan below).
+>
+> **Not retested by Dana:** the UI batch as a whole (hue bar, locks, Randomize, Moons layout, header switches, modifier sections, Space-to-pan); Dana approved the haze and glow fixes on screen. `[B73]`'s eye floor and stage 1's brighter fill are also still unchecked.
 >
 > **Stage 2 plan, as given to Dana (needs her go before building):**
 > 1. `shaders/terrain/landLayers.glsl`: add `landSurfaceColor(rampColor, normal, up, elevationFraction)`. Rock blends in by `1 − dot(normal, up)` through a `smoothstep`, colored by the rock ramp by height (`terrainRampColor`, reused). Optional height term so flat summits can be rocky.
@@ -24,11 +26,14 @@
 >
 > **Open questions for later stages:** stage 3 measures first that the height texture's blue channel survives every texture the land reads (planet patches, the chunk's 4096 map, the patch resample), or it is re-planned; stage 4, whether the palette rule gets its own control (a "Rule" select next to Randomize colors) or only works inside Randomize; stage 5, live or baked ambient occlusion.
 >
-> **Not retested by Dana:** `[B73]`'s eye floor (walk uphill at Speed ×5; no clipping expected). Stage 1's brighter fill (scaled to white's luminance, Ambient light up to 1): Dana liked the colors, wants it brighter; check after the hue slider.
+> **Brighter fill, still open:** stage 1's fill is scaled to white's luminance with Ambient light up to 1; Dana liked the colors and wants it brighter.
 > - ⚠️ The luminance scaling can push shadows strongly toward a very saturated sky color (a pure blue sky makes very blue shadows).
 > - Expected, not a bug: steep shaded faces get half the fill of flat ground (Quilez's sky term), so cliffs in shadow read darker.
 >
 > **Agreed, queued:**
+> - 📌 Erosion's on/off switch moves to its header when Erosion is un-paused (`[S47]`); Dana is unsure Erosion stays.
+> - 📌 The regular Slider has no visible keyboard focus state (only the hue slider has one); adding it is Dana's call.
+> - 💡 Haze through the depth buffer (`[B74]`), only if mountains look too hazy.
 > - 📌 Water reads as water from walk mode: Fresnel on the chunk water's opacity, sky reflection and sun highlight (`[B67]`, `waterFresnel` exists in `water.glsl`), after the land shader plan.
 > - 📌 Moon look (Dana, 2026-10-28, "good enough" with room to improve): a more intense glow, less halo distance, more inner glow. A plan waits for Dana's go: in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`), `MOON_HALO_STRENGTH` 0.6 to 1.0, `MOON_HALO_MIN_SHARE` 0.17 to 0.10, `MOON_HALO_SHARE_PER_UNIT` 0.33 to 0.20, `MOON_HALO_MIN_ANGLE` 0.03 to 0.02, `MOON_GLOW_SHARE_PER_UNIT` 0.12 to 0.25, `MOON_GLOW_STRENGTH` 0.8 to 1.2; and maybe reword Halo's hover text ("meant to stay subtle").
 > - 💡 From Quilez's rig, not planned: a warm bounce light opposite the sun (brightens steep shaded faces), and colored shadow edges.
@@ -37,7 +42,7 @@
 >
 > **Moons, how they stand** (so tuning doesn't restart from zero): the target spec Dana approved, built in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`): color clearly visible and never bleached by the glow; texture as gentle tone; a full moon solid to its edge; the shadow (Crescent) dissolving fully into the sky, with no outline; one rounded glow across the edge, lit side only (all round at Crescent 0); Texture 0 translucent, 1 solid, 2 strongest; split toning (Second color the darks by multiply, Color the brights by screen). Change only what Dana approves: tuning by screenshot made colors swing neon and pale.
 >
-> **Temporary diagnostics still in the code (remove when their bugs close):**
+> **Temporary diagnostics still in the code (remove when their bugs close; the haze and glow ones are already gone):**
 > - `[TEMP water]` logs and the shore-search logs in `scene/walkMode.ts`.
 > - Alt+click on the chunk: the `[TEMP B55]` height row table (`logCliffRow` in `LandChunkCanvas.tsx`, `lastSampleDepth` in `ChunkPatchRenderer.ts`).
 >
@@ -47,7 +52,7 @@
 > - ❓ **Planet spin** (Dana's idea, proposed, not approved): spin speed, axis tilt 0 to 180° (Uranus about 98°), axis direction.
 > - ❓ **Endless-looking chunk:** (a) fade its edges into the haze, now; (b) real terrain to the horizon at lower detail, later.
 > - ❓ Swirl as Musgrave's Coriolis twist (researched, waiting).
-> - 📌 The Texture slider's hover text still says "above 1 the pattern grows stronger"; Texture now scales the contrast from 0. Rewording waits for Dana's yes.
+> - 📌 The Texture slider's hover text (now under Moons) still says "above 1 the pattern grows stronger"; Texture now scales the contrast from 0. Rewording waits for Dana's yes.
 >
 > **Working rules (Dana; most are saved as memories).** A numbered plan and an explicit go before any change (temporary console logs excepted, `console-logs-need-no-permission`); an answer or "ok" to a question is not a go (`strict-confirm-before-acting`; Dana, 2026-10-27: unapproved actions will be blocked). Measure before naming a cause, and say plainly how sure a claim is. Build new visuals on the app's own engines, never hand-rolled or copied (`reuse-app-systems`). Fix structural bugs at the root. Sourced methods only, verified by reading the source; say when only a summary was read. Docs change only in the docs pass that goes with a commit, recording the final result (`docs-only-final`). Check Dana's proposed mechanism against established tools before inventing one, and build only on a measured cause (`.claude/CLAUDE.md`, "How to fix bugs"). No attribution anywhere. No agents without a yes and a cost; page readers are reported with their tokens.
 >
@@ -68,7 +73,7 @@
 >    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.
 >    - 🧭 Look (Dana, 2026-10-28): No Man's Sky's one strong hue per planet, softened by the gentle layered landscapes of Gris and Sable, with unexpected shading colors (Monument Valley) set by procedural rules, not a hand-picked palette.
 >    - 🟡 **Land shader layers** (plan agreed 2026-10-28), each built, tested by Dana and committed before the next. All live in one shared land-layers shader used by both the planet and the chunk.
->      1. 🟡 Colored shadows (built 2026-10-28): the ambient is a sky fill, brighter on faces turned up to the sky, tinted by the sky's color turned by Shadow hue (Scene > Shadows) and kept at white's brightness. The sun is untouched; Ambient light now reaches 1. 📌 Shadow hue becomes a hue slider showing its color. 💡 From Quilez, not planned: a warm bounce light opposite the sun, and colored shadow edges. 📚 three.js hemisphere light; Quilez, outdoor lighting.
+>      1. 🟡 Colored shadows (built 2026-10-28): the ambient is a sky fill, brighter on faces turned up to the sky, tinted by the sky's color turned by Shadow hue (Scene > Shadows) and kept at white's brightness. The sun is untouched; Ambient light now reaches 1. ✅ Shadow hue is a hue slider showing its color, in Atmosphere > Color (2026-10-30). 💡 From Quilez, not planned: a warm bounce light opposite the sun, and colored shadow edges. 📚 three.js hemisphere light; Quilez, outdoor lighting.
 >      2. ⚪ Slope rock: steep faces blend to a rock ramp of their own, by height (room for Sable's strata later), with Slope and Softness sliders. 📚 Slope by the normal against "up", the standard terrain method.
 >      3. ⚪ Large-scale variation: a slow noise from the app's own noise engine, baked into the height texture's free blue channel, shifts hue and lightness. Measure first that the channel survives every texture the land reads.
 >      4. ⚪ Rule-based palettes: Quilez's cosine palette plus No Man's Sky style rules (complementary, analogous, split-complementary), each also choosing the shadow hue. Randomize colors sets the land ramp, rock, variation and shadow hue from one rule; a Softness slider lowers contrast toward Gris and Sable. 📚 Quilez, palettes; Kill Screen and Engadget on Grant Duncan's talk.
@@ -89,7 +94,7 @@
 >
 > **Known risks.** No GLSL compiler on this machine: shader changes are only checked on screen, so a blank view usually means a shader compile error in the console. The planet's cloud shader samples noise up to about 18 times a pixel; lower Detail if it lags. Many atmosphere and water values are inferred and tunable (marked in the code). Planet waves use meter-scale coordinates across the whole planet, so very close up they may show float precision blockiness.
 
-**Overall** ▓▓▓▓▓▓░░░░ 61%
+**Overall** ▓▓▓▓▓▓░░░░ 62%
 
 Stages run in build order, and earlier ones finish before later ones start. Features are numbered under their stage, so 07.3 is the third feature of Stage 07. Each carries a bar; a stage's number averages its features. Every feature has the same three fields: **✅ Done**, **📋 To do**, **🐛 Issues to fix**.
 
@@ -535,7 +540,7 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 ---
 
 ## Stage 14 · Design System & UI Polish
-▓▓▓░░░░░░░ 30%
+▓▓▓▓▓░░░░░ 50%
 
 *Tokenizing the scattered placeholder values, and the interface polish pass.*
 
@@ -569,6 +574,15 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 
 > **📋 To do**
 > - **Organize typography.** Not yet scoped, needs its own plan before it's buildable (Dana, 2026-10-13: "typography needs organizing for sure").
+
+#### 14.5 · One panel hierarchy · 100%
+
+*Every panel built the same way (`[S47]`).*
+
+> **✅ Done**
+> - **Sections:** every section is an accordion, closed by default; on/off switches sit in headers (Atmosphere, Water, Moons, each modifier) or on a title line (Grid); the modifier tabs became nested sections; nested sections lost their left line (2026-10-30).
+> - **New design-system pieces:** the hue slider (Shadow hue, styled as the color ramp's bar), the lock icon, the bare switch and the title line with a switch; color swatches aligned on the right (2026-10-30).
+> - **Navigation:** Space + drag pans in both views, beside Shift + drag (2026-10-30).
 
 ---
 

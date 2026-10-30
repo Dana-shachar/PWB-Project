@@ -36,7 +36,7 @@ export interface GumballTarget {
 const MIN_ZOOM_LEVEL = 10;
 const MAX_ZOOM_LEVEL = 400;
 const MIN_WALK_SPEED = 0.5;
-const MAX_WALK_SPEED = 5;
+const MAX_WALK_SPEED = 10;
 
 // Zoom level to distance. Without a surface it is a percent of the reference
 // distance; with one, height above the surface steps evenly on a log scale
@@ -234,7 +234,7 @@ export class Gumball {
     this.walkSpeedInput.step = '0.1';
     this.walkSpeedInput.value = '1';
     this.walkSpeedInput.className = 'gumball-zoom-input';
-    this.walkSpeedInput.title = 'Walk speed, ×0.5 to ×5';
+    this.walkSpeedInput.title = `Walk speed, ×${MIN_WALK_SPEED} to ×${MAX_WALK_SPEED}`;
     this.walkSpeedInput.addEventListener('input', this.handleWalkSpeedInput);
     this.walkSpeedRow.appendChild(walkSpeedLabel);
     this.walkSpeedRow.appendChild(this.walkSpeedInput);
