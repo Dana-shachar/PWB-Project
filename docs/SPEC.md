@@ -281,7 +281,9 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - Every section is an accordion, closed by default; parts inside it are a divider and a small title, colors last in a "Color" part. Nested sections use horizontal dividers only.
 - A section that can be turned off carries its switch in its header (or its title line), never a separate on/off row. The noise modifiers are nested sections, not tabs.
-- Color swatches line up at the right edge of their rows. The full rules live in the `ui-design` skill.
+- Color swatches line up at the right edge of their rows, with a lock (when there is one) on the edge side. A color bar (ramp, hue slider) always gets its own row: title and swatches above, the bar full width below.
+- Clouds and Moons each have a header switch; off hides them and keeps their settings.
+- The full rules live in the `ui-design` skill.
 
 ### [S24] The left panel is the pipeline · `decided`
 **Decided and built:** 2026-10-07
@@ -413,8 +415,8 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 ### [S44] Moons are randomized landscape elements, baked by the noise engine · `decided`
 **Decided:** 2026-10-28
 
-- One to five moons in the chunk's sky, each with its own size, place, two colors, crescent, crescent angle and simple noise layers baked by the engine. Randomize is the main control; per-moon controls are there only for adjusting (Dana: not a burden on the user).
-- Moons are added and removed like layers (2026-10-30): all five are stored, so removing one keeps its settings out of view.
+- One to five moons in the chunk's sky, each with its own size, place, two colors, crescent, crescent angle, texture, halo, inner glow and simple noise layers baked by the engine. Randomize is the main control; per-moon controls are there only for adjusting (Dana: not a burden on the user).
+- Moons are added and removed like layers (2026-10-30): all five are stored, so removing one keeps its settings out of view. One moon shows its controls directly; two or more get a section each.
 - The look (Dana's references, No Man's Sky and moon photos): screened over the sky so the shadow dissolves into it, split-toned (Second color tints the darks, Color the brights), a crescent turned from the sun's side, and one soft glow across the edge on the lit side.
 - Their sizes set the chunk's tides (size cubed, after the tidal-force rule, exaggerated and capped).
 

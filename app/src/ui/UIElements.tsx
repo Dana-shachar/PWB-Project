@@ -50,8 +50,8 @@ interface SliderProps {
   snapIncrement?: number; // value snapped to when Cmd/Ctrl is held, default 1
   trackClassName?: string; // extra class on the range track, e.g. for a custom gradient
   trackBackground?: string; // a CSS background for the track that changes with other settings, e.g. HueSlider's gradient
-  swatchColor?: string; // a color square at the row's end, lined up with the color pickers' swatches (HueSlider)
-  locked?: boolean; // shows a lock before the swatch when given
+  swatchColor?: string; // a color bar's result (HueSlider): the slider takes its own two-row layout, swatch at the top right
+  locked?: boolean; // shows a lock after the swatch, at the row's edge, when given
   onLockChange?: (locked: boolean) => void;
   disabled?: boolean; // e.g. a view-specific control while both viewport panes are selected, see ui/Panel.tsx
   // What the control does and what its number means, shown on hover. A label
@@ -173,42 +173,65 @@ export function Slider({
     document.addEventListener('mouseup', onUp);
   }
 
+  const labelText = (
+    <label className="ui-slider-label">
+      {label}
+      {unit ? ` (${unit})` : ''}
+    </label>
+  );
+  const track = (
+    <input
+      type="range"
+      className={'ui-slider-track' + (trackClassName ? ` ${trackClassName}` : '')}
+      style={trackBackground ? { background: trackBackground } : undefined}
+      min={isLog ? 0 : min}
+      max={isLog ? 1 : max}
+      step={isLog ? 0.001 : step}
+      value={trackPosition}
+      onChange={handleTrackChange}
+      disabled={disabled}
+    />
+  );
+  const field = (
+    <input
+      ref={fieldRef}
+      type="text"
+      className="ui-slider-field"
+      style={fieldWidth ? { flexBasis: fieldWidth } : undefined}
+      defaultValue={value.toFixed(precision)}
+      key={value} // resync the field's displayed text whenever value changes externally
+      onMouseDown={handleScrubberMouseDown}
+      onBlur={handleFieldCommit}
+      onKeyDown={handleFieldKeyDown}
+      disabled={disabled}
+    />
+  );
+  const rowClass = ' ui-tooltip-anchor' + (disabled ? ' ui-slider-row--disabled' : '');
+
+  // A color bar gets its own row, like the color ramp: the title, number, lock and swatch above, the bar full width
+  // below, so the swatch lines up with the color pickers' swatches (Dana, 2026-10-30).
+  if (swatchColor) {
+    return (
+      <div className={'ui-slider-stack' + rowClass}>
+        {description && <span className="ui-tooltip">{description}</span>}
+        <div className="ui-slider-stack-top">
+          {labelText}
+          <span className="ui-color-end">
+            {field}
+            <span className="ui-hue-swatch" style={{ background: swatchColor }} />
+            {locked !== undefined && onLockChange && <LockButton locked={locked} onChange={onLockChange} />}
+          </span>
+        </div>
+        {track}
+      </div>
+    );
+  }
   return (
-    <div className={'ui-slider-row ui-tooltip-anchor' + (disabled ? ' ui-slider-row--disabled' : '')}>
+    <div className={'ui-slider-row' + rowClass}>
       {description && <span className="ui-tooltip">{description}</span>}
-      <label className="ui-slider-label">
-        {label}
-        {unit ? ` (${unit})` : ''}
-      </label>
-      <input
-        type="range"
-        className={'ui-slider-track' + (trackClassName ? ` ${trackClassName}` : '')}
-        style={trackBackground ? { background: trackBackground } : undefined}
-        min={isLog ? 0 : min}
-        max={isLog ? 1 : max}
-        step={isLog ? 0.001 : step}
-        value={trackPosition}
-        onChange={handleTrackChange}
-        disabled={disabled}
-      />
-      <input
-        ref={fieldRef}
-        type="text"
-        className="ui-slider-field"
-        style={fieldWidth ? { flexBasis: fieldWidth } : undefined}
-        defaultValue={value.toFixed(precision)}
-        key={value} // resync the field's displayed text whenever value changes externally
-        onMouseDown={handleScrubberMouseDown}
-        onBlur={handleFieldCommit}
-        onKeyDown={handleFieldKeyDown}
-        disabled={disabled}
-      />
-      {swatchColor && (
-        <span className="ui-color-end">
-          {locked !== undefined && onLockChange && <LockButton locked={locked} onChange={onLockChange} />}
-          <span className="ui-hue-swatch" style={{ background: swatchColor }} />
-        </span>
-      )}
+      {labelText}
+      {track}
+      {field}
     </div>
   );
 }
@@ -392,7 +415,7 @@ interface ColorPickerProps {
   label: string;
   value: string; // hex string, e.g. "#3a7bd5"
   onChange: (value: string) => void;
-  locked?: boolean; // shows a lock before the swatch when given
+  locked?: boolean; // shows a lock after the swatch, at the row's edge, when given
   onLockChange?: (locked: boolean) => void;
 }
 
@@ -403,13 +426,13 @@ export function ColorPicker({ label, value, onChange, locked, onLockChange }: Co
     <div className="ui-color-row">
       <label className="ui-color-label">{label}</label>
       <span className="ui-color-end">
-        {locked !== undefined && onLockChange && <LockButton locked={locked} onChange={onLockChange} />}
         <input
           type="color"
           className="ui-color-swatch"
           value={value}
           onChange={(event) => onChange(event.target.value)}
         />
+        {locked !== undefined && onLockChange && <LockButton locked={locked} onChange={onLockChange} />}
       </span>
     </div>
   );

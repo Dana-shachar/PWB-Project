@@ -13,6 +13,9 @@ export interface MoonSettings {
   color2: string; // the color its darks are tinted with (Color tints its brights)
   crescentAngle: number; // degrees the crescent turns from the sun's side
   crescent: number; // how much is in shadow: 0 full, 100 the thinnest crescent
+  texture: number; // how clearly the surface shows: 0 pure glow, 1 a solid moon, 2 the strongest pattern
+  halo: number; // a soft light around the moon; meant to stay subtle, under the sky's haze
+  glow: number; // a soft brightening just inside its lit edge
   // Locked colors are kept by Randomize (LockButton).
   colorLocked: boolean;
   color2Locked: boolean;
@@ -183,6 +186,9 @@ export function randomMoons(count: number, current: MoonSettings[], horizonColor
       colorLocked,
       color2Locked,
       crescent: Math.round(Math.random() * 100),
+      texture: current[i]?.texture ?? 1,
+      halo: current[i]?.halo ?? 0.15,
+      glow: current[i]?.glow ?? 0.15,
       layers: randomMoonLayers(baseTypes[i % baseTypes.length], scaleBands[i % scaleBands.length], coverageBands[i % coverageBands.length]),
       crescentAngle: Math.round(Math.random() * 360),
     };
@@ -197,9 +203,9 @@ function fixedLayers(baseType: NoiseType, baseScale: number, detailType: NoiseTy
   ];
 }
 export const DEFAULT_MOONS: MoonSettings[] = [
-  { size: 8, height: 40, azimuth: 229, color: '#f0b48c', color2: '#9c78c8', layers: fixedLayers('voronoi', 2, 'perlin', 6, 12) , crescentAngle: 0, crescent: 50, colorLocked: false, color2Locked: false },
-  { size: 14, height: 25, azimuth: 262, color: '#8fd6b4', color2: '#5f8fd0', layers: fixedLayers('perlin', 2.5, 'voronoi', 5, 51) , crescentAngle: 40, crescent: 50, colorLocked: false, color2Locked: false },
-  { size: 3, height: 32, azimuth: 196, color: '#f2cf6e', color2: '#e07f6a', layers: fixedLayers('simplex', 1.5, 'perlin', 7, 88) , crescentAngle: 320, crescent: 50, colorLocked: false, color2Locked: false },
-  { size: 5, height: 14, azimuth: 244, color: '#c29cf0', color2: '#7b6fd6', layers: fixedLayers('voronoi', 3, 'voronoi', 6, 23) , crescentAngle: 80, crescent: 50, colorLocked: false, color2Locked: false },
-  { size: 2, height: 48, azimuth: 212, color: '#d6ea8c', color2: '#82b86a', layers: fixedLayers('perlin', 1.2, 'voronoi', 4, 67) , crescentAngle: 200, crescent: 50, colorLocked: false, color2Locked: false },
+  { size: 8, height: 40, azimuth: 229, color: '#f0b48c', color2: '#9c78c8', layers: fixedLayers('voronoi', 2, 'perlin', 6, 12) , crescentAngle: 0, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
+  { size: 14, height: 25, azimuth: 262, color: '#8fd6b4', color2: '#5f8fd0', layers: fixedLayers('perlin', 2.5, 'voronoi', 5, 51) , crescentAngle: 40, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
+  { size: 3, height: 32, azimuth: 196, color: '#f2cf6e', color2: '#e07f6a', layers: fixedLayers('simplex', 1.5, 'perlin', 7, 88) , crescentAngle: 320, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
+  { size: 5, height: 14, azimuth: 244, color: '#c29cf0', color2: '#7b6fd6', layers: fixedLayers('voronoi', 3, 'voronoi', 6, 23) , crescentAngle: 80, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
+  { size: 2, height: 48, azimuth: 212, color: '#d6ea8c', color2: '#82b86a', layers: fixedLayers('perlin', 1.2, 'voronoi', 4, 67) , crescentAngle: 200, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
 ];

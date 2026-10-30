@@ -47,9 +47,9 @@ export function createSkyDome(): SkyDome {
       uMoonHasTexture: { value: new Array(MAX_MOONS).fill(0) },
       uMoonCrescentAngles: { value: new Array(MAX_MOONS).fill(0) },
       ...Object.fromEntries(Array.from({ length: MAX_MOONS }, (_, i) => [`uMoonTexture${i}`, { value: null }])),
-      uMoonTextureAmount: { value: 0.45 },
-      uMoonHalo: { value: 0 },
-      uMoonGlow: { value: 0 },
+      uMoonTextureAmounts: { value: new Array(MAX_MOONS).fill(1) },
+      uMoonHalos: { value: new Array(MAX_MOONS).fill(0) },
+      uMoonGlows: { value: new Array(MAX_MOONS).fill(0) },
       uMoonCrescents: { value: new Array(MAX_MOONS).fill(0.5) },
       uCloudCoverage: { value: 0 },
       uCloudColor: { value: new THREE.Color() },
@@ -96,9 +96,6 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
   (uniforms.topColor.value as THREE.Color).set(settings.zenithColor);
   (uniforms.bottomColor.value as THREE.Color).set(settings.horizonColor);
   uniforms.uMoonEnabled.value = settings.moon ? 1 : 0;
-  uniforms.uMoonHalo.value = settings.moonHalo;
-  uniforms.uMoonGlow.value = settings.moonGlow;
-  uniforms.uMoonTextureAmount.value = settings.moonTexture;
   const count = Math.min(settings.moonCount, settings.moons.length);
   uniforms.uMoonCount.value = count;
   // Smallest first, so the larger moons are drawn over them; the hidden ones keep their places after.
@@ -115,10 +112,13 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
     (uniforms.uMoonColors2.value as THREE.Color[])[slot].set(moon.color2);
     (uniforms.uMoonCrescentAngles.value as number[])[slot] = THREE.MathUtils.degToRad(moon.crescentAngle ?? 0);
     (uniforms.uMoonCrescents.value as number[])[slot] = moon.crescent / 100;
+    (uniforms.uMoonTextureAmounts.value as number[])[slot] = moon.texture;
+    (uniforms.uMoonHalos.value as number[])[slot] = moon.halo;
+    (uniforms.uMoonGlows.value as number[])[slot] = moon.glow;
   });
   applyMoonTextures(sky);
   uniforms.uGlow.value = settings.glow;
-  uniforms.uCloudCoverage.value = settings.cloudCoverage;
+  uniforms.uCloudCoverage.value = settings.clouds ? settings.cloudCoverage : 0;
   (uniforms.uCloudColor.value as THREE.Color).set(settings.cloudColor);
   (uniforms.uCloudColor2.value as THREE.Color).set(settings.cloudColor2);
   uniforms.uCloudSoftness.value = settings.cloudSoftness;

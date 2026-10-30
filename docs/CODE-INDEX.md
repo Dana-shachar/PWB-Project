@@ -171,12 +171,12 @@
 *The sky, haze, glow, clouds, wind, moons and tides, saved with the planet.*
 
 **atmosphere/atmosphereSettings.ts**
-- What it is: the settings and their defaults, the locks, and the Atmosphere's Randomize; older saves take their wind from the water and their shared Crescent and "Lock colors" into each moon.
-- Key names: `AtmosphereSettings` (incl. `shadowHue`, `cloudColor2`, `moonCount`, `moons`, `moonTexture`, `moonHalo`, `moonGlow`, `lockedColors`), `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (`NUMBER_RANGES`, `EXTREME_CHANCE`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
+- What it is: the settings and their defaults, the locks, and the Atmosphere's Randomize; older saves take their wind from the water and their shared Crescent, Texture, Halo, Inner glow and "Lock colors" into each moon.
+- Key names: `AtmosphereSettings` (incl. `shadowHue`, `clouds`, `cloudColor2`, `moonCount`, `moons`, `lockedColors`), `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (`NUMBER_RANGES`, `MOON_LOOK_RANGES`, `EXTREME_CHANCE`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
 
 **atmosphere/moonTexture.ts**
 - What it is: the moons: their settings, simple noise layers, Randomize (sizes, places in view, colors from the sky, textures), and the five defaults.
-- Key names: `MoonSettings` (incl. `crescent`, `crescentAngle`, `colorLocked`, `color2Locked`), `MAX_MOONS`, `randomMoons`, `randomMoonLayers`, `moonColorsForSky`, `randomHueTurns`, `COLOR_RULES`, `randomSizes`, `describeMoonLayers`, `DEFAULT_MOONS`.
+- Key names: `MoonSettings` (incl. `crescent`, `crescentAngle`, `texture`, `halo`, `glow`, `colorLocked`, `color2Locked`), `MAX_MOONS`, `randomMoons`, `randomMoonLayers`, `moonColorsForSky`, `randomHueTurns`, `COLOR_RULES`, `randomSizes`, `describeMoonLayers`, `DEFAULT_MOONS`.
 
 **atmosphere/tides.ts**
 - What it is: how far the chunk's water rises and falls with the moons (size cubed, summed, capped).
@@ -187,8 +187,8 @@
 - Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`, `setSkyDomeLight` (the Scene light for the moons), `setSkyDomeMoonTexture`, `getSkyView` (where the camera last looked, for Randomize), `CLOUD_DRIFT`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`, `glowOuterRadius` (for the camera's far limit), `GLOW_MIN_WIDTH`, `GLOW_WIDTH_PER_UNIT`, `GLOW_SHELL_WIDTHS`; `createPlanetHaze`, `updatePlanetHaze` (its ground is the lowest visible surface, `hazeGround` in `scene/SceneCanvas.tsx`), `HAZE_SCALE_HEIGHT`, `HAZE_DENSITY_PER_UNIT`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`, `CLOUD_TIME_PER_WIND`.
 
 **ui/panels/AtmospherePanel.tsx**
-- What it is: the right panel's Clouds (with Wind) and Moons, shown when Atmosphere is selected. Each moon is a nested section, added and removed like layers.
-- Key names: `AtmospherePanel`, `addMoon`, `removeMoon`, `randomizeMoons`, `updateMoon`.
+- What it is: the right panel's Clouds (with Wind) and Moons, shown when Atmosphere is selected, each with a header switch. One moon's controls show inline; two or more get a nested section each, added and removed like layers.
+- Key names: `AtmospherePanel`, `moonControls`, `moonTextureButton`, `addMoon`, `removeMoon`, `randomizeMoons`, `updateMoon`.
 
 ---
 
@@ -293,7 +293,7 @@
 
 **ui/UIElements.tsx**
 - What it is: the design-system components.
-- Key names: `Slider` (log and reversed scales, `trackBackground`, `swatchColor`), `HueSlider`, `Dial` (round angle control), `Toggle`, `Switch`, `SectionTitle` (a title line with an optional switch), `Select`, `ColorPicker` (optional lock), `LockButton`, `EditableText`, `Accordion` (`actions`, `headerSwitch`), `IconButton`, `Popup`, `placeTooltip`.
+- Key names: `Slider` (log and reversed scales, `trackBackground`, `swatchColor`: a color bar on its own row), `HueSlider`, `Dial` (round angle control), `Toggle`, `Switch`, `SectionTitle` (a title line with an optional switch), `Select`, `ColorPicker` (optional lock), `LockButton`, `EditableText`, `Accordion` (`actions`, `headerSwitch`), `IconButton`, `Popup`, `placeTooltip`.
 
 **ui/icons.tsx**
 - What it is: flat line-art icons.

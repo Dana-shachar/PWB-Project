@@ -53,7 +53,7 @@ export function createCloudLayer(): CloudLayer {
 
 // terrainReach is the highest the ground can rise above the radius, in scene units.
 export function updateCloudLayer(clouds: CloudLayer, settings: AtmosphereSettings, radius: number, terrainReach: number): void {
-  clouds.mesh.visible = settings.enabled && settings.cloudCoverage > 0;
+  clouds.mesh.visible = settings.enabled && settings.clouds && settings.cloudCoverage > 0;
   clouds.mesh.scale.setScalar(radius * (1 + CLOUD_GAP) + terrainReach);
   const uniforms = clouds.mesh.material.uniforms;
   uniforms.uCloudCoverage.value = settings.cloudCoverage;

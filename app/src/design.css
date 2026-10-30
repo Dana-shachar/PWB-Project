@@ -268,14 +268,14 @@ input[type='range'].ui-slider-track--hue::-webkit-slider-thumb {
   width: 10px;
   height: 24px;
   border-radius: 3px;
-  border: 1.5px solid var(--color-input-stroke);
+  border: 1.5px solid var(--color-bg); /* dark, so it reads on any hue (Dana, 2026-10-30) */
   background: transparent;
 }
 input[type='range'].ui-slider-track--hue::-moz-range-thumb {
   width: 10px;
   height: 24px;
   border-radius: 3px;
-  border: 1.5px solid var(--color-input-stroke);
+  border: 1.5px solid var(--color-bg); /* dark, so it reads on any hue (Dana, 2026-10-30) */
   background: transparent;
 }
 input[type='range'].ui-slider-track--hue:focus-visible::-webkit-slider-thumb {
@@ -283,6 +283,21 @@ input[type='range'].ui-slider-track--hue:focus-visible::-webkit-slider-thumb {
 }
 input[type='range'].ui-slider-track--hue:focus-visible::-moz-range-thumb {
   border-color: var(--color-accent);
+}
+/* A color bar's own row (Slider with a swatch): title, number, lock and swatch on top, the bar full width below. */
+.ui-slider-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+.ui-slider-stack-top {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+.ui-slider-stack > .ui-slider-track {
+  flex: none;
+  width: 100%;
 }
 /* The result's color, shown only: the color swatch's size and stroke, without its pointer. */
 .ui-hue-swatch {

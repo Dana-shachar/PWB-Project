@@ -17,6 +17,7 @@ export interface AtmosphereSettings {
   glow: number;
   // Clouds: how much of the sky they cover (0 to 1), their color, and how soft their edges are (0 to 1).
   cloudCoverage: number;
+  clouds: boolean; // the Clouds header's switch; off hides them and keeps their settings
   cloudColor: string;
   // A second cloud color, mixed in by warped bands; the same as cloudColor gives one tone.
   cloudColor2: string;
@@ -40,11 +41,6 @@ export interface AtmosphereSettings {
   // How many moons show (1 to 5), and all five, so changing the count never loses one (atmosphere/moonTexture.ts).
   moonCount: number;
   moons: MoonSettings[];
-  // How much of the surface shows as a solid layer under the glow: 0 pure glow, 1 a solid moon.
-  moonTexture: number;
-  // A soft halo around each moon and a glow inside its lit edge; meant to be subtle, under the sky's haze.
-  moonHalo: number;
-  moonGlow: number;
   // The colors Randomize keeps (LockButton); the moons keep their own locks.
   lockedColors: AtmosphereColorKey[];
 }
@@ -69,6 +65,7 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   haze: 0.3,
   glow: 0.5,
   cloudCoverage: 0.4,
+  clouds: true,
   cloudColor: '#f7eef2',
   cloudColor2: '#f7eef2',
   cloudSoftness: 0.6,
@@ -86,9 +83,6 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   moon: false,
   moonCount: 1,
   moons: DEFAULT_MOONS,
-  moonTexture: 1,
-  moonHalo: 0.15,
-  moonGlow: 0.15,
   lockedColors: [],
 };
 
@@ -96,7 +90,7 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
 export function migrateAtmosphere(saved: (Partial<AtmosphereSettings> & LegacyMoonFields) | undefined, legacyWind: number | undefined): AtmosphereSettings {
   const wind = saved?.wind ?? legacyWind ?? DEFAULT_ATMOSPHERE_SETTINGS.wind;
   const cloudColor2 = saved?.cloudColor2 ?? saved?.cloudColor ?? DEFAULT_ATMOSPHERE_SETTINGS.cloudColor2;
-  const { moonCrescent: _crescent, moonColorsLocked: _locked, ...rest } = saved ?? {};
+  const { moonCrescent: _crescent, moonColorsLocked: _locked, moonTexture: _texture, moonHalo: _halo, moonGlow: _glow, ...rest } = saved ?? {};
   return { ...DEFAULT_ATMOSPHERE_SETTINGS, ...rest, wind, cloudColor2, moons: migrateMoons(saved) };
 }
 
@@ -111,6 +105,9 @@ interface LegacyMoonFields {
   // Shared by every moon before each had its own (2026-10-30).
   moonCrescent?: number;
   moonColorsLocked?: boolean;
+  moonTexture?: number;
+  moonHalo?: number;
+  moonGlow?: number;
 }
 function migrateMoons(saved: (Partial<AtmosphereSettings> & LegacyMoonFields) | undefined): MoonSettings[] {
   const moons = saved?.moons ?? DEFAULT_MOONS;
@@ -124,6 +121,9 @@ function migrateMoons(saved: (Partial<AtmosphereSettings> & LegacyMoonFields) | 
     layers: saved?.moonLayers ?? first.layers,
     crescentAngle: first.crescentAngle ?? 0,
     crescent: first.crescent,
+    texture: first.texture,
+    halo: first.halo,
+    glow: first.glow,
     colorLocked: first.colorLocked,
     color2Locked: first.color2Locked,
   };
@@ -133,6 +133,9 @@ function migrateMoons(saved: (Partial<AtmosphereSettings> & LegacyMoonFields) | 
     ...(all[i] ?? DEFAULT_MOONS[i]),
     crescentAngle: all[i]?.crescentAngle ?? 0,
     crescent: all[i]?.crescent ?? saved?.moonCrescent ?? DEFAULT_MOONS[i].crescent,
+    texture: all[i]?.texture ?? saved?.moonTexture ?? DEFAULT_MOONS[i].texture,
+    halo: all[i]?.halo ?? saved?.moonHalo ?? DEFAULT_MOONS[i].halo,
+    glow: all[i]?.glow ?? saved?.moonGlow ?? DEFAULT_MOONS[i].glow,
     colorLocked: all[i]?.colorLocked ?? locked,
     color2Locked: all[i]?.color2Locked ?? locked,
   }));
@@ -157,9 +160,12 @@ const NUMBER_RANGES: { key: keyof AtmosphereSettings; mild: Range; full: Range; 
   { key: 'cloudEquator', mild: [0.3, 1], full: [0, 1] },
   { key: 'cloudMidLatitudes', mild: [0.3, 1], full: [0, 1] },
   { key: 'cloudPoles', mild: [0.3, 1], full: [0, 1] },
-  { key: 'moonTexture', mild: [0.7, 1.3], full: [0, 2] },
-  { key: 'moonHalo', mild: [0.1, 0.6], full: [0, 3] },
-  { key: 'moonGlow', mild: [0.1, 0.6], full: [0, 3] },
+];
+// Each moon's own look, rolled per moon.
+const MOON_LOOK_RANGES: { key: 'texture' | 'halo' | 'glow'; mild: Range; full: Range }[] = [
+  { key: 'texture', mild: [0.7, 1.3], full: [0, 2] },
+  { key: 'halo', mild: [0.1, 0.6], full: [0, 3] },
+  { key: 'glow', mild: [0.1, 0.6], full: [0, 3] },
 ];
 const EXTREME_CHANCE = 0.5; // how often one slider rolls across its full range
 const SKY_SATURATION: Range = [0.25, 0.7];
@@ -187,12 +193,16 @@ export function randomAtmosphere(settings: AtmosphereSettings): AtmosphereSettin
   if (!isLocked('cloudColor2')) next.cloudColor2 = hslHex(baseHue + ruleTurn(), CLOUD_SATURATION, CLOUD_LIGHTNESS);
   if (!isLocked('shadowHue')) next.shadowHue = Math.round((((ruleTurn() * 360 + 540) % 360) - 180));
 
-  const extreme = Math.random() < EXTREME_CHANCE ? pickOne(NUMBER_RANGES).key : undefined;
+  const extreme = Math.random() < EXTREME_CHANCE ? pickOne([...NUMBER_RANGES, ...MOON_LOOK_RANGES]).key : undefined;
   for (const { key, mild, full, whole } of NUMBER_RANGES) {
     const value = between(key === extreme ? full : mild);
     (next[key] as number) = whole ? Math.round(value) : Math.round(value * 100) / 100;
   }
   next.moonCount = 1 + Math.floor(Math.random() * MAX_MOONS);
-  next.moons = randomMoons(next.moonCount, settings.moons, next.horizonColor, next.zenithColor);
+  next.moons = randomMoons(next.moonCount, settings.moons, next.horizonColor, next.zenithColor).map((moon) => {
+    const look = { ...moon };
+    for (const { key, mild, full } of MOON_LOOK_RANGES) look[key] = Math.round(between(key === extreme ? full : mild) * 100) / 100;
+    return look;
+  });
   return next;
 }

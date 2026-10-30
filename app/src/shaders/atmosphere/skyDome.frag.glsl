@@ -27,9 +27,9 @@ uniform sampler2D uMoonTexture1;
 uniform sampler2D uMoonTexture2;
 uniform sampler2D uMoonTexture3;
 uniform sampler2D uMoonTexture4;
-uniform float uMoonTextureAmount; // 0 to 2: the texture's contrast for both tones, and up to 1 the solid layer
-uniform float uMoonHalo;
-uniform float uMoonGlow;
+uniform float uMoonTextureAmounts[MAX_MOON_SLOTS]; // each moon, 0 to 2: the texture's contrast for both tones, and up to 1 the solid layer
+uniform float uMoonHalos[MAX_MOON_SLOTS];
+uniform float uMoonGlows[MAX_MOON_SLOTS];
 uniform float uMoonCrescents[MAX_MOON_SLOTS]; // each moon's shadow: 0 full moon, 1 thinnest crescent
 uniform float uCloudCoverage;
 uniform vec3 uCloudColor;
@@ -130,11 +130,11 @@ vec3 drawMoon(vec3 sky, vec3 dir, int slot) {
   // One glow across the edge (Dana: no stripe where halo and inner glow meet): a rounded peak at the edge, spreading
   // outward by Halo's distance and inward by Inner glow's, on the lit side only so nothing outlines the dark half.
   float offAngle = moonAngle - radius;
-  float haloWidth = max(radius * (MOON_HALO_MIN_SHARE + uMoonHalo * MOON_HALO_SHARE_PER_UNIT), MOON_HALO_MIN_ANGLE);
-  float glowWidth = radius * (MOON_GLOW_MIN_SHARE + uMoonGlow * MOON_GLOW_SHARE_PER_UNIT);
+  float haloWidth = max(radius * (MOON_HALO_MIN_SHARE + uMoonHalos[slot] * MOON_HALO_SHARE_PER_UNIT), MOON_HALO_MIN_ANGLE);
+  float glowWidth = radius * (MOON_GLOW_MIN_SHARE + uMoonGlows[slot] * MOON_GLOW_SHARE_PER_UNIT);
   float across = offAngle / (offAngle > 0.0 ? haloWidth : max(glowWidth, 1e-5));
   float rounded = 1.0 / (1.0 + across * across); // flat at the edge itself, so no line forms there
-  float strength = mix(uMoonGlow * MOON_GLOW_STRENGTH, uMoonHalo * MOON_HALO_STRENGTH, smoothstep(-0.5, 0.5, across));
+  float strength = mix(uMoonGlows[slot] * MOON_GLOW_STRENGTH, uMoonHalos[slot] * MOON_HALO_STRENGTH, smoothstep(-0.5, 0.5, across));
   float litSide = mix(1.0, smoothstep(-0.1, 0.6, dot(disc / max(discRadius, 1e-4), side)), smoothstep(0.0, 0.15, uMoonCrescents[slot]));
   vec3 glow = mix(uMoonColors[slot], vec3(1.0), 0.3) * (1.0 - exp(-rounded * litSide * strength));
   if (offAngle > 0.0) return blendScreen(sky, glow);
@@ -158,13 +158,13 @@ vec3 drawMoon(vec3 sky, vec3 dir, int slot) {
   // Split toning (Lightroom's Split Toning / Color Grading): the surface's brightness, from its texture and shading, is
   // tinted twice. Multiply tints the darks with Second color, screen tints the brights with Color. Texture scales the
   // texture's contrast for both together (0 flat, 2 strongest); the shadow (Crescent) then dissolves both alike.
-  float tone = clamp(0.5 + (height - 0.5) * MOON_PATTERN * 2.0 * min(uMoonTextureAmount, 2.0), 0.0, 1.0) * shade;
+  float tone = clamp(0.5 + (height - 0.5) * MOON_PATTERN * 2.0 * min(uMoonTextureAmounts[slot], 2.0), 0.0, 1.0) * shade;
   vec3 darks = uMoonColors2[slot] * mix(MOON_DARK_DEPTH, 1.0, tone);
   vec3 surface = blendScreen(darks, uMoonColors[slot] * tone);
   float edge = smoothstep(1.0, 0.99, discRadius);
   // Layered like an image editor's stack: the textured surface as a normal layer at Texture's opacity (lit side only),
   // then the light screened over it, so the pattern shows while the moon still melts into the sky.
-  float solid = min(uMoonTextureAmount, 1.0);
+  float solid = min(uMoonTextureAmounts[slot], 1.0);
   // The dark side is the sky itself (Dana): only the lit part is drawn.
   vec3 layered = mix(sky, mix(surface, sky, MOON_SKY_TINT), solid * lit * edge);
   vec3 moonLight = surface * lit * mix(MOON_BRIGHTNESS, MOON_SOLID_GLOW, solid);

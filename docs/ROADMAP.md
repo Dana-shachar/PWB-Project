@@ -581,7 +581,7 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 
 > **✅ Done**
 > - **Sections:** every section is an accordion, closed by default; on/off switches sit in headers (Atmosphere, Water, Moons, each modifier) or on a title line (Grid); the modifier tabs became nested sections; nested sections lost their left line (2026-10-30).
-> - **New design-system pieces:** the hue slider (Shadow hue, styled as the color ramp's bar), the lock icon, the bare switch and the title line with a switch; color swatches aligned on the right (2026-10-30).
+> - **New design-system pieces:** the hue slider (Shadow hue, styled as the color ramp's bar, on its own row), the lock icon (at the row's edge), the bare switch and the title line with a switch; color swatches aligned on the right; Clouds and Moons header switches; each moon's own Texture, Halo and Inner glow, inline when there is one moon (2026-10-30).
 > - **Navigation:** Space + drag pans in both views, beside Shift + drag (2026-10-30).
 
 ---
