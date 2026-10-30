@@ -12,7 +12,9 @@
 >
 > **State.** Everything is committed and pushed: the Shadow hue slider (now in Atmosphere > Color, saved per planet), the panel cleanup (`[S47]`: accordions everywhere, header switches, modifiers as nested sections, swatches on the right), lock icons and the Atmosphere's Randomize (`[S45]`), per-moon Crescent, moons added and removed like layers, the haze fix (`[B74]`, `[S46]`), the glow cut-out fix (`[B75]`), Space + drag to pan, walk speed up to ×10. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
 >
-> **Right now:** Randomize's "drivers" (Dana agreed 2026-10-30): a few hidden drivers (storminess, air thickness, cloud climate) set related sliders together, at most one going extreme. Check sources for the method first, then a numbered plan, then her go. After that, stage 2, slope rock (plan below).
+> **Right now:** Randomize's hidden drivers are built (`[S45]`, 2026-10-30) and wait for Dana's test: press Randomize several times; a stormy world should be windy, cloudy and ragged together, a thick-air world hazy with soft moons. Tune the ranges in `randomAtmosphere` from her notes. Then stage 2, slope rock (plan below), the next land shader layer.
+>
+> **Also this session (committed):** Clouds and Moons header switches; each moon's own Texture, Halo and Inner glow (one moon shows its controls inline); the hue bar on its own row with a dark handle; locks at the row's edge.
 >
 > **Not retested by Dana:** the UI batch as a whole (hue bar, locks, Randomize, Moons layout, header switches, modifier sections, Space-to-pan); Dana approved the haze and glow fixes on screen. `[B73]`'s eye floor and stage 1's brighter fill are also still unchecked.
 >

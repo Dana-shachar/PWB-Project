@@ -142,33 +142,16 @@ function migrateMoons(saved: (Partial<AtmosphereSettings> & LegacyMoonFields) | 
 }
 
 // Randomize (Dana, 2026-10-30): every value changes, but locked colors stay and anchor the palette. Unlocked colors are
-// hue turns from one base hue (the moons' color rules), taken from a locked color, Sky first, else random. Sliders roll
-// in a mild range, and at most one rolls across its full range, so a world can have one extreme without stacking them.
-// Ranges inferred, TUNABLE.
+// hue turns from one base hue (the moons' color rules), taken from a locked color, Sky first, else random.
+// The sliders follow three hidden drivers, so related settings move together (a stormy world is windy, cloudy and
+// ragged at once); each is mild, and sometimes one goes extreme. A few high-level controls driving many parameters is
+// the documented way to keep a generator's output coherent (US 10552730; Compton, "So you want to build a generator").
+// The couplings and ranges are inferred, TUNABLE.
 type Range = [number, number];
-const NUMBER_RANGES: { key: keyof AtmosphereSettings; mild: Range; full: Range; whole?: boolean }[] = [
-  { key: 'haze', mild: [0.2, 2], full: [0, 6] },
-  { key: 'glow', mild: [0.2, 1.2], full: [0, 6] },
-  { key: 'wind', mild: [1, 8], full: [0, 40] },
-  { key: 'cloudCoverage', mild: [0.2, 0.6], full: [0, 1] },
-  { key: 'cloudSoftness', mild: [0.4, 0.8], full: [0, 1] },
-  { key: 'cloudScale', mild: [0.7, 1.6], full: [0.2, 4] },
-  { key: 'cloudDetail', mild: [3, 6], full: [1, 8], whole: true },
-  { key: 'cloudFeather', mild: [0.2, 0.6], full: [0, 1] },
-  { key: 'cloudBanding', mild: [0, 0.4], full: [0, 1] },
-  { key: 'cloudDistributionStrength', mild: [0.3, 0.8], full: [0, 1] },
-  { key: 'cloudEquator', mild: [0.3, 1], full: [0, 1] },
-  { key: 'cloudMidLatitudes', mild: [0.3, 1], full: [0, 1] },
-  { key: 'cloudPoles', mild: [0.3, 1], full: [0, 1] },
-];
-// Each moon's own look, rolled per moon.
-const MOON_LOOK_RANGES: { key: 'texture' | 'halo' | 'glow'; mild: Range; full: Range }[] = [
-  { key: 'texture', mild: [0.7, 1.3], full: [0, 2] },
-  { key: 'halo', mild: [0.1, 0.6], full: [0, 3] },
-  { key: 'glow', mild: [0.1, 0.6], full: [0, 3] },
-];
-const EXTREME_CHANCE = 0.5; // how often one slider rolls across its full range
-const SKY_SATURATION: Range = [0.25, 0.7];
+const MILD_DRIVER: Range = [0.1, 0.55];
+const EXTREME_DRIVER: Range = [0.85, 1];
+const EXTREME_CHANCE = 0.5; // how often one driver goes extreme
+const JITTER = 0.12; // each slider's own wobble around its driver, as a share of its span
 const SKY_LIGHTNESS: Range = [0.45, 0.75];
 const HORIZON_LIGHTNESS: Range = [0.7, 0.88]; // lighter than the sky, as air is near the horizon
 const CLOUD_SATURATION: Range = [0.05, 0.3]; // tinted whites
@@ -178,31 +161,55 @@ const NEIGHBOR_TURN = 30 / 360; // how far the sky and horizon may turn from the
 const hslHex = (hue: number, saturation: Range, lightness: Range) =>
   `#${new THREE.Color().setHSL(((hue % 1) + 1) % 1, between(saturation), between(lightness)).getHexString()}`;
 const ruleTurn = () => pickOne(COLOR_RULES) + (Math.random() * 2 - 1) * HUE_JITTER;
+// A slider's value from its driver (0 to 1) along [from, to], with a little wobble, rounded to two decimals.
+const follow = (driver: number, [from, to]: Range) => {
+  const value = from + (to - from) * Math.min(1, Math.max(0, driver + (Math.random() * 2 - 1) * JITTER));
+  return Math.round(value * 100) / 100;
+};
 
 export function randomAtmosphere(settings: AtmosphereSettings): AtmosphereSettings {
+  // The drivers: storminess (wind, cloud cover, ragged edges, bands), air thickness (haze, glow, pale sky, soft moons)
+  // and cloud climate (how large the cloud systems are and how strongly latitude places them).
+  const extreme = Math.random() < EXTREME_CHANCE ? pickOne(['storm', 'air', 'climate'] as const) : undefined;
+  const roll = (name: 'storm' | 'air' | 'climate') => between(name === extreme ? EXTREME_DRIVER : MILD_DRIVER);
+  const storm = roll('storm');
+  const air = roll('air');
+  const climate = roll('climate');
+
   const isLocked = (key: AtmosphereColorKey) => settings.lockedColors.includes(key);
   const anchor = (['zenithColor', 'horizonColor', 'cloudColor', 'cloudColor2'] as const).find(isLocked);
   const hsl = { h: 0, s: 0, l: 0 };
   const baseHue = anchor ? new THREE.Color(settings[anchor]).getHSL(hsl).h : Math.random();
   const neighbor = () => baseHue + (Math.random() * 2 - 1) * NEIGHBOR_TURN;
+  const skySaturation: Range = [0.7 - air * 0.45, 0.75 - air * 0.4]; // thick air washes the sky out
 
   const next: AtmosphereSettings = { ...settings };
-  if (!isLocked('zenithColor')) next.zenithColor = hslHex(anchor ? neighbor() : baseHue, SKY_SATURATION, SKY_LIGHTNESS);
-  if (!isLocked('horizonColor')) next.horizonColor = hslHex(neighbor(), SKY_SATURATION, HORIZON_LIGHTNESS);
+  if (!isLocked('zenithColor')) next.zenithColor = hslHex(anchor ? neighbor() : baseHue, skySaturation, SKY_LIGHTNESS);
+  if (!isLocked('horizonColor')) next.horizonColor = hslHex(neighbor(), skySaturation, HORIZON_LIGHTNESS);
   if (!isLocked('cloudColor')) next.cloudColor = hslHex(baseHue + ruleTurn(), CLOUD_SATURATION, CLOUD_LIGHTNESS);
   if (!isLocked('cloudColor2')) next.cloudColor2 = hslHex(baseHue + ruleTurn(), CLOUD_SATURATION, CLOUD_LIGHTNESS);
   if (!isLocked('shadowHue')) next.shadowHue = Math.round((((ruleTurn() * 360 + 540) % 360) - 180));
 
-  const extreme = Math.random() < EXTREME_CHANCE ? pickOne([...NUMBER_RANGES, ...MOON_LOOK_RANGES]).key : undefined;
-  for (const { key, mild, full, whole } of NUMBER_RANGES) {
-    const value = between(key === extreme ? full : mild);
-    (next[key] as number) = whole ? Math.round(value) : Math.round(value * 100) / 100;
-  }
+  next.wind = follow(storm, [0.5, 36]);
+  next.cloudCoverage = follow(storm, [0.15, 0.9]);
+  next.cloudFeather = follow(storm, [0.15, 0.85]);
+  next.cloudBanding = follow(storm, [0, 0.8]);
+  next.cloudSoftness = follow(storm, [0.85, 0.3]);
+  next.cloudDetail = Math.round(follow(storm, [3, 7]));
+  next.haze = follow(air, [0.1, 5.5]);
+  next.glow = follow(air, [0.2, 5]);
+  next.cloudScale = follow(climate, [0.7, 3]);
+  next.cloudDistributionStrength = follow(climate, [0.15, 0.95]);
+  next.cloudEquator = follow(Math.random(), [0.2, 1]);
+  next.cloudMidLatitudes = follow(Math.random(), [0.2, 1]);
+  next.cloudPoles = follow(Math.random(), [0, 1]);
+
   next.moonCount = 1 + Math.floor(Math.random() * MAX_MOONS);
-  next.moons = randomMoons(next.moonCount, settings.moons, next.horizonColor, next.zenithColor).map((moon) => {
-    const look = { ...moon };
-    for (const { key, mild, full } of MOON_LOOK_RANGES) look[key] = Math.round(between(key === extreme ? full : mild) * 100) / 100;
-    return look;
-  });
+  next.moons = randomMoons(next.moonCount, settings.moons, next.horizonColor, next.zenithColor).map((moon) => ({
+    ...moon,
+    texture: follow(air, [1.4, 0.4]), // thick air blurs the surface into glow
+    halo: follow(air, [0.05, 2]),
+    glow: follow(air, [0.1, 1.5]),
+  }));
   return next;
 }

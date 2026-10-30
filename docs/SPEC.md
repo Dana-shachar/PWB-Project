@@ -425,7 +425,12 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - The Atmosphere's Randomize changes every atmosphere setting on both panels. A lock icon before a color keeps it, and the unlocked colors are hue turns from a locked one (Sky first), using the moons' color rules.
 - Every lock in the app is this icon, never a "Lock ..." toggle.
-- 💡 Next, agreed with Dana: a few hidden drivers (storminess, air thickness, cloud climate) set related sliders together, so settings work together the way the colors do; at most one driver goes extreme. Sources are checked before the plan. Until then each slider rolls on its own, at most one across its full range.
+- **Hidden drivers (2026-10-30).** The sliders aren't rolled one by one. Randomize rolls three hidden values from 0 to 1, and each slider follows one of them along its own range, plus a small wobble so no two worlds match:
+  - **Storminess:** Wind, cloud Coverage, Feather, Banding and Detail rise together, and Softness falls.
+  - **Air thickness:** Haze and Glow rise, the sky's colors wash out, and the moons blur into glow (less Texture, more Halo and Inner glow).
+  - **Cloud climate:** how large the cloud systems are, and how strongly latitude places them.
+- Each driver is usually mild; half the time one of them goes extreme. So a world can be a storm planet or a fog planet, with the rest staying calm, and the extremes never stack.
+- Why: rolling every slider independently gave incoherent mixes (calm wind under ragged storm clouds). Letting a few high-level controls drive many parameters is the documented way to keep a generator's output coherent (a dimensionality-reduction patent, US 10552730; Kate Compton, "So you want to build a generator", on constraints and dealbreakers). Only summaries were read; the couplings and ranges are our own, tunable.
 
 ### [S46] The haze is air from the visible ground up, deep on purpose · `decided`
 **Decided:** 2026-10-30

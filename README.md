@@ -42,6 +42,9 @@ You move a control in the interface. `App.tsx` passes it to that feature's own h
 
 For every function and the chains between files, open [`CODE-INDEX.md`](docs/CODE-INDEX.md).
 
+**Randomize with hidden drivers.** Randomize doesn't roll each slider on its own. It rolls a few hidden drivers (how stormy, how thick the air, how the clouds gather) and derives the related sliders from them, so a world comes out coherent: a stormy one is windy, cloudy and ragged at once.
+Locked colors stay put and the other colors are built around them, so you can keep what you like and reroll the rest ([`SPEC.md`](docs/SPEC.md), `[S45]`).
+
 ---
 
 ## 📦 Repo structure

@@ -172,7 +172,7 @@
 
 **atmosphere/atmosphereSettings.ts**
 - What it is: the settings and their defaults, the locks, and the Atmosphere's Randomize; older saves take their wind from the water and their shared Crescent, Texture, Halo, Inner glow and "Lock colors" into each moon.
-- Key names: `AtmosphereSettings` (incl. `shadowHue`, `clouds`, `cloudColor2`, `moonCount`, `moons`, `lockedColors`), `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (`NUMBER_RANGES`, `MOON_LOOK_RANGES`, `EXTREME_CHANCE`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
+- Key names: `AtmosphereSettings` (incl. `shadowHue`, `clouds`, `cloudColor2`, `moonCount`, `moons`, `lockedColors`), `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (the drivers `storm`, `air`, `climate`; `follow`, `MILD_DRIVER`, `EXTREME_DRIVER`, `EXTREME_CHANCE`, `JITTER`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
 
 **atmosphere/moonTexture.ts**
 - What it is: the moons: their settings, simple noise layers, Randomize (sizes, places in view, colors from the sky, textures), and the five defaults.

@@ -713,6 +713,14 @@
 **Angle dial** · Photoshop's angle controls · `convention`
 - A circle with a line pointing at the angle, plus a number field. The design system's `Dial`.
 
+**Few controls driving many parameters** · US patent 10552730, "Procedural modeling using autoencoder neural networks" · `method used`
+- A small set of user controls each drive several procedural parameters together, so the output stays coherent.
+- Randomize's hidden drivers (`randomAtmosphere`, `[S45]`). The patent learns the links; ours are hand-written. ⚠️ Summary only.
+
+**So you want to build a generator** · Kate Compton · `framing`
+- List the constraints and dealbreakers; make outputs differ in ways people notice, not just in numbers.
+- Why each driver is mild by default with at most one extreme (`[S45]`). ⚠️ Read through a summary ([Game Developer](https://gamedeveloper.com/design/practical-procedural-generation-for-everyone-)).
+
 **Pan with a held key** · Figma and Photoshop (Space + drag, the hand tool); Blender on a trackpad (Shift + two-finger scroll) · `convention`
 - Holding a key turns a drag into a pan. Space + drag added to both views; Shift + drag is three.js OrbitControls' own default ("left mouse + ctrl/meta/shiftKey", read in its source 2026-10-30).
 - ⚠️ The app conventions are recalled, not checked against each app's docs.

@@ -26,7 +26,7 @@
 - **Colored shadows (2026-10-28):** the first land shader layer. The flat gray ambient became a sky fill, tinted by the sky's color and a Shadow hue, following Quilez's outdoor lighting rig: No Man's Sky's strong color, softened toward Gris and Sable, with unexpected shading colors set by rule.
 - **Walk mode and panel (2026-10-28):** long-press to walk with a Speed slider; the eye no longer sinks into the ground; the planet's flicker while dragging light sliders fixed (`[B72]`); the Scene section grouped into Light, Shadows, Shine, Grid and View.
 - **One panel hierarchy (2026-10-30, `[S47]`):** every section an accordion, closed by default; on/off switches in the headers; the noise modifiers as nested sections instead of tabs; swatches lined up on the right. New design-system pieces: a hue slider (Shadow hue, now saved per planet), a lock icon, a bare switch.
-- **Randomize the atmosphere (2026-10-30, `[S45]`):** one button changes the whole atmosphere; locked colors stay and the rest are built around them. Moons are added and removed like layers, each with its own Crescent, Texture, Halo, Inner glow and color locks; Clouds got an on/off switch.
+- **Randomize the atmosphere (2026-10-30, `[S45]`):** one button changes the whole atmosphere; locked colors stay and the rest are built around them. Moons are added and removed like layers, each with its own Crescent, Texture, Halo, Inner glow and color locks; Clouds got an on/off switch. Randomize now rolls three hidden drivers (storminess, air thickness, cloud climate) and derives the related sliders from them, so worlds come out coherent.
 - **Haze as a soft rim (`[B74]`):** a stripe floated off the planet's edge because the haze's ground sat at the tallest peak; it now starts at the sea, and the air is deeper on purpose, so the rim reads as a glow. The glow's cut-out up close was the camera's far limit (`[B75]`).
 
 ![The planet with the deeper haze: a soft rim instead of a stripe.](screenshots/2026-10-30-haze-soft-rim.png)
@@ -49,7 +49,7 @@
 - ✅ Measured before fixing: an A/B test and a log proved the flicker's cause in one round.
 - ✅ Measured numbers proved two causes in one round each, once logged.
 - ❌ A fix tried before measuring: reverted.
-- ⏭️ Randomize's drivers (related sliders set together), then slope rock; walk mode's `[B71]` is deferred.
+- ⏭️ Tune Randomize's drivers from Dana's test, then slope rock; walk mode's `[B71]` is deferred.
 
 ---
 
