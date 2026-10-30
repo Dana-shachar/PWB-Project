@@ -1,14 +1,30 @@
 import { useRef, useState } from 'react';
-import { createDefaultLayer, NOISE_TYPE_OPTIONS, BLEND_MODE_OPTIONS, VORONOI_DISTANCE_OPTIONS, FRACTAL_TYPE_OPTIONS, type NoiseLayer } from './heightmap';
-import { NOISE_RANGES, randomForRange, type NoiseRangeKey } from './noiseRanges';
+import { createDefaultLayer, VORONOI_DISTANCE_OPTIONS, FRACTAL_TYPE_OPTIONS, type NoiseLayer, type NoiseType } from './heightmap';
+import { randomForRange } from './noiseRanges';
 
 function randomFrom<T>(options: T[]): T {
   return options[Math.floor(Math.random() * options.length)];
 }
 
-// Never picked for a random layer — "randomize" producing a layer that
-// contributes nothing would be the one disappointing result out of the set.
-const RANDOMIZABLE_NOISE_TYPES = NOISE_TYPE_OPTIONS.map((option) => option.value).filter((value) => value !== 'none');
+// Randomize's drivers (randomizeTerrain): how often one goes extreme, each control's wobble around its driver, and the
+// frequency at which a layer keeps its full rolled Height. Inferred, TUNABLE.
+const EXTREME_CHANCE = 0.5;
+const DRIVER_JITTER = 0.15;
+const HEIGHT_REFERENCE_FREQUENCY = 4;
+// What each layer is for, when Randomize builds the stack (randomizeTerrain). Frequencies are on the slider's scale;
+// Heights are before the frequency rule shrinks them. Inferred, TUNABLE.
+type TerrainRole = 'continents' | 'mountains' | 'detail' | 'feature';
+const TERRAIN_ROLES: Record<TerrainRole, { noiseTypes: NoiseType[]; frequency: [number, number]; height: [number, number] }> = {
+  continents: { noiseTypes: ['perlin', 'simplex'], frequency: [0.8, 2.5], height: [0.6, 1.8] },
+  mountains: { noiseTypes: ['perlin', 'simplex'], frequency: [2, 6], height: [0.4, 1.6] },
+  detail: { noiseTypes: ['perlin', 'simplex', 'voronoi'], frequency: [6, 14], height: [0.2, 0.8] },
+  feature: { noiseTypes: ['voronoi', 'perlin'], frequency: [1.5, 5], height: [0.3, 1] },
+};
+// Masks on every layer but the base: how often, and a broad pattern (lower frequency than terrain), covering 25 to 75%.
+const MASK_CHANCE = 0.7;
+const MASK_FREQUENCY: [number, number] = [0.5, 4];
+const MASK_COVERAGE: [number, number] = [25, 75];
+const MASK_SOFTNESS: [number, number] = [10, 50];
 
 function formatLayerName(number: number): string {
   return `Layer ${String(number).padStart(2, '0')}`;
@@ -116,44 +132,70 @@ export function useNoiseLayers(initialLayerId: string) {
   // Left alone on purpose: `visible` (a layer silently vanishing would read
   // as broken, not as a new world) and identity fields (`id`, `name`).
   function randomizeTerrain() {
-    // A control left out of Randomize in the table keeps the layer's value.
-    const pick = (key: NoiseRangeKey, current: number) => (NOISE_RANGES[key].randomize === false ? current : randomForRange(key));
-    setLayers(
-      layers.map((layer) => ({
+    // Two hidden drivers, rolled once, so a world is coherently rugged or smooth, tall or flat (the atmosphere's
+    // method, SPEC [S35]); each mild, and sometimes one extreme. Inferred, TUNABLE.
+    const extreme = Math.random() < EXTREME_CHANCE ? randomFrom(['rugged', 'relief'] as const) : undefined;
+    const roll = (name: 'rugged' | 'relief') => (name === extreme ? 0.85 + Math.random() * 0.15 : 0.1 + Math.random() * 0.45);
+    const rugged = roll('rugged');
+    const relief = roll('relief');
+    const near = (driver: number) => Math.min(1, Math.max(0, driver + (Math.random() * 2 - 1) * DRIVER_JITTER));
+    const between = ([min, max]: [number, number]) => min + Math.random() * (max - min);
+    const logBetween = ([min, max]: [number, number]) => min * Math.pow(max / min, Math.random());
+
+    // Layers by role, as in Lague's procedural planets: broad continents, then masked ridged mountains, then fine
+    // detail, sometimes a stepped feature. Existing layers take the roles bottom up (their paint is kept); missing
+    // ones are added, and extra ones become more detail. Never deleted.
+    const roles: TerrainRole[] = ['continents'];
+    if (Math.random() < 0.85) roles.push('mountains');
+    if (Math.random() < 0.75) roles.push('detail');
+    if (Math.random() < 0.3) roles.push('feature');
+    const stack = [...layers];
+    while (stack.length < roles.length) stack.push(createDefaultLayer(crypto.randomUUID(), formatLayerName(nextLayerNumberRef.current++)));
+
+    const rolled = stack.map((layer, i): NoiseLayer => {
+      const role = roles[i] ?? 'detail';
+      const recipe = TERRAIN_ROLES[role];
+      const frequency = Math.round(logBetween(recipe.frequency) * 10) / 10;
+      // Height from frequency (agreed 2026-10-21): finer noise gets less height, so no layer turns to spikes.
+      const height = (recipe.height[0] + near(relief) * (recipe.height[1] - recipe.height[0])) * Math.min(1, HEIGHT_REFERENCE_FREQUENCY / frequency);
+      const masked = role !== 'continents' && Math.random() < MASK_CHANCE;
+      return {
         ...layer,
-        noiseType: randomFrom(RANDOMIZABLE_NOISE_TYPES),
+        noiseType: randomFrom(recipe.noiseTypes),
         seed: randomForRange('seed'),
-        frequency: randomForRange('frequency'),
-        domainWarpEnabled: Math.random() < 0.5,
-        warpStrength: randomForRange('warpStrength'),
-        octavesEnabled: Math.random() < 0.5,
-        octaves: randomForRange('octaves'),
-        persistence: randomForRange('persistence'),
+        frequency,
+        heightScale: Math.round(height * 100) / 100,
+        opacity: 1,
+        blendMode: role === 'continents' ? 'normal' : 'add',
+        domainWarpEnabled: Math.random() < 0.2 + 0.5 * rugged,
+        warpStrength: randomForRange('warpStrength', near(rugged)),
+        warpScale: randomForRange('warpScale'),
+        warpOctaves: randomForRange('warpOctaves'),
+        octavesEnabled: role !== 'feature',
+        octaves: randomForRange('octaves', near(rugged)),
+        persistence: randomForRange('persistence', near(rugged)),
         lacunarity: randomForRange('lacunarity'),
-        ridgedEnabled: Math.random() < 0.5,
-        ridgeAmount: randomForRange('ridgeAmount'),
-        terraceEnabled: Math.random() < 0.5,
-        terraceSteps: randomForRange('terraceSteps'),
-        offsetX: pick('offset', layer.offsetX),
-        offsetY: pick('offset', layer.offsetY),
-        offsetZ: pick('offset', layer.offsetZ),
-        stretchX: pick('stretch', layer.stretchX),
-        stretchY: pick('stretch', layer.stretchY),
-        stretchZ: pick('stretch', layer.stretchZ),
-        warpScale: pick('warpScale', layer.warpScale),
-        warpOctaves: pick('warpOctaves', layer.warpOctaves),
-        voronoiJitter: pick('voronoiJitter', layer.voronoiJitter),
-        voronoiDistance: randomFrom(VORONOI_DISTANCE_OPTIONS.map((option) => option.value)),
-        ridgeOffset: pick('ridgeOffset', layer.ridgeOffset),
-        ridgeGain: pick('ridgeGain', layer.ridgeGain),
         fractalType: randomFrom(FRACTAL_TYPE_OPTIONS.map((option) => option.value)),
-        fractalOffset: pick('fractalOffset', layer.fractalOffset),
-        fractalGain: pick('fractalGain', layer.fractalGain),
-        opacity: randomForRange('opacity'),
-        heightScale: randomForRange('layerHeight'),
-        blendMode: randomFrom(BLEND_MODE_OPTIONS.map((option) => option.value)),
-      })),
-    );
+        fractalOffset: randomForRange('fractalOffset'),
+        fractalGain: randomForRange('fractalGain'),
+        ridgedEnabled: role === 'mountains',
+        ridgeAmount: randomForRange('ridgeAmount', near(rugged)),
+        ridgeOffset: randomForRange('ridgeOffset'),
+        ridgeGain: randomForRange('ridgeGain'),
+        terraceEnabled: role === 'feature',
+        terraceSteps: randomForRange('terraceSteps'),
+        voronoiJitter: randomForRange('voronoiJitter'),
+        voronoiDistance: randomFrom(VORONOI_DISTANCE_OPTIONS.map((option) => option.value)),
+        // A broad mask, so the layer shows in regions rather than everywhere (Dana, 2026-10-30).
+        maskNoiseType: masked ? randomFrom(['perlin', 'simplex'] as NoiseType[]) : ('none' as NoiseType),
+        maskSeed: randomForRange('seed'),
+        maskFrequency: Math.round(logBetween(MASK_FREQUENCY) * 10) / 10,
+        maskInvert: Math.random() < 0.5,
+        maskCoverage: Math.round(between(MASK_COVERAGE)),
+        maskSoftness: Math.round(between(MASK_SOFTNESS)),
+      };
+    });
+    setLayers(rolled);
   }
 
   return {

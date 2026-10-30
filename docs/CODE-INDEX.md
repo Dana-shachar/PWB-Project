@@ -89,13 +89,13 @@
 - Talks to: `shaders/heightmap/heightmap.frag.glsl`, `SceneCanvas`, the patch renderer.
 
 **map/noiseRanges.ts**
-- What it is: one table of every noise control's range and scale.
-- Key names: `NOISE_RANGES`, `randomForRange`, `sliderRange`.
+- What it is: one table of every noise control's range and scale, plus Randomize's narrower range (`random`).
+- Key names: `NOISE_RANGES`, `randomForRange` (an optional position along the range, for the drivers), `sliderRange`.
 - Talks to: `NoisePanel`, `noiseLayers` (Randomize), `MaskControls`.
 
 **map/noiseLayers.ts**
-- What it is: the layer list hook.
-- Key names: `useNoiseLayers`, `addLayer`, `deleteLayer`, `reorderLayer`, `renameLayer`, `updateSelectedLayer`, `updateLayers`, `toggleLayerVisible`, `randomizeTerrain`.
+- What it is: the layer list hook, and terrain Randomize (layers by role, two drivers, broad masks).
+- Key names: `useNoiseLayers`, `addLayer`, `deleteLayer`, `reorderLayer`, `renameLayer`, `updateSelectedLayer`, `updateLayers`, `toggleLayerVisible`, `randomizeTerrain`, `TERRAIN_ROLES`, `HEIGHT_REFERENCE_FREQUENCY`, `MASK_CHANCE`.
 - Talks to: `NoisePanel`, `heightmap.ts`.
 
 **map/2Dbrush.ts**
@@ -135,7 +135,7 @@
 
 **planet/planetPatchMesh.ts**
 - What it is: patch geometry (stitching, skirts) and material.
-- Key names: `buildPatchGeometry`, `createPatchMaterial`, `applySharedUniforms` (on a change), `applyFrameUniforms` (every frame, the eye only), `buildPatchRampArrays`, `PlanetSharedUniforms`.
+- Key names: `buildPatchGeometry`, `createPatchMaterial`, `applySharedUniforms` (on a change), `applyFrameUniforms` (every frame, the eye only), `buildPatchRampArrays`, `PlanetSharedUniforms` (incl. `terrainBottom`, `terrainTop`: the true height range, beside the ramp's clipped `elevationMin`/`elevationMax`).
 
 **planet/planetControls.ts**
 - What it is: the planet's settings state and their migrations.

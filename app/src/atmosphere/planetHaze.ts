@@ -9,6 +9,7 @@ import type { AtmosphereSettings } from './atmosphereSettings';
 const HAZE_SCALE_HEIGHT = 0.03;
 const HAZE_SHELL_HEIGHTS = 5; // the shell reaches this many scale heights up, where the air is nearly gone
 const HAZE_DENSITY_PER_UNIT = 0.05;
+const PEAK_CLEARANCE = 1.02; // the shell's top above the highest peak, as a share of its radius
 
 export interface PlanetHaze {
   mesh: THREE.Mesh<THREE.SphereGeometry, THREE.ShaderMaterial>;
@@ -47,9 +48,10 @@ export function createPlanetHaze(): PlanetHaze {
 }
 
 // Every frame: size, color and density, the camera and the planet's center, and the sun.
-export function updatePlanetHaze(haze: PlanetHaze, settings: AtmosphereSettings, radius: number, cameraPosition: THREE.Vector3, lightDirection: THREE.Vector3, ambient: number): void {
+// `peakRadius` is the highest terrain's distance from the center: the air's shell always reaches past it.
+export function updatePlanetHaze(haze: PlanetHaze, settings: AtmosphereSettings, radius: number, peakRadius: number, cameraPosition: THREE.Vector3, lightDirection: THREE.Vector3, ambient: number): void {
   haze.mesh.visible = settings.enabled && settings.haze > 0;
-  const airRadius = radius * (1 + HAZE_SCALE_HEIGHT * HAZE_SHELL_HEIGHTS);
+  const airRadius = Math.max(radius * (1 + HAZE_SCALE_HEIGHT * HAZE_SHELL_HEIGHTS), peakRadius * PEAK_CLEARANCE);
   haze.mesh.material.uniforms.uScaleHeight.value = radius * HAZE_SCALE_HEIGHT;
   haze.mesh.scale.setScalar(airRadius);
   const uniforms = haze.mesh.material.uniforms;

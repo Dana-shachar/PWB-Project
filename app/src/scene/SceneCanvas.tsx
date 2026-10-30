@@ -296,6 +296,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     colorStops: DEFAULT_COLOR_STOPS,
     elevationMin: -0.5,
     elevationMax: 0.5,
+    terrainBottom: -0.5,
+    terrainTop: 0.5,
     displacementAmplitude: 0,
     radius: 20,
     waterEnabled: 0,
@@ -388,6 +390,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         material.uniforms.uElevationMax.value = range.max;
         sharedUniformsRef.current.elevationMin = range.min;
         sharedUniformsRef.current.elevationMax = range.max;
+        sharedUniformsRef.current.terrainBottom = histogram.min;
+        sharedUniformsRef.current.terrainTop = histogram.max;
         planetPatchRendererRef.current?.applyShared(sharedUniformsRef.current);
         onElevationRangeChangeRef.current?.({ min: range.min, max: range.max });
         onHeightDistributionChangeRef.current?.(buildHeightDistribution(histogram));
@@ -705,7 +709,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // altitude-scaled camera ([B51]).
     const planetSurface = () => {
       const shared = sharedUniformsRef.current;
-      const margin = shared.displacementAmplitude * Math.max(Math.abs(shared.elevationMin), Math.abs(shared.elevationMax));
+      const margin = shared.displacementAmplitude * Math.max(Math.abs(shared.terrainBottom), Math.abs(shared.terrainTop));
       return { planetRadius: shared.radius, surfaceRadius: shared.radius + margin };
     };
     gumballTargetRef.current = { camera: perspectiveCamera, cameraControls: orbitControls, referenceDistance: DEFAULT_CAMERA_DISTANCE, surface: planetSurface };
@@ -767,7 +771,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         sharedUniformsRef.current.seaTime += seaStep * windTimeScale(sharedUniformsRef.current.wind);
         sharedUniformsRef.current.time = nowSeconds;
         const shared = sharedUniformsRef.current;
-        const terrainReach = shared.displacementAmplitude * Math.max(Math.abs(shared.elevationMin), Math.abs(shared.elevationMax));
+        // The true highest point, not the color ramp's 1% clip: the haze, glow and clouds must clear every peak ([B76]).
+        const terrainReach = shared.displacementAmplitude * Math.max(Math.abs(shared.terrainBottom), Math.abs(shared.terrainTop));
         updatePlanetGlow(planetGlow, atmosphereRef.current, shared.radius + terrainReach);
         updatePlanetGlowFrame(planetGlow, perspectiveCamera.position);
         updateCloudLayer(cloudLayer, atmosphereRef.current, shared.radius, terrainReach);
@@ -777,7 +782,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         // The haze's ground is the lowest visible surface (the sea, or the deepest ground with water off), not the tallest
         // peak: a ground above the visible edge drew a stripe floating off the planet (Dana, 2026-10-30).
         const hazeGround = shared.radius + (shared.waterEnabled ? shared.seaLevel : shared.elevationMin) * shared.displacementAmplitude;
-        updatePlanetHaze(planetHaze, atmosphereRef.current, hazeGround, perspectiveCamera.position, shared.lightDirection, shared.ambient);
+        updatePlanetHaze(planetHaze, atmosphereRef.current, hazeGround, shared.radius + terrainReach, perspectiveCamera.position, shared.lightDirection, shared.ambient);
         updateCloudLayerFrame(cloudLayer, atmosphereRef.current.wind, seaStep, shared.lightDirection, shared.ambient, perspectiveCamera.position);
         sharedUniformsRef.current.rippleEnabled = isRippleMapReady() ? 1 : 0;
         sharedUniformsRef.current.viewWidthPixels = Math.max(1, (viewportElement?.clientWidth ?? 1) * window.devicePixelRatio);

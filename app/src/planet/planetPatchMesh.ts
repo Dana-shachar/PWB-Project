@@ -281,6 +281,9 @@ export interface PlanetSharedUniforms {
   colorStops: ColorStop[];
   elevationMin: number;
   elevationMax: number;
+  // The true lowest and highest heights, unclipped: what the atmosphere and the camera must clear ([B76]).
+  terrainBottom: number;
+  terrainTop: number;
   displacementAmplitude: number;
   radius: number;
   // Wrap lighting amount, shared with the land chunk (Scene > Wrap).

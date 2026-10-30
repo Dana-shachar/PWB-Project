@@ -32,6 +32,7 @@
 
 **Procedural planets end to end** · Sebastian Lague · `framing`
 - Noise layering through biomes to water, close to this project's own scope.
+- Terrain Randomize's layer roles (broad continents, ridged mountains, detail; `[S35]`). ⚠️ Recalled from the series, not re-watched.
 - *[Procedural Planets playlist](https://www.youtube.com/watch?v=QN39W020LqU&list=PLFt_AvWsXl0cONs3T0By4puYy6GM22ko8)*
 
 **Simulations that play themselves** · Ian Cheng, *Emissaries* · `framing`

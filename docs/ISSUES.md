@@ -15,7 +15,7 @@
 🟡 Partial   22
 ❓ Decision   1
 📋 Tracked    4
-✅ Fixed     37
+✅ Fixed     39
 ```
 
 <details>
@@ -41,6 +41,12 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ## 🪐 Planet mesh
 
 *The sphere itself, its seams, and the poles.*
+
+### [B76] Peaks poked through the atmosphere, and the camera could sink into them · `wrong but workable`
+**✅ Fixed:** 2026-10-30 · **Found:** 2026-10-30 · **Where:** `scene/SceneCanvas.tsx`, `atmosphere/planetHaze.ts`
+- Dana: on a tall planet the haze, glow and clouds stayed the same size whatever the shape, and the peaks stuck out.
+- Cause, measured: an infrastructure bug. The atmosphere and the camera's lowest height used the color ramp's range, which drops the top and bottom 1% on purpose. A log showed a true top of 7.49 against 6.07 used, about 4.3 units of terrain outside the atmosphere at amplitude 3.
+- Fixed: the true lowest and highest heights (`terrainBottom`, `terrainTop`) are kept next to the ramp's range; the haze, glow, clouds and the camera's floor use them, and the haze's shell always reaches past the highest peak.
 
 ### [B51] Zooming in doesn't reveal more terrain, unlike the land chunk · `wrong but workable`
 **🔴 Open:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `scene/Gumball.tsx`, `shaders/heightmap.frag.glsl`
@@ -202,6 +208,12 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ## 🧱 Layers & noise
 
 *Generating terrain and composing it.*
+
+### [B77] Terrain Randomize made nearly every planet a ball of spikes · `blocks work`
+**✅ Fixed:** 2026-10-30 · **Found:** 2026-10-30 · **Where:** `map/noiseLayers.ts`, `map/noiseRanges.ts`
+- Dana: every press came out spiky; "this doesn't look like a planet".
+- Cause, measured: Randomize rolled every control across the full slider ranges, widened for hand exploration (`[S35]`), and could pick white noise and any blend mode. A simulation of 10,000 rolls put a single layer's steepness at a median 4.3× the default layer, with 1 in 10 about 1,400×.
+- Fixed: Randomize builds the stack by role, with its own narrow ranges, Height shrinking as Frequency grows, broad masks, and two drivers (`[S35]`). Simulated before handover: a whole planet now has a median of 1.5× one default layer, 9 in 10 under 5×. Dana: "much better".
 
 ### [B18] Ridged noise inflated the whole planet rather than its peaks · `wrong but workable`
 **✅ Fixed:** 2026-09-24 · **Found:** 2026-09-24

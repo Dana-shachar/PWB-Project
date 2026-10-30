@@ -155,9 +155,15 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - 📚 Photoshop, Procreate and Substance Painter attach a mask to the layer with a thumbnail on its row. A group mask reaches every layer inside the group, but a mask on the top layer alone does not reach the layers below it. A group mask is a possible later addition.
 - Sources in `REFERENCES.md`.
 
-### [S35] Noise control ranges live in one table, and Randomize reads it · `decided`
-**Decided:** 2026-10-21 · **Built:** 2026-10-21, untested on screen
+### [S35] Noise control ranges live in one table; Randomize builds the stack by role · `decided`
+**Decided:** 2026-10-21 · **Built:** 2026-10-21 · **Changed:** 2026-10-30 (`[B77]`)
 
+- **Randomize (2026-10-30), what replaced the full-range rolls below:**
+  - Layers get roles, after Sebastian Lague's procedural planets: broad continents at the bottom (unmasked, Normal), masked ridged mountains, fine detail, and sometimes a stepped feature layer (each above the base set to Add). One to four roles per press; existing layers take them bottom up and keep their paint, missing ones are added, extra ones become detail, none are deleted.
+  - Each control has a narrower Randomize range beside its slider range (the slider stays wide for working by hand). Height shrinks as Frequency grows, so fine noise never gets tall (the "bounded heights" rule of 2026-10-21).
+  - Two hidden drivers, ruggedness and relief, set related controls together, mild by default, sometimes one extreme: the same method as the atmosphere (`[S45]`).
+  - The white-noise type and random blend modes are never picked. Ranges are inferred, tunable.
+- Earlier rule, kept for the sliders:
 - Every noise control's minimum, maximum, step and scale lives in one shared table. The sliders and Randomize both read it, so a range is changed in one place.
 - Randomize is never hardcoded. It picks from whatever each range allows, on the control's own scale, so a log slider such as Frequency is sampled logarithmically.
 - Why: the sliders were too tight to show what the shader can resolve (Frequency stopped at 20), and Randomize had copied those limits.
