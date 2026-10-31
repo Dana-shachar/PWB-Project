@@ -4,7 +4,7 @@
 // (distance from the edge, stacked falloffs, tone mapping), rewritten. Mix and inward rate inferred, TUNABLE.
 uniform vec3 glowColor;
 uniform vec3 uCenter;
-uniform float uRadius;
+uniform float uRadius; // the planet's; the glow starts at the air's ground above it
 uniform float uWidth; // the glow's size, in world units
 uniform float uStrength;
 uniform vec3 uCameraPosition;
@@ -15,7 +15,8 @@ void main() {
   float along = dot(toCenter, rayDirection);
   // Closest the ray passes to the center; past the edge in glow widths (negative over the planet's disc).
   float closest = along > 0.0 ? length(toCenter - rayDirection * along) : length(toCenter);
-  float beyond = (closest - uRadius) / max(uWidth, 1e-6);
+  vec3 closestDirection = normalize(uCameraPosition + rayDirection * max(along, 0.0) - uCenter);
+  float beyond = (closest - uRadius - airGroundLift(closestDirection)) / max(uWidth, 1e-6);
   float glow = beyond >= 0.0
     ? 0.6 * exp(-beyond * 2.5) + 0.4 * exp(-beyond * 0.8)
     : exp(beyond * 3.0);

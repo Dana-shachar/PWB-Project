@@ -223,5 +223,9 @@ void main() {
     float foam = max(shore, whitecap) * FOAM_OPACITY;
     litColor = mix(litColor, FOAM_COLOR * foamLight, foam);
   }
+  // The air between the eye and this point (planetAir.glsl): the ray stops here, so peaks get only the air in front.
+  vec3 toSurface = vWorldPosition - uCameraPosition;
+  vec4 haze = planetHaze(uCameraPosition, normalize(toSurface), length(toSurface), uLightDirection, uAmbient);
+  litColor = mix(litColor, haze.rgb, haze.a);
   gl_FragColor = vec4(litColor, 1.0);
 }

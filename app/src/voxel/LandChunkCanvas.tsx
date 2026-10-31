@@ -180,6 +180,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   sharedRendererRef.current = sharedRenderer;
   const gumballTargetRef = useRef<GumballTarget | null>(null);
   const walkFovRef = useRef(walkFieldOfView); // vertical field of view while walking, degrees
+  const gridVisibleRef = useRef(gridVisible); // the Scene setting; walk mode hides the grid on top of it
   const patchRendererRef = useRef<ChunkPatchRenderer | null>(null);
   // Read each frame by the patch renderer, so onFrame never goes stale.
   const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, chunkSize, bakePatch, groundHeights });
@@ -198,6 +199,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   useEffect(() => {
     walkFovRef.current = walkFieldOfView;
   }, [walkFieldOfView]);
+  useEffect(() => {
+    gridVisibleRef.current = gridVisible;
+  }, [gridVisible]);
 
   useEffect(() => {
     const viewportElement = viewportRef.current;
@@ -417,6 +421,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       const now = performance.now();
       const deltaSeconds = Math.min(0.1, (now - lastFrameTime) / 1000);
       lastFrameTime = now;
+      // An editor helper: hidden while walking, or it shows through the see-through water.
+      if (gridMeshRef.current) gridMeshRef.current.visible = gridVisibleRef.current && !walkMode.active;
       if (walkMode.active) {
         // The lens eases with the fly-in: near follows the eye height (a quarter of it, as
         // keepAboveFlatGround does) and far stops past the chunk, blended from the orbit values.

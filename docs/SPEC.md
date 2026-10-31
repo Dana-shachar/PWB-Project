@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-10-30`
+`Last updated: 2026-10-31`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -423,8 +423,9 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - One to five moons in the chunk's sky, each with its own size, place, two colors, crescent, crescent angle, texture, halo, inner glow and simple noise layers baked by the engine. Randomize is the main control; per-moon controls are there only for adjusting (Dana: not a burden on the user).
 - Moons are added and removed like layers (2026-10-30): all five are stored, so removing one keeps its settings out of view. One moon shows its controls directly; two or more get a section each.
-- The look (Dana's references, No Man's Sky and moon photos): screened over the sky so the shadow dissolves into it, split-toned (Second color tints the darks, Color the brights), a crescent turned from the sun's side, and one soft glow across the edge on the lit side.
+- The look (Dana's references, No Man's Sky and moon photos): screened over the sky so the shadow dissolves into it, split-toned in two tones set by the sky (`[S48]`), a crescent turned from the sun's side, and one soft glow across the edge on the lit side.
 - Their sizes set the chunk's tides (size cubed, after the tidal-force rule, exaggerated and capped).
+- They set behind the sea and fade into the air toward the horizon, by the air they're seen through (2026-10-30, three.js `Sky.js`: Kasten-Young airmass, Beer-Lambert). Each moon's Blend fades it into the sky at any height.
 
 ### [S45] Randomize changes everything; locked colors stay and anchor the palette · `decided`
 **Decided:** 2026-10-30
@@ -441,6 +442,28 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 ### [S46] The haze is air from the visible ground up, deep on purpose · `decided`
 **Decided:** 2026-10-30
 
-- Haze is the air's density at the ground, in the Horizon color; the air thins with height (O'Neil, GPU Gems 2), starting at the lowest visible surface.
+- Haze is the air's density at the ground, in the Horizon color; the air thins with height (O'Neil, GPU Gems 2), measured from the air's ground (`[S49]`).
+- Each surface pixel hazes only the air between the eye and itself, so peaks get the air in front of them and no line forms around them; the shell covers only the sky around the planet (2026-10-31). The rule is Lague's ray length, `min(sceneDepth, dstToOcean)`, done inside each surface's shader as iTwin.js does, which needs no depth texture or extra pass.
 - The air is about 4 times deeper than Earth's in proportion (0.03 of the radius), so its rim reads as a soft glow rather than a stripe: these are alien worlds, not realistic ones (Dana). The separate Glow stays, in the Sky color.
 - The camera's far limit always contains the atmosphere (`[B75]`).
+
+### [S48] A moon's colors come from the sky and a harmony rule · `decided`
+**Decided:** 2026-10-30
+
+- Each moon has one hue, a turn from the sky's hue, so changing the sky carries the moons with it and no color can clash. Its shadow tone sits at a set distance from it, picked from a color-harmony rule (complementary, split complementary, triadic, analogous, monochrome) or dragged freely, and drawn a little darker.
+- Saturation is the moon's own (0 to 1), and Randomize sets it from the sky. Lightness comes from the sky's stronger color, kept between 0.25 and 0.9 so a moon never turns black or white.
+- Why: two free color pickers allowed clashing colors, and averaging the sky's two colors washed every moon out (Dana: keep it simple, but keep the two tones).
+
+### [S49] The atmosphere follows the planet's broad shape · `decided`
+**Decided:** 2026-10-30
+
+- The haze, glow and clouds stand on the air's ground: the visible surface (the sea over water) averaged over about 17° around each direction, kept as a small cube map and re-baked only when the terrain or sea level changes.
+- Broad shapes (continents, plateaus, wide ranges) lift the air; a lone jagged peak barely moves the average, so it rises through the haze and past the glow. This replaces sizing the air to the tallest peak, which left a wide empty ring on jagged planets (`[B80]`).
+- The glow starts a fixed 1.8% of the radius above the air's ground, plus more on a jagged planet (how far its surface typically rises above the average), so the gap reads the same on every planet. The clouds move out by the same jagged extra.
+- Clouds are three stacked shells, each higher one more see-through and showing only the denser cores (Lohmüller's stacked-plane clouds, POV-Ray). More shells would cost a full cloud pass each.
+- Why: Dana, "the atmosphere is a derivative of the planet's shape". Height fog over a non-flat ground is the sourced part (Quilez); the averaging width and the gaps are inferred, tunable.
+
+### [S50] The chunk's water is a block, not a sheet · `decided`
+**Decided:** 2026-10-30
+
+- See-through side walls run from the chunk's base up to the water surface, colored by the water ramp by depth and clearer near the top, so the water reads as a block with the land's cut visible through it.

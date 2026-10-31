@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import vertexShader from '../shaders/atmosphere/skyDome.vert.glsl?raw';
 import fragmentShader from '../shaders/atmosphere/skyDome.frag.glsl?raw';
 import type { AtmosphereSettings } from './atmosphereSettings';
-import { MAX_MOONS } from './moonTexture';
+import { MAX_MOONS, moonColorsForSky } from './moonTexture';
 
 // The chunk's sky: three.js's hemisphere-lights sky dome (MIT; offset 33 and exponent 0.6 on a 4000-radius sphere),
 // drawn from inside, following the camera, behind everything else, sized just inside the camera's far plane.
@@ -51,6 +51,7 @@ export function createSkyDome(): SkyDome {
       uMoonHalos: { value: new Array(MAX_MOONS).fill(0) },
       uMoonGlows: { value: new Array(MAX_MOONS).fill(0) },
       uMoonCrescents: { value: new Array(MAX_MOONS).fill(0.5) },
+      uMoonBlends: { value: new Array(MAX_MOONS).fill(0) },
       uCloudCoverage: { value: 0 },
       uCloudColor: { value: new THREE.Color() },
       uCloudColor2: { value: new THREE.Color() },
@@ -108,13 +109,15 @@ export function updateSkyDome(sky: SkyDome, settings: AtmosphereSettings): void 
     const elevation = THREE.MathUtils.degToRad(moon.height);
     const azimuth = THREE.MathUtils.degToRad(moon.azimuth);
     (uniforms.uMoonDirections.value as THREE.Vector3[])[slot].set(Math.cos(elevation) * Math.cos(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.sin(azimuth));
-    (uniforms.uMoonColors.value as THREE.Color[])[slot].set(moon.color);
-    (uniforms.uMoonColors2.value as THREE.Color[])[slot].set(moon.color2);
+    const colors = moonColorsForSky(settings.horizonColor, settings.zenithColor, moon.hueTurn, moon.secondOffset, moon.saturation);
+    (uniforms.uMoonColors.value as THREE.Color[])[slot].copy(colors.color);
+    (uniforms.uMoonColors2.value as THREE.Color[])[slot].copy(colors.color2);
     (uniforms.uMoonCrescentAngles.value as number[])[slot] = THREE.MathUtils.degToRad(moon.crescentAngle ?? 0);
     (uniforms.uMoonCrescents.value as number[])[slot] = moon.crescent / 100;
     (uniforms.uMoonTextureAmounts.value as number[])[slot] = moon.texture;
     (uniforms.uMoonHalos.value as number[])[slot] = moon.halo;
     (uniforms.uMoonGlows.value as number[])[slot] = moon.glow;
+    (uniforms.uMoonBlends.value as number[])[slot] = moon.blend;
   });
   applyMoonTextures(sky);
   uniforms.uGlow.value = settings.glow;

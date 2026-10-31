@@ -11,6 +11,9 @@ uniform vec3 uCloudColor;
 uniform vec3 uCloudColor2;
 uniform float uCloudSoftness;
 uniform float uCloudTime; // advances faster in stronger wind
+uniform float uCloudLayer; // which stacked shell, 0 the lowest: higher shells show only the thicker cores
+const float CLOUD_SHELL_CORE = 0.05; // how much higher each shell's threshold sits. Inferred, TUNABLE.
+const float CLOUD_SHELL_OPACITY = 0.55; // each shell's share; stacked, the cores reach about the old single layer's
 uniform float uCloudScale;
 uniform float uCloudDetail;
 uniform float uCloudFeather;
@@ -114,7 +117,7 @@ void main() {
   float phase1 = fract(uCloudTime * LOOP_RATE + 0.5);
   float gather = max(max(uCloudEquator * gaussian(latitude, 0.0, 12.0), uCloudMidLatitudes * gaussian(absLat, 50.0, 15.0)), uCloudPoles * gaussian(absLat, 90.0, 18.0));
   // Latitude nudges where clouds form rather than gating them, so scattered clouds remain between the bands.
-  float threshold = 1.0 - uCloudCoverage * mix(1.0, gather, uCloudDistributionStrength);
+  float threshold = 1.0 - uCloudCoverage * mix(1.0, gather, uCloudDistributionStrength) + uCloudLayer * CLOUD_SHELL_CORE;
   float edge = 0.02 + uCloudSoftness * 0.5;
   float speed = bandSpeed(latitude) * BAND_SWING;
   float drift = uCloudTime * GLOBAL_DRIFT;
@@ -136,5 +139,5 @@ void main() {
   vec3 shadowColor = baseColor * 0.55;
   // The darkest a core gets is capped at halfway to the shadow color.
   vec3 color = mix(shadowColor, baseColor, clamp(0.5 + 0.5 * energy, 0.0, 1.0)) * (uAmbient + sunlit);
-  gl_FragColor = vec4(color, cloud * 0.9);
+  gl_FragColor = vec4(color, cloud * CLOUD_SHELL_OPACITY);
 }

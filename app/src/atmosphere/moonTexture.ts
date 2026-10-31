@@ -9,16 +9,16 @@ export interface MoonSettings {
   size: number; // degrees across
   height: number; // degrees above the horizon
   azimuth: number; // compass direction, degrees
-  color: string; // the gradient's first color
-  color2: string; // the color its darks are tinted with (Color tints its brights)
+  hueTurn: number; // degrees round the color wheel from the sky's hue; the sky sets the rest (moonColorsForSky)
+  secondOffset: number; // the darks' hue, degrees from hueTurn (a harmony rule, or dragged freely)
+  saturation: number; // both tones, 0 to 1; Randomize takes it from the sky (skySaturation)
   crescentAngle: number; // degrees the crescent turns from the sun's side
   crescent: number; // how much is in shadow: 0 full, 100 the thinnest crescent
   texture: number; // how clearly the surface shows: 0 pure glow, 1 a solid moon, 2 the strongest pattern
   halo: number; // a soft light around the moon; meant to stay subtle, under the sky's haze
   glow: number; // a soft brightening just inside its lit edge
-  // Locked colors are kept by Randomize (LockButton).
-  colorLocked: boolean;
-  color2Locked: boolean;
+  blend: number; // how far it fades into the sky at any height: 0 as drawn, 1 gone
+  colorLocked: boolean; // a locked hue is kept by Randomize (LockButton)
   layers: NoiseLayer[]; // its surface: a simple stack of the engine's noise layers
 }
 
@@ -93,10 +93,20 @@ export function describeMoonLayers(layers: NoiseLayer[]): string {
 
 // Moon colors that go with the sky (Dana, 2026-10-28): its complement or a hue close to it, short of full saturation
 // (the screen blend softens them further), after No Man's Sky's color rules (REFERENCES.md). Inferred, TUNABLE.
-const MOON_SATURATION: [number, number] = [0.45, 0.7]; // delicate, not neon (Dana, 2026-10-28)
-const MOON_LIGHTNESS: [number, number] = [0.68, 0.82];
-const MOON_SECOND_LIGHTNESS: [number, number] = [0.5, 0.66];
-const SECOND_COLOR_SHIFT: [number, number] = [20 / 360, 50 / 360]; // how far the gradient's second color turns
+const MOON_LIGHTNESS: [number, number] = [0.25, 0.9]; // only keeps a moon from going black or white
+const SECOND_COLOR_DARKER = 0.8; // the darks' lightness against the brights'
+const MOON_MIN_SATURATION = 0.4; // so a gray sky still gives colored moons
+// Harmony rules for the darks' hue, in degrees from the main hue; picking one resets the second handle to it.
+export const HARMONY_RULES: { name: string; offset: number }[] = [
+  { name: 'Complementary', offset: 180 },
+  { name: 'Split complementary', offset: 150 },
+  { name: 'Triadic', offset: 120 },
+  { name: 'Analogous', offset: 30 },
+  { name: 'Monochrome', offset: 0 },
+];
+// The rule a second handle sits on (either side of the main hue), or Custom once dragged off them.
+export const harmonyFor = (secondOffset: number) =>
+  HARMONY_RULES.find((rule) => [rule.offset, -rule.offset].some((offset) => (((secondOffset - offset) % 360) + 360) % 360 === 0))?.name ?? 'Custom';
 // The color rules, as hue turns from the sky: its complement, a neighbor on either side, split-complementary (the two
 // hues either side of the complement) and triadic (a third of the way round either side). Each moon picks a rule at
 // random and turns a little further at random, and moons in one sky stay MOON_HUE_GAP apart, so every roll differs.
@@ -114,16 +124,45 @@ function randomHueTurns(count: number): number[] {
   return turns;
 }
 
-export function moonColorsForSky(horizonColor: string, zenithColor: string, hueTurn: number = pickOne(COLOR_RULES)): { color: string; color2: string } {
-  const sky = new THREE.Color(horizonColor).lerp(new THREE.Color(zenithColor), 0.5);
-  const skyHsl = { h: 0, s: 0, l: 0 };
-  sky.getHSL(skyHsl);
-  const hue = (skyHsl.h + hueTurn + 1) % 1;
-  const secondHue = (hue + (Math.random() < 0.5 ? -1 : 1) * between(SECOND_COLOR_SHIFT) + 1) % 1;
+const wrapDegrees = (degrees: number) => ((((degrees + 180) % 360) + 360) % 360) - 180;
+// The hue is the sky's average; saturation and lightness come from its stronger color, since averaging two different
+// colors pulls them toward gray.
+const skyHsl = (horizonColor: string, zenithColor: string) => {
+  const [average, horizon, zenith] = [{ h: 0, s: 0, l: 0 }, { h: 0, s: 0, l: 0 }, { h: 0, s: 0, l: 0 }];
+  new THREE.Color(horizonColor).lerp(new THREE.Color(zenithColor), 0.5).getHSL(average);
+  new THREE.Color(horizonColor).getHSL(horizon);
+  new THREE.Color(zenithColor).getHSL(zenith);
+  const stronger = horizon.s >= zenith.s ? horizon : zenith;
+  return { h: average.h, s: Math.max(stronger.s, MOON_MIN_SATURATION), l: stronger.l };
+};
+
+// A moon's two colors from the sky (Dana, 2026-10-30, so none can clash): its hue turned by hueTurn, saturation and
+// lightness taken from the sky; the darks turn by secondOffset and are a little darker.
+// The saturation that goes with the sky: its stronger color's, never below MOON_MIN_SATURATION.
+export const skySaturation = (horizonColor: string, zenithColor: string) => skyHsl(horizonColor, zenithColor).s;
+
+export function moonColorsForSky(horizonColor: string, zenithColor: string, hueTurn: number, secondOffset = 0, saturation = skySaturation(horizonColor, zenithColor)): { color: THREE.Color; color2: THREE.Color } {
+  const sky = skyHsl(horizonColor, zenithColor);
+  const hue = (sky.h + hueTurn / 360 + 1) % 1;
+  const lightness = THREE.MathUtils.clamp(sky.l, ...MOON_LIGHTNESS);
   return {
-    color: `#${new THREE.Color().setHSL(hue, between(MOON_SATURATION), between(MOON_LIGHTNESS)).getHexString()}`,
-    color2: `#${new THREE.Color().setHSL(secondHue, between(MOON_SATURATION), between(MOON_SECOND_LIGHTNESS)).getHexString()}`,
+    color: new THREE.Color().setHSL(hue, saturation, lightness),
+    color2: new THREE.Color().setHSL((hue + secondOffset / 360 + 1) % 1, saturation, lightness * SECOND_COLOR_DARKER),
   };
+}
+
+// A saved color as a turn from the sky's hue, for saves from before the hue slider.
+export const hueTurnFor = (color: string, horizonColor: string, zenithColor: string) => {
+  const hsl = { h: 0, s: 0, l: 0 };
+  new THREE.Color(color).getHSL(hsl);
+  return Math.round(wrapDegrees((hsl.h - skyHsl(horizonColor, zenithColor).h) * 360));
+};
+
+// The Hue track: the moon's color at each turn from -180 to 180, so the track's center is the sky's own hue.
+export function moonHueTrackGradient(horizonColor: string, zenithColor: string, saturation?: number): string {
+  const stops: string[] = [];
+  for (let turn = -180; turn <= 180; turn += 30) stops.push(moonColorsForSky(horizonColor, zenithColor, turn, 0, saturation).color.getStyle());
+  return `linear-gradient(to right, ${stops.join(', ')})`;
 }
 
 // Sizes: alien skies have huge moons and small ones. Any moon can be the largest, the others spread up to its
@@ -150,7 +189,7 @@ function randomSizes(): number[] {
   return shuffled(sizes);
 }
 
-// Locked colors stay; the rest go with the sky.
+// Locked hues stay; the rest go with the sky.
 export function randomMoons(count: number, current: MoonSettings[], horizonColor: string, zenithColor: string): MoonSettings[] {
   const view = getSkyView();
   const top = view.pitch + view.halfHeight * VIEW_MARGIN;
@@ -174,21 +213,20 @@ export function randomMoons(count: number, current: MoonSettings[], horizonColor
       if (room > best.room) best = { azimuth, height, room };
     }
     if (i < count) placed.push({ azimuth: best.azimuth, height: best.height, size });
-    const fresh = moonColorsForSky(horizonColor, zenithColor, hueTurns[i]);
     const colorLocked = current[i]?.colorLocked ?? false;
-    const color2Locked = current[i]?.color2Locked ?? false;
     return {
       size,
       height: Math.round(Math.min(90, best.height)),
       azimuth: Math.round((best.azimuth + 360) % 360),
-      color: colorLocked ? current[i].color : fresh.color,
-      color2: color2Locked ? current[i].color2 : fresh.color2,
+      hueTurn: colorLocked ? current[i].hueTurn : Math.round(wrapDegrees(hueTurns[i] * 360)),
+      secondOffset: colorLocked ? current[i].secondOffset : pickOne(HARMONY_RULES).offset * pickOne([1, -1]),
       colorLocked,
-      color2Locked,
       crescent: Math.round(Math.random() * 100),
       texture: current[i]?.texture ?? 1,
       halo: current[i]?.halo ?? 0.15,
       glow: current[i]?.glow ?? 0.15,
+      blend: current[i]?.blend ?? 0,
+      saturation: colorLocked ? current[i].saturation : Math.round(skySaturation(horizonColor, zenithColor) * 100) / 100,
       layers: randomMoonLayers(baseTypes[i % baseTypes.length], scaleBands[i % scaleBands.length], coverageBands[i % coverageBands.length]),
       crescentAngle: Math.round(Math.random() * 360),
     };
@@ -203,9 +241,9 @@ function fixedLayers(baseType: NoiseType, baseScale: number, detailType: NoiseTy
   ];
 }
 export const DEFAULT_MOONS: MoonSettings[] = [
-  { size: 8, height: 40, azimuth: 229, color: '#f0b48c', color2: '#9c78c8', layers: fixedLayers('voronoi', 2, 'perlin', 6, 12) , crescentAngle: 0, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
-  { size: 14, height: 25, azimuth: 262, color: '#8fd6b4', color2: '#5f8fd0', layers: fixedLayers('perlin', 2.5, 'voronoi', 5, 51) , crescentAngle: 40, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
-  { size: 3, height: 32, azimuth: 196, color: '#f2cf6e', color2: '#e07f6a', layers: fixedLayers('simplex', 1.5, 'perlin', 7, 88) , crescentAngle: 320, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
-  { size: 5, height: 14, azimuth: 244, color: '#c29cf0', color2: '#7b6fd6', layers: fixedLayers('voronoi', 3, 'voronoi', 6, 23) , crescentAngle: 80, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
-  { size: 2, height: 48, azimuth: 212, color: '#d6ea8c', color2: '#82b86a', layers: fixedLayers('perlin', 1.2, 'voronoi', 4, 67) , crescentAngle: 200, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, colorLocked: false, color2Locked: false },
+  { size: 8, height: 40, azimuth: 229, hueTurn: 180, secondOffset: 150, layers: fixedLayers('voronoi', 2, 'perlin', 6, 12) , crescentAngle: 0, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, blend: 0, saturation: 0.6, colorLocked: false },
+  { size: 14, height: 25, azimuth: 262, hueTurn: -30, secondOffset: -120, layers: fixedLayers('perlin', 2.5, 'voronoi', 5, 51) , crescentAngle: 40, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, blend: 0, saturation: 0.6, colorLocked: false },
+  { size: 3, height: 32, azimuth: 196, hueTurn: 30, secondOffset: 180, layers: fixedLayers('simplex', 1.5, 'perlin', 7, 88) , crescentAngle: 320, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, blend: 0, saturation: 0.6, colorLocked: false },
+  { size: 5, height: 14, azimuth: 244, hueTurn: 150, secondOffset: 30, layers: fixedLayers('voronoi', 3, 'voronoi', 6, 23) , crescentAngle: 80, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, blend: 0, saturation: 0.6, colorLocked: false },
+  { size: 2, height: 48, azimuth: 212, hueTurn: -150, secondOffset: -150, layers: fixedLayers('perlin', 1.2, 'voronoi', 4, 67) , crescentAngle: 200, crescent: 50, texture: 1, halo: 0.15, glow: 0.15, blend: 0, saturation: 0.6, colorLocked: false },
 ];

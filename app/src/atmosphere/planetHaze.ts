@@ -1,6 +1,9 @@
 import * as THREE from 'three';
 import vertexShader from '../shaders/atmosphere/planetHaze.vert.glsl?raw';
 import fragmentShader from '../shaders/atmosphere/planetHaze.frag.glsl?raw';
+import airGroundGlsl from '../shaders/atmosphere/airGround.glsl?raw';
+import planetAirGlsl from '../shaders/atmosphere/planetAir.glsl?raw';
+import { planetAirUniforms } from './planetAir';
 import type { AtmosphereSettings } from './atmosphereSettings';
 
 // The haze over the planet: air thinning with height drawn over the ground in the horizon color, as thick as the air each
@@ -20,17 +23,12 @@ export function createPlanetHaze(): PlanetHaze {
   const geometry = new THREE.SphereGeometry(1, 64, 32);
   const material = new THREE.ShaderMaterial({
     vertexShader,
-    fragmentShader,
-    side: THREE.FrontSide,
+    fragmentShader: airGroundGlsl + planetAirGlsl + fragmentShader,
+    side: THREE.BackSide, // the far side, hidden by any surface in front: only the sky shows the shell
     transparent: true,
     depthWrite: false,
     uniforms: {
-      hazeColor: { value: new THREE.Color() },
-      uDensity: { value: 0 },
-      uCenter: { value: new THREE.Vector3() },
-      uRadius: { value: 1 },
-      uAirRadius: { value: 1 },
-      uScaleHeight: { value: 0.01 },
+      ...planetAirUniforms,
       uCameraPosition: { value: new THREE.Vector3() },
       uLightDirection: { value: new THREE.Vector3(1, 1, 1) },
       uAmbient: { value: 0.2 },
@@ -47,20 +45,23 @@ export function createPlanetHaze(): PlanetHaze {
   };
 }
 
-// Every frame: size, color and density, the camera and the planet's center, and the sun.
-// `peakRadius` is the highest terrain's distance from the center: the air's shell always reaches past it.
-export function updatePlanetHaze(haze: PlanetHaze, settings: AtmosphereSettings, radius: number, peakRadius: number, cameraPosition: THREE.Vector3, lightDirection: THREE.Vector3, ambient: number): void {
-  haze.mesh.visible = settings.enabled && settings.haze > 0;
+// Every frame: size, color and density, the camera and the planet's center, and the sun. `radius` is the lowest visible
+// ground, `planetRadius` the planet's own, `peakRadius` the highest terrain's distance from the center: the air's shell
+// always reaches past it. The values go to planetAirUniforms, so the surfaces' haze follows too.
+export function updatePlanetHaze(haze: PlanetHaze, settings: AtmosphereSettings, radius: number, planetRadius: number, peakRadius: number, cameraPosition: THREE.Vector3, lightDirection: THREE.Vector3, ambient: number): void {
+  const on = settings.enabled && settings.haze > 0;
+  haze.mesh.visible = on;
   const airRadius = Math.max(radius * (1 + HAZE_SCALE_HEIGHT * HAZE_SHELL_HEIGHTS), peakRadius * PEAK_CLEARANCE);
-  haze.mesh.material.uniforms.uScaleHeight.value = radius * HAZE_SCALE_HEIGHT;
   haze.mesh.scale.setScalar(airRadius);
+  planetAirUniforms.uHazeScaleHeight.value = radius * HAZE_SCALE_HEIGHT;
+  planetAirUniforms.uHazeCenter.value.copy(haze.mesh.position);
+  planetAirUniforms.uHazeSeaRadius.value = radius;
+  planetAirUniforms.uHazePlanetRadius.value = planetRadius;
+  planetAirUniforms.uHazeAirRadius.value = airRadius;
+  planetAirUniforms.uHazeColor.value.set(settings.horizonColor);
+  planetAirUniforms.uHazeDensity.value = on ? settings.haze * HAZE_DENSITY_PER_UNIT : 0;
   const uniforms = haze.mesh.material.uniforms;
   (uniforms.uCameraPosition.value as THREE.Vector3).copy(cameraPosition);
-  (uniforms.uCenter.value as THREE.Vector3).copy(haze.mesh.position);
-  uniforms.uRadius.value = radius;
-  uniforms.uAirRadius.value = airRadius;
-  (uniforms.hazeColor.value as THREE.Color).set(settings.horizonColor);
-  uniforms.uDensity.value = settings.haze * HAZE_DENSITY_PER_UNIT;
   (uniforms.uLightDirection.value as THREE.Vector3).copy(lightDirection);
   uniforms.uAmbient.value = ambient;
 }

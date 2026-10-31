@@ -32,6 +32,10 @@
 ![The planet with the deeper haze: a soft rim instead of a stripe.](screenshots/2026-10-30-haze-soft-rim.png)
 
 - **Navigation:** Space + drag pans, beside Shift + drag; walk speed reaches ×10.
+- **Moons that set (2026-10-30, `[B78]`):** a low moon showed through the see-through sea and never faded. Moons now set behind the sea and melt into the horizon color, after three.js's sky shader (airmass extinction), with a Blend slider per moon.
+- **Moon colors from the sky (`[S48]`):** each moon has one hue relative to the sky, a shadow tone set by a color-harmony rule (complementary, triadic, analogous and so on) and a Saturation slider. A new design-system control, the two-handle hue bar, sets both tones.
+- **An atmosphere shaped like its planet (2026-10-31, `[S49]`, `[B80]`):** on jagged planets a wide empty ring sat between the planet and its glow. The air now stands on the planet's averaged surface, the glow keeps the same gap on every planet, each surface hazes only the air in front of it (Lague's atmosphere, done per surface as iTwin.js does), and the clouds are three stacked layers.
+- **Water as a block (`[S50]`):** the chunk's water got see-through side walls; the grid no longer shows through the water in walk mode (`[B79]`).
 
 ### 🤖 AI process
 - **A day lost to theories:** three fixes were built on unproven causes (octave tweaks, local coordinates for fine detail, smoothing) before Dana's own idea, a dedicated height map resampled at higher resolution, solved it. New working rules: check Dana's proposed mechanism against established tools first, build only on a measured cause, and edit docs only at commit.
@@ -40,6 +44,9 @@
 
 - **Guessing again on the haze and glow:** Claude offered causes and fixes before measuring (a draw-order change that altered the colors and fixed nothing, then a wrong reading of Dana's description). What worked: logs that printed the measured numbers (the haze's ground 0.31 units above the sea; the far limit at 40 against a glow reaching 65), and a test switch Dana could compare on her own planet. A frozen test copy on another port loaded a different planet, so that test meant nothing.
 - **Unapproved style again:** the first moon sections carried a nested style Dana hadn't seen; now written into the design system so it can't drift.
+- **An invented fix, caught:** Claude softened the haze's edge with a method of its own and called it done; it drew rings across the planet. Dana: only known, documented methods. It was undone and replaced with Lague's, read in the source code.
+- **Unchecked assumptions:** a shader used an old texture function that three.js only translates in one shader stage, so the clouds vanished; a moon color helper dropped the second tone's offset. Both were found from the console and the code, then fixed.
+- **Tokens:** two research agents (55k and 13k tokens); Dana asked for narrower reads through the code index.
 
 ### 📊 Worked / didn't / next
 - ✅ The chunk's own height map, resampled: the established terrain approach.
@@ -49,7 +56,9 @@
 - ✅ Measured before fixing: an A/B test and a log proved the flicker's cause in one round.
 - ✅ Measured numbers proved two causes in one round each, once logged.
 - ❌ A fix tried before measuring: reverted.
-- ⏭️ Tune Randomize's drivers from Dana's test, then slope rock; walk mode's `[B71]` is deferred.
+- ✅ Reading the actual source code (Lague, iTwin.js, three.js `Sky.js`, Lohmüller) before building.
+- ❌ An invented method presented as a fix: undone.
+- ⏭️ Tune Randomize's drivers from Dana's test, then slope rock and landscape variety; walk mode's `[B71]` is deferred.
 
 ---
 

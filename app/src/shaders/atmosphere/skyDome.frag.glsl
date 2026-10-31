@@ -31,6 +31,7 @@ uniform float uMoonTextureAmounts[MAX_MOON_SLOTS]; // each moon, 0 to 2: the tex
 uniform float uMoonHalos[MAX_MOON_SLOTS];
 uniform float uMoonGlows[MAX_MOON_SLOTS];
 uniform float uMoonCrescents[MAX_MOON_SLOTS]; // each moon's shadow: 0 full moon, 1 thinnest crescent
+uniform float uMoonBlends[MAX_MOON_SLOTS]; // each moon's Blend: 0 as drawn, 1 gone into the sky
 uniform float uCloudCoverage;
 uniform vec3 uCloudColor;
 uniform vec3 uCloudColor2;
@@ -81,6 +82,11 @@ const float MOON_TERMINATOR_SOFTNESS = 0.5;   // how wide the lit side melts int
 const float MOON_TERMINATOR_ROUGHNESS = 0.15; // how much the surface breaks up that edge
 const float MOON_MAX_PHASE = 2.9;             // radians the light swings behind the moon at Crescent 100
 const float MOON_DARK_DEPTH = 0.55;           // how deep the darks go under their Second color tint
+const float MOON_EDGE_SOFTNESS = 0.03;        // share of the radius over which the disc's edge melts into the sky
+// Setting into the horizon (three.js Sky.js: the disc times exp(-extinction * airmass)); our moon is mixed back toward the
+// sky by that share instead, so it melts into the horizon color. Inferred, TUNABLE.
+const float MOON_EXTINCTION = 0.05;           // per unit of airmass above 1 (overhead); the horizon fade does the rest
+const float MOON_HORIZON_FADE = 0.03;         // dir.y over which the moon is cut by the horizon
 // The glow around and inside the edge, sized like the planet's glow (planetGlow.frag.glsl): outward, a minimum share of
 // the moon's radius plus a part that grows with Halo, never under MOON_HALO_MIN_ANGLE so far, small moons still get
 // distance and feather; inward, a share that grows with Inner glow. Tone mapped, lit side only.
@@ -109,6 +115,11 @@ float moonSurface(int slot, vec3 ball) {
   if (slot == 2) return texture2D(uMoonTexture2, uv).r;
   if (slot == 3) return texture2D(uMoonTexture3, uv).r;
   return texture2D(uMoonTexture4, uv).r;
+}
+// Kasten-Young relative airmass, as in three.js Sky.js: 1 overhead, about 38 at the horizon.
+float airmass(float dirY) {
+  float zenithAngle = acos(clamp(dirY, 0.0, 1.0));
+  return 1.0 / (cos(zenithAngle) + 0.15 * pow(93.885 - degrees(zenithAngle), -1.253));
 }
 vec3 drawMoon(vec3 sky, vec3 dir, int slot) {
   vec3 moonDir = normalize(uMoonDirections[slot]);
@@ -161,7 +172,7 @@ vec3 drawMoon(vec3 sky, vec3 dir, int slot) {
   float tone = clamp(0.5 + (height - 0.5) * MOON_PATTERN * 2.0 * min(uMoonTextureAmounts[slot], 2.0), 0.0, 1.0) * shade;
   vec3 darks = uMoonColors2[slot] * mix(MOON_DARK_DEPTH, 1.0, tone);
   vec3 surface = blendScreen(darks, uMoonColors[slot] * tone);
-  float edge = smoothstep(1.0, 0.99, discRadius);
+  float edge = smoothstep(1.0, 1.0 - MOON_EDGE_SOFTNESS, discRadius);
   // Layered like an image editor's stack: the textured surface as a normal layer at Texture's opacity (lit side only),
   // then the light screened over it, so the pattern shows while the moon still melts into the sky.
   float solid = min(uMoonTextureAmounts[slot], 1.0);
@@ -185,7 +196,9 @@ void main() {
   if (uMoonEnabled > 0.5) {
     for (int i = 0; i < MAX_MOON_SLOTS; i++) {
       if (float(i) >= uMoonCount) break;
-      sky = drawMoon(sky, dir, i);
+      // Hidden below the horizon, fading into the air as it sinks, and Blend fades it into the sky at any height.
+      float shown = smoothstep(0.0, MOON_HORIZON_FADE, dir.y) * exp(-MOON_EXTINCTION * (airmass(dir.y) - 1.0)) * (1.0 - uMoonBlends[i]);
+      sky = mix(sky, drawMoon(sky, dir, i), shown);
     }
   }
 

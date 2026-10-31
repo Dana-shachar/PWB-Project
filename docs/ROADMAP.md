@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-10-30`
+`Last updated: 2026-10-31`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,17 +8,15 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-30, tenth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-10-31, eleventh handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Everything is committed and pushed: the Shadow hue slider (now in Atmosphere > Color, saved per planet), the panel cleanup (`[S47]`: accordions everywhere, header switches, modifiers as nested sections, swatches on the right), lock icons and the Atmosphere's Randomize (`[S45]`), per-moon Crescent, moons added and removed like layers, the haze fix (`[B74]`, `[S46]`), the glow cut-out fix (`[B75]`), Space + drag to pan, walk speed up to ×10. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console.
+> **State.** Everything is committed and pushed. This round (2026-10-30 to 31): moons set behind the sea and fade toward the horizon (`[B78]`), each with a Blend, a two-handle Hue bar with a Harmony rule and a Saturation slider (`[S48]`); the atmosphere follows the planet's broad shape and hazes each surface only up to itself (`[S49]`, `[S46]`, `[B80]`); three stacked cloud shells; the chunk's water has see-through walls (`[S50]`); the grid hides in walk mode (`[B79]`). The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console. Use `texture(...)`, never `texture2D` or `textureCube`, in new shader code: three.js only maps the old names in fragment shaders.
 >
-> **Right now:** stage 2 of the land shader, slope rock (plan below, needs Dana's go). Both Randomize buttons now work by hidden drivers: the atmosphere's (`[S45]`, not yet tuned by Dana) and the terrain's, which builds layers by role (`[S35]`, `[B77]`, Dana: "much better"). Tune either from her notes when she asks.
+> **Right now:** stage 2 of the land shader, slope rock (plan below, approved; four choices still to settle with Dana: Slope in degrees or 0 to 1, default rock colors, whether Randomize and locks cover rock, rocky flat summits). Then Dana's question on landscape variety across one planet (open decision below).
 >
-> **Also this session (committed):** Clouds and Moons header switches; each moon's own Texture, Halo and Inner glow (one moon shows its controls inline); the hue bar on its own row with a dark handle; locks at the row's edge.
+> **Tested and passed by Dana:** the UI batch, the water walls, the moon changes, the atmosphere ("good enough": lone peaks still rise past the air, by design). Rule: a check Dana skips without comment has passed (memory `silence-means-recs-approved`).
 >
-> **Not retested by Dana:** the UI batch as a whole (hue bar, locks, Randomize, Moons layout, header switches, modifier sections, Space-to-pan); Dana approved the haze and glow fixes on screen. `[B73]`'s eye floor and stage 1's brighter fill are also still unchecked.
->
-> **Stage 2 plan, as given to Dana (needs her go before building):**
+> **Stage 2 plan, approved by Dana (settle the four choices above first):**
 > 1. `shaders/terrain/landLayers.glsl`: add `landSurfaceColor(rampColor, normal, up, elevationFraction)`. Rock blends in by `1 − dot(normal, up)` through a `smoothstep`, colored by the rock ramp by height (`terrainRampColor`, reused). Optional height term so flat summits can be rocky.
 > 2. `planetPatch.frag.glsl` and `chunk.frag.glsl`: call it right after the ramp color.
 > 3. `planet/planetControls.ts`: `rockStops`, `slopeStart`, `slopeSoftness` in `PlanetSettings`, plus `migrateRock` for old saves (these are saved, unlike Scene settings).
@@ -49,6 +47,7 @@
 > - Alt+click on the chunk: the `[TEMP B55]` height row table (`logCliffRow` in `LandChunkCanvas.tsx`, `lastSampleDepth` in `ChunkPatchRenderer.ts`).
 >
 > **Open decisions for Dana**
+> - ❓ **Landscape variety across one planet** (Dana, 2026-10-31): mountains, canyons, valleys, plateaus and deserts in different regions instead of one noise everywhere. Options given in chat; waiting for her pick.
 > - ❓ **A real moon orbiting the planet** (plan given, waiting for a go): a 3D moon sharing the sky moons' texture and look, orbiting slowly (`atmosphere/planetMoon.ts`, `shaders/atmosphere/planetMoon.frag.glsl`); later the chunk's sky moons following the orbit, and tides that follow it.
 > - ❓ **General undo history** for every setting (Dana asked 2026-10-28; undo now covers paint strokes only; undo/redo is paused on the roadmap, so un-pausing it is her call).
 > - ❓ **Planet spin** (Dana's idea, proposed, not approved): spin speed, axis tilt 0 to 180° (Uranus about 98°), axis direction.
@@ -71,6 +70,7 @@
 >    - 🟡 Reworked after Dana's tests (2026-10-27): the planet glow is an edge-distance fade sized by Glow; the planet haze thins with height (no rim; since 2026-10-30 a deeper air layer from the visible ground gives a soft rim on purpose, `[S46]`); the chunk haze is Quilez's height fog with sky and sun hues and a fine grain, Haze up to 6 (was 10); Wind up to 40 (waves stop at 12); clouds have a second color. Waiting on Dana's retest of the glow and haze.
    - ✅ Moons and tides (2026-10-28): one to five randomized moons baked by the noise engine, split-toned, with a crescent dial; the chunk's water rises and falls with their size (`[S44]`).
    - ✅ Randomize and locks (2026-10-30): one button for the whole atmosphere, by hidden drivers; locked colors anchor the palette (`[S45]`). Moons are added and removed like layers, each with its own Crescent, Texture, Halo and Inner glow.
+   - ✅ Moons and air polish (2026-10-31): moons set behind the sea and fade toward the horizon, with Blend, a two-handle Hue bar, Harmony and Saturation (`[S48]`); the air follows the planet's broad shape and hazes each surface only up to itself (`[S49]`); three stacked cloud shells.
 > 3. **Terrain shading and volcanoes:** rock by slope, snow by height and latitude (poles), glowing lava, cones placed at Voronoi cell centers, rock strata on cliffs (Sable).
 >    - 🧭 Art direction (Dana, 2026-10-27): 2.5D, real 3D but flatter: soft wrapped light, little shine, depth from haze layers, limited palettes; between No Man's Sky and Sable, not toon. Images in `docs/references/`, listed under 🎨 Visual in `REFERENCES.md` (No Man's Sky, Sable, Outer Wilds, Gris, Monument Valley).
 >    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.

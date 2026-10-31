@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-10-30`
+`Last updated: 2026-10-31`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -42,11 +42,18 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 *The sphere itself, its seams, and the poles.*
 
+### [B80] The atmosphere stayed a ball on a jagged planet · `wrong but workable`
+**✅ Fixed:** 2026-10-31 · **Found:** 2026-10-30 · **Where:** `atmosphere/airGround.ts`, `shaders/atmosphere/planetAir.glsl`
+- Dana: on a spiky planet a wide dark ring sat between the sea's edge and the glow, with clouds floating in it; on a smooth planet the glow hugged the surface. Close up, a hard line ran around the peaks.
+- Cause: a structural bug. The haze, glow and clouds were spheres sized to the tallest peak (`[B76]`), and the haze's rays stopped at a sea-level sphere, so peaks in front of it got a full chord of air.
+- Fixed: the air stands on an averaged ground and the glow keeps a fixed gap (`[S49]`); each surface pixel hazes only the air in front of it (`[S46]`). Lone peaks still rise past the air, by design (Dana: "good enough").
+
 ### [B76] Peaks poked through the atmosphere, and the camera could sink into them · `wrong but workable`
 **✅ Fixed:** 2026-10-30 · **Found:** 2026-10-30 · **Where:** `scene/SceneCanvas.tsx`, `atmosphere/planetHaze.ts`
 - Dana: on a tall planet the haze, glow and clouds stayed the same size whatever the shape, and the peaks stuck out.
 - Cause, measured: an infrastructure bug. The atmosphere and the camera's lowest height used the color ramp's range, which drops the top and bottom 1% on purpose. A log showed a true top of 7.49 against 6.07 used, about 4.3 units of terrain outside the atmosphere at amplitude 3.
 - Fixed: the true lowest and highest heights (`terrainBottom`, `terrainTop`) are kept next to the ramp's range; the haze, glow, clouds and the camera's floor use them, and the haze's shell always reaches past the highest peak.
+- Later (2026-10-31): the air's shape moved to an averaged ground, so it no longer grows with the tallest peak (`[B80]`).
 
 ### [B51] Zooming in doesn't reveal more terrain, unlike the land chunk · `wrong but workable`
 **🔴 Open:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `scene/Gumball.tsx`, `shaders/heightmap.frag.glsl`
@@ -242,6 +249,18 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ## 🧊 Land chunk
 
 *The flattened detail view and its two render styles.*
+
+### [B78] A low moon showed through the sea and never faded at the horizon · `wrong but workable`
+**✅ Fixed:** 2026-10-30 · **Found:** 2026-10-30 · **Where:** `shaders/atmosphere/skyDome.frag.glsl`
+- Dana: the moon sat in front of the water and didn't disappear into the horizon.
+- Cause, measured: nothing hid the moons below the horizon (the clouds had that limit, the moons didn't), and the sea is partly see-through, so a moon drawn below the horizon showed through it. Nothing dimmed a low moon either.
+- Fixed: moons are cut at the horizon and fade into the air toward it (`[S44]`).
+
+### [B79] Thin lines crossed the water in walk mode · `minor`
+**✅ Fixed:** 2026-10-30 · **Found:** 2026-10-30 · **Where:** `voxel/LandChunkCanvas.tsx`
+- Dana: two thin white lines crossed in walk mode.
+- Cause: the ground grid's center lines, a flat sheet at height 0, showed through the see-through water.
+- Fixed: the grid hides while walking; the Scene setting still applies in the orbit view.
 
 ### [B32] Resolution slider goes past what the chunk can actually use · `minor`
 **✅ Fixed:** 2026-10-17 · **Found:** 2026-10-14 · **Where:** `scene/sharedViewportRenderer.ts` (new), `scene/SceneCanvas.tsx`, `voxel/LandChunkCanvas.tsx`, `App.tsx`, `planet/patch.ts`, `voxel/landChunk.ts`, `shaders/chunk.vert.glsl`, `shaders/chunk.frag.glsl`, `shaders/terrain.glsl`

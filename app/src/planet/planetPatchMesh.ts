@@ -5,6 +5,9 @@ import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
 import landLayersGlsl from '../shaders/terrain/landLayers.glsl?raw';
 import waterGlsl from '../shaders/water/water.glsl?raw';
 import oceanWavesGlsl from '../shaders/water/oceanWaves.glsl?raw';
+import airGroundGlsl from '../shaders/atmosphere/airGround.glsl?raw';
+import planetAirGlsl from '../shaders/atmosphere/planetAir.glsl?raw';
+import { planetAirUniforms } from '../atmosphere/planetAir';
 import { KM_PER_SCENE_UNIT } from './planetControls';
 import { getRippleMap } from './rippleMap';
 import { landRampFloor } from './seaLevel';
@@ -32,7 +35,7 @@ import { faceIndex, PATCH_BORDER_TEXELS, type TerrainPatch } from './patch';
 import type { EdgeStitchFlags } from './planetPatches';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from './colorRamp';
 
-const patchFragmentShader = terrainGlsl + landLayersGlsl + waterGlsl + oceanWavesGlsl + patchFragmentShaderBody;
+const patchFragmentShader = terrainGlsl + landLayersGlsl + waterGlsl + oceanWavesGlsl + airGroundGlsl + planetAirGlsl + patchFragmentShaderBody;
 
 // How far inward (as a fraction of radius) a patch's outer edge drops to
 // form its skirt — a thin wall hiding any sliver left where this patch meets
@@ -341,6 +344,7 @@ export function createPatchMaterial(
     // terrain like this.
     side: THREE.DoubleSide,
     uniforms: {
+      ...planetAirUniforms, // shared, not cloned: the haze updates every patch at once
       uBaseColor: { value: shared.baseColor.clone() },
       uLightDirection: { value: shared.lightDirection.clone() },
       uAmbient: { value: shared.ambient },

@@ -266,6 +266,51 @@ export function HueSlider({ trackBackground, swatchColor, ...rest }: HueSliderPr
   );
 }
 
+interface DualHueSliderProps {
+  label: string;
+  value: number; // the main hue turn, degrees, -180 to 180
+  secondOffset: number; // where the second handle sits, degrees from the main one
+  onChange: (value: number) => void;
+  onSecondOffsetChange: (secondOffset: number) => void;
+  trackBackground: string;
+  swatchColor: string;
+  secondSwatchColor: string;
+  locked?: boolean;
+  onLockChange?: (locked: boolean) => void;
+  disabled?: boolean;
+  description?: string;
+}
+
+const wrapHue = (degrees: number) => ((((degrees + 180) % 360) + 360) % 360) - 180;
+
+// Two hues on one bar (Dana, 2026-10-30): the main handle, and a smaller second one saved as a distance from it, so
+// dragging the main carries the second along. Two range inputs stacked on one bar, only their handles taking the pointer.
+export function DualHueSlider({ label, value, secondOffset, onChange, onSecondOffsetChange, trackBackground, swatchColor, secondSwatchColor, locked, onLockChange, disabled = false, description }: DualHueSliderProps) {
+  const second = wrapHue(value + secondOffset);
+  const share = (degrees: number) => ((degrees + 180) / 360) * 100;
+  const [left, right] = [Math.min(share(value), share(second)), Math.max(share(value), share(second))];
+  return (
+    <div className={'ui-slider-stack ui-tooltip-anchor' + (disabled ? ' ui-slider-row--disabled' : '')}>
+      {description && <span className="ui-tooltip">{description}</span>}
+      <div className="ui-slider-stack-top">
+        <label className="ui-slider-label">{label} (°)</label>
+        <span className="ui-color-end">
+          <span className="ui-slider-field ui-dual-hue-value">{Math.round(value)}</span>
+          <span className="ui-hue-swatch" style={{ background: swatchColor }} />
+          <span className="ui-hue-swatch" style={{ background: secondSwatchColor }} />
+          {locked !== undefined && onLockChange && <LockButton locked={locked} onChange={onLockChange} />}
+        </span>
+      </div>
+      <div className="ui-dual-hue">
+        <span className="ui-dual-hue-bar" style={{ background: trackBackground }} />
+        <span className="ui-dual-hue-link" style={{ left: `${left}%`, width: `${right - left}%` }} />
+        <input type="range" className="ui-dual-hue-handle" aria-label={`${label}, main`} min={-180} max={180} step={1} value={value} onChange={(event) => onChange(parseFloat(event.target.value))} disabled={disabled} />
+        <input type="range" className="ui-dual-hue-handle ui-dual-hue-handle--second" aria-label={`${label}, second`} min={-180} max={180} step={1} value={second} onChange={(event) => onSecondOffsetChange(wrapHue(parseFloat(event.target.value) - value))} disabled={disabled} />
+      </div>
+    </div>
+  );
+}
+
 interface DialProps {
   label: string;
   value: number; // degrees, 0 to 360

@@ -14,8 +14,9 @@ import { MAX_WAVE_WIND, windTimeScale } from '../planet/oceanSpectrum';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { fillColorFor } from './fillLight';
 import { createPlanetGlow, glowOuterRadius, updatePlanetGlow, updatePlanetGlowFrame } from '../atmosphere/planetGlow';
-import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame } from '../atmosphere/cloudLayer';
+import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame, GAP_PER_JAGGEDNESS } from '../atmosphere/cloudLayer';
 import { createPlanetHaze, updatePlanetHaze } from '../atmosphere/planetHaze';
+import { bakeAirGround, createAirGround, type AirGround } from '../atmosphere/airGround';
 
 import { isRippleMapReady } from '../planet/rippleMap';
 import { KM_PER_SCENE_UNIT, WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
@@ -282,6 +283,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   // `planetMesh.material.uniforms.X.value = Y` now also mirrors the same
   // value in here, then pushes it to every current patch material in one
   // call, rather than each patch tracking these independently.
+  const airGroundRef = useRef<AirGround | null>(null);
   const sharedUniformsRef = useRef<PlanetSharedUniforms>({
     baseColor: new THREE.Color(0x3a7bd5),
     lightDirection: new THREE.Vector3(1, 1, 1),
@@ -733,6 +735,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     const planetGlow = createPlanetGlow();
     const cloudLayer = createCloudLayer();
     const planetHaze = createPlanetHaze();
+    const airGround = createAirGround();
+    airGroundRef.current = airGround;
+    for (const layer of [planetGlow, cloudLayer, planetHaze]) {
+      layer.mesh.traverse((each) => { if (each instanceof THREE.Mesh) Object.assign(each.material.uniforms, airGround.uniforms); });
+    }
     scene.add(planetGlow.mesh);
     scene.add(cloudLayer.mesh);
     scene.add(planetHaze.mesh);
@@ -773,16 +780,19 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const shared = sharedUniformsRef.current;
         // The true highest point, not the color ramp's 1% clip: the haze, glow and clouds must clear every peak ([B76]).
         const terrainReach = shared.displacementAmplitude * Math.max(Math.abs(shared.terrainBottom), Math.abs(shared.terrainTop));
-        updatePlanetGlow(planetGlow, atmosphereRef.current, shared.radius + terrainReach);
+        // A jagged planet's glow and clouds sit further out, by how far its peaks typically rise above the averaged ground.
+        const jaggedGap = airGround.jaggedness * shared.displacementAmplitude * GAP_PER_JAGGEDNESS;
+        updatePlanetGlow(planetGlow, atmosphereRef.current, shared.radius, terrainReach, jaggedGap);
         updatePlanetGlowFrame(planetGlow, perspectiveCamera.position);
-        updateCloudLayer(cloudLayer, atmosphereRef.current, shared.radius, terrainReach);
+        updateCloudLayer(cloudLayer, atmosphereRef.current, shared.radius, terrainReach, jaggedGap);
         // The light, turned with the camera when it follows it, first: the haze, clouds and land all read it this frame.
         sharedUniformsRef.current.lightDirection.copy(lightBaseRef.current);
         if (lightFollowsCameraRef.current) sharedUniformsRef.current.lightDirection.applyQuaternion(perspectiveCamera.quaternion);
         // The haze's ground is the lowest visible surface (the sea, or the deepest ground with water off), not the tallest
         // peak: a ground above the visible edge drew a stripe floating off the planet (Dana, 2026-10-30).
         const hazeGround = shared.radius + (shared.waterEnabled ? shared.seaLevel : shared.elevationMin) * shared.displacementAmplitude;
-        updatePlanetHaze(planetHaze, atmosphereRef.current, hazeGround, shared.radius + terrainReach, perspectiveCamera.position, shared.lightDirection, shared.ambient);
+        airGround.uniforms.uAirAmplitude.value = shared.displacementAmplitude;
+        updatePlanetHaze(planetHaze, atmosphereRef.current, hazeGround, shared.radius, shared.radius + terrainReach, perspectiveCamera.position, shared.lightDirection, shared.ambient);
         updateCloudLayerFrame(cloudLayer, atmosphereRef.current.wind, seaStep, shared.lightDirection, shared.ambient, perspectiveCamera.position);
         sharedUniformsRef.current.rippleEnabled = isRippleMapReady() ? 1 : 0;
         sharedUniformsRef.current.viewWidthPixels = Math.max(1, (viewportElement?.clientWidth ?? 1) * window.devicePixelRatio);
@@ -1078,6 +1088,17 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // effect above), so without this, the guard above would return once and
     // never automatically retry once it's actually ready.
   }, [layers, detailAmount, sharedRenderer.renderer]);
+
+  // The air's ground follows the terrain and the sea, re-baked 150 ms after the last change (drags stay smooth).
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const webglRenderer = webglRendererRef.current;
+      const heightmapPipeline = heightmapPipelineRef.current;
+      if (!webglRenderer || !heightmapPipeline || !airGroundRef.current) return;
+      bakeAirGround(airGroundRef.current, webglRenderer, heightmapPipeline, layers, water.enabled ? water.seaLevel : null);
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [layers, water.enabled, water.seaLevel, sharedRenderer.renderer]);
 
   return null;
 });

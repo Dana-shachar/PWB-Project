@@ -284,6 +284,91 @@ input[type='range'].ui-slider-track--hue:focus-visible::-webkit-slider-thumb {
 input[type='range'].ui-slider-track--hue:focus-visible::-moz-range-thumb {
   border-color: var(--color-accent);
 }
+/* Dual hue slider (UIElements.tsx DualHueSlider): the hue bar with two handles, the second smaller, joined by a thin line.
+   Two stacked range inputs; only their handles take the pointer (the standard two-thumb range technique). */
+.ui-dual-hue {
+  position: relative;
+  height: 24px;
+}
+.ui-dual-hue-bar {
+  position: absolute;
+  inset: 2px 0;
+  border-radius: 2px;
+  border: 0.25px solid var(--color-input-stroke);
+}
+.ui-dual-hue-link {
+  position: absolute;
+  top: 50%;
+  height: 1px;
+  background: var(--color-bg);
+  pointer-events: none;
+}
+.ui-dual-hue-value {
+  text-align: right;
+  cursor: default;
+}
+input[type='range'].ui-dual-hue-handle {
+  -webkit-appearance: none;
+  appearance: none;
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  background: transparent;
+  outline: none;
+  pointer-events: none;
+}
+input[type='range'].ui-dual-hue-handle::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  pointer-events: auto;
+  width: 10px;
+  height: 24px;
+  border-radius: 3px;
+  border: 1.5px solid var(--color-bg);
+  background: transparent;
+  cursor: grab;
+}
+input[type='range'].ui-dual-hue-handle::-moz-range-thumb {
+  pointer-events: auto;
+  width: 10px;
+  height: 24px;
+  border-radius: 3px;
+  border: 1.5px solid var(--color-bg);
+  background: transparent;
+  cursor: grab;
+}
+input[type='range'].ui-dual-hue-handle--second::-webkit-slider-thumb {
+  width: 8px;
+  height: 14px;
+}
+input[type='range'].ui-dual-hue-handle--second::-moz-range-thumb {
+  width: 8px;
+  height: 14px;
+}
+input[type='range'].ui-dual-hue-handle:hover::-webkit-slider-thumb {
+  border-color: var(--color-text);
+}
+input[type='range'].ui-dual-hue-handle:hover::-moz-range-thumb {
+  border-color: var(--color-text);
+}
+input[type='range'].ui-dual-hue-handle:active::-webkit-slider-thumb {
+  cursor: grabbing;
+  border-width: 2px;
+}
+input[type='range'].ui-dual-hue-handle:active::-moz-range-thumb {
+  cursor: grabbing;
+  border-width: 2px;
+}
+input[type='range'].ui-dual-hue-handle:focus-visible::-webkit-slider-thumb {
+  border-color: var(--color-accent);
+}
+input[type='range'].ui-dual-hue-handle:focus-visible::-moz-range-thumb {
+  border-color: var(--color-accent);
+}
+input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
+  cursor: default;
+}
 /* A color bar's own row (Slider with a swatch): title, number, lock and swatch on top, the bar full width below. */
 .ui-slider-stack {
   display: flex;

@@ -5,6 +5,9 @@ import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
 import waterGlsl from '../shaders/water/water.glsl?raw';
 import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw';
 import oceanWavesGlsl from '../shaders/water/oceanWaves.glsl?raw';
+import wallVertexGlsl from '../shaders/water/chunkWaterWall.vert.glsl?raw';
+import wallFragmentBody from '../shaders/water/chunkWaterWall.frag.glsl?raw';
+import { chunkBaseDepth } from './chunkPatchMesh';
 import { buildRampUniformArrays, MAX_COLOR_STOPS } from '../planet/colorRamp';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import { TIDE_PERIOD_SECONDS } from '../atmosphere/tides';
@@ -17,8 +20,13 @@ export interface ChunkWater {
   mesh: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
   // The tide (atmosphere/tides.ts) moves the water around its base level each frame; heights in raw units.
   tide: { baseSeaLevel: number; maxHeight: number; height: number; phase: number };
+  // The side walls, a child of the sheet: from the chunk's base up to the surface, so the water reads as a block.
+  walls: THREE.Mesh<THREE.BoxGeometry, THREE.ShaderMaterial[]>;
+  baseDepth: number;
   dispose: () => void;
 }
+
+const WALL_OUTSET = 0.002; // share of the chunk's width
 
 export function createChunkWater(): ChunkWater {
   const geometry = new THREE.PlaneGeometry(1, 1);
@@ -59,12 +67,34 @@ export function createChunkWater(): ChunkWater {
   const mesh = new THREE.Mesh(geometry, material);
   mesh.renderOrder = 1; // after the ground, so the shallows show it through
   mesh.visible = false;
+
+  // An open box (sides only), a hair wider than the chunk so it never fights the land's own walls for the same pixels.
+  const wallGeometry = new THREE.BoxGeometry(1 + WALL_OUTSET, 1, 1 + WALL_OUTSET);
+  wallGeometry.translate(0, -0.5, 0);
+  wallGeometry.clearGroups();
+  wallGeometry.addGroup(0, 12, 0); // +x, -x (BoxGeometry's face order: px, nx, py, ny, pz, nz)
+  wallGeometry.addGroup(24, 12, 0); // +z, -z
+  // Shares the sheet's uniform objects, so every update to the sheet reaches the walls too.
+  const wallMaterial = new THREE.ShaderMaterial({
+    vertexShader: wallVertexGlsl,
+    fragmentShader: terrainGlsl + waterGlsl + hazeGlsl + wallFragmentBody,
+    transparent: true,
+    depthWrite: false,
+    uniforms: { ...material.uniforms, uMaxHeight: { value: 1 } },
+  });
+  const walls = new THREE.Mesh(wallGeometry, [wallMaterial]);
+  walls.renderOrder = 1;
+  mesh.add(walls);
   return {
     mesh,
     tide: { baseSeaLevel: 0, maxHeight: 0, height: 0, phase: 0 },
+    walls,
+    baseDepth: 0,
     dispose() {
       geometry.dispose();
       material.dispose();
+      wallGeometry.dispose();
+      wallMaterial.dispose();
     },
   };
 }
@@ -84,6 +114,8 @@ export function chunkWaterLevel(water: ChunkWater): number {
 function applyTide(water: ChunkWater): void {
   const level = chunkWaterLevel(water);
   water.mesh.position.y = Math.max(0, level + 0.5) * water.tide.maxHeight;
+  water.walls.scale.y = Math.max(0.0001, water.mesh.position.y - water.baseDepth);
+  water.walls.material[0].uniforms.uMaxHeight.value = water.tide.maxHeight;
   water.mesh.material.uniforms.uSeaLevel.value = level;
 }
 
@@ -134,6 +166,7 @@ export function updateChunkWater(
   wind: number,
 ): void {
   water.mesh.scale.set(chunkSize, 1, chunkSize);
+  water.baseDepth = chunkBaseDepth(chunkSize);
   water.tide.baseSeaLevel = settings.seaLevel;
   water.tide.maxHeight = maxHeight;
   const uniforms = water.mesh.material.uniforms;

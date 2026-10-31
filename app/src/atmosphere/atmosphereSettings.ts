@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { NoiseLayer } from '../map/heightmap';
-import { between, COLOR_RULES, DEFAULT_MOONS, HUE_JITTER, MAX_MOONS, pickOne, randomMoons, type MoonSettings } from './moonTexture';
+import { between, COLOR_RULES, DEFAULT_MOONS, HUE_JITTER, hueTurnFor, MAX_MOONS, skySaturation, pickOne, randomMoons, type MoonSettings } from './moonTexture';
 
 // The planet's atmosphere: sky colors, haze, the planet's glow, clouds, the wind (which also drives the water's
 // waves) and optional moons in the chunk's sky. Saved with the planet (planet/planetControls.ts).
@@ -109,36 +109,40 @@ interface LegacyMoonFields {
   moonHalo?: number;
   moonGlow?: number;
 }
+// Moons saved before the hue slider (2026-10-30) kept two free colors; the first becomes a turn from the sky's hue.
+type LegacyMoon = Partial<MoonSettings> & { color?: string; color2?: string; color2Locked?: boolean };
 function migrateMoons(saved: (Partial<AtmosphereSettings> & LegacyMoonFields) | undefined): MoonSettings[] {
-  const moons = saved?.moons ?? DEFAULT_MOONS;
+  const moons: LegacyMoon[] = saved?.moons ?? DEFAULT_MOONS;
   const first = moons[0] ?? DEFAULT_MOONS[0];
-  const legacyFirst: MoonSettings = {
+  const legacyFirst: LegacyMoon = {
+    ...first,
     size: saved?.moonSize ?? first.size,
     height: saved?.moonHeight ?? first.height,
     azimuth: saved?.moonAzimuth ?? first.azimuth,
     color: saved?.moonColor ?? first.color,
-    color2: saved?.moonColor2 ?? first.color2,
     layers: saved?.moonLayers ?? first.layers,
-    crescentAngle: first.crescentAngle ?? 0,
-    crescent: first.crescent,
-    texture: first.texture,
-    halo: first.halo,
-    glow: first.glow,
-    colorLocked: first.colorLocked,
-    color2Locked: first.color2Locked,
   };
   const all = [saved?.moons ? first : legacyFirst, ...moons.slice(1)];
   const locked = saved?.moonColorsLocked ?? false;
-  return Array.from({ length: MAX_MOONS }, (_, i) => ({
-    ...(all[i] ?? DEFAULT_MOONS[i]),
-    crescentAngle: all[i]?.crescentAngle ?? 0,
-    crescent: all[i]?.crescent ?? saved?.moonCrescent ?? DEFAULT_MOONS[i].crescent,
-    texture: all[i]?.texture ?? saved?.moonTexture ?? DEFAULT_MOONS[i].texture,
-    halo: all[i]?.halo ?? saved?.moonHalo ?? DEFAULT_MOONS[i].halo,
-    glow: all[i]?.glow ?? saved?.moonGlow ?? DEFAULT_MOONS[i].glow,
-    colorLocked: all[i]?.colorLocked ?? locked,
-    color2Locked: all[i]?.color2Locked ?? locked,
-  }));
+  const horizonColor = saved?.horizonColor ?? DEFAULT_ATMOSPHERE_SETTINGS.horizonColor;
+  const zenithColor = saved?.zenithColor ?? DEFAULT_ATMOSPHERE_SETTINGS.zenithColor;
+  return Array.from({ length: MAX_MOONS }, (_, i) => {
+    const { color, color2, color2Locked: _color2Locked, ...moon } = all[i] ?? DEFAULT_MOONS[i];
+    return {
+      ...DEFAULT_MOONS[i],
+      ...moon,
+      hueTurn: moon.hueTurn ?? (color ? hueTurnFor(color, horizonColor, zenithColor) : DEFAULT_MOONS[i].hueTurn),
+      secondOffset: moon.secondOffset ?? (color && color2 ? hueTurnFor(color2, horizonColor, zenithColor) - hueTurnFor(color, horizonColor, zenithColor) : DEFAULT_MOONS[i].secondOffset),
+      crescentAngle: moon.crescentAngle ?? 0,
+      crescent: moon.crescent ?? saved?.moonCrescent ?? DEFAULT_MOONS[i].crescent,
+      texture: moon.texture ?? saved?.moonTexture ?? DEFAULT_MOONS[i].texture,
+      halo: moon.halo ?? saved?.moonHalo ?? DEFAULT_MOONS[i].halo,
+      glow: moon.glow ?? saved?.moonGlow ?? DEFAULT_MOONS[i].glow,
+      blend: moon.blend ?? 0,
+      saturation: moon.saturation ?? skySaturation(horizonColor, zenithColor),
+      colorLocked: moon.colorLocked ?? locked,
+    };
+  });
 }
 
 // Randomize (Dana, 2026-10-30): every value changes, but locked colors stay and anchor the palette. Unlocked colors are

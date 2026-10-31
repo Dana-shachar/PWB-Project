@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-10-30`
+`Last updated: 2026-10-31`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -175,8 +175,12 @@
 - Key names: `AtmosphereSettings` (incl. `shadowHue`, `clouds`, `cloudColor2`, `moonCount`, `moons`, `lockedColors`), `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (the drivers `storm`, `air`, `climate`; `follow`, `MILD_DRIVER`, `EXTREME_DRIVER`, `EXTREME_CHANCE`, `JITTER`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
 
 **atmosphere/moonTexture.ts**
-- What it is: the moons: their settings, simple noise layers, Randomize (sizes, places in view, colors from the sky, textures), and the five defaults.
-- Key names: `MoonSettings` (incl. `crescent`, `crescentAngle`, `texture`, `halo`, `glow`, `colorLocked`, `color2Locked`), `MAX_MOONS`, `randomMoons`, `randomMoonLayers`, `moonColorsForSky`, `randomHueTurns`, `COLOR_RULES`, `randomSizes`, `describeMoonLayers`, `DEFAULT_MOONS`.
+- What it is: the moons: their settings, simple noise layers, Randomize (sizes, places in view, colors from the sky, textures), the colors built from the sky and a harmony rule, and the five defaults.
+- Key names: `MoonSettings` (incl. `hueTurn`, `secondOffset`, `saturation`, `blend`, `crescent`, `crescentAngle`, `texture`, `halo`, `glow`, `colorLocked`), `MAX_MOONS`, `randomMoons`, `randomMoonLayers`, `moonColorsForSky`, `skySaturation`, `skyHsl`, `hueTurnFor` (old saves), `moonHueTrackGradient`, `HARMONY_RULES`, `harmonyFor`, `MOON_LIGHTNESS`, `MOON_MIN_SATURATION`, `SECOND_COLOR_DARKER`, `randomHueTurns`, `COLOR_RULES`, `randomSizes`, `describeMoonLayers`, `DEFAULT_MOONS`.
+
+**atmosphere/airGround.ts**, **planetAir.ts**
+- What it is: the air's ground, the planet's visible surface averaged by direction into a small cube map, re-baked 150 ms after terrain or sea changes, with the planet's jaggedness; and the haze settings shared by the sky shell and every surface patch.
+- Key names: `AirGround` (`jaggedness`), `createAirGround`, `bakeAirGround`, `cubeMapDirection`, `cubeMapTexel`, `AIR_GROUND_SMOOTHING`; `planetAirUniforms`; in `scene/SceneCanvas.tsx`, `airGroundRef` and `jaggedGap`; `GAP_PER_JAGGEDNESS` in `cloudLayer.ts`.
 
 **atmosphere/tides.ts**
 - What it is: how far the chunk's water rises and falls with the moons (size cubed, summed, capped).
@@ -184,7 +188,7 @@
 
 **atmosphere/skyDome.ts**, **planetGlow.ts**, **planetHaze.ts**, **cloudLayer.ts**
 - What it is: the chunk's sky, the planet's rim glow, surface haze and cloud shell.
-- Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`, `setSkyDomeLight` (the Scene light for the moons), `setSkyDomeMoonTexture`, `getSkyView` (where the camera last looked, for Randomize), `CLOUD_DRIFT`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`, `glowOuterRadius` (for the camera's far limit), `GLOW_MIN_WIDTH`, `GLOW_WIDTH_PER_UNIT`, `GLOW_SHELL_WIDTHS`; `createPlanetHaze`, `updatePlanetHaze` (its ground is the lowest visible surface, `hazeGround` in `scene/SceneCanvas.tsx`), `HAZE_SCALE_HEIGHT`, `HAZE_DENSITY_PER_UNIT`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`, `CLOUD_TIME_PER_WIND`.
+- Key names: `createSkyDome`, `updateSkyDome`, `updateSkyDomeFrame`, `setSkyDomeLight` (the Scene light for the moons), `setSkyDomeMoonTexture`, `getSkyView` (where the camera last looked, for Randomize), `CLOUD_DRIFT`; `createPlanetGlow`, `updatePlanetGlow`, `updatePlanetGlowFrame`, `glowOuterRadius` (for the camera's far limit), `GLOW_MIN_WIDTH`, `GLOW_WIDTH_PER_UNIT`, `GLOW_SHELL_WIDTHS`; `GLOW_GAP`; `createPlanetHaze` (the sky-only shell, its far side), `updatePlanetHaze` (writes `planetAirUniforms`; rays stop at the lowest visible surface, `hazeGround` in `scene/SceneCanvas.tsx`), `HAZE_SCALE_HEIGHT`, `HAZE_DENSITY_PER_UNIT`; `createCloudLayer`, `updateCloudLayer`, `updateCloudLayerFrame`, `CLOUD_TIME_PER_WIND`.
 
 **ui/panels/AtmospherePanel.tsx**
 - What it is: the right panel's Clouds (with Wind) and Moons, shown when Atmosphere is selected, each with a header switch. One moon's controls show inline; two or more get a nested section each, added and removed like layers.
@@ -253,8 +257,8 @@
 - Talks to: `LandChunkCanvas.tsx` (saves and restores the orbit camera, eases fov/near/far with `progress`), `ChunkPatchRenderer.sampleHeight` for the eye height.
 
 **voxel/chunkWater.ts**
-- What it is: the chunk's water, TDM's Seascape on a flat sheet, recolored by the water ramp, see-through in the shallows, with shore and crest foam.
-- Key names: `ChunkWater`, `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
+- What it is: the chunk's water, TDM's Seascape on a flat sheet, recolored by the water ramp, see-through in the shallows, with shore and crest foam, and see-through side walls down to the chunk's base.
+- Key names: `ChunkWater` (`walls`, `baseDepth`), `WALL_OUTSET`, `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.
@@ -293,7 +297,7 @@
 
 **ui/UIElements.tsx**
 - What it is: the design-system components.
-- Key names: `Slider` (log and reversed scales, `trackBackground`, `swatchColor`: a color bar on its own row), `HueSlider`, `Dial` (round angle control), `Toggle`, `Switch`, `SectionTitle` (a title line with an optional switch), `Select`, `ColorPicker` (optional lock), `LockButton`, `EditableText`, `Accordion` (`actions`, `headerSwitch`), `IconButton`, `Popup`, `placeTooltip`.
+- Key names: `Slider` (log and reversed scales, `trackBackground`, `swatchColor`: a color bar on its own row), `HueSlider`, `DualHueSlider` (two hues on one bar, the second saved as a distance), `Dial` (round angle control), `Toggle`, `Switch`, `SectionTitle` (a title line with an optional switch), `Select`, `ColorPicker` (optional lock), `LockButton`, `EditableText`, `Accordion` (`actions`, `headerSwitch`), `IconButton`, `Popup`, `placeTooltip`.
 
 **ui/icons.tsx**
 - What it is: flat line-art icons.
@@ -336,13 +340,13 @@
 - What it is: the sea for both views: Seascape's waves and color, plus the project's additions.
 - Key names: Seascape's `sea_octave`, `sea_octaves` (band-limited, `gSeaFootprint`, `SEA_WARP`), `sea_height` (currents, `seaBend`), `getNormal`, `seaColor` (Shine, Reflection, Cox and Munk glint far away); additions `seaFetchScale`, `gSeaAmplitude`, `seaWindScale`, `seaWhitecaps`, `seaStormStrength`, `foamStreaks`, `seaWhiteSea`, `seaFarFoam`, `halftoneMask`, `foamPatchiness`, `crestFoam`, `seaGlint`, `seaSlopeVariance`, `surfWave` (`uSurfZone`), `worldGradient`, `waterVariance` (Gerstner waves, pinch foam), the triplanar helpers `triplanarWeights`, `seaHeightTriplanar`, `seaNormalTriplanar`, `crestFoamTriplanar`.
 
-**water/water.glsl**, **water/chunkWater.vert.glsl**, **water/chunkWater.frag.glsl**
+**water/water.glsl**, **water/chunkWater.vert.glsl**, **water/chunkWater.frag.glsl**, **water/chunkWaterWall.vert.glsl**, **water/chunkWaterWall.frag.glsl**
 - What it is: the water look both views share, and the chunk's water sheet (Seascape plus variance, surf, foam, depth transparency and haze).
 - Key names: `WATER_F0`, `waterFresnel`, `waterTransmittance`, `waterRampPosition`, `waterFilter`, `waterFoam` (`SHORE_FOAM_SOFTNESS`, `SHORE_FOAM_EDGE_CUTOFF`), `FOAM_COLOR`, `FOAM_OPACITY`.
 
-**atmosphere/** (`skyDome`, `planetGlow`, `planetHaze`, `clouds`, `haze.glsl`)
+**atmosphere/** (`skyDome`, `planetGlow`, `planetHaze`, `clouds`, `haze.glsl`, `airGround.glsl`, `planetAir.glsl`)
 - What it is: the chunk's sky dome, the planet's rim glow and surface haze, the planet's cloud shell, and the chunk haze shared by ground and water.
-- Key names: sky dome `topColor`, `bottomColor`, `uGlow`, sun halo, `skyFbm`, `drawMoon` (screen blend, split toning, crescent, one rounded glow across the edge), `moonSurface`, `blendScreen`, `MOON_HALO_*`, `MOON_GLOW_*`; glow `uWidth`, `uStrength`, edge-distance fade; haze `sphereHits`, `uScaleHeight`, `HAZE_STEPS`; clouds `cloudShape` (Swirl, Feather erosion), `cloudFbm`, `cloudTone`, `toneBands`, `bandSpeed`, `GLOBAL_DRIFT`, `BAND_SWING`, Beer and powder lighting; `haze.glsl` `applyHaze` (Quilez height fog, sun and sky hues), `interleavedGradientNoise`, `HAZE_FALLOFF`, `HAZE_GRAIN`.
+- Key names: sky dome `topColor`, `bottomColor`, `uGlow`, sun halo, `skyFbm`, `drawMoon` (screen blend, split toning, crescent, one rounded glow across the edge), `airmass`, `MOON_EXTINCTION`, `MOON_HORIZON_FADE`, `MOON_EDGE_SOFTNESS`, `uMoonBlends`; `airGroundLift`; `planetHaze` (the haze along a ray, used by surfaces and the shell), `hazeSphereHits`; clouds `uCloudLayer`, `CLOUD_SHELL_CORE`, `CLOUD_SHELL_OPACITY`; `moonSurface`, `blendScreen`, `MOON_HALO_*`, `MOON_GLOW_*`; glow `uWidth`, `uStrength`, edge-distance fade; haze `sphereHits`, `uScaleHeight`, `HAZE_STEPS`; clouds `cloudShape` (Swirl, Feather erosion), `cloudFbm`, `cloudTone`, `toneBands`, `bandSpeed`, `GLOBAL_DRIFT`, `BAND_SWING`, Beer and powder lighting; `haze.glsl` `applyHaze` (Quilez height fog, sun and sky hues), `interleavedGradientNoise`, `HAZE_FALLOFF`, `HAZE_GRAIN`.
 
 **erosion/**, **scene/** (the grid)
 - What it is: the erosion passes and the ground grid.

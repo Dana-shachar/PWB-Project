@@ -1,6 +1,6 @@
 # 📚 References
 
-`Last updated: 2026-10-30`
+`Last updated: 2026-10-31`
 
 *Every outside source this project relies on, with what it is and what was taken from it. Cited once here, linked from everywhere else.*
 
@@ -203,6 +203,35 @@
 **Distance fog as the biggest single improvement** · Shedworks, *Sable* · `reference`
 - Sable builds on flat shading by adding lighting, fog and lines; distant fog, tuned per biome, "had the biggest impact overall" and frames the day and night cycle.
 - *[Game Developer, how Shedworks refined the art of Sable](https://www.gamedeveloper.com/marketing/how-shedworks-refined-the-art-of-sable-in-pursuit-of-readability). Read 2026-10-28.*
+
+### Atmosphere, moons and clouds
+
+**Horizon extinction for sky objects** · three.js, Kasten and Young · `method used`
+- three.js's sky shader dims the sun disc by `Fex = exp(-(beta × zenithLength × airmass))`, with Kasten and Young's relative airmass, `1 / (cos z + 0.15 × (93.885 − z°)^−1.253)`: 1 overhead, about 38 at the horizon. Its clouds fade in with `smoothstep(0, …, direction.y)`.
+- Used for the moons (`drawMoon`'s loop in `shaders/atmosphere/skyDome.frag.glsl`): cut at the horizon and mixed back toward the sky by the airmass term, so a low moon melts into the horizon color (mixing rather than dimming is our adaptation). See `[S44]`, `[B78]`.
+- *three.js `examples/jsm/objects/Sky.js`, read in `node_modules`. Read 2026-10-30.*
+
+**Haze that stops at the real surface** · Lague, iTwin.js · `method used`
+- Lague's post-process atmosphere stops each view ray at the nearer of the scene's depth and the ocean sphere: `dstToSurface = min(sceneDepth, dstToOcean)`, `dstThroughAtmosphere = min(chord, dstToSurface − dstToAtmosphere)`. iTwin.js (Bentley Systems' open-source globe viewer) uses the same rule inside each surface's own shader, with a sky-box variant of unlimited depth.
+- Used the iTwin.js way, since it needs no depth texture or extra pass: `planetHaze` in `shaders/atmosphere/planetAir.glsl`, called from `planetPatch.frag.glsl` and from the sky-only shell. See `[S46]`, `[B80]`.
+- *[Lague, Solar System, `Atmosphere.shader`](https://github.com/SebLague/Solar-System/blob/main/Assets/Scripts/Celestial/Shaders/PostProcessing/Atmosphere.shader) · [iTwin.js, `glsl/Atmosphere.ts`](https://github.com/iTwin/itwinjs-core/blob/master/core/frontend/src/internal/render/webgl/glsl/Atmosphere.ts). Both read 2026-10-31.*
+
+**Planet atmospheres stay spherical** · Hillaire, Unreal, Mobius · `reference`
+- Real-time planet skies keep the atmosphere a sphere with the terrain as geometry inside it (Hillaire 2020; Unreal's volumetric clouds, a layer at a set altitude above the planet radius; Outer Wilds' atmosphere). No source was found for air that follows a displaced planet, so `[S49]`'s averaged ground is height fog over a non-flat ground (Quilez), with the averaging inferred.
+- *[Hillaire 2020](https://diglib.eg.org/handle/10.1111/cgf14050) · [Unreal, Volumetric Cloud](https://dev.epicgames.com/documentation/unreal-engine/volumetric-cloud-component-properties-in-unreal-engine) · [Mobius, "The Atmosphere Awakens"](https://www.mobiusdigitalgames.com/news/the-atmosphere-awakens). Summaries only, 2026-10-30.*
+
+**Stacked-plane clouds** · Lohmüller (POV-Ray), Pixar · `method used`
+- Many transparent layers stacked at even spacing, each higher one more see-through, shifting from the base color to the top color, with a rising coverage threshold so the upper layers show only the denser parts. Few layers show gaps at grazing angles.
+- Used with three shells (`CLOUD_SHELLS` in `atmosphere/cloudLayer.ts`), each a full cloud pass. See `[S49]`.
+- *[Lohmüller, stacked-plane clouds](https://f-lohmueller.de/pov_tut/backgrnd/p_sky4.htm) and its `Stacked_Planes_Clouds_1.inc`, read 2026-10-31 · [Pixar, planet and clouds](https://graphics.pixar.com/library/PlanetAndClouds/paper.pdf), summary only.*
+
+**Color harmony rules** · color theory · `method used`
+- Complementary (180°), split complementary (150°), triadic (120°), analogous (30°) and monochrome hue relations, used for each moon's shadow tone (`HARMONY_RULES` in `atmosphere/moonTexture.ts`). See `[S48]`.
+- *[Color scheme, Wikipedia](https://en.wikipedia.org/wiki/Color_scheme). Not re-read this session.*
+
+**Two-handle range slider** · web UI · `method used`
+- Two range inputs stacked on one track, with only their handles taking the pointer, so keyboard and focus work as on any slider. Used for `DualHueSlider` (`ui/UIElements.tsx`).
+- *A standard technique, built from knowledge; no single page read.*
 
 ### Erosion
 

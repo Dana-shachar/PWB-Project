@@ -1,6 +1,6 @@
-import { Accordion, ColorPicker, Dial, IconButton, Slider } from '../UIElements';
+import { Accordion, ColorPicker, Dial, DualHueSlider, IconButton, Select, Slider } from '../UIElements';
 import { colorLockProps, type AtmosphereSettings } from '../../atmosphere/atmosphereSettings';
-import { describeMoonLayers, MAX_MOONS, randomMoonLayers, randomMoons, type MoonSettings } from '../../atmosphere/moonTexture';
+import { describeMoonLayers, HARMONY_RULES, harmonyFor, MAX_MOONS, moonColorsForSky, moonHueTrackGradient, randomMoonLayers, randomMoons, type MoonSettings } from '../../atmosphere/moonTexture';
 import { DiceIcon } from '../icons';
 
 // The atmosphere's detail controls on the right panel: the clouds (with the wind that moves them) and the moons. The general
@@ -40,11 +40,32 @@ export function AtmospherePanel({ atmosphere, onAtmosphereChange }: AtmospherePa
       <Slider label="Texture" value={moon.texture} onChange={(texture) => updateMoon(i, { texture })} min={0} max={2} step={0.01} precision={2} disabled={moonOff} description="How clearly the surface shows: 0 is pure glow melting into the sky, 1 a solid moon, and above 1 the pattern grows stronger too." />
       <Slider label="Halo" value={moon.halo} onChange={(halo) => updateMoon(i, { halo })} min={0} max={3} step={0.01} precision={2} disabled={moonOff} description="A soft light around this moon. Meant to stay subtle; the sky's haze softens it further." />
       <Slider label="Inner glow" value={moon.glow} onChange={(glow) => updateMoon(i, { glow })} min={0} max={3} step={0.01} precision={2} disabled={moonOff} description="A soft brightening just inside this moon's lit edge." />
+      <Slider label="Blend" value={moon.blend} onChange={(blend) => updateMoon(i, { blend })} min={0} max={1} step={0.01} precision={2} disabled={moonOff} description="How far this moon fades into the sky: 0 is as drawn, 1 gone. Low in the sky it fades further on its own, as the air thickens toward the horizon." />
       <p className="ui-note">{describeMoonLayers(moon.layers)}</p>
       <div className="panel-section-divider" />
       <span className="panel-section-title">Color</span>
-      <ColorPicker label="Color" value={moon.color} onChange={(color) => updateMoon(i, { color })} locked={moon.colorLocked} onLockChange={(colorLocked) => updateMoon(i, { colorLocked })} />
-      <ColorPicker label="Second color" value={moon.color2} onChange={(color2) => updateMoon(i, { color2 })} locked={moon.color2Locked} onLockChange={(color2Locked) => updateMoon(i, { color2Locked })} />
+      <DualHueSlider
+        label="Hue"
+        value={moon.hueTurn}
+        secondOffset={moon.secondOffset}
+        onChange={(hueTurn) => updateMoon(i, { hueTurn })}
+        onSecondOffsetChange={(secondOffset) => updateMoon(i, { secondOffset })}
+        trackBackground={moonHueTrackGradient(atmosphere.horizonColor, atmosphere.zenithColor, moon.saturation)}
+        swatchColor={moonColorsForSky(atmosphere.horizonColor, atmosphere.zenithColor, moon.hueTurn, 0, moon.saturation).color.getStyle()}
+        secondSwatchColor={moonColorsForSky(atmosphere.horizonColor, atmosphere.zenithColor, moon.hueTurn, moon.secondOffset, moon.saturation).color2.getStyle()}
+        locked={moon.colorLocked}
+        onLockChange={(colorLocked) => updateMoon(i, { colorLocked })}
+        disabled={moonOff}
+        description="This moon's two tones: the large handle colors its lights, the small one its shadows. 0 is the sky's own hue. Dragging the large handle carries the small one along; Harmony resets the small one to a color rule."
+      />
+      <Slider label="Saturation" value={moon.saturation} onChange={(saturation) => updateMoon(i, { saturation })} min={0} max={1} step={0.01} precision={2} disabled={moonOff} description="How strong this moon's two colors are: 0 is gray, 1 the purest. Randomize sets it to go with the sky." />
+      <Select
+        label="Harmony"
+        value={harmonyFor(moon.secondOffset)}
+        onChange={(name) => { const rule = HARMONY_RULES.find((each) => each.name === name); if (rule) updateMoon(i, { secondOffset: rule.offset }); }}
+        options={[...HARMONY_RULES.map((rule) => rule.name), 'Custom'].map((name) => ({ value: name, label: name }))}
+        description="A color rule for the shadow tone, measured from the main hue: Complementary is opposite, Analogous a neighbor, Monochrome the same hue, darker."
+      />
     </>
   );
   return (
