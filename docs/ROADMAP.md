@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-10-31`
+`Last updated: 2026-11-01`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,15 +8,38 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-10-31, eleventh handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-11-01, twelfth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Everything is committed and pushed. This round (2026-10-30 to 31): moons set behind the sea and fade toward the horizon (`[B78]`), each with a Blend, a two-handle Hue bar with a Harmony rule and a Saturation slider (`[S48]`); the atmosphere follows the planet's broad shape and hazes each surface only up to itself (`[S49]`, `[S46]`, `[B80]`); three stacked cloud shells; the chunk's water has see-through walls (`[S50]`); the grid hides in walk mode (`[B79]`). The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. There is no GLSL compiler here: a blank view means a shader error in the console. Use `texture(...)`, never `texture2D` or `textureCube`, in new shader code: three.js only maps the old names in fragment shaders.
+> **State.** Everything is committed and pushed. This round (2026-10-31 to 11-01): water Fresnel in both views, sun-sharp sparkles (`[B81]` still not visible to Dana), lace foam by distance from shore (`[B83]`), Terrain Randomize by world types (`[S52]`), the planet itself spins at any tilt (`[S51]`), clouds along its equator against the spin, and a shader check. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. **After any shader edit run `node scripts/checkShaders.mjs` from `app/`** (needs `brew install glslang`) before Dana reloads; add new shader pieces to its list. In new shaders use `texture(...)`, never `texture2D` or `textureCube`, and search a file for a name before adding a constant.
 >
-> **Right now:** stage 2 of the land shader, slope rock (plan below, approved; four choices still to settle with Dana: Slope in degrees or 0 to 1, default rock colors, whether Randomize and locks cover rock, rocky flat summits). Then Dana's question on landscape variety across one planet (open decision below).
+> **Right now, in order:**
+> 1. `[B84]`: Clarity recolors the land. Anchor the land ramp above sea level so Clarity moves only its underwater part (`landRampFloor`).
+> 2. **Slope rock** (land shader stage 2): the plan below, with Slope in degrees, default rock colors from the planet's ramp, Randomize and a lock on the rock ramp, no rocky summits. Dana noted the height and slope texturing of the Procedural Stochastic Terrain Shader as a reference for these stages, and Zucconi's Journey sand for deserts.
+> 3. Then stage 3 (snow) gets its own plan.
 >
-> **Tested and passed by Dana:** the UI batch, the water walls, the moon changes, the atmosphere ("good enough": lone peaks still rise past the air, by design). Rule: a check Dana skips without comment has passed (memory `silence-means-recs-approved`).
+> **Terrain, parked as good enough (Dana may return to it):** `[TEMP terrain]` still logs each Randomize (`map/noiseLayers.ts`) with its world type. ❓ Canyons: no documented recipe yet (Gaea's Canyon node is "drainage based", no method given; Shane's gorge carves along a path; Quilez's canyon is all rights reserved, ideas only). ❓ Clay John's Eroded Terrain Noise (MIT; slope-aligned stripes with branching, faded near water) would weather any terrain and answer "erode one I already like", but needs a new bake step and adapting to the sphere. Dana: not new systems without a reason. 📌 A "Smooth" control fading fine octaves was offered, not built.
 >
-> **Stage 2 plan, approved by Dana (settle the four choices above first):**
+> **Tested and passed by Dana:** the moon work, water walls, the atmosphere ("good enough": lone peaks rise past the air, by design), the spin ("I think everything is working"). Rule: a check Dana skips without comment has passed (memory `silence-means-recs-approved`).
+>
+> **Decisions from this round, so they aren't re-argued:**
+> - The planet itself rotates; the camera workaround was removed after it broke the grid, dragging and the poles (`[S51]`). Anything new that measures in world space must turn into the planet's frame (`uPlanetFrame`, `planetGroup.worldToLocal`).
+> - Blend modes don't reach the 3D terrain: elevation is the sum of the layers' Heights (Dana's design, 2026-09-24). A layer carves by a negative Height.
+> - Masks can only be noise patterns (layer-driven masks were removed), so "follow the continents" means a mask with the continents' type, seed and frequency, on an unshifted, unstretched continents layer.
+> - Terraces stay rare and small; Dana dislikes them across wide areas and above about 6 steps (`[S52]`). Her liked plateau roll had frequency 1.6.
+> - Moons: one main hue plus a second handle on a two-handle bar, a Harmony rule, Saturation and Blend (`[S48]`).
+> - Sources are read, not assumed: Lague's planet code, Clay John's erosion and three.js's own files were read directly. Quilez's Shadertoys forbid any use, ideas only.
+>
+> **Open threads:**
+> - 🔴 `[B81]` No visible glitter path: Dana wanted the sun's sparkling column; a sun-sharp highlight and the Cox and Munk glint are in, she saw no difference. Unmeasured; check with the sun low and in front.
+> - 🔴 `[B82]` The Cast shadow toggle seems to do nothing. Not checked.
+> - 🔴 `[B84]` Clarity recolors the land (first in "Right now").
+> - 📌 The foam's lace sizes are first guesses, not tuned (`FOAM_LACE_SCALE`, `FOAM_LACE_WIDTH`); Dana's references are soft lacy swash and breaking waves.
+> - 📌 Water looks too clear in shallows at any Clarity (Dana, 2026-11-01); not addressed.
+> - 💡 `renderer.debug.onShaderError` could show shader errors on screen; `checkShaders` could join the build.
+>
+> **Working style (Dana, this round):** a skipped check has passed, don't re-ask. Test only at big points. Short, exact answers. Say which parts are sourced and which are inferred, before building. Never call a workaround safe and the standard way risky without showing why. A bug that shares a root with another gets one holistic plan. `.obsidian/workspace.json` stays out of commits.
+>
+> **Stage 2 plan, approved by Dana:**
 > 1. `shaders/terrain/landLayers.glsl`: add `landSurfaceColor(rampColor, normal, up, elevationFraction)`. Rock blends in by `1 − dot(normal, up)` through a `smoothstep`, colored by the rock ramp by height (`terrainRampColor`, reused). Optional height term so flat summits can be rocky.
 > 2. `planetPatch.frag.glsl` and `chunk.frag.glsl`: call it right after the ramp color.
 > 3. `planet/planetControls.ts`: `rockStops`, `slopeStart`, `slopeSoftness` in `PlanetSettings`, plus `migrateRock` for old saves (these are saved, unlike Scene settings).
@@ -43,14 +66,13 @@
 > **Moons, how they stand** (so tuning doesn't restart from zero): the target spec Dana approved, built in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`): color clearly visible and never bleached by the glow; texture as gentle tone; a full moon solid to its edge; the shadow (Crescent) dissolving fully into the sky, with no outline; one rounded glow across the edge, lit side only (all round at Crescent 0); Texture 0 translucent, 1 solid, 2 strongest; split toning (Second color the darks by multiply, Color the brights by screen). Change only what Dana approves: tuning by screenshot made colors swing neon and pale.
 >
 > **Temporary diagnostics still in the code (remove when their bugs close; the haze and glow ones are already gone):**
+> - `[TEMP terrain]` in `map/noiseLayers.ts`, each Randomize's world type and layers, kept while terrain may be tuned.
 > - `[TEMP water]` logs and the shore-search logs in `scene/walkMode.ts`.
 > - Alt+click on the chunk: the `[TEMP B55]` height row table (`logCliffRow` in `LandChunkCanvas.tsx`, `lastSampleDepth` in `ChunkPatchRenderer.ts`).
 >
 > **Open decisions for Dana**
-> - ❓ **Landscape variety across one planet** (Dana, 2026-10-31): mountains, canyons, valleys, plateaus and deserts in different regions instead of one noise everywhere. Options given in chat; waiting for her pick.
 > - ❓ **A real moon orbiting the planet** (plan given, waiting for a go): a 3D moon sharing the sky moons' texture and look, orbiting slowly (`atmosphere/planetMoon.ts`, `shaders/atmosphere/planetMoon.frag.glsl`); later the chunk's sky moons following the orbit, and tides that follow it.
 > - ❓ **General undo history** for every setting (Dana asked 2026-10-28; undo now covers paint strokes only; undo/redo is paused on the roadmap, so un-pausing it is her call).
-> - ❓ **Planet spin** (Dana's idea, proposed, not approved): spin speed, axis tilt 0 to 180° (Uranus about 98°), axis direction.
 > - ❓ **Endless-looking chunk:** (a) fade its edges into the haze, now; (b) real terrain to the horizon at lower detail, later.
 > - ❓ Swirl as Musgrave's Coriolis twist (researched, waiting).
 > - 📌 The Texture slider's hover text (now under Moons) still says "above 1 the pattern grows stronger"; Texture now scales the contrast from 0. Rewording waits for Dana's yes.

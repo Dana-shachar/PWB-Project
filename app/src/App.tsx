@@ -6,6 +6,7 @@ import { useSceneControls } from './scene/sceneControls';
 import { useSharedGumball } from './scene/sharedGumball';
 import { useSharedViewportRenderer } from './scene/sharedViewportRenderer';
 import { usePlanetControls } from './planet/planetControls';
+import { randomSpin } from './scene/planetSpin';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
 import { usePanelResize, useDockHeightResize } from './ui/panelResize';
@@ -43,6 +44,11 @@ function App() {
   const sceneControls = useSceneControls();
   const planetControls = usePlanetControls();
   const noiseLayers = useNoiseLayers(INITIAL_LAYER_ID);
+  // Terrain Randomize also rolls how the planet spins: any tilt, any direction (scene/planetSpin.ts).
+  const randomizeWorld = () => {
+    noiseLayers.randomizeTerrain();
+    planetControls.updateSpin(randomSpin());
+  };
   const brush = useBrush(sceneHandleRef);
   // Declared before the land chunk, which consumes its result: erosion runs
   // on the patch the chunk is showing, and that patch reaches it as a prop
@@ -168,7 +174,7 @@ function App() {
         onBaseColorChange={planetControls.setBaseColor}
         displayMode={planetControls.displayMode}
         onDisplayModeChange={planetControls.setDisplayMode}
-        onRandomizeTerrain={noiseLayers.randomizeTerrain}
+        onRandomizeTerrain={randomizeWorld}
         colorByElevation={planetControls.colorByElevation}
         onColorByElevationChange={planetControls.setColorByElevation}
         colorStops={planetControls.colorStops}
@@ -202,6 +208,8 @@ function App() {
         planetElevationRange={planetControls.elevationRange}
         chunkElevationRange={{ min: landChunk.elevationMin, max: landChunk.elevationMax }}
         water={planetControls.water}
+        spin={planetControls.spin}
+        onSpinChange={planetControls.updateSpin}
         onWaterChange={planetControls.updateWater}
         atmosphere={planetControls.atmosphere}
         onAtmosphereChange={planetControls.updateAtmosphere}
@@ -288,6 +296,7 @@ function App() {
                 onElevationRangeChange={planetControls.setElevationRange}
                 onHeightDistributionChange={planetControls.setHeightDistribution}
                 water={planetControls.water}
+                spin={planetControls.spin}
                 atmosphere={planetControls.atmosphere}
                 lightFollowsCamera={sceneControls.lightFollowsCamera}
                 shoreSeaLevel={planetControls.shoreSeaLevel}
@@ -362,7 +371,7 @@ function App() {
         onReorderLayer={noiseLayers.reorderLayer}
         onUpdateSelectedLayer={noiseLayers.updateSelectedLayer}
         onUpdateLayers={noiseLayers.updateLayers}
-        onRandomizeTerrain={noiseLayers.randomizeTerrain}
+        onRandomizeTerrain={randomizeWorld}
         brushRadiusPx={brush.brushRadiusPx}
         onBrushRadiusPxChange={brush.setBrushRadiusPx}
         brushValue={brush.brushValue}

@@ -17,6 +17,7 @@ import { createPlanetGlow, glowOuterRadius, updatePlanetGlow, updatePlanetGlowFr
 import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame, GAP_PER_JAGGEDNESS } from '../atmosphere/cloudLayer';
 import { createPlanetHaze, updatePlanetHaze } from '../atmosphere/planetHaze';
 import { bakeAirGround, createAirGround, type AirGround } from '../atmosphere/airGround';
+import { createPlanetSpin, type SpinSettings } from './planetSpin';
 
 import { isRippleMapReady } from '../planet/rippleMap';
 import { KM_PER_SCENE_UNIT, WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
@@ -171,6 +172,8 @@ const USE_PLANET_PATCHES = true;
 const patchViewMatrix = new THREE.Matrix4();
 const patchFrustum = new THREE.Frustum();
 const patchViewDirection = new THREE.Vector3();
+const patchCameraLocal = new THREE.Vector3();
+const planetInverse = new THREE.Quaternion();
 
 // The old single whole-globe mesh (only shown in Wireframe) has its own
 // fixed density now that the Resolution slider is a detail bias.
@@ -216,6 +219,7 @@ interface SceneCanvasProps {
   onHeightDistributionChange?: (distribution: HeightDistribution | null) => void;
   water: WaterSettings;
   atmosphere: AtmosphereSettings;
+  spin: SpinSettings; // the planet turning when left alone (scene/planetSpin.ts)
   // The light turns with the camera instead of staying fixed (scene/sceneControls.ts).
   lightFollowsCamera: boolean;
   // The settled sea level Roughness fades toward, or null with water off (planet/planetControls.ts).
@@ -256,6 +260,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     onHeightDistributionChange,
     water,
     atmosphere,
+    spin,
     lightFollowsCamera,
     shoreSeaLevel,
   },
@@ -273,6 +278,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   // Read every frame by the glow and clouds, so they follow the latest settings without rebuilding the scene.
   const atmosphereRef = useRef(atmosphere);
   atmosphereRef.current = atmosphere;
+  const spinRef = useRef(spin);
+  spinRef.current = spin;
   // The Scene panel's light direction, and whether it turns with the camera; applied every frame.
   const lightBaseRef = useRef(new THREE.Vector3(1, 1, 1));
   const lightFollowsCameraRef = useRef(lightFollowsCamera);
@@ -323,6 +330,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     fieldOfViewRadians: Math.PI / 4,
   });
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
+  const planetGroupRef = useRef<THREE.Group | null>(null);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const heightmapPipelineRef = useRef<HeightmapPipeline | null>(null);
   const erosionEngineRef = useRef<ErosionEngine | null>(null);
@@ -656,7 +664,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         // point doubles as the direction from the planet's center. Height
         // displacement happens on the GPU and isn't in this mesh, so the hit
         // is against the undisplaced sphere — fine for choosing an area.
-        return patchContaining(hit.point.clone(), depth);
+        // The hit is in world space; the patch grid is in the planet's own, turning frame.
+        const planetGroup = planetGroupRef.current;
+        return patchContaining(planetGroup ? planetGroup.worldToLocal(hit.point.clone()) : hit.point.clone(), depth);
       },
       getGumballTarget() {
         return gumballTargetRef.current;
@@ -686,6 +696,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     // pointer handling of its own, each pane's camera controls attach to
     // whatever DOM element represents that pane's own screen region.
     const orbitControls = controls(perspectiveCamera, viewportElement);
+    const planetGroup = new THREE.Group(); // everything that turns with the planet (scene/planetSpin.ts)
+    scene.add(planetGroup);
+    planetGroupRef.current = planetGroup;
+    const planetSpin = createPlanetSpin(planetGroup, viewportElement);
+    let lastSpinTime = performance.now();
     const gridMesh = grid(gridSpacing);
     const planetMesh = planet(radius, OLD_MESH_SEGMENTS);
     // Centered at the origin (matches the camera/orbit-controls target) so
@@ -719,7 +734,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     sharedUniformsRef.current.radius = radius;
     const planetPatches = new PlanetPatchRenderer();
     planetPatchRendererRef.current = planetPatches;
-    scene.add(planetPatches.group);
+    planetGroup.add(planetPatches.group);
     // The old single mesh stays fully built and in the scene graph either
     // way (cheap — geometry/material, no per-frame cost beyond what it
     // already had), just hidden, so it's a real fallback (flip
@@ -730,7 +745,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     planetPatches.group.visible = !planetMesh.visible;
 
     scene.add(gridMesh);
-    scene.add(planetMesh);
+    planetGroup.add(planetMesh);
     // The atmosphere seen from space: a rim glow and a cloud shell (atmosphere/).
     const planetGlow = createPlanetGlow();
     const cloudLayer = createCloudLayer();
@@ -740,9 +755,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     for (const layer of [planetGlow, cloudLayer, planetHaze]) {
       layer.mesh.traverse((each) => { if (each instanceof THREE.Mesh) Object.assign(each.material.uniforms, airGround.uniforms); });
     }
-    scene.add(planetGlow.mesh);
-    scene.add(cloudLayer.mesh);
-    scene.add(planetHaze.mesh);
+    planetGroup.add(planetGlow.mesh, cloudLayer.mesh, planetHaze.mesh);
 
     // Runs right before this view renders, every frame it's actually drawn —
     // the shared renderer (scene/sharedViewportRenderer.ts) already handles
@@ -752,6 +765,10 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     function onFrame() {
       const { planetRadius, surfaceRadius } = planetSurface();
       applyAltitudeRates(orbitControls, perspectiveCamera, planetRadius, surfaceRadius, Math.max(surfaceRadius, glowOuterRadius(planetGlow)));
+      const spinNow = performance.now();
+      planetSpin.update(Math.min(0.1, (spinNow - lastSpinTime) / 1000), spinRef.current);
+      airGround.uniforms.uPlanetFrame.value.setFromMatrix4(planetGroup.matrixWorld).transpose(); // world to planet: a rotation's inverse
+      lastSpinTime = spinNow;
       orbitControls.update(); // required every frame — damping is enabled, see controls.ts
       // The specular term needs the eye position and the camera moves every
       // frame via orbit controls, so this is read fresh rather than set once.
@@ -768,10 +785,11 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         sharedUniformsRef.current.fieldOfViewRadians = THREE.MathUtils.degToRad(perspectiveCamera.fov);
         // What the camera sees, so close-ups build only what is in view.
         perspectiveCamera.updateMatrixWorld();
-        patchViewMatrix.multiplyMatrices(perspectiveCamera.projectionMatrix, perspectiveCamera.matrixWorldInverse);
+        // Patches are chosen in the planet's own frame, so the frustum is too (how three.js culls a moved object).
+        patchViewMatrix.multiplyMatrices(perspectiveCamera.projectionMatrix, perspectiveCamera.matrixWorldInverse).multiply(planetGroup.matrixWorld);
         patchFrustum.setFromProjectionMatrix(patchViewMatrix);
         sharedUniformsRef.current.frustum = patchFrustum;
-        perspectiveCamera.getWorldDirection(patchViewDirection);
+        perspectiveCamera.getWorldDirection(patchViewDirection).applyQuaternion(planetInverse.copy(planetGroup.quaternion).invert());
         sharedUniformsRef.current.viewDirection = patchViewDirection;
         const nowSeconds = performance.now() / 1000;
         const seaStep = sharedUniformsRef.current.time > 0 ? Math.min(nowSeconds - sharedUniformsRef.current.time, 0.1) : 0;
@@ -799,17 +817,16 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         planetPatches.applyFrame(sharedUniformsRef.current);
         // Internally throttled by how far the camera's actually moved — see
         // PlanetPatchRenderer.updatePatches — cheap to call every frame.
-        planetPatches.updatePatches(perspectiveCamera.position, webglRenderer, heightmapPipeline, layersRef.current, sharedUniformsRef.current);
+        planetPatches.updatePatches(planetGroup.worldToLocal(patchCameraLocal.copy(perspectiveCamera.position)), webglRenderer, heightmapPipeline, layersRef.current, sharedUniformsRef.current);
       }
     }
     sharedRenderer.registerView('planet', { scene, camera: perspectiveCamera, elementRef: viewportRef, onFrame });
 
     return () => {
       sharedRenderer.unregisterView('planet');
+      planetSpin.dispose();
+      scene.remove(planetGroup);
       orbitControls.dispose();
-      scene.remove(planetGlow.mesh);
-      scene.remove(cloudLayer.mesh);
-      scene.remove(planetHaze.mesh);
       planetGlow.dispose();
       cloudLayer.dispose();
       planetHaze.dispose();
@@ -846,7 +863,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
 
       const currentPlanet = planetMeshRef.current;
       if (currentPlanet) {
-        scene.remove(currentPlanet); // also removes the overlay, added as its child
+        currentPlanet.removeFromParent(); // also removes the overlay, added as its child
         currentPlanet.geometry.dispose();
         (currentPlanet.material as THREE.Material).dispose();
       }
@@ -854,7 +871,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
 
       const currentPatches = planetPatchRendererRef.current;
       if (currentPatches) {
-        scene.remove(currentPatches.group);
+        currentPatches.group.removeFromParent();
         currentPatches.dispose();
       }
       planetPatchRendererRef.current = null;

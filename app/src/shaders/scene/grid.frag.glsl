@@ -4,12 +4,13 @@
 // intersection (geometry already places us at y=0).
 
 varying vec3 vWorldPosition;
+varying vec2 vGridCoord;
 
 uniform float uMinorSpacing;
 uniform float uFadeDistance;
 
 void main() {
-  vec2 gridCoord = vWorldPosition.xz;
+  vec2 gridCoord = vGridCoord;
   float majorSpacing = uMinorSpacing * 10.0;
 
   vec2 minorDeriv = fwidth(gridCoord / uMinorSpacing);

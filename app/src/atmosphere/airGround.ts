@@ -18,7 +18,7 @@ export interface AirGround {
   // planet, larger on a jagged one, so the glow and clouds can sit further out.
   jaggedness: number;
   // Shared by every atmosphere material, so one update reaches them all.
-  uniforms: Pick<typeof planetAirUniforms, 'uAirGround' | 'uAirAmplitude'>;
+  uniforms: Pick<typeof planetAirUniforms, 'uAirGround' | 'uAirAmplitude' | 'uPlanetFrame'>;
 }
 
 function emptyFace(): THREE.DataTexture {
@@ -36,7 +36,7 @@ export function createAirGround(): AirGround {
   texture.generateMipmaps = false;
   texture.needsUpdate = true;
   planetAirUniforms.uAirGround.value = texture;
-  return { texture, jaggedness: 0, uniforms: { uAirGround: planetAirUniforms.uAirGround, uAirAmplitude: planetAirUniforms.uAirAmplitude } };
+  return { texture, jaggedness: 0, uniforms: { uAirGround: planetAirUniforms.uAirGround, uAirAmplitude: planetAirUniforms.uAirAmplitude, uPlanetFrame: planetAirUniforms.uPlanetFrame } };
 }
 
 // The direction of a cube map texel, by the GL cube map face table (faces +X, -X, +Y, -Y, +Z, -Z).

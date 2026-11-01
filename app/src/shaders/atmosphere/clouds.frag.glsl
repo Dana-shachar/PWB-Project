@@ -10,6 +10,7 @@ uniform float uCloudCoverage;
 uniform vec3 uCloudColor;
 uniform vec3 uCloudColor2;
 uniform float uCloudSoftness;
+uniform mat4 modelMatrix; // the planet's spin: clouds are in its frame, the light in the world's
 uniform float uCloudTime; // advances faster in stronger wind
 uniform float uCloudLayer; // which stacked shell, 0 the lowest: higher shells show only the thicker cores
 const float CLOUD_SHELL_CORE = 0.05; // how much higher each shell's threshold sits. Inferred, TUNABLE.
@@ -120,7 +121,7 @@ void main() {
   float threshold = 1.0 - uCloudCoverage * mix(1.0, gather, uCloudDistributionStrength) + uCloudLayer * CLOUD_SHELL_CORE;
   float edge = 0.02 + uCloudSoftness * 0.5;
   float speed = bandSpeed(latitude) * BAND_SWING;
-  float drift = uCloudTime * GLOBAL_DRIFT;
+  float drift = -uCloudTime * GLOBAL_DRIFT; // against the spin at the equator, as the trade winds blow
   float shape = mix(cloudShape(dir, drift + speed * phase0, threshold), cloudShape(dir, drift + speed * phase1, threshold), abs(0.5 - phase0) / 0.5);
   float cloud = smoothstep(threshold - edge, threshold + edge, shape);
 
@@ -134,7 +135,7 @@ void main() {
   float powder = 1.0 - exp(-2.0 * thickness);
   float towardSun = max(dot(-toEye, light), 0.0);
   float energy = mix(beer, beer * powder * 2.0, towardSun);
-  float sunlit = clamp((dot(dir, light) + LIGHT_WRAP) / (1.0 + LIGHT_WRAP), 0.0, 1.0);
+  float sunlit = clamp((dot(normalize(mat3(modelMatrix) * dir), light) + LIGHT_WRAP) / (1.0 + LIGHT_WRAP), 0.0, 1.0);
   vec3 baseColor = mix(uCloudColor, uCloudColor2, cloudTone(dir, drift));
   vec3 shadowColor = baseColor * 0.55;
   // The darkest a core gets is capped at halfway to the shadow color.

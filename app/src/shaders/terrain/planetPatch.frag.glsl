@@ -203,15 +203,17 @@ void main() {
     // Surf near the coast, only up close like the shore foam.
     vec3 surf = surfWave(depthShare, ocean, breakup, worldGradient(depthShare, ocean), length(fwidth(ocean))) * rippleFade * (1.0 - far);
     seaNormal = normalize(seaNormal + vec3(-surf.x, 0.0, -surf.y));
-    vec3 eyeDir = normalize(toPoint);
+    // The ocean's frame is the planet's own, so the eye and sun turn into it (v * M applies a rotation's inverse).
+    vec3 eyeDir = normalize(toPoint) * mat3(modelMatrix);
     vec3 eyeLocal = vec3(dot(eyeDir, frameX), dot(eyeDir, localNormal), dot(eyeDir, frameZ));
-    vec3 sunDir = normalize(uLightDirection);
+    vec3 sunDir = normalize(uLightDirection) * mat3(modelMatrix);
     vec3 sunLocal = vec3(dot(sunDir, frameX), dot(sunDir, localNormal), dot(sunDir, frameZ));
     // Day and night like the land: the same ambient and wrapped sunlight on the sphere's own direction, in world space.
     vec3 sphereNormal = normalize(mat3(modelMatrix) * localNormal);
     float dayLight = ambient + softDiffuse(sphereNormal, lightDir, uDiffuseWrap);
     vec3 sea = seaColor(surfacePoint, seaNormal, sunLocal, eyeLocal, distOcean, seaBase, seaWaterColor, uSkyColor, far, seaSlopeVariance(fetch)) * uLightIntensity * dayLight;
-    float transmittance = waterTransmittance(depthShare, uWaterClarity);
+    // Only what the surface doesn't reflect reaches the seabed (Schlick: reflect F, transmit 1 - F), as on the chunk.
+    float transmittance = (1.0 - waterFresnel(seaNormal, -eyeLocal)) * waterTransmittance(depthShare, uWaterClarity);
     vec3 seabed = surfaceColor * (fill + diffuse) * waterFilter(depthShare, uWaterClarity, seaBase);
     litColor = mix(seabed, sea, 1.0 - transmittance);
     float foamLight = (ambient + seaDiffuse(seaNormal, sunLocal, 1.0)) * uLightIntensity;

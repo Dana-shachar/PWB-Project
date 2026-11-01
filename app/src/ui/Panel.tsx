@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle, Dial } from './UIElements';
+import type { SpinSettings } from '../scene/planetSpin';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
 import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
@@ -51,6 +52,8 @@ interface PanelProps {
   onGridVisibleChange: (value: boolean) => void;
   walkFieldOfView: number;
   onWalkFieldOfViewChange: (value: number) => void;
+  spin: SpinSettings;
+  onSpinChange: (changes: Partial<SpinSettings>) => void;
   // Planet controls
   radiusKm: number;
   onRadiusKmChange: (value: number) => void;
@@ -220,6 +223,8 @@ export function Panel({
   onGridVisibleChange,
   walkFieldOfView,
   onWalkFieldOfViewChange,
+  spin,
+  onSpinChange,
   radiusKm,
   onRadiusKmChange,
   baseColor,
@@ -485,6 +490,9 @@ export function Panel({
             />
             <div className="panel-section-divider" />
             <span className="panel-section-title">View</span>
+            {/* The planet turning on its own when left alone; dragging pauses it (scene/planetSpin.ts). */}
+            <Slider label="Spin speed" unit="°/s" value={spin.speed} onChange={(speed) => onSpinChange({ speed })} min={0} max={30} step={0.5} precision={1} description="How fast the planet turns on its own when you leave it alone, in degrees per second. 0 stops it. Dragging pauses it; it starts again a few seconds after you let go." />
+            <Dial label="Spin direction" value={spin.direction} onChange={(direction) => onSpinChange({ direction })} description="Which way the spin's axis leans." />
             {/* Walk mode's vertical view angle; 20 to 150 is Unity's documented sample slider range. */}
             <Slider
               label="Walk field of view"
@@ -569,6 +577,9 @@ export function Panel({
                   : "The planet's physical radius, in kilometers. Select the planet or chunk pane to control that view's own scale."
               }
             />
+            {activeViewContext !== 'landChunk' && (
+              <Slider label="Spin angle" unit="°" value={spin.tilt} onChange={(tilt) => onSpinChange({ tilt })} min={0} max={180} step={1} precision={0} disabled={activeViewContext === null} description="How far the planet's spin axis leans from straight up: 0 is upright, 23 is Earth's tilt, 98 Uranus's, on its side, 180 upside down." />
+            )}
             {/* The voxel chunk's mesh Resolution; smooth detail follows Scene's Auto detail. */}
             {activeViewContext === 'landChunk' && displayMode === 'voxel' && (
               <Slider

@@ -14,4 +14,5 @@ export const planetAirUniforms = {
   uHazeAirRadius: { value: 1 },
   uAirGround: { value: null as THREE.CubeTexture | null },
   uAirAmplitude: { value: 0 },
+  uPlanetFrame: { value: new THREE.Matrix3() }, // turns a world direction into the planet's own, spinning frame
 };

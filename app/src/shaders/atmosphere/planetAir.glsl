@@ -35,7 +35,7 @@ vec4 planetHaze(vec3 origin, vec3 direction, float surfaceDistance, vec3 lightDi
   float depth = 0.0;
   for (int i = 0; i < HAZE_STEPS; i++) {
     vec3 fromCenter = origin + direction * (enter + (float(i) + 0.5) * stepLength) - uHazeCenter;
-    float height = max(length(fromCenter) - uHazePlanetRadius - airGroundLift(normalize(fromCenter)), 0.0);
+    float height = max(length(fromCenter) - uHazePlanetRadius - airGroundLiftWorld(normalize(fromCenter)), 0.0);
     depth += exp(-height / uHazeScaleHeight) * stepLength;
   }
   float opacity = min(1.0 - exp(-uHazeDensity * depth / uHazeScaleHeight), HAZE_MAX_OPACITY);

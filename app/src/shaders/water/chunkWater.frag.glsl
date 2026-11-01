@@ -28,6 +28,8 @@ const float METERS_PER_UNIT = 1000.0;
 // How far apart the surf's slope samples are, as a share of the chunk. Inferred, TUNABLE.
 const float SURF_SLOPE_UV_STEP = 0.002;
 
+const float SHORE_FOAM_REACH_METERS = 6.0; // the widest the shore foam reaches from the waterline. Inferred, TUNABLE.
+
 void main() {
   vec2 chunkUv = vWorldPosition.xz / uChunkSize + 0.5;
   vec4 heightTexel = texture2D(uChunkHeightMap, chunkUv);
@@ -58,7 +60,7 @@ void main() {
   vec3 variance = waterVariance(meters, footprint, fetch);
   normal = normalize(normal + vec3(-variance.x, 0.0, -variance.y));
   // Surf rolling toward the shore, lit as a wave and leaving foam behind its crest.
-  float breakup = 0.5 + 0.5 * noise(meters * 0.08 + uSeaTime * 0.3);
+  float breakup = foamBreakup(meters, footprint);
   // The depth's slope from the ground's heights at neighboring points, per unit of the waves' coordinates.
   vec2 uvStep = vec2(SURF_SLOPE_UV_STEP, 0.0);
   float groundX = mix(texture2D(uChunkHeightMap, chunkUv + uvStep.xy).r, texture2D(uChunkHeightMap, chunkUv + uvStep.xy).g, uHeightMapGreenChannel);
@@ -74,13 +76,19 @@ void main() {
   // Foam: from the wave crests (averaged with distance), the shore edge, and the surf; never fully white.
   float foamAmount = clamp(uFoamWidth / 0.05, 0.0, 1.0);
   float crest = max(crestFoam(waveHeight, far, meters), variance.z * (1.0 - far)); // plus foam where the big waves pinch
-  float shore = max(waterFoam(depthShare, uFoamWidth, breakup), surf.z);
+  // Foam by distance from the shore, not depth alone (the shore-wave source's own measure): depth over the seabed's
+  // slope, a first-order estimate, so a gentle beach keeps a narrow band instead of a wide sheet ([B83]).
+  float shoreMeters = depthShare / max(length(depthGradient), 1e-4) * uWaveScale;
+  float foamDepth = min(depthShare, shoreMeters / SHORE_FOAM_REACH_METERS * uFoamWidth);
+  float surfFoam = surf.z * (1.0 - smoothstep(SHORE_FOAM_REACH_METERS, 2.0 * SHORE_FOAM_REACH_METERS, shoreMeters));
+  float shore = max(waterFoam(foamDepth, uFoamWidth, breakup), surfFoam);
   float foam = max(shore, crest) * foamAmount * FOAM_OPACITY;
   color = mix(color, FOAM_COLOR * (uAmbient + seaDiffuse(normal, light, 1.0)) * uLightIntensity, foam);
 
   color = applyHaze(color, vWorldPosition, uCameraPosition, uLightDirection);
 
-  // See-through in the shallows, so the shore blends into the ground instead of meeting it at a hard edge.
-  float opacity = max(1.0 - waterTransmittance(depthShare, uWaterClarity), foam);
+  // See-through in the shallows, so the shore blends into the ground instead of meeting it at a hard edge. Only the
+  // light the surface doesn't reflect passes (Schlick: reflect F, transmit 1 - F), so low views read as water.
+  float opacity = max(1.0 - (1.0 - waterFresnel(normal, -eye)) * waterTransmittance(depthShare, uWaterClarity), foam);
   gl_FragColor = vec4(color, opacity);
 }

@@ -56,6 +56,9 @@ float seaDiffuse(vec3 n,vec3 l,float p) {
   return pow(dot(n,l) * 0.4 + 0.6,p);
 }
 
+// Seascape's highlight; the exponent sets how tight it is. A sun-sharp one makes sparkles (inferred, TUNABLE: the sun's
+// disc is about 0.5 degrees, widened so ripples catch it).
+const float SEA_SPARKLE_EXPONENT = 1500.0;
 float seaSpecular(vec3 n,vec3 l,vec3 e,float s) {
   float nrm = (s + 8.0) / (PI * 8.0);
   return pow(max(dot(reflect(e,n),l),0.0),s) * nrm;
@@ -170,7 +173,10 @@ vec3 seaColor(vec3 p, vec3 n, vec3 l, vec3 eye, vec3 dist, vec3 seaBase, vec3 se
   vec3 color = mix(refracted,reflected,fresnel);
   float atten = max(1.0 - dot(dist,dist) * 0.001, 0.0);
   color += seaWaterColor * (p.y - SEA_HEIGHT) * 0.18 * atten;
-  color += vec3(mix(seaSpecular(n,l,eye,60.0), seaGlint(n,l,-eye,slopeVariance), far)) * uSeaShine;
+  // The sun's glitter path: up close each wave facet mirrors the sun only when almost exactly aligned, so sparkles sit
+  // on the ripples and gather under the sun; far away, where facets are too small to see, Cox and Munk's slope
+  // statistics draw the same path as a smooth column.
+  color += vec3(mix(seaSpecular(n,l,eye,SEA_SPARKLE_EXPONENT), seaGlint(n,l,-eye,slopeVariance), far)) * uSeaShine;
   return color;
 }
 
@@ -315,6 +321,41 @@ vec2 worldGradient(float value, vec2 xz) {
   if (abs(det) < 1e-12) return vec2(0.0);
   return vec2(dvx * dy.y - dx.y * dvy, dx.x * dvy - dvx * dy.x) / det;
 }
+// Foam breakup as lace (Dana's references, 2026-11-01): the edges of a warped Voronoi pattern make the web of bubbles,
+// the shoreline-foam method practitioners describe (Voronoi cell edges masked to the shore band and moved with the waves;
+// Unity's stylized water layers two offset Voronoi patterns); edge distance as in Worley's cellular texture. A larger
+// pattern opens holes in the web; a scrolling, distorted noise moves it (Roystan). Fades to gray under about two pixels
+// (Quilez's band-limiting). Sizes inferred, TUNABLE.
+const float FOAM_LACE_SCALE = 1.2; // cells per meter
+const float FOAM_LACE_WIDTH = 0.18; // strand thickness, in cell units
+const float FOAM_LACE_HOLES_SCALE = 0.25; // the larger pattern that opens holes in the web
+const float FOAM_SCROLL = 0.15;
+const float FOAM_DISTORTION = 0.27;
+// Distance to the nearest cell edge (second-nearest point minus nearest), 0 on an edge.
+float foamCellEdge(vec2 p) {
+  vec2 cell = floor(p);
+  vec2 local = fract(p);
+  float nearest = 8.0;
+  float second = 8.0;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 offset = vec2(float(i), float(j));
+      vec2 point = offset + vec2(hash(cell + offset), hash(cell + offset + 17.3)) - local;
+      float dist = length(point);
+      if (dist < nearest) { second = nearest; nearest = dist; }
+      else if (dist < second) second = dist;
+    }
+  }
+  return second - nearest;
+}
+float foamBreakup(vec2 seaXz, float footprint) {
+  vec2 drift = vec2(noise(seaXz * 0.3 + 3.1), noise(seaXz * 0.3 + 7.7)) * FOAM_DISTORTION + uSeaTime * FOAM_SCROLL;
+  float lace = 1.0 - smoothstep(0.0, FOAM_LACE_WIDTH, foamCellEdge(seaXz * FOAM_LACE_SCALE + drift));
+  float patches = smoothstep(0.1, 0.6, foamCellEdge(seaXz * FOAM_LACE_HOLES_SCALE - drift * 0.5));
+  float value = mix(lace * 0.75, lace, patches);
+  return mix(value, 0.35, smoothstep(0.3, 0.6, footprint * FOAM_LACE_SCALE));
+}
+
 // depthGradient is how depthShare changes per unit of seaXz, read smoothly from the ground's heights by the caller (not
 // screen derivatives, which step in 2x2-pixel blocks). footprint is the pixel size in seaXz units: bands thinner than
 // about two pixels fade out (Quilez's band-limiting), so the surf fades with distance instead of turning jagged.

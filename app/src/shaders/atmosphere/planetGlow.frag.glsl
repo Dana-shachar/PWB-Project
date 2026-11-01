@@ -16,7 +16,7 @@ void main() {
   // Closest the ray passes to the center; past the edge in glow widths (negative over the planet's disc).
   float closest = along > 0.0 ? length(toCenter - rayDirection * along) : length(toCenter);
   vec3 closestDirection = normalize(uCameraPosition + rayDirection * max(along, 0.0) - uCenter);
-  float beyond = (closest - uRadius - airGroundLift(closestDirection)) / max(uWidth, 1e-6);
+  float beyond = (closest - uRadius - airGroundLiftWorld(closestDirection)) / max(uWidth, 1e-6);
   float glow = beyond >= 0.0
     ? 0.6 * exp(-beyond * 2.5) + 0.4 * exp(-beyond * 0.8)
     : exp(beyond * 3.0);

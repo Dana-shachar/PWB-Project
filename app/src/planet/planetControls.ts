@@ -1,4 +1,5 @@
 import { DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
+import { DEFAULT_SPIN, type SpinSettings } from '../scene/planetSpin';
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { DEFAULT_COLOR_STOPS, type ColorStop } from './colorRamp';
@@ -171,6 +172,8 @@ export interface PlanetSettings {
   water?: WaterSettings;
   // Absent in older saves, which load with the default atmosphere (and their water's wind, if any).
   atmosphere?: AtmosphereSettings;
+  // How the planet turns when left alone. Absent in older saves, which load with the default spin.
+  spin?: SpinSettings;
 }
 
 export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
@@ -188,6 +191,7 @@ export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
   autoDetail: true,
   water: DEFAULT_WATER_SETTINGS,
   atmosphere: DEFAULT_ATMOSPHERE_SETTINGS,
+  spin: DEFAULT_SPIN,
 };
 
 // A saved project from before colorStops existed only has the old
@@ -251,6 +255,7 @@ export function usePlanetControls() {
   const [elevationRange, setElevationRange] = useState({ min: -0.5, max: 0.5 });
   const [water, setWater] = useState<WaterSettings>(DEFAULT_WATER_SETTINGS);
   const [atmosphere, setAtmosphere] = useState<AtmosphereSettings>(DEFAULT_ATMOSPHERE_SETTINGS);
+  const [spin, setSpin] = useState<SpinSettings>(DEFAULT_SPIN);
   // The planet's height distribution, for the land share readout. Read-only, not saved.
   const [heightDistribution, setHeightDistribution] = useState<HeightDistribution | null>(null);
 
@@ -262,6 +267,9 @@ export function usePlanetControls() {
     return () => clearTimeout(timeoutId);
   }, [shoreSeaLevelNow]);
 
+  function updateSpin(changes: Partial<SpinSettings>) {
+    setSpin((previous) => ({ ...previous, ...changes }));
+  }
   function updateAtmosphere(changes: Partial<AtmosphereSettings>) {
     setAtmosphere((previous) => ({ ...previous, ...changes }));
   }
@@ -284,7 +292,7 @@ export function usePlanetControls() {
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -303,6 +311,7 @@ export function usePlanetControls() {
     setAutoDetail(settings.autoDetail ?? true);
     setWater(migrateWater(settings.water));
     setAtmosphere(migrateAtmosphere(settings.atmosphere, (settings.water as { wind?: number } | undefined)?.wind));
+    setSpin({ ...DEFAULT_SPIN, ...settings.spin });
   }
 
   // A project with nothing saved yet (new, or an old save from before this
@@ -342,6 +351,8 @@ export function usePlanetControls() {
     updateWater,
     atmosphere,
     updateAtmosphere,
+    spin,
+    updateSpin,
     shoreSeaLevel,
     heightDistribution,
     setHeightDistribution,

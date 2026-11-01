@@ -1,6 +1,6 @@
 # 📚 References
 
-`Last updated: 2026-10-31`
+`Last updated: 2026-11-01`
 
 *Every outside source this project relies on, with what it is and what was taken from it. Cited once here, linked from everywhere else.*
 
@@ -109,6 +109,11 @@
 ### Terrain shading look
 
 *Dana's reference images for the land shader layers, 2026-10-28.*
+
+**Journey's sand shader** · Alan Zucconi · `considered`, for desert regions
+- A multi-part breakdown of how Journey shades its sand. Part 5, read: a glitter of grains, each a random normal from a noise texture that glints only when it mirrors the light into the eye (`R = reflect(L, G)`, compared with the view past a threshold). Part 3 not yet read.
+- Noted by Dana (2026-10-31) for the land shader, once terrain variation gives the planet desert regions.
+- *[Zucconi, Journey Sand Shader, part 3](https://www.alanzucconi.com/2019/10/08/journey-sand-shader-3/) · [part 5, glitter](https://www.alanzucconi.com/?p=10059), part 5 read 2026-10-31.*
 
 **No Man's Sky, terrain color per planet** · `reference`
 - Terrain color sets each planet apart: one dominant hue per world, with accents by rule. Dana finds the colors a bit too strong, which is where the softness of Gris and Sable comes in.
@@ -475,6 +480,38 @@
 
 ### Fractal types for terrain
 
+**Eroded terrain noise** · Clay John, guil · `considered`
+- Base fBm returns its slope; an erosion noise of short stripes aligned down the slope (`cos(dot(offset, dir) × 2π)` under a Gaussian) is summed over octaves, each turned by the slopes so far, which branches like drainage. It fades near the waterline, so coasts stay smooth. Would weather any terrain, but needs a new bake step and adapting to the sphere.
+- *Clay John, Eroded Terrain Noise, MIT (Shadertoy `MtGcWh`); a fork's Buffer A pasted by Dana, `NfsSz7`; guil's Gavoronoise, CC BY-NC-SA 3.0, `llsGWl`. Read 2026-11-01.*
+
+**Canyons** · Shane, Quilez, Gaea · `considered`
+- Shane's Dry Rocky Gorge carves a tube along a path from a plane with a smooth maximum, then adds noise (Shadertoy default CC BY-NC-SA). Quilez's canyon pushes a broad noise through a `smoothstep` for flat floors and steep walls, plus vertically squashed noise for ledges; its license forbids use in any project, so ideas only. Gaea's Canyon node is "a drainage based river canyon", with no method given.
+- *Shadertoy `XldGR7`, `MdBGzG`, code pasted by Dana 2026-11-01 · [Gaea docs repository](https://github.com/QuadSpinner/Gaea-Docs). Read 2026-11-01.*
+
+**Stochastic terrain texturing** · Michael Evan Allison · `considered`, for the land shader
+- A Unity shader graph picking textures by height and slope, with anti-tiling. Texturing only, no shape.
+- *[Procedural Stochastic Terrain Shader](https://github.com/MichaelEGA/Procedural-Stochastic-Terrain-Shader), README read 2026-11-01.*
+
+**Continents and masked ridged mountains** · Sebastian Lague, Procedural Planets · `method used`
+- A first plain fBm layer is the continents; a "min value" cuts everything below it flat for the ocean floor. A second layer, a ridged multifractal (`v = (1 − |n|)²`, each octave weighted by the last through a weight multiplier), is masked by the first layer's own height, so mountains rise inland and vanish at sea.
+- His saved planet (E07): continents 4 octaves, frequency 1.07, lacunarity 2.2, persistence 0.5; mountains 4 octaves, frequency 1.59, lacunarity 3.3, persistence 0.5, weight 0.78. Used by Terrain Randomize (`LAGUE` in `map/noiseLayers.ts`), with the region mask instead of masking by the first layer, which the engine no longer offers.
+- *[Lague, Procedural Planets](https://github.com/SebLague/Procedural-Planets): `ShapeGenerator.cs`, `SimpleNoiseFilter.cs`, `RidgidNoiseFilter.cs`, E07 `Settings/Shape.asset`. Read 2026-10-31.*
+
+**Regions from broad noises** · Minecraft 1.18 · `method used`
+- Continentalness (the lowest-frequency noise, ocean to inland), erosion (rugged to flat) and peaks and valleys pass through curves that set height and roughness; landscape types sit on bands of these broad noises and blend because the inputs are smooth.
+- Terrain Randomize's region field: mountains on its top share, plateaus on its inverted bottom share, plains between (`randomizeTerrain`).
+- *[Minecraft Wiki, World generation](https://minecraft.wiki/w/World_generation), read by a research agent 2026-10-31 · Henrik Kniberg's talk, not seen.*
+
+**Ridges and terraces from noise** · Red Blob Games · `method used`
+- Ridged noise `2 × (0.5 − |0.5 − n|)`, redistribution `pow(e, k)`, terraces `round(e × n) / n`, biomes from elevation and moisture.
+- The plateaus' Terrace.
+- *[Red Blob Games, terrain from noise](https://www.redblobgames.com/maps/terrain-from-noise/), read by a research agent 2026-10-31.*
+
+**Musgrave offset and gain defaults** · Blender · `method used`
+- Blender's Musgrave texture defaults offset and gain to 1, offset acting as a "sea level" for hybrid and ridged types; a reference library uses 0.7 and notes the formulas assume an offset near 1.
+- The region layers' offset and gain in Terrain Randomize.
+- *[Blender API, MusgraveTexture](https://docs.blender.org/api/4.3/bpy.types.MusgraveTexture.html) · [Blender manual, Musgrave](https://docs.blender.org/manual/ja/4.1/render/materials/legacy_textures/types/musgrave.html) · [libcruft fractal](https://git.nerdcruft.net/nerdcruft/libcruft-util/commit/bc1c576297a78e7ff43359ad1579aa0caf2108a1). Summaries, 2026-10-31.*
+
 **Musgrave fractal types** · Blender source, Blender manual, Unity · `method used`
 - fBm, multifractal, hybrid multifractal, hetero terrain and ridged multifractal each have a short recurrence in Blender's shader source. Hybrid and hetero scale each octave by the height so far, which gives smooth valleys and rough peaks. Offset and Gain are the shared extra controls
 - where the planned fractal type selector comes from. Trust: Blender's open-source GLSL (v3.6.0) is a primary source. The manual quotes are from the 2.80 page. ⚠️ Not documented: formulas for Billow and Strata (Unity gives only one-line descriptions), and Musgrave's own chapter was not readable. Renormalizing the unbounded outputs is our inference
@@ -588,6 +625,24 @@
 **Planar reflection and refraction for flat water** · three.js `Reflector`, `Refractor`, `Water2` · `superseded 2026-10-26`
 - A mirrored camera renders the scene into a texture for the reflection, and a camera clipped at the surface renders what lies below for the refraction. Water2 projects both with a texture matrix, offsets the lookups by the ripple normal (factor 0.05) and blends them by Schlick Fresnel.
 - The chunk's water (`voxel/chunkWater.ts`): the refraction replaces the old multiply pass as the seabed, and the reflection replaces the flat sky color, with the sky as the fallback where nothing was drawn. Read in the installed three.js 0.185 source.
+
+**Lace foam from Voronoi cell edges** · Planetside forum, Unity, Worley · `method used`, combination inferred
+- A Voronoi pattern's edges (second-nearest point minus nearest) make the web of foam, masked to the shore band and moved with the waves.
+- `foamBreakup` and `foamCellEdge` (`shaders/water/oceanWaves.glsl`).
+- *[Planetside, Voronoi surf](https://planetside.co.uk/forums/index.php?msg=292329) · [Unity, nature shaders](https://unity.com/blog/engine-platform/nature-shaders-with-shader-graph-in-2022-lts). Summaries, 2026-11-01. Worley 1996 from knowledge.*
+
+**Shore foam from a thresholded, scrolling noise** · Roystan, toon water · `method used`
+- Foam where a scrolling Perlin noise, distorted by a second noise (0.27), passes a cutoff that drops near the shore (`saturate(depth / foamDistance) × 0.777`), with a narrow `smoothstep` edge; the noise's fine scale breaks the foam into patches.
+- `foamBreakup` (`shaders/water/oceanWaves.glsl`); the zone is capped by distance from the shore (`SHORE_FOAM_REACH_METERS`, `[B83]`).
+- *[Roystan, Toon Water Shader](https://roystan.net/articles/toon-water.html), read by a page reader 2026-10-31 (some lines cut off).*
+
+**Water opacity by Fresnel** · three.js `Water2` · `method used`
+- `mix(refractColor, reflectColor, reflectance)` with Schlick's reflectance at 0.02: what shows through is weighted by 1 − F. Confirms the split in the Schlick entry above.
+- Both views' see-through water (`opacity` in `chunkWater.frag.glsl`, the ocean's `transmittance` in `planetPatch.frag.glsl`).
+- *three.js `examples/jsm/objects/Water2.js`, read in `node_modules` 2026-10-31.*
+
+**Sun glitter path, near and far** · Cox and Munk, Seascape · `method used`
+- Far away, Cox and Munk's slope statistics draw the glitter path as a column; up close, Seascape's highlight with a sun-sharp exponent lets single facets catch the sun (`SEA_SPARKLE_EXPONENT`). Not yet visible to Dana (`[B81]`).
 
 **Shore foam from the depth gap** · Godot community water shaders, Unity forum · `superseded 2026-10-27`
 - Game water adds foam where the gap between the water surface and the ground behind it is small, softened with smoothstep and broken up by a scrolling texture.

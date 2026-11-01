@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-10-31`
+`Last updated: 2026-11-01`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -467,3 +467,20 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 **Decided:** 2026-10-30
 
 - See-through side walls run from the chunk's base up to the water surface, colored by the water ramp by depth and clearer near the top, so the water reads as a block with the land's cut visible through it.
+
+### [S51] The planet itself spins, at any tilt · `decided`
+**Decided:** 2026-11-01
+
+- Left alone, the planet turns about an axis at any tilt (0 to 180°: upright, Earth-like, Uranus on its side, Venus upside down) and any direction; Randomize rolls all three. A press on the planet pauses it, and it eases back in over a second on release; scrolling and zooming don't pause it.
+- The planet is one group (surface, clouds, air), leaned onto the axis and turned about it: the standard object rotation. Camera, grid, sun and controls don't move, and whatever measures in world space turns into the planet's frame first (patch detail, clicking, the air's ground, the ocean's local frame).
+- Why: moving the camera instead looked cheaper but kept breaking things (the grid moved, dragging mirrored, the view swung over the poles, clouds didn't match the spin), all from one root cause. Dana: a holistic fix, not one patch at a time.
+- Clouds ride on the planet, so their bands run parallel to its equator as real ones do, and they drift against the spin at the equator (the trade winds' direction), so wind and spin read as different motions.
+
+### [S52] Terrain Randomize picks a world type first · `decided`
+**Decided:** 2026-11-01
+
+- Randomize first picks one of nine types, then rolls within it: ranges, archipelago, supercontinent, highlands, rolling, cellular, shattered, rifted and wild. Each uses a different part of the noise engine, so worlds differ in kind, not only in numbers; wild is the free mix.
+- Continents are the broadest layer; mountains, plateaus and detail are masked by the continents' own noise, so they stay on land (after Lague, who masks mountains by the first layer). Low ground stays smooth through Musgrave's hetero terrain.
+- Terraces are rare and small: highlands or a fifth of wild worlds, 8 to 15% of the surface, 3 to 6 steps. Dana: they look uniform, so only in specific areas.
+- Planets stay round: the shown layers' Heights together are capped at 1.5, and a layer carves by a negative Height, since elevation is their sum with no blend mode. Blend modes shape only the 2D map.
+- ❓ Open: canyons (no documented recipe found; Gaea's is "drainage based") and Clay John's erosion noise (MIT, needs a new bake step).

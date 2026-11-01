@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-10-31`
+`Last updated: 2026-11-01`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -94,8 +94,8 @@
 - Talks to: `NoisePanel`, `noiseLayers` (Randomize), `MaskControls`.
 
 **map/noiseLayers.ts**
-- What it is: the layer list hook, and terrain Randomize (layers by role, two drivers, broad masks).
-- Key names: `useNoiseLayers`, `addLayer`, `deleteLayer`, `reorderLayer`, `renameLayer`, `updateSelectedLayer`, `updateLayers`, `toggleLayerVisible`, `randomizeTerrain`, `TERRAIN_ROLES`, `HEIGHT_REFERENCE_FREQUENCY`, `MASK_CHANCE`.
+- What it is: the layer list hook, and terrain Randomize: a world type first, then layers by role, masked by the continents' noise.
+- Key names: `useNoiseLayers`, `addLayer`, `deleteLayer`, `reorderLayer`, `renameLayer`, `updateSelectedLayer`, `updateLayers`, `toggleLayerVisible`, `randomizeTerrain`, `WORLD_TYPES`, `TERRAIN_ROLES`, `ROLE_NAMES`, `HEIGHT_SUM_CAP`, `TERRACE_STEPS`, `PLATEAU_SHARE`, `MOUNTAIN_SHARE`, `landMask`, `HEIGHT_REFERENCE_FREQUENCY`.
 - Talks to: `NoisePanel`, `heightmap.ts`.
 
 **map/2Dbrush.ts**
@@ -225,6 +225,13 @@
 - What it is: the camera and its orbit controls. Every frame the planet view scales rotate, pan and zoom speed, and the near and far planes, by height above the surface; the far plane always contains the glow (`[B75]`). Space + drag pans, as does Shift + drag.
 - Key names: `camera`, `defaultCameraPosition`, `DEFAULT_CAMERA_DISTANCE`, `MIN_CAMERA_ALTITUDE`, `DEFAULT_NEAR`, `DEFAULT_FAR`, `controls`, `holdSpaceToPan`, `applyAltitudeRates` (`outerRadius`), `keepAboveFlatGround` (the chunk). The gumball's zoom slider and Reset View call the target's `pivotToGround` first (`scene/Gumball.tsx`).
 
+**scene/planetSpin.ts**
+- What it is: the planet turning on its own: the planet's group leans onto the axis and turns about it, a press pauses it, and it eases back in.
+- Key names: `SpinSettings`, `DEFAULT_SPIN`, `randomSpin`, `spinAxis`, `createPlanetSpin`, `SPIN_EASE_SECONDS`; in `scene/SceneCanvas.tsx`, `planetGroup`, `planetGroupRef`, `patchCameraLocal`; `uPlanetFrame` in `planetAirUniforms`, `airGroundLiftWorld`.
+
+**app/scripts/checkShaders.mjs**
+- What it is: compiles every material with glslangValidator, using three.js's own header. Run after any shader edit; new shader pieces go in its `MATERIALS` list.
+
 **scene/grid.ts**, **renderer.ts**, **scene.ts**
 - What it is: small Three.js setup modules.
 
@@ -338,7 +345,7 @@
 
 **water/oceanWaves.glsl** (CC BY-NC-SA 3.0, TDM's Seascape, with additions)
 - What it is: the sea for both views: Seascape's waves and color, plus the project's additions.
-- Key names: Seascape's `sea_octave`, `sea_octaves` (band-limited, `gSeaFootprint`, `SEA_WARP`), `sea_height` (currents, `seaBend`), `getNormal`, `seaColor` (Shine, Reflection, Cox and Munk glint far away); additions `seaFetchScale`, `gSeaAmplitude`, `seaWindScale`, `seaWhitecaps`, `seaStormStrength`, `foamStreaks`, `seaWhiteSea`, `seaFarFoam`, `halftoneMask`, `foamPatchiness`, `crestFoam`, `seaGlint`, `seaSlopeVariance`, `surfWave` (`uSurfZone`), `worldGradient`, `waterVariance` (Gerstner waves, pinch foam), the triplanar helpers `triplanarWeights`, `seaHeightTriplanar`, `seaNormalTriplanar`, `crestFoamTriplanar`.
+- Key names: Seascape's `sea_octave`, `sea_octaves` (band-limited, `gSeaFootprint`, `SEA_WARP`), `sea_height` (currents, `seaBend`), `getNormal`, `seaColor` (Shine, Reflection, Cox and Munk glint far away); additions `seaFetchScale`, `gSeaAmplitude`, `seaWindScale`, `seaWhitecaps`, `seaStormStrength`, `foamStreaks`, `seaWhiteSea`, `seaFarFoam`, `halftoneMask`, `foamPatchiness`, `crestFoam`, `seaGlint`, `SEA_SPARKLE_EXPONENT`, `foamBreakup`, `foamCellEdge`, `FOAM_LACE_SCALE`, `seaSlopeVariance`, `surfWave` (`uSurfZone`), `worldGradient`, `waterVariance` (Gerstner waves, pinch foam), the triplanar helpers `triplanarWeights`, `seaHeightTriplanar`, `seaNormalTriplanar`, `crestFoamTriplanar`.
 
 **water/water.glsl**, **water/chunkWater.vert.glsl**, **water/chunkWater.frag.glsl**, **water/chunkWaterWall.vert.glsl**, **water/chunkWaterWall.frag.glsl**
 - What it is: the water look both views share, and the chunk's water sheet (Seascape plus variance, surf, foam, depth transparency and haze).

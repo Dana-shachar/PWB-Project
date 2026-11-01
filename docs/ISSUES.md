@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-10-31`
+`Last updated: 2026-11-01`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -667,6 +667,31 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Cause, measured: the eye height eases toward the ground at a fixed rate, so any fast rise left it under the ground. The log showed 19.15 m below after a 20.8 m shore move, catching up over about 12 frames.
 - Fixed: the eye never goes below the ground (or the sea) plus 0.5 m; the smoothing still eases it down. Not yet retested by Dana.
 
+### [B84] Clarity recolors the land, not just the water · `wrong but workable`
+**🔴 Open, next up** · **Found:** 2026-11-01 · **Where:** `landRampFloor` in `planet/seaLevel.ts`
+- Dana (screenshots at low and high Clarity): the mountains change color, read as a lighting change, while the water itself barely changes.
+- Cause, from the code: the land color ramp starts at the depth light reaches, which Clarity sets, so moving Clarity re-stretches the whole land ramp. Fix not built yet: anchor the land ramp above sea level and let Clarity move only its underwater part.
+
+### [B81] No visible sun glitter path on the chunk water · `minor`
+**🔴 Open** · **Found:** 2026-10-31 · **Where:** `seaColor` in `shaders/water/oceanWaves.glsl`
+- Dana: wants the sparkling path under the sun seen in photos; after a sun-sharp highlight up close (`SEA_SPARKLE_EXPONENT`) and the Cox and Munk glint far away, she sees no difference. Not measured yet: the Scene light follows the camera by default, so the sun may never sit in front of the view. Deferred to move on.
+
+### [B82] The Cast shadow toggle seems to do nothing · `minor`
+**🔴 Open** · **Found:** 2026-10-31 · **Where:** the Scene panel's Shadows controls
+- Dana: hasn't seen it change anything. Not checked in the code yet.
+
+### [B83] Shore foam covered wide flat shallows as a solid sheet · `wrong but workable`
+**✅ Fixed:** 2026-11-01 · **Found:** 2026-10-31 · **Where:** `foamBreakup`, `chunkWater.frag.glsl`
+- Dana (screenshots): first three hard stripes, then wide pale sheets on gentle shores.
+- Cause: the foam zone was set by depth, so on a flat beach shallow water spans a wide area and all of it foamed; the breakup noise was wider than a surf band, so each band drew solid.
+- Fixed: the foam's reach is measured from the shore (depth over the seabed's slope, capped at 6 m), and its pattern is a soft lace of warped Voronoi cell edges (`foamBreakup`).
+
+### [B85] A duplicate shader constant blanked the planet · `blocks work`
+**✅ Fixed:** 2026-11-01 · **Found:** 2026-11-01 · **Where:** `shaders/water/oceanWaves.glsl`, new `app/scripts/checkShaders.mjs`
+- Dana: the planet's surface vanished after a foam edit.
+- Cause, measured: a new constant reused a name already in the file (`FOAM_PATCH_SCALE`), a compile error in the file both the planet and the water include. The type check can't see inside shader text.
+- Fixed at the root: `scripts/checkShaders.mjs` compiles every material with Khronos's glslangValidator, using three.js's own header, and runs after every shader edit.
+
 ### [B67] From walk mode the water is barely visible · `minor`
 **🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`
 - Dana: standing on the shore, the water reads as muddy ground. It is there, but its opacity depends on depth only, so the shallows are nearly see-through, and at eye height everything is seen at a grazing angle where real water reflects more (Fresnel). Fix not planned.
@@ -676,8 +701,9 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Cause from the code: Roughness fades to nothing near sea level (so the coastline never moves, a 2026-10 decision), leaving a smooth slope that meets the water in a near-straight line. Fix not chosen; needs a sourced method for coastline detail that doesn't make new islands or ponds.
 
 ### [B69] A hard color line where the land meets the water · `wrong but workable`
-**🔴 Open** · **Found:** 2026-10-27 · **Where:** the land color ramp at sea level (`landRampFloor` in `planet/seaLevel.ts`, `chunk.frag.glsl`)
-- Dana (screenshot): the land's color ramp stops at the waterline instead of continuing under the water, so the shore shows a sharp color edge. Fix not planned; read the ramp floor code first.
+**✅ Fixed** · **Found:** 2026-10-27 · **Where:** `landRampFloor` in `planet/seaLevel.ts`
+- Dana (screenshot): the land's color ramp stopped at the waterline, so the shore showed a sharp color edge.
+- Fixed by the land ramp floor, which starts the ramp at the depth light reaches, so land colors continue through the shallows. Checked in the code 2026-10-31; Dana saw no line in testing.
 
 ### [B55] Lighting seams and a straight cliff on the land chunk · `wrong but workable`
 **🔴 Open, cliff seen again 2026-10-27** · **Opened:** 2026-10-26 · **Found:** 2026-10-26 · **Where:** `shaders/chunk.frag.glsl`, `voxel/ChunkPatchRenderer.ts`

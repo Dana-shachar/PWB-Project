@@ -35,6 +35,10 @@
 - **Moons that set (2026-10-30, `[B78]`):** a low moon showed through the see-through sea and never faded. Moons now set behind the sea and melt into the horizon color, after three.js's sky shader (airmass extinction), with a Blend slider per moon.
 - **Moon colors from the sky (`[S48]`):** each moon has one hue relative to the sky, a shadow tone set by a color-harmony rule (complementary, triadic, analogous and so on) and a Saturation slider. A new design-system control, the two-handle hue bar, sets both tones.
 - **An atmosphere shaped like its planet (2026-10-31, `[S49]`, `[B80]`):** on jagged planets a wide empty ring sat between the planet and its glow. The air now stands on the planet's averaged surface, the glow keeps the same gap on every planet, each surface hazes only the air in front of it (Lague's atmosphere, done per surface as iTwin.js does), and the clouds are three stacked layers.
+- **Water up close:** Fresnel in both views, so low views read as water (`[B67]`); foam reaches a set distance from the shore in a soft lace of Voronoi edges (`[B83]`).
+- **World types (2026-11-01, `[S52]`):** Terrain Randomize picks one of nine types first (ranges, archipelago, supercontinent, highlands, rolling, cellular, shattered, rifted, wild), after reading Lague's actual planet code and Minecraft's region noises. Mountains stay on land, coasts stay smooth, terraces are rare, planets stay round.
+- **The planet spins (`[S51]`):** at any tilt, like Uranus or Venus, with clouds running along its equator against the spin.
+- **A shader check (`[B85]`):** every shader now compiles with Khronos's reference compiler before a reload.
 - **Water as a block (`[S50]`):** the chunk's water got see-through side walls; the grid no longer shows through the water in walk mode (`[B79]`).
 
 ### 🤖 AI process
@@ -46,7 +50,9 @@
 - **Unapproved style again:** the first moon sections carried a nested style Dana hadn't seen; now written into the design system so it can't drift.
 - **An invented fix, caught:** Claude softened the haze's edge with a method of its own and called it done; it drew rings across the planet. Dana: only known, documented methods. It was undone and replaced with Lague's, read in the source code.
 - **Unchecked assumptions:** a shader used an old texture function that three.js only translates in one shader stage, so the clouds vanished; a moon color helper dropped the second tone's offset. Both were found from the console and the code, then fixed.
-- **Tokens:** two research agents (55k and 13k tokens); Dana asked for narrower reads through the code index.
+- **Tokens:** research agents (55k, 13k, 59k, 29k, 9k tokens); Dana asked for narrower reads through the code index.
+- **A workaround that kept breaking:** Claude built the spin by moving the camera, called the standard approach (rotating the planet) risky, and each fix uncovered another side effect. Dana stopped it and asked for one holistic fix. Reading every affected system first made it one clean pass.
+- **Fixed recipes flatten variety:** copying one saved planet's numbers made every world alike; they became the center of ranges by world type. Dana's logs of liked and disliked rolls drove each round.
 
 ### 📊 Worked / didn't / next
 - ✅ The chunk's own height map, resampled: the established terrain approach.
@@ -58,6 +64,8 @@
 - ❌ A fix tried before measuring: reverted.
 - ✅ Reading the actual source code (Lague, iTwin.js, three.js `Sky.js`, Lohmüller) before building.
 - ❌ An invented method presented as a fix: undone.
+- ✅ A real compiler for shaders: the exact error on the first run.
+- ❌ A camera workaround instead of the standard rotation: replaced.
 - ⏭️ Tune Randomize's drivers from Dana's test, then slope rock and landscape variety; walk mode's `[B71]` is deferred.
 
 ---
