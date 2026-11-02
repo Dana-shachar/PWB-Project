@@ -50,12 +50,24 @@ uniform float uDetailAmount;
 uniform float uShoreEnabled;
 uniform float uShoreSeaLevel;
 #ifndef CHUNK_PATCH_PASS
-uniform sampler2D uValleyMap; // RG = eroded height times land, land; BA = water level times cover, cover (rivers/valleyMap.ts)
+uniform sampler2D uValleyMap; // RG = eroded height times land, land; BA = lake level times cover, minus cover (rivers/valleyMap.ts)
+uniform vec2 uValleyMapSize; // columns, land rows
+uniform float uValleyTextureRows; // land rows plus the river grid's (rivers/riverGrid.ts)
+uniform vec2 uRiverGridSize;
+uniform float uRiverBlendWidth; // radians over which the land blends to a river (rivers/riverGrid.ts)
+const int RIVER_MAX_BUCKET_PIECES = 48; // RIVER_MAX_BUCKET_PIECES in rivers/riverGrid.ts
+const int RIVER_CURVE_STEPS = 4; // RIVER_CURVE_STEPS in rivers/riverGrid.ts
+// Nearby water joins in one smooth shape, as Genevaux blends terrain fields (after Wyvill's BlobTree): lake disks round
+// into one shore and junctions get soft corners. Radians. Inferred, TUNABLE
+const float WATER_SMOOTH_UNION = 0.0008;
+// Where rivers meet or reach the sea the join widens with them, as confluences scour and widen (Best 1987). Of the
+// wider one's half width. Inferred, TUNABLE
+const float WATER_UNION_PER_WIDTH = 1.5;
 uniform float uValleyEnabled;
 uniform float uErosionStrength;
-const float WATER_MIN_COVER = 0.3;
 #endif
 const float RIVER_CHANNEL_DEPTH = 0.002; // how far a river's bed sits under its water. Inferred, TUNABLE
+const float NO_WATER_MARGIN = 0.0001; // off the water, B is the ground just under itself, so shores fall between texels
 const float NO_LOCAL_WATER = -1000.0; // far under any sea, so filtering toward it only trims an edge
 // Each layer's own mask pattern: a base generator type (-1 = unmasked), its
 // seed and frequency, then the brightness band that lets the layer through.
@@ -550,6 +562,72 @@ float chunkBaseElevation(vec2 localFace) {
 }
 #endif
 
+#ifndef CHUNK_PATCH_PASS
+// One texel of the river grid, by its index past the land rows.
+vec4 riverGridTexel(float idx) {
+  float row = floor(idx / uValleyMapSize.x);
+  return texture2D(uValleyMap, vec2(idx - row * uValleyMapSize.x + 0.5, uValleyMapSize.y + row + 0.5) / vec2(uValleyMapSize.x, uValleyTextureRows));
+}
+// Signed distance past the nearest river's edge (negative inside it), and the river's height there. Each span is stored
+// as its curve's points (rivers/riverGrid.ts), joined by straight pieces. The height follows riverFields in Plate-Local
+// River Generation's rivers.cpp: the mean inside channels, else an inverse-distance blend of nearby spans.
+float riverEdgeDistance(vec3 position, vec2 uv, out float level, out float halfWidth) {
+  vec2 bucketCell = clamp(floor(uv * uRiverGridSize), vec2(0.0), uRiverGridSize - 1.0);
+  vec4 bucket = riverGridTexel(bucketCell.y * uRiverGridSize.x + bucketCell.x);
+  float nearest = 1e6;
+  float smoothNearest = 1e6;
+  float nearestLevel = 0.0;
+  float nearestHalfWidth = 0.0;
+  float insideSum = 0.0;
+  float insideCount = 0.0;
+  float weightedSum = 0.0;
+  float weightSum = 0.0;
+  for (int i = 0; i < RIVER_MAX_BUCKET_PIECES; i++) {
+    if (float(i) >= bucket.g) break;
+    float spanEdge = 1e6;
+    float spanLevel = 0.0;
+    float spanHalfWidth = 0.0;
+    float first = riverGridTexel(bucket.r + float(i)).r;
+    vec2 halfWidths = riverGridTexel(first + float(RIVER_CURVE_STEPS) + 1.0).rg; // at its upstream and downstream ends
+    vec4 prevPoint = riverGridTexel(first);
+    for (int step = 1; step <= RIVER_CURVE_STEPS; step++) {
+      vec4 point = riverGridTexel(first + float(step));
+      vec3 stepDir = point.xyz - prevPoint.xyz;
+      float share = clamp(dot(position - prevPoint.xyz, stepDir) / max(1e-12, dot(stepDir, stepDir)), 0.0, 1.0);
+      float along = (float(step) - 1.0 + share) / float(RIVER_CURVE_STEPS);
+      float edge = length(position - prevPoint.xyz - share * stepDir) - mix(halfWidths.x, halfWidths.y, along);
+      if (edge < spanEdge) {
+        spanEdge = edge;
+        spanLevel = mix(prevPoint.w, point.w, share);
+        spanHalfWidth = mix(halfWidths.x, halfWidths.y, along);
+      }
+      prevPoint = point;
+    }
+    // Polynomial smooth minimum: equal to min apart from where two shapes come within the union radius.
+    float unionRadius = WATER_SMOOTH_UNION + WATER_UNION_PER_WIDTH * max(spanHalfWidth, nearestHalfWidth);
+    float overlap = max(unionRadius - abs(smoothNearest - spanEdge), 0.0) / unionRadius;
+    smoothNearest = min(smoothNearest, spanEdge) - overlap * overlap * unionRadius * 0.25;
+    if (spanEdge < nearest) {
+      nearest = spanEdge;
+      nearestLevel = spanLevel;
+      nearestHalfWidth = spanHalfWidth;
+    }
+    if (spanEdge <= 0.0) {
+      insideSum += spanLevel;
+      insideCount += 1.0;
+    } else if (spanEdge < uRiverBlendWidth) {
+      float fade = 1.0 - smoothstep(0.0, 1.0, spanEdge / uRiverBlendWidth);
+      float weight = fade * fade / (spanEdge * spanEdge);
+      weightedSum += spanLevel * weight;
+      weightSum += weight;
+    }
+  }
+  level = insideCount > 0.0 ? insideSum / insideCount : weightSum > 0.0 ? weightedSum / weightSum : nearestLevel;
+  halfWidth = nearestHalfWidth;
+  return smoothNearest;
+}
+#endif
+
 void main() {
   // Only these two lines differ between a whole-globe bake and a region
   // bake: which surface point this pixel stands for, and where to read
@@ -700,16 +778,18 @@ void main() {
 
   // B carries a lake or river's surface (Derzapf 2011). The sea stays out of it, so it can move without a re-bake.
   float waterSurface = NO_LOCAL_WATER;
-  float riverCover = 0.0;
+  float riverLevel = 0.0;
+  float riverEdge = 1e6;
+  float riverHalfWidth = 0.0;
 #ifndef CHUNK_PATCH_PASS
   // The land as the rivers shaped it (rivers/streamPower.ts), under Roughness so its bumps stay.
   if (uRegionMode > 0.5 && uValleyEnabled > 0.5) {
-    vec4 valley = texture2D(uValleyMap, spherePositionToPaintUv(basePosition));
+    vec2 paintUv = spherePositionToPaintUv(basePosition);
+    // The land rows only: the river grid sits above them in the same texture.
+    vec4 valley = texture2D(uValleyMap, vec2(paintUv.x, min(paintUv.y * uValleyMapSize.y, uValleyMapSize.y - 0.5) / uValleyTextureRows));
     elevation = elevation * (1.0 - valley.g * uErosionStrength) + valley.r * uErosionStrength;
-    if (abs(valley.a) > WATER_MIN_COVER) {
-      waterSurface = valley.b / valley.a;
-      if (valley.a > 0.0) riverCover = smoothstep(WATER_MIN_COVER, 1.0, valley.a); // lakes keep their terrain shoreline
-    }
+    // Rivers and lakes alike: lakes are disks of water in the same grid (rivers/riverGrid.ts), placed after Roughness.
+    riverEdge = riverEdgeDistance(basePosition, paintUv, riverLevel, riverHalfWidth);
   }
 #endif
 
@@ -724,6 +804,29 @@ void main() {
     elevation += uDetailAmount * shoreFade * planetDetail(basePosition, sampleSpacing, 0.0);
   }
   // After Roughness, so bumps can't lift a riverbed above its water and break the river up.
-  if (riverCover > 0.0) elevation = min(elevation, mix(elevation, waterSurface - RIVER_CHANNEL_DEPTH, riverCover));
+#ifndef CHUNK_PATCH_PASS
+  // Génevaux et al. 2013, section 7: the river replaces the land, h = (1 - w) hLand + w hRiver, with the compact weight
+  // w = (1 - d^2 / r^2)^2 and hRiver = river height + its profile across the channel; water exists only in the channel.
+  // A channel is never narrower than one bake texel, so it can't fall between samples (a line's minimum width).
+  if (uRegionMode > 0.5 && uValleyEnabled > 0.5) {
+    float channelHalf = max(riverHalfWidth, sampleSpacing);
+    float centerDistance = riverEdge + riverHalfWidth;
+    float reach = channelHalf + uRiverBlendWidth;
+    if (centerDistance < reach) {
+      float ratio = centerDistance * centerDistance / (reach * reach);
+      float weight = (1.0 - ratio) * (1.0 - ratio);
+      float across = centerDistance / channelHalf;
+      // A parabola across the channel, carried on past its edge so the bank rises above the water. Inferred, TUNABLE
+      float profile = RIVER_CHANNEL_DEPTH * min(1.0, across * across - 1.0);
+      float carved = (1.0 - weight) * elevation + weight * (riverLevel + profile);
+      // A river only cuts, never raises: raising low land to its bank built walls that dammed rivers at the coast, and
+      // raising the sea floor at a mouth left pale stubs.
+      elevation = min(elevation, carved);
+      // Water reaches a texel past the channel, so the shore is where the rising bank crosses it, not a texel's edge.
+      if (centerDistance < channelHalf + sampleSpacing) waterSurface = riverLevel;
+    }
+  }
+#endif
+  if (uRegionMode > 0.5 && waterSurface < -500.0) waterSurface = elevation - NO_WATER_MARGIN;
   gl_FragColor = uElevationInRed > 0.5 ? vec4(elevation, elevation, waterSurface, 1.0) : vec4(clamp(composite, 0.0, 1.0), elevation, waterSurface, 1.0);
 }

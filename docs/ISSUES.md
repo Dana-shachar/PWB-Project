@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-11-01`
+`Last updated: 2026-11-02`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -732,6 +732,76 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ### [B92] Shore foam still looks worse than it should · `minor`
 **⏸️ Parked** · **Found:** 2026-11-01 · **Where:** `foamMask`, `shaders/water/chunkWater.frag.glsl`
 - Dana: not perfect, moving on. Foam that trails receding waves needs a stored buffer that decays (Crest, War Thunder).
+
+### [B93] River water looks like raised silver bands up close · `wrong but workable`
+**🔴 Open, next up** · **Found:** 2026-11-01 · **Where:** the water branch of `shaders/terrain/planetPatch.frag.glsl`
+- Dana: the river water shader needs adjusting. Up close at a low angle, rivers are pale, shiny and wave-covered, and seem to stand above the land.
+- Not measured yet. Rivers share the ocean's waves, reflection and colors, which are scaled for a sea.
+- Needed: river water that accounts for flow direction, so its surface moves downstream.
+
+### [B94] Rivers drawn onto a terrain they didn't shape · `wrong but workable`
+**🔴 Open, the root of B95 to B105** · **Found:** 2026-11-02 · **Where:** the river carve in `shaders/heightmap/heightmap.frag.glsl`, `rivers/`
+- Dana: every round looked worse; floods, dry trenches, tubes, vanishing water, straight lines and ragged edges kept returning.
+- Cause, measured: a debug view of shown ground minus river level put tributaries far below the ground and main rivers far above it. The noise was never shaped by water, and the rivers were a decal cut into it.
+- Fix: the water system design in the `ROADMAP.md` handover (2026-11-02), with water and terrain from one field.
+
+### [B95] Rivers ran along the grid's rows · `wrong but workable`
+**✅ Fixed:** 2026-11-02 · **Found:** 2026-11-02 · **Where:** new `rivers/riverGraph.ts`
+- Dana: rivers completely straight, side by side.
+- Cause: each node's neighbors came from a row pattern with eight directions (Derzapf: "parallel rivers would emerge").
+- Fixed: neighbors from a Delaunay triangulation of the nodes (Cordonnier et al. 2016, 4.1), built once when the worker starts. Measured: 23.6% of river steps on the old eight directions, against 22% for even spread.
+
+### [B96] River levels were invented, not taken from the terrain · `wrong but workable`
+**✅ Fixed:** 2026-11-02 · **Found:** 2026-11-02 · **Where:** `levelsFromTerrain` in `rivers/valleyMap.ts`
+- Cause, measured: `erodeTerrain`'s stream power profile replaced the levels, stretched to the noise's tallest point, so tributaries sat above the ground and main rivers below it.
+- Fixed: each level is the shown coarse height, noise mixed with eroded land by Erosion, lowered wherever it would climb (Peytavie 5.1; Plate-Local). Main rivers matched the ground in the debug view.
+
+### [B97] Tiny islands inside river channels · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-02 · **Where:** `riverEdgeDistance` in `shaders/heightmap/heightmap.frag.glsl`
+- Cause, read in the code: a smooth minimum between consecutive pieces of one river pushes the distance below the channel at every node, so the cross-section rises back up there.
+- Fix: remove that smoothing; widen junctions with a pool at each confluence instead.
+
+### [B98] Rivers stop short of the shown coast · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-02 · **Where:** mouths in `rivers/riverGrid.ts`, the carve in `heightmap.frag.glsl`
+- Dana: land is left around a river near the ocean, as if the land goes around it.
+- Cause: the network sees the coast at 9 km, and the shown coast comes from finer noise. Mouths now run 3 node spacings out and rivers only cut, which helped but didn't close every gap.
+- Fix: carve each river through to where the shown ocean begins, measured in the shader.
+
+### [B99] River mouths hooked sideways · `minor`
+**🟡 Fix built, Dana's check pending** · **Found:** 2026-11-02 · **Where:** `curvePoint` in `rivers/riverGrid.ts`
+- Cause: a mouth's last stretch headed to the deepest sea node beside it.
+- Fixed: the last stretch heads straight out along the river, and widens as an estuary (Savenije's shape; its length and size are not yet sourced).
+
+### [B100] Odd lakes: blobs, lakes at river mouths, most lakes closed · `wrong but workable`
+**🟡 Lakes removed for now, Dana wants some back** · **Found:** 2026-11-02 · **Where:** `buildRiverTree` in `rivers/riverTree.ts`
+- Measured: 178 of 260 lakes never spilled. Lakes at mouths came from small below-sea dips raised to sea level (`OCEAN_MIN_NODES`), which became flat pits.
+- Now: every pit is filled with a slight slope (Priority-Flood + ε, Barnes et al. 2014, as Peytavie does), so there are 0 lakes.
+- Next: Fill-Spill-Merge (Barnes, Callaghan and Wickert 2020) decides which dips hold water. Not read yet.
+
+### [B101] Tributaries widened into wedges where they joined · `minor`
+**🟡 Fix built, Dana's check pending** · **Found:** 2026-11-02 · **Where:** `buildRiverGrid` in `rivers/riverGrid.ts`
+- Cause: each stretch ended at the width of the river or lake it flowed into.
+- Fixed: a stretch ends at its own width and starts at the width of the stretch above it.
+
+### [B102] Blunt river heads, and the taper rule · `minor`
+**🔴 Open** · **Found:** 2026-11-02 · **Where:** `SOURCE_HEAD_SHARE` in `rivers/riverGrid.ts`
+- Dana: a river tapers at its source and widens at its mouth, or widens at both ends when it joins two large bodies of water.
+- Now: sources start at 60% of their width, so heads are blunt.
+
+### [B103] Jagged, stair-stepped water edges · `minor`
+**🟡 Fix built, Dana's check pending** · **Found:** 2026-11-02 · **Where:** the end of `heightmap.frag.glsl`
+- Cause: off the water the bake stored −1000, so shores snapped to whole texels.
+- Fixed: off the water, B is the ground just under itself, so shores fall between texels.
+
+### [B104] Too many rivers, side by side · `minor`
+**🟡 Partly fixed** · **Found:** 2026-11-02 · **Where:** `RIVER_MIN_AREA` in `rivers/riverGrid.ts`, growth in `buildRiverTree`
+- Now: rivers drawn from 256 nodes of drainage area, and basins grown by Génevaux's priority rule (5). Measured: 146 drawn systems reach the sea, the largest basin 9,768 nodes.
+- Next: the threshold, ζ and the branching odds become sliders, since the papers make them user settings.
+
+### [B105] The type check checked nothing · `slows work`
+**✅ Fixed:** 2026-11-02 · **Found:** 2026-11-02 · **Where:** the check command
+- Cause: the root `tsconfig.json` only points to other configs, so `npx tsc --noEmit -p .` had no files.
+- Fixed: check with `npx tsc --noEmit -p tsconfig.app.json`. It found three real errors from that day's wiring.
 
 ### [B67] From walk mode the water is barely visible · `minor`
 **🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`

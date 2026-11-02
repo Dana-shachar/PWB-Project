@@ -525,7 +525,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const webglRenderer = webglRendererRef.current;
         const heightmapPipeline = heightmapPipelineRef.current;
         if (!webglRenderer || !heightmapPipeline) return;
-        heightmapPipeline.setValleyMap(map, VALLEY_MAP_WIDTH, VALLEY_MAP_HEIGHT);
+        heightmapPipeline.setValleyMap(map, VALLEY_MAP_WIDTH, VALLEY_MAP_HEIGHT, map ? map.length / 4 / VALLEY_MAP_WIDTH : 0);
         planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
       },
       setErosionStrength(strength) {

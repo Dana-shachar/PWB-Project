@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-11-01`
+`Last updated: 2026-11-02`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -16,7 +16,9 @@
 | Task | Read first, in order |
 |---|---|
 | Add or change a noise control | `map/noiseRanges.ts`, `map/heightmap.ts` (`NoiseLayer`), `ui/NoisePanel.tsx`, `shaders/heightmap/heightmap.frag.glsl` |
-| Change rivers or lakes | `rivers/riverTree.ts` (`buildRiverTree`, `balanceLakes`), `rivers/riverTree.worker.ts`, `rivers/riverControls.ts` |
+| Change rivers or lakes | `rivers/riverTree.ts` (`buildRiverTree`, `balanceLakes`), `rivers/riverGrid.ts` (`buildRiverGrid`), `rivers/riverTree.worker.ts`, `rivers/riverControls.ts` |
+| Change how rivers carve the terrain | `riverEdgeDistance` and the carve after Roughness in `shaders/heightmap/heightmap.frag.glsl`, `rivers/riverGrid.ts` |
+| Change which nodes neighbor | `rivers/riverGraph.ts` (`buildRiverGraph`) |
 | Change how land erodes | `rivers/streamPower.ts`, `rivers/valleyMap.ts`, `uValleyMap` in `shaders/heightmap/heightmap.frag.glsl` |
 | Add a liquid or a climate control | `rivers/riverClimate.ts` (`LIQUIDS`, `waterBudget`), `atmosphere/atmosphereSettings.ts` (`randomClimate`), the Climate part in `ui/Panel.tsx` |
 | Add a field to a layer | `map/heightmap.ts` (`NoiseLayer`, `createDefaultLayer`, `migrateLegacyLayers`, `syncLayerUniforms`), then the shader uniform |
@@ -89,7 +91,7 @@
 **map/heightmap.ts**
 - What it is: the layer type, its migrations, and the pipeline that bakes layers into a heightmap on the GPU.
 - Key names: `NoiseLayer`, `NOISE_TYPE_OPTIONS`, `FRACTAL_TYPE_OPTIONS`, `VORONOI_DISTANCE_OPTIONS`, `BLEND_MODE_OPTIONS`, `hasMask`, `quantileOf`, `createDefaultLayer`, `migrateLegacyLayers`, `HeightmapPipeline` (`beginStroke`, `endStroke`, `replayLayerHistory`, `bakeRegionToTarget`, `getRegionElevationData`, `setDetailAmount`, `setPlanetRadiusMeters`, `getChunkBaseTexture` (the 4096 map for the chunk's water and shadows), the globe size option in the constructor, `bakeRegionInto`, `ensureChunkBase`: the land chunk's own 4096 height map, `chunkPatchMaterial`: the bake compiled as `CHUNK_PATCH_PASS` to resample it, `maskSortedValues`, `resolveMaskBand`), `RegionParams` (`localOrigin`, `fromChunkBase`), `CHUNK_BASE_SAMPLES`, `syncLayerUniforms`.
-- Talks to: `shaders/heightmap/heightmap.frag.glsl`, `SceneCanvas`, the patch renderer.
+- Talks to: `shaders/heightmap/heightmap.frag.glsl`, `SceneCanvas`, the patch renderer. `setValleyMap` takes the valley map with the river grid's rows after it (`uValleyMapSize`, `uValleyTextureRows`, `uRiverGridSize`, `uRiverBlendWidth`).
 
 **map/noiseRanges.ts**
 - What it is: one table of every noise control's range and scale, plus Randomize's narrower range (`random`).
@@ -174,8 +176,16 @@
 *The drainage tree, lakes, climate, erosion and the map that carries them into the bake. It runs in a worker.*
 
 **rivers/riverTree.ts**
-- What it is: the tree, grown from the coast after filling pits; the climate step that balances lakes, sums flow and fills reused arrays; smoothing, meanders and the arrays handed to the app.
-- Key names: `buildRiverTree` (inner `waterLevels`, `collectNeighbors`), `RiverTree`, `RiverNetwork`, `applyClimate`, `findPits`, `balanceLakes`, `smoothRiverPaths`, `meanderChain`, `extractRiverSegments`, `extractLakeNodes`, `queryRiverSegments`, `RIVER_MIN_LAKE_CATCHMENT`, `RIVER_MIN_LAKE_NODES`.
+- What it is: the tree, grown from the coast by Génevaux's priority rule after filling every pit; the climate step that balances lakes, sums flow and fills reused arrays; smoothing and the arrays handed to the app.
+- Key names: `buildRiverTree` (inner `waterLevels`, `collectNeighbors`, `popNext`), `seededRandom`, `RiverTree`, `RiverNetwork`, `applyClimate`, `findPits`, `balanceLakes`, `smoothRiverPaths`, `extractRiverSegments`, `extractLakeNodes`, `queryRiverSegments`, `FILL_EPSILON`, `OCEAN_MIN_NODES`, `RIVER_PRIORITY_RANGE`, `RIVER_MIN_LAKE_CATCHMENT`, `RIVER_MIN_LAKE_NODES`.
+
+**rivers/riverGraph.ts**
+- What it is: where the nodes sit and which ones neighbor, from a Delaunay triangulation (Delaunator), built once when the worker starts.
+- Key names: `buildRiverGraph`, `RiverGraph`, `RIVER_NODE_JITTER`.
+
+**rivers/riverGrid.ts**
+- What it is: every drawn river stretch as curve points with widths and levels, filed by place so each patch bake measures distance to rivers at its own resolution; winding, estuaries, lake disks.
+- Key names: `buildRiverGrid`, `windNoise`, `RIVER_GRID_WIDTH`, `RIVER_GRID_HEIGHT`, `RIVER_MAX_BUCKET_PIECES`, `RIVER_BLEND_WIDTH`, `RIVER_CURVE_STEPS`, `RIVER_MIN_AREA`, `LAKE_NODE_RADIUS`, `ESTUARY_LENGTH`, `SOURCE_HEAD_SHARE`.
 
 **rivers/riverClimate.ts**
 - What it is: the water budget from Rainfall, Temperature and Liquid, and each liquid's ranges and behavior.
@@ -186,15 +196,15 @@
 - Key names: `erodeTerrain`, `MIN_RISE`, `MAX_STEP`.
 
 **rivers/valleyMap.ts**
-- What it is: bakes eroded height and water level into one map, with river widths and tapered tips. R and G are height times land, and land; B and A are water level times cover, and cover, negative for lakes.
-- Key names: `buildValleyMap`, `blurLand`, `paintWater`, `VALLEY_MAP_WIDTH`, `RIDGE_BLUR_PASSES`, `RIVER_BASE_WIDTH`.
+- What it is: bakes the eroded height into one map, with the river grid in the rows after it, and takes river levels from the shown terrain. R and G are height times land, and land; B and A still carry the old lake circles, no longer read.
+- Key names: `buildValleyMap`, `levelsFromTerrain`, `blurLand`, `paintLake`, `VALLEY_MAP_WIDTH`, `VALLEY_MAP_HEIGHT`, `RIDGE_BLUR_PASSES`, `LAKE_EDGE_SCALE`.
 
 **rivers/riverTree.worker.ts**
-- What it is: holds the tree off the main thread and answers build, climate, valley and camera queries.
-- Key names: `applyAndReport`.
+- What it is: holds the graph and the tree off the main thread and answers build, climate, valley and camera queries. [TEMP] logs lake outflows, basins and grid alignment.
+- Key names: `applyAndReport`, `gridAlignedShare`, `lakeOutflows`.
 
 **rivers/riverControls.ts**
-- What it is: `useRivers`, which rebuilds on terrain or sea level, sends only the newest climate, waits for sliders to settle before the map, and returns `valleyRevision`.
+- What it is: `useRivers`, which rebuilds on terrain or sea level, sends only the newest climate and Erosion, waits for sliders to settle before the map, and returns `valleyRevision` and `riversBusy`.
 - Key names: `useRivers`, `sendClimate`, `sendValleyWhenSettled`.
 
 **rivers/riverView.ts**
@@ -343,7 +353,7 @@
 
 **ui/UIElements.tsx**
 - What it is: the design-system components.
-- Key names: `Slider` (log and reversed scales, `trackBackground`, `swatchColor`: a color bar on its own row), `HueSlider`, `DualHueSlider` (two hues on one bar, the second saved as a distance), `Dial` (round angle control), `Toggle`, `Switch`, `SectionTitle` (a title line with an optional switch), `Select`, `ColorPicker` (optional lock), `LockButton`, `EditableText`, `Accordion` (`actions`, `headerSwitch`), `IconButton`, `Popup`, `placeTooltip`.
+- Key names: `Slider` (log and reversed scales, `trackBackground`, `swatchColor`: a color bar on its own row), `HueSlider`, `DualHueSlider` (two hues on one bar, the second saved as a distance), `Dial` (round angle control), `Toggle`, `Switch`, `SectionTitle` (a title line with an optional switch), `Select`, `ColorPicker` (optional lock), `LockButton`, `EditableText`, `Accordion` (`actions`, `headerSwitch`), `IconButton`, `Popup`, `placeTooltip`, `BusyIndicator` (background work running).
 
 **ui/icons.tsx**
 - What it is: flat line-art icons.

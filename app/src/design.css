@@ -1856,3 +1856,29 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   justify-content: center;
   padding: 6px;
 }
+
+/* BusyIndicator: a spinning ring in the track color with an accent arc, and its label. */
+.busy-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+}
+.busy-indicator-ring {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--color-track);
+  border-top-color: var(--color-accent);
+  animation: busy-indicator-spin 0.9s linear infinite;
+}
+@keyframes busy-indicator-spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .busy-indicator-ring {
+    animation: none;
+    border-color: var(--color-accent);
+  }
+}

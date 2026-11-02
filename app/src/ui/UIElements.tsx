@@ -768,3 +768,14 @@ export function Popup({ open, anchorRef, onClose, children }: PopupProps) {
     document.body,
   );
 }
+
+// A row saying work is running in the background, so the app doesn't read as stuck. Not interactive: shown while
+// busy, gone when done; with reduced motion the ring holds still.
+export function BusyIndicator({ label }: { label: string }) {
+  return (
+    <div className="busy-indicator" role="status" aria-live="polite">
+      <span className="busy-indicator-ring" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
+}

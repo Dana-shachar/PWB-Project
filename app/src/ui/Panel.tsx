@@ -1,6 +1,6 @@
 import { LIQUIDS, liquidNamed, rainfallMax, referenceTemperature } from '../rivers/riverClimate';
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle, Dial } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle, Dial, BusyIndicator } from './UIElements';
 import type { SpinSettings } from '../scene/planetSpin';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
@@ -114,6 +114,7 @@ interface PanelProps {
   onWaterChange: (changes: Partial<WaterSettings>) => void;
   atmosphere: AtmosphereSettings;
   onAtmosphereChange: (changes: Partial<AtmosphereSettings>) => void;
+  riversBusy: boolean;
   heightDistribution: HeightDistribution | null;
   // Planet Resolution: a detail bias, 1 is automatic (planet/planetPatches.ts).
   maxErrorPixels: number;
@@ -266,6 +267,7 @@ export function Panel({
   onWaterChange,
   atmosphere,
   onAtmosphereChange,
+  riversBusy,
   heightDistribution,
   chunkElevationRange,
   maxErrorPixels,
@@ -854,6 +856,7 @@ export function Panel({
               description="How far rivers have shaped the land into ridges and valleys. 0 is the plain noise terrain."
             />
             <Toggle label="River debug" value={atmosphere.riverDebug} onChange={(riverDebug) => onAtmosphereChange({ riverDebug })} description="Shows the rivers as lines and the lakes as dots, over the terrain." />
+            {riversBusy && <BusyIndicator label="Building rivers…" />}
           </Accordion>
         </div>
 

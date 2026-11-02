@@ -4,6 +4,7 @@
 // rims first (Priority-Flood, as Peytavie et al. 2019 do), so water at every node has its own height, like a local sea.
 
 import { waterBudget, type RiverClimate, type WaterBudget } from './riverClimate';
+import type { RiverGraph } from './riverGraph';
 
 export const NOT_LAND = -2; // sea nodes, which have no parent: every river ends in one, as in Sapiens and Davis
 const NO_LAKE = -1;
@@ -70,17 +71,29 @@ interface ClimateScratch {
   isPlaced: Uint8Array;
 }
 
-const RIVER_NODE_JITTER = 0.8; // of a cell. Inferred, TUNABLE
+// Basins by priority (Genevaux et al. 2013, section 5): among the waiting nodes within ζ of the lowest, the one with the
+// highest Horton-Strahler priority grows first, so a few rivers reach far inland and gather big basins (their Fig. 5:
+// "one large drainage network and several small ones"). Mouths take priorities by Horton's law, about 4 times fewer
+// rivers of each higher order. ζ and the branching odds are the paper's user settings. Inferred, TUNABLE
+// Pits are filled with a slight slope so water always flows on: Priority-Flood + ε (Barnes et al. 2014), the "optimal
+// depression filling" Peytavie et al. 2019 use so river graphs never break up. ε is a step float32 heights can hold,
+// not a design value.
+const FILL_EPSILON = 1e-6;
+// Below sea level counts as sea only in a body this big, in nodes (about 85 km² each); smaller dips cut off from the
+// ocean are land, so rivers carry on to the real coast. The ocean as the sea connected to it. Inferred, TUNABLE
+const OCEAN_MIN_NODES = 2000;
+const RIVER_MAX_PRIORITY = 5;
+const RIVER_BIFURCATION_RATIO = 4;
+const RIVER_PRIORITY_RANGE = 0.03; // ζ, as a share of the land's relief
+const RIVER_CONTINUE_ODDS = 0.6; // Pc: the first new branch keeps its parent's priority
+const RIVER_SYMMETRIC_ODDS = 0.15; // Ps: two branches of priority n - 1; the rest (Pa) keep n and add a smaller one
 const RIVER_GROWTH_RANDOMNESS = 0.001; // of the land's relief: at 0.02 rivers sat no lower than a random spot. Inferred, TUNABLE
 const RIVER_MIN_LAKE_NODES = 8; // every pit fills, but smaller ones don't count as lakes: display only. Inferred, TUNABLE
 const RIVER_MIN_LAKE_CATCHMENT = 200; // nodes of land: less than this sinks into the ground. Inferred, TUNABLE
-const RIVER_MEANDER = 0.0025; // radians at full swing, about a cell and a half. Inferred, TUNABLE
-const RIVER_MEANDER_WAVELENGTH = 8; // nodes per bend. Inferred, TUNABLE
-const RIVER_MEANDER_STEEP = 0.004; // the drop per node at which rivers run straight (Peytavie 2019: meanders need low slopes). Inferred, TUNABLE
 const RIVER_SPLINE_STEP = 3; // nodes between spline points: through every node, the zigzag would stay. Inferred, TUNABLE
 
 // Mulberry32: a small seeded generator, so the same terrain always gives the same rivers.
-function seededRandom(seed: number): () => number {
+export function seededRandom(seed: number): () => number {
   let state = seed;
   return () => {
     state = (state + 0x6d2b79f5) | 0;
@@ -102,6 +115,14 @@ class NodeHeap {
   }
 
   push(node: number, key: number): void {
+    if (this.size === this.nodes.length) {
+      const nodes = new Int32Array(this.nodes.length * 2);
+      const keys = new Float32Array(this.keys.length * 2);
+      nodes.set(this.nodes);
+      keys.set(this.keys);
+      this.nodes = nodes;
+      this.keys = keys;
+    }
     let idx = this.size++;
     while (idx > 0) {
       const parentIdx = (idx - 1) >> 1;
@@ -139,59 +160,48 @@ class NodeHeap {
 }
 
 // heights is the globe map: rows north to south, columns by longitude (uvToSpherePosition in heightmap.frag.glsl).
-export function buildRiverTree(heights: Float32Array, width: number, height: number, seaLevel: number, seed = 1): RiverTree {
-  // Fewer nodes per row toward the poles, so they stay about one cell apart instead of bunching up.
-  const rowStarts = new Int32Array(height + 1);
-  for (let row = 0; row < height; row++) {
-    const latitude = (0.5 - (row + 0.5) / height) * Math.PI;
-    rowStarts[row + 1] = rowStarts[row] + Math.max(3, Math.round(width * Math.cos(latitude)));
-  }
-  const nodeCount = rowStarts[height];
-  const positions = new Float32Array(nodeCount * 3);
+// graph holds the nodes and their neighbors (riverGraph.ts), built once for this map's size.
+export function buildRiverTree(heights: Float32Array, seaLevel: number, graph: RiverGraph, seed = 1): RiverTree {
+  const { rowStarts, sampleIndex, neighborStarts, neighborList, maxDegree } = graph;
+  const nodeCount = rowStarts[graph.height];
+  const positions = graph.positions.slice();
   const nodeHeights = new Float32Array(nodeCount);
-  const nodeRows = new Int32Array(nodeCount);
   const random = seededRandom(seed);
-
   let highest = seaLevel;
-  for (let row = 0; row < height; row++) {
-    const rowCount = rowStarts[row + 1] - rowStarts[row];
-    for (let i = 0; i < rowCount; i++) {
-      const node = rowStarts[row] + i;
-      nodeRows[node] = row;
-      const uvX = (i + 0.5 + (random() - 0.5) * RIVER_NODE_JITTER) / rowCount;
-      const uvY = 1 - (row + 0.5 + (random() - 0.5) * RIVER_NODE_JITTER) / height;
-      // The height where the node is drawn, or its sea and land tests disagree with the map beneath it.
-      const column = (Math.floor(uvX * width) + width) % width;
-      const sampleRow = Math.max(0, Math.min(height - 1, Math.floor((1 - uvY) * height)));
-      nodeHeights[node] = heights[sampleRow * width + column];
-      highest = Math.max(highest, nodeHeights[node]);
-      const longitude = (uvX - 0.5) * 2 * Math.PI;
-      const latitude = (uvY - 0.5) * Math.PI;
-      positions[node * 3] = Math.cos(latitude) * Math.cos(longitude);
-      positions[node * 3 + 1] = Math.sin(latitude);
-      positions[node * 3 + 2] = Math.cos(latitude) * Math.sin(longitude);
-    }
+  for (let node = 0; node < nodeCount; node++) {
+    nodeHeights[node] = heights[sampleIndex[node]];
+    highest = Math.max(highest, nodeHeights[node]);
   }
 
-  const neighbors = new Int32Array(8);
+  const neighbors = new Int32Array(maxDegree);
   function collectNeighbors(node: number): number {
-    const row = nodeRows[node];
-    const start = rowStarts[row];
-    const rowCount = rowStarts[row + 1] - start;
-    const idx = node - start;
-    let count = 0;
-    neighbors[count++] = start + ((idx + 1) % rowCount);
-    neighbors[count++] = start + ((idx + rowCount - 1) % rowCount);
-    for (const otherRow of [row - 1, row + 1]) {
-      if (otherRow < 0 || otherRow >= height) continue;
-      const otherStart = rowStarts[otherRow];
-      const otherCount = rowStarts[otherRow + 1] - otherStart;
-      const nearest = Math.floor(((idx + 0.5) / rowCount) * otherCount);
-      for (let offset = -1; offset <= 1; offset++) {
-        neighbors[count++] = otherStart + ((nearest + offset + otherCount) % otherCount);
+    const first = neighborStarts[node];
+    const count = neighborStarts[node + 1] - first;
+    for (let i = 0; i < count; i++) neighbors[i] = neighborList[first + i];
+    return count;
+  }
+
+  // Each body of below-sea nodes, found by flood fill; one too small to be ocean is raised to the shore as land.
+  const bodyOf = new Int32Array(nodeCount).fill(-1);
+  const stack: number[] = [];
+  const members: number[] = [];
+  for (let start = 0; start < nodeCount; start++) {
+    if (bodyOf[start] >= 0 || nodeHeights[start] >= seaLevel) continue;
+    members.length = 0;
+    stack.push(start);
+    bodyOf[start] = start;
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      members.push(node);
+      const first = neighborStarts[node];
+      for (let i = first; i < neighborStarts[node + 1]; i++) {
+        const next = neighborList[i];
+        if (bodyOf[next] >= 0 || nodeHeights[next] >= seaLevel) continue;
+        bodyOf[next] = start;
+        stack.push(next);
       }
     }
-    return count;
+    if (members.length < OCEAN_MIN_NODES) for (const node of members) nodeHeights[node] = seaLevel;
   }
 
   // Every land node beside the sea is a mouth, and drains into its deepest sea neighbor.
@@ -232,29 +242,61 @@ export function buildRiverTree(heights: Float32Array, width: number, height: num
         const next = neighbors[i];
         if (isDone[next] || nodeHeights[next] < seaLevel) continue;
         isDone[next] = 1;
-        filled[next] = Math.max(nodeHeights[next], level);
+        filled[next] = Math.max(nodeHeights[next], level + FILL_EPSILON);
         heap.push(next, filled[next]);
       }
     }
     return filled;
   }
   const levels = waterLevels();
+  // The filled surface is the land the rivers run on: no pits are left, so no lakes form from them.
+  for (let node = 0; node < nodeCount; node++) if (nodeHeights[node] >= seaLevel) nodeHeights[node] = levels[node];
 
-  for (let i = 0; i < mouthCount; i++) heap.push(growthOrder[i], nodeHeights[growthOrder[i]] + random() * randomness);
+  // One waiting list per priority; each step takes the highest priority whose lowest node is within ζ of the lowest
+  // overall, as Genevaux's selection does.
+  const priority = new Uint8Array(nodeCount);
+  const waiting = Array.from({ length: RIVER_MAX_PRIORITY + 1 }, () => new NodeHeap(1024));
+  const priorityRange = RIVER_PRIORITY_RANGE * (highest - seaLevel);
+  for (let i = 0; i < mouthCount; i++) {
+    let rank = 1;
+    while (rank < RIVER_MAX_PRIORITY && random() < 1 / RIVER_BIFURCATION_RATIO) rank++;
+    priority[growthOrder[i]] = rank;
+    waiting[rank].push(growthOrder[i], nodeHeights[growthOrder[i]] + random() * randomness);
+  }
+  function popNext(): { node: number; key: number } | null {
+    let lowest = Infinity;
+    for (let rank = 1; rank <= RIVER_MAX_PRIORITY; rank++) if (waiting[rank].size > 0) lowest = Math.min(lowest, waiting[rank].topKey());
+    if (lowest === Infinity) return null;
+    for (let rank = RIVER_MAX_PRIORITY; rank >= 1; rank--) {
+      if (waiting[rank].size > 0 && waiting[rank].topKey() <= lowest + priorityRange) {
+        const key = waiting[rank].topKey();
+        return { node: waiting[rank].pop(), key };
+      }
+    }
+    return null;
+  }
 
   // A key never falls below its parent's, so water that meets a pit climbs out by the lowest pass. Stepping only onto
   // equal or higher levels keeps the randomness from crossing a ridge anywhere but that pass.
-  while (heap.size > 0) {
-    const key = heap.topKey();
-    const node = heap.pop();
+  for (let next = popNext(); next; next = popNext()) {
+    const { node, key } = next;
+    const rank = priority[node];
+    // Génevaux's rules: continue at n, split into two of n - 1, or keep n and add a smaller branch; further ones are 1.
+    const roll = random();
+    const firstRank = roll < RIVER_CONTINUE_ODDS ? rank : roll < RIVER_CONTINUE_ODDS + RIVER_SYMMETRIC_ODDS ? Math.max(1, rank - 1) : rank;
+    const secondRank = roll < RIVER_CONTINUE_ODDS ? 1 : roll < RIVER_CONTINUE_ODDS + RIVER_SYMMETRIC_ODDS ? Math.max(1, rank - 1) : 1 + Math.floor(random() * Math.max(1, rank - 1));
+    let added = 0;
     const count = collectNeighbors(node);
     const firstNeighbor = Math.floor(random() * count);
     for (let i = 0; i < count; i++) {
-      const next = neighbors[(firstNeighbor + i) % count];
-      if (parents[next] !== NOT_LAND || nodeHeights[next] < seaLevel || levels[next] < levels[node]) continue;
-      parents[next] = node;
-      growthOrder[grown++] = next;
-      heap.push(next, Math.max(nodeHeights[next], key) + random() * randomness);
+      const child = neighbors[(firstNeighbor + i) % count];
+      if (parents[child] !== NOT_LAND || nodeHeights[child] < seaLevel || levels[child] < levels[node]) continue;
+      parents[child] = node;
+      growthOrder[grown++] = child;
+      const childRank = added === 0 ? firstRank : added === 1 ? secondRank : 1;
+      priority[child] = childRank;
+      added++;
+      waiting[childRank].push(child, Math.max(nodeHeights[child], key) + random() * randomness);
     }
   }
 
@@ -480,35 +522,6 @@ export function smoothRiverPaths(network: RiverNetwork): void {
         for (let axis = 0; axis < 3; axis++) positions[chain[idx] * 3 + axis] = point[axis] / len;
       }
     }
-    meanderChain(chain, network);
-  }
-}
-
-// Sideways bends along a chain, none at its fixed ends and fewer on steep ground, so valley and water share one curve.
-// Noise offsets along the river (Sapiens, Davis); these two sines stand in for that noise.
-function meanderChain(chain: number[], network: RiverNetwork): void {
-  const { positions, levels } = network;
-  const lastIdx = chain.length - 1;
-  const phase = chain[0] * 0.618;
-  for (let idx = 1; idx < lastIdx; idx++) {
-    const node = chain[idx];
-    const prev = chain[idx - 1];
-    const next = chain[idx + 1];
-    const dirX = positions[next * 3] - positions[prev * 3], dirY = positions[next * 3 + 1] - positions[prev * 3 + 1], dirZ = positions[next * 3 + 2] - positions[prev * 3 + 2];
-    const upX = positions[node * 3], upY = positions[node * 3 + 1], upZ = positions[node * 3 + 2];
-    const sideX = upY * dirZ - upZ * dirY, sideY = upZ * dirX - upX * dirZ, sideZ = upX * dirY - upY * dirX;
-    const sideLen = Math.hypot(sideX, sideY, sideZ);
-    if (sideLen === 0) continue;
-    const drop = Math.abs(levels[prev] - levels[next]) / 2;
-    const flatness = Math.max(0, 1 - drop / RIVER_MEANDER_STEEP);
-    const taper = Math.sin((Math.PI * idx) / lastIdx);
-    const wave = (2 * Math.PI * idx) / RIVER_MEANDER_WAVELENGTH;
-    const swing = RIVER_MEANDER * flatness * taper * (Math.sin(wave + phase) + 0.5 * Math.sin(2.3 * wave + phase * 2)) / sideLen;
-    const movedX = upX + sideX * swing, movedY = upY + sideY * swing, movedZ = upZ + sideZ * swing;
-    const movedLen = Math.hypot(movedX, movedY, movedZ);
-    positions[node * 3] = movedX / movedLen;
-    positions[node * 3 + 1] = movedY / movedLen;
-    positions[node * 3 + 2] = movedZ / movedLen;
   }
 }
 

@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-01`
+`Last updated: 2026-11-02`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,7 +8,69 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-01, thirteenth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-11-02, fourteenth handover):** *read `.claude/CLAUDE.md` first (new rules today: read sources before the first fix, no inventions, one change per test, stop when a fix makes it worse). Then this block. The block below it is the previous handover.*
+>
+> **State.** The 2026-11-02 river session is committed as one work-in-progress commit on top of `a444a75`, and it is a pile of patches. Do not build on it as a whole. Rebuild the water system in the order below, carrying over only the parts marked ✅ (compare against `a444a75` to see them). `delaunator` 5.1.0 was added to `app/package.json`.
+>
+> **Root cause, measured 2026-11-02:** the rivers were a layer drawn onto a terrain that water never shaped. A debug view of ground minus river level showed tributaries far below and main rivers far above the shown ground. Every drawing fix moved the problem instead of solving it.
+>
+> **🧭 The water system, one design, in this order** *(Dana approved the direction 2026-11-02; approve this written design once before building)*
+>
+> **1. Ocean**
+> - One connected body below sea level, as Earth's oceans are one World Ocean. Every other dip is land.
+> - Today: a 2,000-node cutoff (`OCEAN_MIN_NODES` in `rivers/riverTree.ts`), a guess. Replace with the connected-to-ocean rule.
+>
+> **2. Pits and lakes**
+> - Fill-Spill-Merge (Barnes, Callaghan and Wickert 2020): a dip holds a lake only if the water reaching it fills it, otherwise it spills on. ❓ Not read yet: read it before planning.
+> - Today: Priority-Flood + ε fills every pit (Barnes et al. 2014, as Peytavie et al. 2019), so there are 0 lakes. Dana wants some lakes.
+>
+> **3. Network** ✅
+> - Points joined by a Delaunay triangulation (Cordonnier et al. 2016, 4.1), `rivers/riverGraph.ts`, built once at worker start (about 5 s) with a "Building rivers…" busy indicator. Measured: 23.6% of river steps on the old grid's 8 directions (22% is even).
+> - Growth by Génevaux et al. 2013, section 5: priority within ζ, Horton's 4:1 for mouth ranks. ζ and the branching odds are the paper's user settings: make them sliders.
+>
+> **4. River data per stretch**
+> - River levels from the shown terrain, only ever downhill (`levelsFromTerrain` in `rivers/valleyMap.ts`, from Peytavie 5.1 and Plate-Local). ✅ Measured: main rivers matched the ground.
+> - Width from drainage area: flow 0.42 A^0.69 (Peytavie), width ∝ √flow (Leopold and Maddock). Depth ∝ flow^0.4 (Leopold and Maddock), checked against Derzapf's 300 m. Estuaries widen at the sea and at lake outlets (Savenije). Sources taper. Winding by noise along the stem, wavelength 11 widths (Leopold). ❓ Look up each remaining number; none may stay a guess.
+>
+> **5. Shaping the terrain**
+> - Génevaux's replace operator: h = (1 − w) land + w river, w = (1 − d²/r²)², rivers and lakes only cut. ✅ Built in `shaders/heightmap/heightmap.frag.glsl`.
+> - Then Johansen's erosion filter (2026, Mozilla Public License, Shadertoy `wXcfWn`) on the land between, so small valleys drain into the rivers. Not built.
+>
+> **6. Drawing the water**
+> - One water height field for sea, lakes and rivers. Off the water, the bake's B channel is the ground just under itself, so shores fall between texels. Channels at least one texel wide at any zoom.
+>
+> **7. Coast handoff**
+> - Every river is carved through to where the shown ocean begins, measured in the shader, not a fixed reach.
+>
+> **Tests, one per part, measured before Dana looks:** every river reaches the ocean or a spilling lake (the `lake outflows` log); no islands inside channels; shores between texels; grid-aligned share near 22%; no lakes at river mouths.
+>
+> **Known bugs in the uncommitted patches (2026-11-02), so they aren't carried over:**
+> - 🔴 Tiny islands at every river node: a smooth minimum between consecutive pieces of one river pushed the distance below the channel. Remove it; widen confluences with a pool at each junction instead.
+> - 🔴 Rivers stop short of the shown coast: the network sees the coast at 9 km, the shown coast comes from finer noise.
+> - 🔴 Blunt, square river heads; Dana's rule: a river tapers at its source and widens at its mouth, or widens at both ends when it joins two large bodies of water.
+>
+> **Dana's requests for the water system (2026-11-02), each to be met by a sourced method:**
+> - Main rivers clearly thicker than tributaries; a tributary arrives at its own width, never the width of what it joins (`[B101]`).
+> - A river tapers at its source and widens at its mouth, or widens at both ends when it joins two large bodies of water (`[B102]`).
+> - Confluences and mouths soft and blobby, eroded, like deltas; no thin, sharp joins and no tiny islands (`[B97]`).
+> - No land left in front of a river near the ocean: rivers open into the shown sea (`[B98]`).
+> - Some lakes, but none that make no sense: no blobs, no lakes right at river mouths, smooth soft shores (`[B100]`). 178 of 260 lakes never spilled before pits were filled.
+> - Fewer rivers, and neighboring systems joined into big basins whose trunk crosses the land and branches out (`[B104]`). The drainage threshold, ζ and the branching odds become sliders.
+> - Natural curves, like her reference photo: wide smooth bends, rounded banks.
+> - The inland color fade at mouths is her call; water in the chunk's rivers and the flow shader (`[B93]`) follow the water system.
+> - Not all land beside water should be flat: some banks are cliffs. Cordonnier et al. 2016 vary the maximum slope by a rock-strength noise (6° to 54°) and raise it above a height for crest cliffs.
+> - No small scraps of land along the coast (seen in the chunk at the start of the session; cause not measured).
+> - Lava rivers are parked until each liquid gets its own look.
+> - Later: rivers refined per patch as the camera zooms (Derzapf section 5), after the design above works.
+>
+> **Costs today:** the triangulation takes about 5 s once when the app loads (a "Building rivers…" indicator shows), the first river build about 4.3 s instead of 1.2 s, and the worker holds about 130 MB more for the neighbor lists. Banks or meanders in meters would depend on the Height setting, so Height changes would rebuild the river map.
+>
+> **Docs owed:** this week's architecture diagram (new modules `rivers/riverGraph.ts` and `rivers/riverGrid.ts`) is due with the 2026-11-04 push, per the diagram rule. The `ui-design` skill gained a Busy indicator. The `[TEMP rivers]` logs (`gridAlignedShare`, `lakeOutflows`, basins, valleys, graph) and the dead lake circles in `rivers/valleyMap.ts` are removed in the rebuild's cleanup. Bugs are `[B94]` to `[B105]` in `ISSUES.md`.
+>
+> **Also learned:** `npx tsc --noEmit -p .` checks nothing here (the root `tsconfig.json` only points to others). Use `-p tsconfig.app.json` (`[B105]`).
+
+> [!NOTE]
+> **Previous handover (2026-11-01, thirteenth):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
 > **State.** The whole river, climate and erosion round is committed and pushed. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. **After any shader edit run `node scripts/checkShaders.mjs` from `app/`** (needs `brew install glslang`) before Dana reloads; add new shader pieces to its list. In new shaders use `texture(...)`, never `texture2D` or `textureCube`, except in `heightmap.frag.glsl`, which is GLSL ES 1.00; search a file for a name before adding a constant.
 >
@@ -20,13 +82,22 @@
 >
 > **Next, in order:**
 > 1. Dana's check of the last round. Tune `RIVER_BASE_WIDTH`, `RIVER_CHANNEL_DEPTH`, `INLAND_DEPTH_RAMP`, and Lava's `channelWidth` (3) if she asks.
-> 2. **Water on the chunk:** `voxel/chunkWater.ts`, `chunkWater.vert.glsl`, `chunkWater.frag.glsl`: the sheet is one flat square; subdivide it and lift it to the water heights. Depth, Clarity and foam measure from the local water height. The tide moves only the sea. The chunk's patch pass has no water channel yet (`CHUNK_PATCH_PASS`, its blue is 0), so the base map must carry it. ⚠️ River water at the chunk's edge meets the water walls, which only know sea level. Then `scene/walkMode.ts` reads the same height.
-> 3. **River controls and cleanup:** `planet/planetControls.ts` adds `rivers` to `WaterSettings` with a `migrateWater` update; `ui/Panel.tsx` adds an on/off switch with Width and Depth (Rainfall replaces Amount). Remove `rivers/riverDebug.ts`, the River debug toggle and the `[TEMP rivers]` logs.
-> 4. **Memory (agreed in principle, not built):** free the JS copy of the map after upload (`onUpdate`, about 134 MB of RAM); half-float map with heights stored relative to sea level (about 67 MB of video memory, may band); reuse the map's arrays in the worker; keep only land nodes (about 350 MB; the worker holds about 500 MB today); re-bake only patches a change touched. Slider steps now include `erodeTerrain`, so measure them on Dana's machine.
-> 5. **Slope rock** (land shader stage 2): the plan below. It colors by slope, and the eroded land now gives it real slopes. Dana noted the height and slope texturing of the Procedural Stochastic Terrain Shader as a reference, and Zucconi's Journey sand for deserts. Moss belongs to the biome stage, using these masks.
-> 6. Then stage 3 (snow) gets its own plan. The bake's blue channel is now taken by water.
+> 2. **River water shader (`[B93]`, Dana, 2026-11-01):** up close at a low angle, rivers read as raised, silvery bands with ocean-scale waves. Inland water needs its own look that accounts for flow direction: ripples and foam move downstream along each river, with no sea waves or sky reflection, and it must sit below its banks. The direction has to reach the shader: the map's four channels are full, so derive it from the slope of the water surface, or find a way to store it. Read the cause before proposing a fix.
+> 3. **Water on the chunk:** `voxel/chunkWater.ts`, `chunkWater.vert.glsl`, `chunkWater.frag.glsl`: the sheet is one flat square; subdivide it and lift it to the water heights. Depth, Clarity and foam measure from the local water height. The tide moves only the sea. The chunk's patch pass has no water channel yet (`CHUNK_PATCH_PASS`, its blue is 0), so the base map must carry it. ⚠️ River water at the chunk's edge meets the water walls, which only know sea level. Then `scene/walkMode.ts` reads the same height.
+> 4. **River controls and cleanup:** `planet/planetControls.ts` adds `rivers` to `WaterSettings` with a `migrateWater` update; `ui/Panel.tsx` adds an on/off switch with Width and Depth (Rainfall replaces Amount). Remove `rivers/riverDebug.ts`, the River debug toggle and the `[TEMP rivers]` logs.
+> 5. **Memory (agreed in principle, not built):** free the JS copy of the map after upload (`onUpdate`, about 134 MB of RAM); half-float map with heights stored relative to sea level (about 67 MB of video memory, may band); reuse the map's arrays in the worker; keep only land nodes (about 350 MB; the worker holds about 500 MB today); re-bake only patches a change touched. Slider steps now include `erodeTerrain`, so measure them on Dana's machine.
+> 6. **Slope rock** (land shader stage 2): the plan below. It colors by slope, and the eroded land now gives it real slopes. Dana noted the height and slope texturing of the Procedural Stochastic Terrain Shader as a reference, and Zucconi's Journey sand for deserts. Moss belongs to the biome stage, using these masks.
+> 7. Then stage 3 (snow) gets its own plan. The bake's blue channel is now taken by water.
 >
 > 📌 Later: rerun the tree on eroded land for two or three passes (`[B91]`, adds seconds to a rebuild); sea-filled fjords by letting land near the coast drop below sea level, which moves the coast (Dana's call); chunk branches, since a 9 km cell is more than half the 16 km chunk (`buildChunkTributaries`, Clay John's noise or Nick McDonald's hydrology); stored foam in a decaying buffer (`[B92]`); tidal bores up rivers (Chanson; a bore needs a tide over 4.5 to 6 m and a funnel mouth); river color and surface per liquid (lava's glow, sulfur's yellow).
+>
+> **Open decisions for Dana:**
+> - ❓ Whether Lava stays this wide after the taper, and whether wet worlds' river density reads as a mistake (Ethane is the extreme).
+> - ❓ Whether the dark ridgeline curves need the tree rerun (`[B91]`).
+> - ❓ Which memory items to build, and when. The recommendation was the three small ones after the chunk water; none has a go yet.
+> - ❓ Her Atmosphere Randomize report: she said Climate wasn't connected, the code rolled it, and both buttons roll it now. She never said which button she pressed, so confirm it works.
+>
+> **Testing without a reload:** build a synthetic globe and compile `riverTree.ts`, `riverClimate.ts`, `streamPower.ts` and `valleyMap.ts` with `tsc` to CommonJS in the scratchpad, then render a hillshade to a PPM and convert it with `sips -s format png`. One image exposed the scaling bug at once. That harness was session-only, so write it again if it's needed, and ask before running new measurements.
 >
 > **Also agreed:** the timeline moves to its own section with one world clock, and every system stores its history there (Dana, 2026-11-01). Plan it after rivers.
 >

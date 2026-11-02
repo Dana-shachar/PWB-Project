@@ -1,6 +1,6 @@
 # 📚 References
 
-`Last updated: 2026-11-01`
+`Last updated: 2026-11-02`
 
 *Every outside source this project relies on, with what it is and what was taken from it. Cited once here, linked from everywhere else.*
 
@@ -826,6 +826,7 @@
 
 **Procedural Riverscapes (Peytavie et al. 2019)** · `used 2026-11-01`
 - depression filling before the drainage calculation, piecewise cubic splines between confluences, meanders only on low slopes.
+- 2026-11-02: flow from drainage area, 0.42 A^0.69, and width from the cross-section; the drawing threshold as a user setting; river heights made monotonic downstream.
 - *PDF in the course folder*
 
 **Priority-Flood (Barnes, Lehman and Mulla 2014)** · `used 2026-11-01, known through Peytavie, not read`
@@ -833,6 +834,7 @@
 
 **Large Scale Terrain Generation from Tectonic Uplift and Fluvial Erosion (Cordonnier et al. 2016)** · `used 2026-11-01`
 - the stream power equation over a stream graph, `n = 1`, `m = 0.5`, an implicit update from the root up, 100 to 300 steps, slopes capped at 30 degrees, lake overflow.
+- 2026-11-02: section 4.1, Poisson points joined by a Delaunay triangulation instead of a regular grid, "because the edges of the graph better represent possible directions for local streams."
 - *PDF in the course folder · [record](https://diglib.eg.org/handle/10.1111/cgf12820)*
 
 **A very efficient O(n), implicit and parallel method to solve the stream power equation (Braun and Willett 2013)** · `used 2026-11-01`
@@ -875,6 +877,56 @@
 
 **Dendry (Gaillard et al. 2019)** · `considered 2026-11-01`
 - noise that follows dendritic patterns, a fallback if rivers need detail finer than the map.
+
+**River Networks for Instant Procedural Planets (Derzapf, Ganster, Guthe and Klein 2011)** · `used 2026-11-02`
+- the warning that grid flow gives eight directions and parallel rivers; water height per vertex; the bank limits of Table 2 (10 m bank edge, 1 m/km near rivers, 1000 m/km steepest), tried and removed.
+- *PDF in the course folder*
+
+**Terrain Generation Using Procedural Models Based on Hydrology (Génevaux et al. 2013)** · `used 2026-11-02`
+- the replace operator h = (1 − w) land + w river with w = (1 − d²/r²)²; growth by priority within ζ and Horton-Strahler rules; paths perturbed by type.
+- *PDF in the course folder*
+
+**Plate-Local River Generation (Michael K. Davis III, 2026), code** · `used 2026-11-02` · CC BY 4.0
+- equation 32's blend and its settings, and `riverFields`' inverse-distance river height near junctions, adapted in `heightmap.frag.glsl`. Credit as the license requires: Michael K. Davis III, *plate-local-river-generation*, CC BY 4.0.
+- *[Repository](https://github.com/Davismk3/plate-local-river-generation)*
+
+**Delaunator (Mapbox)** · `used 2026-11-02` · ISC
+- the Delaunay triangulation of the river nodes, through a stereographic projection, in `riverGraph.ts`.
+- *[Repository](https://github.com/mapbox/delaunator)*
+
+**Priority-Flood + ε (Barnes, Lehman and Mulla 2014)** · `used 2026-11-02, not read`
+- every pit filled with a slight slope so water flows on (`FILL_EPSILON`).
+
+**Fill-Spill-Merge (Barnes, Callaghan and Wickert 2020)** · `planned, not read`
+- which dips hold lakes, from the water that reaches them.
+
+**Fast and Gorgeous Erosion Filter (Rune Skovbo Johansen, 2026)** · `planned` · Mozilla Public License 2.0
+- gullies along the slope as a per-point filter, after Clay John's 2018 Shadertoy; for the land between rivers.
+- *[Blog](https://blog.runevision.com/2026/03/) · Shadertoy `wXcfWn`*
+
+**River meanders (Langbein and Leopold 1966; Leopold and Wolman 1957; Leopold 1994)** · `used 2026-11-02, from search summaries`
+- meander wavelength about 11 channel widths (7 to 12 in 1957), used for the winding's wavelength; the sine-generated curve, tried and removed.
+- *[USGS PP 422-H](https://pubs.usgs.gov/pp/0422h/report.pdf) · [USGS PP 282-B](https://pubs.usgs.gov/pp/0282b/report.pdf)*
+
+**Hydraulic geometry (Leopold and Maddock 1953)** · `used 2026-11-02, from memory, not verified`
+- width growing with the square root of discharge. Verify before relying on it.
+
+**Estuary shape (Savenije 2005), confluences (Best 1987), channel heads (Montgomery and Dietrich 1988)** · `used 2026-11-02, from memory, not read`
+- exponential widening toward the sea, widening at junctions, rivers starting in hollows. The numbers in the code are guesses until these are read.
+
+**Rosgen stream types (Rosgen 1994)** · `considered 2026-11-02, from secondary summaries`
+- slope classes for meandering; tried and removed.
+
+**meanderpy (Sylvester, Durkin and Covault 2019)** · `considered 2026-11-02` · Apache 2.0
+- a tested meander migration model (Howard and Knutson 1984).
+- *[Repository](https://github.com/zsylvester/meanderpy)*
+
+**SimpleHydrology (weigert, likely Nick McDonald)** · `rejected 2026-11-02`
+- meanders from a momentum map; the repository has no license, so its code can't be used.
+
+**Water Flow in Portal 2 (Vlachos 2010) and Catlike Coding's flow tutorial** · `planned for [B93]`
+- flow maps that slide ripples downstream.
+- *[Slides](https://www.advances.realtimerendering.com/s2010/Vlachos-Waterflow(SIGGRAPH%202010%20Advanced%20RealTime%20Rendering%20Course).pdf) · [Tutorial](https://catlikecoding.com/unity/tutorials/flow/texture-distortion/)*
 
 ### Stylized sky, planet and terrain shaders (candidates)
 

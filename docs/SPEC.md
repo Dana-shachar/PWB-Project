@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-11-01`
+`Last updated: 2026-11-02`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -499,8 +499,8 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - The tree lives in a worker, and river data never passes through React props, since its dev timing copies them and ran out of memory.
 - A control updates only what it affects: terrain or sea level regrow the tree, climate reruns only the balance, and Erosion only re-bakes.
 
-### [S54] Lakes come from a water budget, not from filling every pit · `decided`
-**Decided:** 2026-11-01
+### [S54] Lakes come from a water budget, not from filling every pit · `open`
+**Decided:** 2026-11-01 · **Reopened:** 2026-11-02, every pit is filled for now (`[S64]`)
 
 - A lake grows until evaporation from its surface meets what flows in, computed directly, with no time stepping. Short of its rim it stays closed; at the rim it spills the rest downstream (Braun and Willett's sill).
 - Runoff uses Budyko's framework in Fu's form. The closed-lake balance is from search summaries, not a paper read in full.
@@ -541,3 +541,33 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - A fragment shader commonly gets 16 texture slots, counted by what's declared, not by what's in use. Paint took all 16, so the river map takes the last one.
 - Layers past 15 are ignored, so the bake can't crash.
+
+### [S60] River nodes neighbor by triangulation · `decided`
+**Decided:** 2026-11-02
+
+- Each node's neighbors come from a Delaunay triangulation of the nodes, not the grid's row pattern, so water can flow in any direction (Cordonnier et al. 2016, section 4.1; Derzapf et al. 2011 on grids giving parallel rivers).
+- The nodes stay on the map's rows, so the valley map still finds a pixel's node by its row. The triangulation depends only on the grid and seed, so it's built once when the worker starts.
+
+### [S61] River levels come from the shown terrain · `decided`
+**Decided:** 2026-11-02
+
+- A river's level is the shown coarse height, noise mixed with eroded land by Erosion, lowered wherever it would climb, so rivers only run downhill (Peytavie et al. 2019, 5.1; Plate-Local River Generation). A lake lies at its outlet's height.
+- *Measured: an invented stream power profile had put tributaries above the ground and main rivers below it (`[B96]`).*
+
+### [S62] Rivers replace the land near them, and only cut · `decided`
+**Decided:** 2026-11-02
+
+- Near a river the bake applies Génevaux et al. 2013's replace operator, h = (1 − w) land + w river, w = (1 − d²/r²)², measured per patch texel from the river's curve, so rivers are sharp at any zoom.
+- A river never raises land: raised banks dammed rivers at the coast.
+
+### [S63] Basins grow by priority · `decided`
+**Decided:** 2026-11-02
+
+- The tree grows from the coast taking, among waiting nodes within ζ of the lowest, the one with the highest Horton-Strahler priority (Génevaux et al. 2013, section 5), so a few rivers gather big basins. Mouth priorities follow Horton's law.
+- ζ, the branching odds and the drawing threshold are the papers' user settings; they're meant to become sliders.
+
+### [S64] Every pit is filled, for now · `decided`
+**Decided:** 2026-11-02 · Dana chose this over keeping only large lakes
+
+- Pits are filled with a slight slope so water always flows on (Priority-Flood + ε, Barnes et al. 2014, as Peytavie does), so rivers never break up and there are no lakes.
+- Dana wants some lakes back: Fill-Spill-Merge (Barnes, Callaghan and Wickert 2020) is to decide which dips hold water. See the `ROADMAP.md` handover.

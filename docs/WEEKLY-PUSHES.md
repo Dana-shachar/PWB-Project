@@ -1,6 +1,6 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-11-01`
+`Last updated: 2026-11-02`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
 
@@ -61,6 +61,7 @@
 
 - **A real shader compiler (`[S58]`):** Khronos's glslangValidator now checks all 15 materials after every shader edit, because a passing build can't see inside shader text. It caught two errors this round before they reached the screen.
 - **Limits:** noise layers capped at 15 to free a texture slot for the river map (`[S59]`). Rivers only reach the planet view so far; the chunk still shows sea water.
+- **Rivers rebuilt around one cause (2026-11-02, `[B94]`):** a debug view measured that rivers were drawn onto a terrain they didn't shape. Kept from the day: a triangulated network instead of grid rows (`[B95]`), river levels from the shown terrain (`[B96]`), Génevaux's replace operator and basin priorities, and pits filled so rivers connect. The rest is written up as one water system design for the next session, with its open bugs (`[B97]` to `[B104]`).
 
 ### 🤖 AI process
 - **A day lost to theories:** three fixes were built on unproven causes (octave tweaks, local coordinates for fine detail, smoothing) before Dana's own idea, a dedicated height map resampled at higher resolution, solved it. New working rules: check Dana's proposed mechanism against established tools first, build only on a measured cause, and edit docs only at commit.
@@ -78,6 +79,7 @@
 - **The same performance bug again:** the first climate slider regrew the whole river tree on each step, despite the repo's rule to reuse its fixes. Dana caught it.
 - **Misreadings cost rounds:** "a different liquid" became Temperature picking the liquid, when Dana expected a dropdown; "contextual ranges" got a guess instead of a question. Her diagnosis of the terrain itself was right from the start: the landscape has to account for water.
 - **A wrong figure:** Claude said the worker would hold about 100 MB; the arrays add up to about 500 MB.
+- **A lost day on rivers (2026-11-02):** Claude fixed one symptom per screenshot, built on guesses and its own inventions, put several unproven changes into one test, and repeated failing approaches, so nearly every round looked worse. New rules came out of it: read the sources before the first fix, no inventions, one change per test, stop when a fix makes it worse. A web-reading agent used about 58k tokens. Claude also reported type checks as passing for a whole day when the command checked no files (`[B105]`), and an edit Dana rejected was written anyway, then undone.
 - **Fixed recipes flatten variety:** copying one saved planet's numbers made every world alike; they became the center of ranges by world type. Dana's logs of liked and disliked rolls drove each round.
 
 ### 📊 Worked / didn't / next
@@ -96,7 +98,9 @@
 - ✅ An offline render before Dana's reload showed the erosion working, and a scaling bug, in one image.
 - ❌ Narrow valleys tuned round after round: the real fix was the method, not the numbers.
 - ❌ Actions without a go, and research around sources already at hand.
-- ⏭️ Water on the chunk, river controls and cleanup, cutting the worker's memory, then slope rock; walk mode's `[B71]` is deferred.
+- ✅ A debug view of ground minus river level found the root cause in one look.
+- ❌ A symptom per screenshot, several unproven changes per test, and invented methods: a day of churn.
+- ⏭️ The water system design in the `ROADMAP.md` handover, rebuilt in order; then water on the chunk, river controls and cleanup, cutting the worker's memory, then slope rock; walk mode's `[B71]` is deferred.
 
 ---
 

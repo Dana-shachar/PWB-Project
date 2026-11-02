@@ -12,6 +12,7 @@ import minMaxReduceFragmentGlsl from '../shaders/heightmap/minMaxReduce.frag.gls
 import elevationHistogramVertexGlsl from '../shaders/heightmap/elevationHistogram.vert.glsl?raw'; // see getRegionPercentileRangeAsync()
 import elevationHistogramFragmentGlsl from '../shaders/heightmap/elevationHistogram.frag.glsl?raw';
 import { HISTOGRAM_BINS, percentileRangeFromBins } from './elevationRange';
+import { RIVER_BLEND_WIDTH, RIVER_GRID_HEIGHT, RIVER_GRID_WIDTH } from '../rivers/riverGrid';
 
 // TODO(DS): arbitrary placeholder resolution — detail/generation-cost
 // tradeoff (see Dana's question 2026-09-14); lower this first if
@@ -497,15 +498,18 @@ export class HeightmapPipeline {
   }
 
   // The rivers' mark on the land (rivers/valleyMap.ts): region bakes apply it, whole-globe bakes don't, so rivers never see it.
-  setValleyMap(map: Float32Array | null, width: number, height: number): void {
+  // height is the land rows; the river grid fills the rows after them, up to totalRows.
+  setValleyMap(map: Float32Array | null, width: number, height: number, totalRows: number): void {
     this.valleyTexture?.dispose();
     this.valleyTexture = null;
     if (map) {
-      this.valleyTexture = new THREE.DataTexture(map, width, height, THREE.RGBAFormat, THREE.FloatType);
+      this.valleyTexture = new THREE.DataTexture(map, width, totalRows, THREE.RGBAFormat, THREE.FloatType);
       this.valleyTexture.magFilter = THREE.LinearFilter;
       this.valleyTexture.minFilter = THREE.LinearFilter;
       this.valleyTexture.wrapS = THREE.RepeatWrapping;
       this.valleyTexture.needsUpdate = true;
+      (this.material.uniforms.uValleyMapSize.value as THREE.Vector2).set(width, height);
+      this.material.uniforms.uValleyTextureRows.value = totalRows;
     }
     this.material.uniforms.uValleyMap.value = this.valleyTexture;
     this.material.uniforms.uValleyEnabled.value = map ? 1 : 0;
@@ -578,6 +582,10 @@ export class HeightmapPipeline {
         uShoreEnabled: { value: 0 },
         uShoreSeaLevel: { value: 0 },
         uValleyMap: { value: null },
+        uValleyMapSize: { value: new THREE.Vector2(1, 1) },
+        uValleyTextureRows: { value: 1 },
+        uRiverGridSize: { value: new THREE.Vector2(RIVER_GRID_WIDTH, RIVER_GRID_HEIGHT) },
+        uRiverBlendWidth: { value: RIVER_BLEND_WIDTH },
         uValleyEnabled: { value: 0 },
         uErosionStrength: { value: 0.7 },
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },

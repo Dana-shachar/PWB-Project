@@ -48,7 +48,7 @@ function App() {
   const planetControls = usePlanetControls();
   const waterClarityShare = clarityDepthShare(planetControls.water.clarityMeters, planetControls.water.seaLevel, planetControls.elevationRange.min, planetControls.heightScale);
   const noiseLayers = useNoiseLayers(INITIAL_LAYER_ID);
-  const valleyRevision = useRivers(sceneHandleRef, planetControls.water.enabled && planetControls.atmosphere.enabled, planetControls.water.seaLevel, planetControls.atmosphere, planetControls.atmosphere.riverDebug, planetControls.atmosphere.erosion, planetControls.heightDistribution);
+  const { valleyRevision, riversBusy } = useRivers(sceneHandleRef, planetControls.water.enabled && planetControls.atmosphere.enabled, planetControls.water.seaLevel, planetControls.atmosphere, planetControls.atmosphere.riverDebug, planetControls.atmosphere.erosion, planetControls.heightDistribution);
   // Terrain Randomize also rolls how the planet spins (scene/planetSpin.ts) and its climate.
   const randomizeWorld = () => {
     noiseLayers.randomizeTerrain();
@@ -220,6 +220,7 @@ function App() {
         onWaterChange={planetControls.updateWater}
         atmosphere={planetControls.atmosphere}
         onAtmosphereChange={planetControls.updateAtmosphere}
+        riversBusy={riversBusy}
         heightDistribution={planetControls.heightDistribution}
         activeStage={activeStage}
         onStageChange={setActiveStage}
