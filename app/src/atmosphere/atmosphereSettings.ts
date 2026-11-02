@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type { NoiseLayer } from '../map/heightmap';
+import { flowingMinC, LIQUIDS, liquidNamed, rainfallMax } from '../rivers/riverClimate';
 import { between, COLOR_RULES, DEFAULT_MOONS, HUE_JITTER, hueTurnFor, MAX_MOONS, skySaturation, pickOne, randomMoons, type MoonSettings } from './moonTexture';
 
 // The planet's atmosphere: sky colors, haze, the planet's glow, clouds, the wind (which also drives the water's
@@ -37,6 +38,12 @@ export interface AtmosphereSettings {
   cloudDistributionStrength: number;
   // How windy, as a Beaufort force: 0 is calm, 12 a storm. Moves the clouds and sets the water's waves.
   wind: number;
+  // The climate that sets the rivers and lakes (rivers/riverClimate.ts): mm a year, degrees C, and what falls and flows.
+  rainfall: number;
+  temperature: number;
+  liquid: string;
+  erosion: number; // how far the land has been shaped by its rivers, 0 (plain noise) to 1
+  riverDebug: boolean; // [TEMP rivers] the lines and dots
   moon: boolean;
   // How many moons show (1 to 5), and all five, so changing the count never loses one (atmosphere/moonTexture.ts).
   moonCount: number;
@@ -80,6 +87,11 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   cloudPoles: 0.5,
   cloudDistributionStrength: 0.6,
   wind: 4,
+  rainfall: 450,
+  temperature: 15,
+  liquid: 'Water',
+  erosion: 0.7,
+  riverDebug: false,
   moon: false,
   moonCount: 1,
   moons: DEFAULT_MOONS,
@@ -91,7 +103,10 @@ export function migrateAtmosphere(saved: (Partial<AtmosphereSettings> & LegacyMo
   const wind = saved?.wind ?? legacyWind ?? DEFAULT_ATMOSPHERE_SETTINGS.wind;
   const cloudColor2 = saved?.cloudColor2 ?? saved?.cloudColor ?? DEFAULT_ATMOSPHERE_SETTINGS.cloudColor2;
   const { moonCrescent: _crescent, moonColorsLocked: _locked, moonTexture: _texture, moonHalo: _halo, moonGlow: _glow, ...rest } = saved ?? {};
-  return { ...DEFAULT_ATMOSPHERE_SETTINGS, ...rest, wind, cloudColor2, moons: migrateMoons(saved) };
+  const liquid = liquidNamed(saved?.liquid ?? DEFAULT_ATMOSPHERE_SETTINGS.liquid);
+  const temperature = Math.min(liquid.maxC, Math.max(liquid.minC, saved?.temperature ?? DEFAULT_ATMOSPHERE_SETTINGS.temperature)); // saves from before the liquid menu
+  const rainfall = Math.min(rainfallMax(liquid), Math.max(1, saved?.rainfall ?? DEFAULT_ATMOSPHERE_SETTINGS.rainfall));
+  return { ...DEFAULT_ATMOSPHERE_SETTINGS, ...rest, wind, cloudColor2, rainfall, temperature, liquid: liquid.name, moons: migrateMoons(saved) };
 }
 
 // Saves from before there were several moons kept one moon's fields flat; they become moon 1.
@@ -171,6 +186,18 @@ const follow = (driver: number, [from, to]: Range) => {
   return Math.round(value * 100) / 100;
 };
 
+const WATER_WORLD_CHANCE = 0.7;
+
+// Mostly water worlds, with a chance of anything from nitrogen to iron.
+export function randomClimate(): Pick<AtmosphereSettings, 'liquid' | 'temperature' | 'rainfall'> {
+  const liquid = Math.random() < WATER_WORLD_CHANCE ? LIQUIDS[0] : pickOne(LIQUIDS);
+  return {
+    liquid: liquid.name,
+    temperature: Math.round(follow(Math.random(), [flowingMinC(liquid), liquid.maxC])),
+    rainfall: Math.max(1, Math.round(follow(Math.random(), [liquid.typicalRainfall * 0.3, liquid.typicalRainfall * 3]))),
+  };
+}
+
 export function randomAtmosphere(settings: AtmosphereSettings): AtmosphereSettings {
   // The drivers: storminess (wind, cloud cover, ragged edges, bands), air thickness (haze, glow, pale sky, soft moons)
   // and cloud climate (how large the cloud systems are and how strongly latitude places them).
@@ -204,6 +231,7 @@ export function randomAtmosphere(settings: AtmosphereSettings): AtmosphereSettin
   next.glow = follow(air, [0.2, 5]);
   next.cloudScale = follow(climate, [0.7, 3]);
   next.cloudDistributionStrength = follow(climate, [0.15, 0.95]);
+  Object.assign(next, randomClimate());
   next.cloudEquator = follow(Math.random(), [0.2, 1]);
   next.cloudMidLatitudes = follow(Math.random(), [0.2, 1]);
   next.cloudPoles = follow(Math.random(), [0, 1]);

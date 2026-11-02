@@ -83,8 +83,8 @@ export interface WaterSettings {
   seaLevel: number;
   // The water's color ramp by depth: position 0 is the shore, 1 the deepest water.
   colorStops: ColorStop[];
-  // How far light reaches, as a share of the deepest water's depth (Beer-Lambert). Hand-set, TUNABLE.
-  clarity: number;
+  // The depth in meters where light falls to 37% (Beer-Lambert), at walking scale. See clarityDepthShare in seaLevel.ts.
+  clarityMeters: number;
   // How wide the shore foam is, as a share of the deepest water's depth. 0 is off.
   foamWidth: number;
   // How many of Seascape's wave octaves the chunk shows, 1 (simple, stylized) to 5 (the original).
@@ -107,7 +107,7 @@ export const DEFAULT_WATER_SETTINGS: WaterSettings = {
     { position: 0.45, color: '#2286c0' },
     { position: 1, color: '#1d5a9e' },
   ],
-  clarity: 0.4,
+  clarityMeters: 20, // 1 / Kd(490) of clear ocean, Jerlov type IB (about 0.05 per meter). TUNABLE
   foamWidth: 0.05, // inferred, TUNABLE
   waveDetail: 3,
   waveScale: 4, // inferred, TUNABLE
@@ -121,9 +121,10 @@ export const WATER_SKY_COLOR = '#a9cdea';
 export const WATER_SHININESS = 200;
 
 // Saves from before the water ramp stored a shallow and a deep color; they become a two-stop ramp.
-function migrateWater(saved: (Partial<WaterSettings> & { shallowColor?: string; deepColor?: string }) | undefined): WaterSettings {
+// Saves from before Clarity was in meters held a share of the deepest water, which has no meters to convert to.
+function migrateWater(saved: (Partial<WaterSettings> & { shallowColor?: string; deepColor?: string; clarity?: number }) | undefined): WaterSettings {
   if (!saved) return DEFAULT_WATER_SETTINGS;
-  const { shallowColor, deepColor, ...rest } = saved;
+  const { shallowColor, deepColor, clarity: _oldClarity, ...rest } = saved;
   const colorStops =
     rest.colorStops ??
     (shallowColor && deepColor

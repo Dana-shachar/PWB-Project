@@ -1,4 +1,5 @@
 import { HISTOGRAM_BINS } from '../map/elevationRange';
+import { DEFAULT_CHUNK_SIZE } from '../voxel/chunkGrid';
 
 // The planet's heights as a cumulative, area-weighted histogram: the share of the surface below each bin.
 export interface HeightDistribution {
@@ -35,13 +36,21 @@ export function depthToRampPosition(depthShare: number, clarity: number): number
 
 export function rampPositionToDepth(position: number, clarity: number): number {
   const scale = Math.max(clarity, 0.001);
-  return -scale * Math.log(1 - Math.min(1, Math.max(0, position)) * (1 - Math.exp(-1 / scale)));
+  return Math.min(1, -scale * Math.log(1 - Math.min(1, Math.max(0, position)) * (1 - Math.exp(-1 / scale))));
 }
 
-// With water on, the land ramp starts at the depth light reaches (Clarity, as a share of the deepest water), not at sea
-// level, so the seabed seen through the shallows keeps the land's colors (Dana, 2026-10-27). Never below the deepest point.
-export function landRampFloor(seaLevel: number, deepest: number, clarity: number): number {
-  return seaLevel - Math.min(1, Math.max(0, clarity)) * Math.max(0, seaLevel - deepest);
+// Clarity is in meters at walking scale, so it means the same however deep the ocean is. The shaders read it as a share
+// of the deepest water; the chunk's meters are used in both views, which keeps their water alike ([B84]).
+export function clarityDepthShare(clarityMeters: number, seaLevel: number, deepest: number, heightScale: number): number {
+  const metersPerHeight = (heightScale / 100) * DEFAULT_CHUNK_SIZE * 1000;
+  return clarityMeters / Math.max(0.0001, (seaLevel - deepest) * metersPerHeight);
+}
+
+// With water on, the land ramp starts below sea level, so the seabed seen through the shallows keeps the land's colors
+// (Dana, 2026-10-27). A fixed depth, so Clarity never recolors the land ([B84]). Never below the deepest point.
+const LAND_RAMP_DEPTH_SHARE = 0.4;
+export function landRampFloor(seaLevel: number, deepest: number): number {
+  return seaLevel - LAND_RAMP_DEPTH_SHARE * Math.max(0, seaLevel - deepest);
 }
 
 // Share of the surface above sea level, 0..1, interpolated within the bin the sea level falls in.

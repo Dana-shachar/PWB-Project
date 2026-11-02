@@ -4,7 +4,7 @@
 
 varying vec2 vUv;
 
-const int MAX_LAYERS = 16; // loop upper bound — actual count is uLayerCount, via the break below
+const int MAX_LAYERS = 15; // loop upper bound — actual count is uLayerCount, via the break below
 
 uniform float uLayerCount;
 uniform float uLayerNoiseType[MAX_LAYERS]; // base generator: 0=random, 1=perlin, 2=simplex, 3=voronoi, 4=none
@@ -49,6 +49,14 @@ uniform float uDetailAmount;
 // With water on, there is no Roughness under water, and it fades in over the coast, so it never moves the coastline.
 uniform float uShoreEnabled;
 uniform float uShoreSeaLevel;
+#ifndef CHUNK_PATCH_PASS
+uniform sampler2D uValleyMap; // RG = eroded height times land, land; BA = water level times cover, cover (rivers/valleyMap.ts)
+uniform float uValleyEnabled;
+uniform float uErosionStrength;
+const float WATER_MIN_COVER = 0.3;
+#endif
+const float RIVER_CHANNEL_DEPTH = 0.002; // how far a river's bed sits under its water. Inferred, TUNABLE
+const float NO_LOCAL_WATER = -1000.0; // far under any sea, so filtering toward it only trims an edge
 // Each layer's own mask pattern: a base generator type (-1 = unmasked), its
 // seed and frequency, then the brightness band that lets the layer through.
 uniform float uLayerMaskType[MAX_LAYERS];
@@ -76,13 +84,12 @@ uniform sampler2D uLayerPaintTexture11;
 uniform sampler2D uLayerPaintTexture12;
 uniform sampler2D uLayerPaintTexture13;
 uniform sampler2D uLayerPaintTexture14;
-uniform sampler2D uLayerPaintTexture15;
 #else
 // [B66] A chunk patch reads its height from the chunk's own base map instead of running the layers.
 uniform sampler2D uChunkBase;
 #endif
 
-// Selects among the 16 named paint-texture uniforms above by constant
+// Selects among the 15 named paint-texture uniforms above by constant
 // comparison. Returns (value, mask) — mask 0 = untouched (procedural shows
 // through), mask 1 = fully painted (value replaces it).
 #ifdef CHUNK_PATCH_PASS
@@ -105,8 +112,7 @@ vec2 samplePaintTexture(int index, vec2 uv) {
   if (index == 11) return texture2D(uLayerPaintTexture11, uv).rg;
   if (index == 12) return texture2D(uLayerPaintTexture12, uv).rg;
   if (index == 13) return texture2D(uLayerPaintTexture13, uv).rg;
-  if (index == 14) return texture2D(uLayerPaintTexture14, uv).rg;
-  return texture2D(uLayerPaintTexture15, uv).rg;
+  return texture2D(uLayerPaintTexture14, uv).rg;
 }
 #endif
 
@@ -692,6 +698,21 @@ void main() {
     elevation += uLayerHeightScale[i] * (layerHeight - 0.5) * coverage;
   }
 
+  // B carries a lake or river's surface (Derzapf 2011). The sea stays out of it, so it can move without a re-bake.
+  float waterSurface = NO_LOCAL_WATER;
+  float riverCover = 0.0;
+#ifndef CHUNK_PATCH_PASS
+  // The land as the rivers shaped it (rivers/streamPower.ts), under Roughness so its bumps stay.
+  if (uRegionMode > 0.5 && uValleyEnabled > 0.5) {
+    vec4 valley = texture2D(uValleyMap, spherePositionToPaintUv(basePosition));
+    elevation = elevation * (1.0 - valley.g * uErosionStrength) + valley.r * uErosionStrength;
+    if (abs(valley.a) > WATER_MIN_COVER) {
+      waterSurface = valley.b / valley.a;
+      if (valley.a > 0.0) riverCover = smoothstep(WATER_MIN_COVER, 1.0, valley.a); // lakes keep their terrain shoreline
+    }
+  }
+#endif
+
   // R = shape (clamped 0..1, unchanged — drives the 2D canvas/painting).
   // G = elevation (unclamped, can exceed 1 or go negative — real height,
   // read by the planet's displacement and the land chunk instead of R).
@@ -702,5 +723,7 @@ void main() {
     float shoreFade = uShoreEnabled > 0.5 ? clamp((elevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
     elevation += uDetailAmount * shoreFade * planetDetail(basePosition, sampleSpacing, 0.0);
   }
-  gl_FragColor = uElevationInRed > 0.5 ? vec4(elevation, elevation, 0.0, 1.0) : vec4(clamp(composite, 0.0, 1.0), elevation, 0.0, 1.0);
+  // After Roughness, so bumps can't lift a riverbed above its water and break the river up.
+  if (riverCover > 0.0) elevation = min(elevation, mix(elevation, waterSurface - RIVER_CHANNEL_DEPTH, riverCover));
+  gl_FragColor = uElevationInRed > 0.5 ? vec4(elevation, elevation, waterSurface, 1.0) : vec4(clamp(composite, 0.0, 1.0), elevation, waterSurface, 1.0);
 }

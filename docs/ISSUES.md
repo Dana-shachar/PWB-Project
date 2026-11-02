@@ -668,9 +668,10 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Fixed: the eye never goes below the ground (or the sea) plus 0.5 m; the smoothing still eases it down. Not yet retested by Dana.
 
 ### [B84] Clarity recolors the land, not just the water · `wrong but workable`
-**🔴 Open, next up** · **Found:** 2026-11-01 · **Where:** `landRampFloor` in `planet/seaLevel.ts`
+**✅ Fixed:** 2026-11-01 · **Found:** 2026-11-01 · **Where:** `landRampFloor` in `planet/seaLevel.ts`
 - Dana (screenshots at low and high Clarity): the mountains change color, read as a lighting change, while the water itself barely changes.
-- Cause, from the code: the land color ramp starts at the depth light reaches, which Clarity sets, so moving Clarity re-stretches the whole land ramp. Fix not built yet: anchor the land ramp above sea level and let Clarity move only its underwater part.
+- Cause: the land color ramp started at the depth light reaches, which Clarity set, so moving Clarity re-stretched the whole land ramp.
+- Fixed: the ramp uses a fixed depth share. Clarity became meters, 1 to 200 on a log slider, turned into a share by `clarityDepthShare`, so it means the same in both views.
 
 ### [B81] No visible sun glitter path on the chunk water · `minor`
 **🔴 Open** · **Found:** 2026-10-31 · **Where:** `seaColor` in `shaders/water/oceanWaves.glsl`
@@ -691,6 +692,46 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Dana: the planet's surface vanished after a foam edit.
 - Cause, measured: a new constant reused a name already in the file (`FOAM_PATCH_SCALE`), a compile error in the file both the planet and the water include. The type check can't see inside shader text.
 - Fixed at the root: `scripts/checkShaders.mjs` compiles every material with Khronos's glslangValidator, using three.js's own header, and runs after every shader edit.
+
+### [B86] Rivers ignored the terrain's valleys · `wrong but workable`
+**✅ Fixed:** 2026-11-01 · **Found:** 2026-11-01 · **Where:** `buildRiverTree`, `RIVER_GROWTH_RANDOMNESS`
+- Dana: the river lines don't line up with the land.
+- Cause, measured: growth randomness added up along each path, so drawn rivers sat barely lower than a random spot (rank 0.458 against 0.486). Each node's height was also read at its cell's center, not where it was drawn, so about 8% of sea ends landed on land.
+- Fixed: randomness cut from 0.02 to 0.001, and heights read at the drawn position. Sea ends on land fell to 0%.
+
+### [B87] Every basin flooded into a lake · `wrong but workable`
+**✅ Fixed:** 2026-11-01 · **Found:** 2026-11-01 · **Where:** `balanceLakes`, `rivers/riverClimate.ts`
+- Dana: far too many lakes, and too large.
+- Cause: noise basins have no outlets, so filling each to its rim drowned them: 527 lakes, the largest about 1.25M km².
+- Fixed: a lake settles where evaporation from its surface meets what flows in, and a basin with a small catchment sinks into the ground (`RIVER_MIN_LAKE_CATCHMENT`). See `[S54]`.
+
+### [B88] A climate slider rebuilt the whole river tree · `slows work`
+**✅ Fixed:** 2026-11-01 · **Found:** 2026-11-01 · **Where:** `rivers/riverControls.ts`, `applyClimate`
+- Dana: a slider must only update the delta.
+- Cause: each step regrew the tree (1 to 2.7 s) and the worker ran every queued step in order.
+- Fixed: the worker keeps the tree and reruns only the climate's part, in reused arrays, and only the newest value is ever sent. About 120 ms a step before erosion joined it. A full delta, touching only the lakes that changed, isn't built.
+
+### [B89] River valleys read as scratches on noise · `wrong but workable`
+**✅ Fixed:** 2026-11-01 · **Found:** 2026-11-01 · **Where:** new `rivers/streamPower.ts`, `rivers/valleyMap.ts`
+- Dana: the land doesn't look water eroded; it should resemble fjords, not blobs laid on noise.
+- Cause: the noise was final and water came after. Narrow cuts changed only 3 to 13% of the map, and the land around them never drained to the rivers.
+- Fixed: the land is now computed from the river tree by the stream power law. See `[S55]`.
+
+### [B90] Roughness broke rivers into dashes · `wrong but workable`
+**🟡 Fix built, Dana's check pending** · **Found:** 2026-11-01 · **Where:** `shaders/heightmap/heightmap.frag.glsl`
+- Dana: rivers are in pieces.
+- Cause, measured: the valley cut averaged 0.004 in height, and Roughness, added afterward, swings up to 0.06, so bumps lifted the bed above the water.
+- Fixed: the channel is cut after Roughness. The same round softens banks, tapers tips, and fades inland water's color toward the sea at river mouths.
+
+### [B91] Dark curved lines along ridgelines · `minor`
+**🟡 Softened, not solved** · **Found:** 2026-11-01 · **Where:** `erodeTerrain`, `RIDGE_BLUR_PASSES`
+- Dana: some areas don't make sense.
+- Cause: the river tree stays fixed while the land changes, so neighboring basins can end at different heights along a ridge.
+- Softened by a four-pass blur. The real fix is rerunning the tree on the eroded land for two or three passes, as Braun and Willett and Cordonnier do, at a cost of seconds per terrain rebuild.
+
+### [B92] Shore foam still looks worse than it should · `minor`
+**⏸️ Parked** · **Found:** 2026-11-01 · **Where:** `foamMask`, `shaders/water/chunkWater.frag.glsl`
+- Dana: not perfect, moving on. Foam that trails receding waves needs a stored buffer that decays (Crest, War Thunder).
 
 ### [B67] From walk mode the water is barely visible · `minor`
 **🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`

@@ -25,10 +25,12 @@ uniform vec3 uCameraPosition;
 varying vec3 vWorldPosition;
 
 const float METERS_PER_UNIT = 1000.0;
+const float CHUNK_SURF_TILT = 0.5; // softens the sky's hard ribbons on the surf. Inferred, TUNABLE.
+const float SHORE_FOAM_REST = 0.6; // the foam that stays at the shore between waves. Inferred, TUNABLE.
 // How far apart the surf's slope samples are, as a share of the chunk. Inferred, TUNABLE.
 const float SURF_SLOPE_UV_STEP = 0.002;
 
-const float SHORE_FOAM_REACH_METERS = 6.0; // the widest the shore foam reaches from the waterline. Inferred, TUNABLE.
+const float SHORE_FOAM_REACH_METERS = 30.0; // how far foam reaches from the waterline at the Foam slider's default. Inferred, TUNABLE.
 
 void main() {
   vec2 chunkUv = vWorldPosition.xz / uChunkSize + 0.5;
@@ -60,15 +62,14 @@ void main() {
   vec3 variance = waterVariance(meters, footprint, fetch);
   normal = normalize(normal + vec3(-variance.x, 0.0, -variance.y));
   // Surf rolling toward the shore, lit as a wave and leaving foam behind its crest.
-  float breakup = foamBreakup(meters, footprint);
   // The depth's slope from the ground's heights at neighboring points, per unit of the waves' coordinates.
   vec2 uvStep = vec2(SURF_SLOPE_UV_STEP, 0.0);
   float groundX = mix(texture2D(uChunkHeightMap, chunkUv + uvStep.xy).r, texture2D(uChunkHeightMap, chunkUv + uvStep.xy).g, uHeightMapGreenChannel);
   float groundZ = mix(texture2D(uChunkHeightMap, chunkUv + uvStep.yx).r, texture2D(uChunkHeightMap, chunkUv + uvStep.yx).g, uHeightMapGreenChannel);
   float seaUnitsPerStep = SURF_SLOPE_UV_STEP * uChunkSize * METERS_PER_UNIT / uWaveScale;
   vec2 depthGradient = -vec2(groundX - groundRaw, groundZ - groundRaw) / max(0.0001, uSeaLevel - uWaterDeepest) / seaUnitsPerStep;
-  vec3 surf = surfWave(depthShare, meters, breakup, depthGradient, footprint) * (1.0 - far);
-  normal = normalize(normal + vec3(-surf.x, 0.0, -surf.y));
+  vec3 surf = surfWave(depthShare, meters, 0.0, depthGradient, footprint) * (1.0 - far);
+  normal = normalize(normal + vec3(-surf.x, 0.0, -surf.y) * CHUNK_SURF_TILT);
   vec3 eye = normalize(toPoint);
   vec3 light = normalize(uLightDirection);
   vec3 color = seaColor(surfacePoint, normal, light, eye, distMeters, seaBase, seaWaterColor, uSkyColor, far, seaSlopeVariance(fetch)) * uLightIntensity;
@@ -79,11 +80,15 @@ void main() {
   // Foam by distance from the shore, not depth alone (the shore-wave source's own measure): depth over the seabed's
   // slope, a first-order estimate, so a gentle beach keeps a narrow band instead of a wide sheet ([B83]).
   float shoreMeters = depthShare / max(length(depthGradient), 1e-4) * uWaveScale;
-  float foamDepth = min(depthShare, shoreMeters / SHORE_FOAM_REACH_METERS * uFoamWidth);
-  float surfFoam = surf.z * (1.0 - smoothstep(SHORE_FOAM_REACH_METERS, 2.0 * SHORE_FOAM_REACH_METERS, shoreMeters));
-  float shore = max(waterFoam(foamDepth, uFoamWidth, breakup), surfFoam);
+  float shoreReach = max(SHORE_FOAM_REACH_METERS * uFoamWidth / 0.05, 0.001); // the Foam slider sets the band's width
+  // Saturation ends at the reach: depth alone let shore foam cover every shallow flat (measured, [B83]).
+  float shoreFade = 1.0 - smoothstep(shoreReach, 2.0 * shoreReach, shoreMeters);
+  float saturation = max(SHORE_FOAM_REST * clamp(1.0 - shoreMeters / (2.0 * shoreReach), 0.0, 1.0), gSurfTrail * (1.0 - far) * shoreFade);
+  float shore = clamp((saturation - foamMask(meters, footprint)) * FOAM_FADE_GAIN, 0.0, 1.0) * foamTexture(meters, footprint);
   float foam = max(shore, crest) * foamAmount * FOAM_OPACITY;
-  color = mix(color, FOAM_COLOR * (uAmbient + seaDiffuse(normal, light, 1.0)) * uLightIntensity, foam);
+  // Foam adds to the water as in Parberry et al. (screen, so it never clips), taking the sky at a slant, so shine stays.
+  vec3 foamColor = mix(FOAM_COLOR * (uAmbient + seaDiffuse(normal, light, 1.0)) * uLightIntensity, uSkyColor, waterFresnel(normal, -eye));
+  color = 1.0 - (1.0 - clamp(color, 0.0, 1.0)) * (1.0 - clamp(foamColor, 0.0, 1.0) * foam);
 
   color = applyHaze(color, vWorldPosition, uCameraPosition, uLightDirection);
 

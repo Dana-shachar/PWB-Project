@@ -483,4 +483,61 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Continents are the broadest layer; mountains, plateaus and detail are masked by the continents' own noise, so they stay on land (after Lague, who masks mountains by the first layer). Low ground stays smooth through Musgrave's hetero terrain.
 - Terraces are rare and small: highlands or a fifth of wild worlds, 8 to 15% of the surface, 3 to 6 steps. Dana: they look uniform, so only in specific areas.
 - Planets stay round: the shown layers' Heights together are capped at 1.5, and a layer carves by a negative Height, since elevation is their sum with no blend mode. Blend modes shape only the 2D map.
-- ❓ Open: canyons (no documented recipe found; Gaea's is "drainage based") and Clay John's erosion noise (MIT, needs a new bake step).
+- ❓ Open: canyons (no documented recipe found; Gaea's is "drainage based"). Rivers now erode the land by `[S55]`.
+
+---
+
+## 🏞️ Rivers and climate
+
+*Decided 2026-11-01. The land and its water are built from one drainage tree, in a worker, on any planet.*
+
+### [S53] Rivers are a tree grown from the coast · `decided`
+**Decided:** 2026-11-01
+
+- A tree of jittered nodes grows inland on a 4096 by 2048 map (about 9 km a cell), lower ground first, so every land node reaches the sea and flow is summed from the springs (Frampton's Sapiens).
+- Pits are filled first (Priority-Flood, as Peytavie et al. do), and growth only steps onto equal or higher fill levels, so rivers cross a ridge only at its lowest pass and each lake has one outlet.
+- The tree lives in a worker, and river data never passes through React props, since its dev timing copies them and ran out of memory.
+- A control updates only what it affects: terrain or sea level regrow the tree, climate reruns only the balance, and Erosion only re-bakes.
+
+### [S54] Lakes come from a water budget, not from filling every pit · `decided`
+**Decided:** 2026-11-01
+
+- A lake grows until evaporation from its surface meets what flows in, computed directly, with no time stepping. Short of its rim it stays closed; at the rim it spills the rest downstream (Braun and Willett's sill).
+- Runoff uses Budyko's framework in Fu's form. The closed-lake balance is from search summaries, not a paper read in full.
+- A catchment under `RIVER_MIN_LAKE_CATCHMENT` gets no lake: its water sinks into the ground.
+- Water at every point has its own height (Derzapf 2011, section 3.3), stored per texel, and shows where it stands above the ground. Lakes draw their shores from the terrain.
+
+### [S55] Stream power shapes the land · `decided`
+**Decided:** 2026-11-01
+
+- Noise is the input, not the final terrain: it sets how fast each place rises, and rivers cut it down with the stream power law, `n = 1`, `m = 0.5` (Braun and Willett 2013, Cordonnier et al. 2016).
+- Those papers step through time and let rivers move, 100 to 300 steps. With a fixed tree the same equation settles directly, so one pass from the sea up is enough. That direct form is inferred, and the cost is that routes stay as the noise set them.
+- Slopes are capped, as Cordonnier caps them at 30 degrees, so low-drainage peaks don't spike.
+- The Erosion slider blends noise and eroded land; 0 is the plain noise. Whole-globe bakes stay uneroded, so rivers never read their own result and readouts stay exact.
+- With Water or Atmosphere off, nothing erodes, so the terrain is the plain noise.
+
+### [S56] Climate lives with the atmosphere, for the whole planet · `decided`
+**Decided:** 2026-11-01
+
+- Atmosphere and climate are one section, with a Climate part: Liquid, Rainfall, Temperature, Erosion.
+- These are one value per planet until Stage 09 gives each place its own. Turning Atmosphere off removes rivers, lakes and erosion: no air, no rain.
+- Both Randomize buttons roll the climate, mostly water worlds.
+
+### [S57] Worlds can run on other liquids · `decided`
+**Decided:** 2026-11-01
+
+- Water, Nitrogen, Methane, Ethane, Ammonia, Sulfuric acid, Sulfur, Lava and Iron, or Dry. Ice is cold Water, not its own material.
+- The liquid sets the Temperature and Rainfall ranges. Each differs in evaporation, viscosity (speed falls with it, Jeffreys), cooling, channel width and branching. Sulfur's viscosity peaks near 187 C, as real sulfur's does.
+- The worlds don't need to be scientific: bizarre results are welcome, as long as they don't read as bugs. Numbers are chosen for the look.
+
+### [S58] Shaders compile with a real compiler before every reload · `decided`
+**Decided:** 2026-11-01
+
+- A passing type check can't see inside shader text, so `app/scripts/checkShaders.mjs` compiles every material with Khronos's glslangValidator, using three.js's own header.
+- It runs after any shader edit, and new shader pieces join its list.
+
+### [S59] At most 15 noise layers · `decided`
+**Decided:** 2026-11-01
+
+- A fragment shader commonly gets 16 texture slots, counted by what's declared, not by what's in use. Paint took all 16, so the river map takes the last one.
+- Layers past 15 are ignored, so the bake can't crash.

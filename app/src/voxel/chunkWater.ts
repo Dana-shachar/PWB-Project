@@ -161,6 +161,7 @@ export function updateChunkWater(
   chunkSize: number,
   maxHeight: number,
   waterDeepest: number,
+  clarityShare: number,
   heightMap: THREE.Texture | null,
   heightMapGreenChannel: boolean,
   wind: number,
@@ -175,7 +176,7 @@ export function updateChunkWater(
   uniforms.uChunkSize.value = chunkSize;
   applyTide(water);
   uniforms.uWaterDeepest.value = waterDeepest;
-  uniforms.uWaterClarity.value = settings.clarity;
+  uniforms.uWaterClarity.value = clarityShare;
   uniforms.uFoamWidth.value = settings.foamWidth;
   uniforms.uSeaIterations.value = settings.waveDetail;
   // Wind lengthens Seascape's waves (windLengthScale); the variance waves already have the wind's lengths, so their

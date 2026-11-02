@@ -6,6 +6,7 @@ import { useSceneControls } from './scene/sceneControls';
 import { useSharedGumball } from './scene/sharedGumball';
 import { useSharedViewportRenderer } from './scene/sharedViewportRenderer';
 import { usePlanetControls } from './planet/planetControls';
+import { clarityDepthShare } from './planet/seaLevel';
 import { randomSpin } from './scene/planetSpin';
 import { Panel } from './ui/Panel';
 import { RightPanel } from './ui/RightPanel';
@@ -17,6 +18,8 @@ import { useBrush } from './map/2Dbrush';
 import { useCurrentUser } from './firebase/currentUser';
 import { useSaveProject } from './projectSettings/saveProject';
 import { useErosion } from './erosion/erosionControls';
+import { useRivers } from './rivers/riverControls';
+import { randomClimate } from './atmosphere/atmosphereSettings';
 import { ErosionTimeline } from './erosion/ErosionTimeline';
 import { useLandChunk } from './voxel/landChunk';
 import { LandChunkCanvas, type LandChunkCanvasHandle } from './voxel/LandChunkCanvas';
@@ -43,11 +46,14 @@ function App() {
 
   const sceneControls = useSceneControls();
   const planetControls = usePlanetControls();
+  const waterClarityShare = clarityDepthShare(planetControls.water.clarityMeters, planetControls.water.seaLevel, planetControls.elevationRange.min, planetControls.heightScale);
   const noiseLayers = useNoiseLayers(INITIAL_LAYER_ID);
-  // Terrain Randomize also rolls how the planet spins: any tilt, any direction (scene/planetSpin.ts).
+  const valleyRevision = useRivers(sceneHandleRef, planetControls.water.enabled && planetControls.atmosphere.enabled, planetControls.water.seaLevel, planetControls.atmosphere, planetControls.atmosphere.riverDebug, planetControls.atmosphere.erosion, planetControls.heightDistribution);
+  // Terrain Randomize also rolls how the planet spins (scene/planetSpin.ts) and its climate.
   const randomizeWorld = () => {
     noiseLayers.randomizeTerrain();
     planetControls.updateSpin(randomSpin());
+    planetControls.updateAtmosphere(randomClimate());
   };
   const brush = useBrush(sceneHandleRef);
   // Declared before the land chunk, which consumes its result: erosion runs
@@ -208,6 +214,7 @@ function App() {
         planetElevationRange={planetControls.elevationRange}
         chunkElevationRange={{ min: landChunk.elevationMin, max: landChunk.elevationMax }}
         water={planetControls.water}
+        waterClarityShare={waterClarityShare}
         spin={planetControls.spin}
         onSpinChange={planetControls.updateSpin}
         onWaterChange={planetControls.updateWater}
@@ -296,6 +303,7 @@ function App() {
                 onElevationRangeChange={planetControls.setElevationRange}
                 onHeightDistributionChange={planetControls.setHeightDistribution}
                 water={planetControls.water}
+                waterClarityShare={waterClarityShare}
                 spin={planetControls.spin}
                 atmosphere={planetControls.atmosphere}
                 lightFollowsCamera={sceneControls.lightFollowsCamera}
@@ -342,11 +350,12 @@ function App() {
                 shadowsEnabled={planetControls.shadowsEnabled}
                 patch={landChunk.patch}
                 patchesEnabled={planetControls.displayMode !== 'voxel'}
-                bakeVersion={landChunk.bakeVersion}
+                bakeVersion={landChunk.bakeVersion + valleyRevision}
                 maxErrorPixels={planetControls.effectiveMaxErrorPixels}
                 bakePatch={bakeChunkPatch}
                 groundHeights={landChunk.groundHeights}
                 water={planetControls.water}
+                waterClarityShare={waterClarityShare}
                 atmosphere={planetControls.atmosphere}
                 lightFollowsCamera={sceneControls.lightFollowsCamera}
                 waterDeepest={planetControls.elevationRange.min}

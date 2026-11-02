@@ -24,7 +24,7 @@ const PLANET_OCEAN_UNIT_KM = 0.001;
 
 // With water on, the land ramp starts at the depth light reaches (planet/seaLevel.ts); depth still uses the true low.
 function landRampMin(shared: PlanetSharedUniforms): number {
-  return shared.waterEnabled > 0.5 ? landRampFloor(shared.seaLevel, shared.elevationMin, shared.waterClarity) : shared.elevationMin;
+  return shared.waterEnabled > 0.5 ? landRampFloor(shared.seaLevel, shared.elevationMin) : shared.elevationMin;
 }
 
 function oceanScale(waveScale: number): number {

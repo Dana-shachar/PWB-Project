@@ -1,6 +1,6 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-10-30`
+`Last updated: 2026-11-01`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
 
@@ -13,9 +13,11 @@
 
 `Covers 2026-10-28 to 2026-11-04 · Due: start of class, 10:10 am`
 
-*Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map, rebuilt the moons (up to five, randomized, with tides), then made every panel follow one hierarchy and softened the planet's haze into a rim.*
+*Gave the planet a water system, with rivers, lakes, a climate and land eroded by its rivers. Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map, rebuilt the moons (up to five, randomized, with tides), then made every panel follow one hierarchy and softened the planet's haze into a rim.*
 
 ![Walk mode on the land chunk after the fix: smooth slopes down to the water, no stripes.](screenshots/2026-10-28-ground-smooth-after.png)
+
+![The architecture diagram: the rivers join as their own module, in a worker.](diagrams/architecture-2026-11-01.svg)
 
 ### 🛠️ Done
 - **Ground pattern fixed (`[B66]`, 2026-10-28):** up close the chunk showed stripes and stair-stepped ridges, because its heights were computed as points on the whole 6000 km planet, where floats round to about 0.6 m. The chunk now bakes its own 4096 height map from the planet's noise and resamples it smoothly; finer texture comes from Roughness. Before and after screenshots are in the issue. The water and shadows now read the same map, so the seabed is smooth too.
@@ -41,6 +43,25 @@
 - **A shader check (`[B85]`):** every shader now compiles with Khronos's reference compiler before a reload.
 - **Water as a block (`[S50]`):** the chunk's water got see-through side walls; the grid no longer shows through the water in walk mode (`[B79]`).
 
+![A low view of the coast: the seabed fading through the shallows into deep water.](screenshots/2026-11-01-shallows-low-view.png)
+
+![A water world from orbit, with clouds along the equator of its tilted spin.](screenshots/2026-11-01-cloud-world-from-orbit.png)
+
+- **Clarity in meters (`[B84]`):** Clarity no longer recolors the land. It's now 1 to 200 m, the same in both views.
+- **Shore foam (2026-11-01):** clumpy foam by Parberry's saturation method, lingering behind each wave. Not perfect, parked (`[B92]`).
+- **Rivers (2026-11-01, `[S53]`):** a drainage tree grown from the coast on a 4096 by 2048 map, 5.3 million nodes, built in about 1.5 s off the main thread. Rivers cross ridges only at their lowest pass, and splines and meanders curve their paths.
+- **Lakes from a water budget (`[S54]`):** a lake grows until evaporation meets what flows in, so a dry world keeps small closed lakes and a wet one fills its basins and spills. Water at every point has its own height, and lakes draw real shorelines from the terrain.
+- **Climate joined the atmosphere (`[S56]`):** a Climate section with Liquid, Rainfall, Temperature and Erosion, on the Atmosphere switch, and rolled by both Randomize buttons.
+- **Other liquids (`[S57]`):** nitrogen, methane, ethane, ammonia, sulfuric acid, sulfur, lava and iron, each with its own ranges and behavior, as on Titan, Io and the hottest exoplanets.
+- **Land shaped by water (`[S55]`, `[B89]`):** the turning point of the week. Narrow river cuts looked like scratches, because the noise never knew about water. The land is now computed from the river tree by the stream power law, the standard model of river erosion, in about 0.1 s. Ridges and branching valleys appear across every landmass, and an Erosion slider blends back to the plain noise.
+
+![The eroded land: tributaries feeding lakes and running to the sea.](screenshots/2026-11-01-river-network.png)
+
+![A lava world: wider channels from a thicker liquid.](screenshots/2026-11-01-lava-channels.png)
+
+- **A real shader compiler (`[S58]`):** Khronos's glslangValidator now checks all 15 materials after every shader edit, because a passing build can't see inside shader text. It caught two errors this round before they reached the screen.
+- **Limits:** noise layers capped at 15 to free a texture slot for the river map (`[S59]`). Rivers only reach the planet view so far; the chunk still shows sea water.
+
 ### 🤖 AI process
 - **A day lost to theories:** three fixes were built on unproven causes (octave tweaks, local coordinates for fine detail, smoothing) before Dana's own idea, a dedicated height map resampled at higher resolution, solved it. New working rules: check Dana's proposed mechanism against established tools first, build only on a measured cause, and edit docs only at commit.
 - **Measured, finally:** a readout of identical neighboring heights proved the rounding, after a day of guessing.
@@ -52,6 +73,11 @@
 - **Unchecked assumptions:** a shader used an old texture function that three.js only translates in one shader stage, so the clouds vanished; a moon color helper dropped the second tone's offset. Both were found from the console and the code, then fixed.
 - **Tokens:** research agents (55k, 13k, 59k, 29k, 9k tokens); Dana asked for narrower reads through the code index.
 - **A workaround that kept breaking:** Claude built the spin by moving the camera, called the standard approach (rotating the planet) risky, and each fix uncovered another side effect. Dana stopped it and asked for one holistic fix. Reading every affected system first made it one clean pass.
+- **Rivers, method first:** the course folder's papers answered most questions once they were actually read: Riverscapes for pit filling and splines, Davis for blending, Derzapf for water height per point. Dana's Cordonnier and Braun and Willett PDFs settled the erosion method, and corrected Claude's claim of "one pass" for their full method: they need 100 to 300 steps, and the one-pass form is an inference from a fixed tree.
+- **Over-engineering, and asking too much:** Claude measured things Dana hadn't asked for, ran web searches while the papers sat in her folder, launched an agent on top of searches already running, and edited code on a reaction instead of a go. Dana stopped each one. New saved rules: read the course folder first, a reaction isn't a go, and a slider updates only its delta.
+- **The same performance bug again:** the first climate slider regrew the whole river tree on each step, despite the repo's rule to reuse its fixes. Dana caught it.
+- **Misreadings cost rounds:** "a different liquid" became Temperature picking the liquid, when Dana expected a dropdown; "contextual ranges" got a guess instead of a question. Her diagnosis of the terrain itself was right from the start: the landscape has to account for water.
+- **A wrong figure:** Claude said the worker would hold about 100 MB; the arrays add up to about 500 MB.
 - **Fixed recipes flatten variety:** copying one saved planet's numbers made every world alike; they became the center of ranges by world type. Dana's logs of liked and disliked rolls drove each round.
 
 ### 📊 Worked / didn't / next
@@ -66,7 +92,11 @@
 - ❌ An invented method presented as a fix: undone.
 - ✅ A real compiler for shaders: the exact error on the first run.
 - ❌ A camera workaround instead of the standard rotation: replaced.
-- ⏭️ Tune Randomize's drivers from Dana's test, then slope rock and landscape variety; walk mode's `[B71]` is deferred.
+- ✅ Reading the course papers before building: pit filling, splines, water height and stream power all came from them.
+- ✅ An offline render before Dana's reload showed the erosion working, and a scaling bug, in one image.
+- ❌ Narrow valleys tuned round after round: the real fix was the method, not the numbers.
+- ❌ Actions without a go, and research around sources already at hand.
+- ⏭️ Water on the chunk, river controls and cleanup, cutting the worker's memory, then slope rock; walk mode's `[B71]` is deferred.
 
 ---
 

@@ -1,4 +1,6 @@
 import { useEffect, useImperativeHandle, useRef, forwardRef, type RefObject } from 'react';
+import { buildLakeDebugDots, buildRiverDebugLines } from '../rivers/riverDebug';
+import { VALLEY_MAP_HEIGHT, VALLEY_MAP_WIDTH } from '../rivers/valleyMap';
 import * as THREE from 'three';
 import { scene } from './scene';
 import { camera, DEFAULT_CAMERA_DISTANCE } from './camera';
@@ -68,6 +70,18 @@ export interface SceneCanvasHandle {
   // `samples` is how finely the patch is measured; the patch itself is which
   // ground is measured. Independent on purpose. See planet/patch.ts.
   getPatchElevationData(patch: TerrainPatch, samples: number): ElevationData | null;
+  // The whole-globe heights at the rivers' own size, read back without stalling (rivers/riverTree.ts).
+  getGlobeElevationAsync(): Promise<ElevationData | null>;
+  // [TEMP rivers] shows these segments as lines on the planet, turning with it; null clears them.
+  setRiverSegments(segments: Float32Array | null): void;
+  // [TEMP rivers] shows every lake node as a dot; null clears them.
+  setRiverLakes(lakeNodes: Float32Array | null): void;
+  setRiverDebugVisible(visible: boolean): void;
+  // The rivers' mark on the land (rivers/valleyMap.ts): re-bakes the shown patches.
+  setValleyMap(map: Float32Array | null): void;
+  setErosionStrength(strength: number): void;
+  // The camera in the planet's own frame, which sets the rivers in view (rivers/riverView.ts).
+  getRiverView(): { x: number; y: number; z: number; radius: number } | null;
   // The patch's real min/max, without the full synchronous readback
   // getPatchElevationData above pays for — a GPU reduction pyramid instead
   // (map/heightmap.ts's getRegionMinMaxAsync()), reading back one texel
@@ -218,6 +232,7 @@ interface SceneCanvasProps {
   // The planet's area-weighted height distribution, for the land share readout (planet/seaLevel.ts).
   onHeightDistributionChange?: (distribution: HeightDistribution | null) => void;
   water: WaterSettings;
+  waterClarityShare: number;
   atmosphere: AtmosphereSettings;
   spin: SpinSettings; // the planet turning when left alone (scene/planetSpin.ts)
   // The light turns with the camera instead of staying fixed (scene/sceneControls.ts).
@@ -259,6 +274,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     onElevationRangeChange,
     onHeightDistributionChange,
     water,
+    waterClarityShare,
     atmosphere,
     spin,
     lightFollowsCamera,
@@ -331,6 +347,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   });
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const planetGroupRef = useRef<THREE.Group | null>(null);
+  const riverLinesRef = useRef<ReturnType<typeof buildRiverDebugLines> | null>(null);
+  const riverLakesRef = useRef<ReturnType<typeof buildLakeDebugDots> | null>(null);
+  const riverDebugVisibleRef = useRef(false);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const heightmapPipelineRef = useRef<HeightmapPipeline | null>(null);
   const erosionEngineRef = useRef<ErosionEngine | null>(null);
@@ -464,6 +483,72 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const heightmapPipeline = heightmapPipelineRef.current;
         if (!webglRenderer || !heightmapPipeline) return null;
         return heightmapPipeline.getElevationData(webglRenderer);
+      },
+      setRiverSegments(segments) {
+        const planetGroup = planetGroupRef.current;
+        if (!planetGroup) return;
+        const previous = riverLinesRef.current;
+        if (previous) {
+          planetGroup.remove(previous);
+          previous.geometry.dispose();
+          previous.material.dispose();
+        }
+        const shared = sharedUniformsRef.current;
+        riverLinesRef.current = segments ? buildRiverDebugLines(segments, shared.radius, shared.displacementAmplitude) : null;
+        if (riverLinesRef.current) {
+          riverLinesRef.current.visible = riverDebugVisibleRef.current;
+          planetGroup.add(riverLinesRef.current);
+        }
+      },
+      setRiverLakes(lakeNodes) {
+        const planetGroup = planetGroupRef.current;
+        if (!planetGroup) return;
+        const previous = riverLakesRef.current;
+        if (previous) {
+          planetGroup.remove(previous);
+          previous.geometry.dispose();
+          previous.material.dispose();
+        }
+        const shared = sharedUniformsRef.current;
+        riverLakesRef.current = lakeNodes ? buildLakeDebugDots(lakeNodes, shared.radius, shared.displacementAmplitude) : null;
+        if (riverLakesRef.current) {
+          riverLakesRef.current.visible = riverDebugVisibleRef.current;
+          planetGroup.add(riverLakesRef.current);
+        }
+      },
+      setRiverDebugVisible(visible) {
+        riverDebugVisibleRef.current = visible;
+        if (riverLinesRef.current) riverLinesRef.current.visible = visible;
+        if (riverLakesRef.current) riverLakesRef.current.visible = visible;
+      },
+      setValleyMap(map) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return;
+        heightmapPipeline.setValleyMap(map, VALLEY_MAP_WIDTH, VALLEY_MAP_HEIGHT);
+        planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
+      },
+      setErosionStrength(strength) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return;
+        heightmapPipeline.setErosionStrength(strength);
+        planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
+      },
+      getRiverView() {
+        const planetGroup = planetGroupRef.current;
+        const camera = gumballTargetRef.current?.camera;
+        if (!planetGroup || !camera) return null;
+        const local = planetGroup.worldToLocal(camera.position.clone());
+        return { x: local.x, y: local.y, z: local.z, radius: sharedUniformsRef.current.radius };
+      },
+      async getGlobeElevationAsync() {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return null;
+        const elevation = await heightmapPipeline.getRegionElevationDataAsync(webglRenderer, heightmapPipeline.renderRiverHeights(webglRenderer, layersRef.current));
+        heightmapPipeline.releaseRiverTarget();
+        return elevation;
       },
       getPatchElevationData(patch, samples) {
         const webglRenderer = webglRendererRef.current;
@@ -1021,14 +1106,14 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shared.waterEnabled = water.enabled ? 1 : 0;
     shared.seaLevel = water.seaLevel;
     shared.waterStops = water.colorStops;
-    shared.waterClarity = water.clarity;
+    shared.waterClarity = waterClarityShare;
     shared.foamWidth = water.foamWidth;
     shared.waveDetail = water.waveDetail;
     shared.waveScale = water.waveScale;
     shared.shine = water.shine;
     shared.reflection = water.reflection;
     planetPatchRendererRef.current?.applyShared(shared);
-  }, [water]);
+  }, [water, waterClarityShare]);
 
   // The wind (it sets the water's waves) and the sky the water reflects come from the atmosphere.
   useEffect(() => {

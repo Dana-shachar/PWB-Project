@@ -546,16 +546,17 @@ interface SelectProps {
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   description?: string; // shown on hover, same reason as Slider's
+  disabled?: boolean;
 }
 
 // Plain <select>, styled to match the panel's other controls — the React
 // equivalent of the gumball's vanilla-DOM view-preset dropdown.
-export function Select({ label, value, onChange, options, description }: SelectProps) {
+export function Select({ label, value, onChange, options, description, disabled = false }: SelectProps) {
   return (
     <div className="ui-select-row ui-tooltip-anchor">
       {description && <span className="ui-tooltip">{description}</span>}
       <label className="ui-select-label">{label}</label>
-      <select className="ui-select" value={value} onChange={(event) => onChange(event.target.value)}>
+      <select className="ui-select" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

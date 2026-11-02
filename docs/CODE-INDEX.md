@@ -16,6 +16,9 @@
 | Task | Read first, in order |
 |---|---|
 | Add or change a noise control | `map/noiseRanges.ts`, `map/heightmap.ts` (`NoiseLayer`), `ui/NoisePanel.tsx`, `shaders/heightmap/heightmap.frag.glsl` |
+| Change rivers or lakes | `rivers/riverTree.ts` (`buildRiverTree`, `balanceLakes`), `rivers/riverTree.worker.ts`, `rivers/riverControls.ts` |
+| Change how land erodes | `rivers/streamPower.ts`, `rivers/valleyMap.ts`, `uValleyMap` in `shaders/heightmap/heightmap.frag.glsl` |
+| Add a liquid or a climate control | `rivers/riverClimate.ts` (`LIQUIDS`, `waterBudget`), `atmosphere/atmosphereSettings.ts` (`randomClimate`), the Climate part in `ui/Panel.tsx` |
 | Add a field to a layer | `map/heightmap.ts` (`NoiseLayer`, `createDefaultLayer`, `migrateLegacyLayers`, `syncLayerUniforms`), then the shader uniform |
 | Change a layer's mask | `ui/MaskControls.tsx`, `map/heightmap.ts` (`hasMask`, `quantileOf`), the mask code in `shaders/heightmap/heightmap.frag.glsl` |
 | Change which patches the planet shows | `planet/planetPatches.ts`, `planet/PlanetPatchRenderer.ts`, `planet/patchLifecycle.ts` |
@@ -166,13 +169,49 @@
 
 ---
 
+## 🏞️ Rivers (`rivers/`)
+
+*The drainage tree, lakes, climate, erosion and the map that carries them into the bake. It runs in a worker.*
+
+**rivers/riverTree.ts**
+- What it is: the tree, grown from the coast after filling pits; the climate step that balances lakes, sums flow and fills reused arrays; smoothing, meanders and the arrays handed to the app.
+- Key names: `buildRiverTree` (inner `waterLevels`, `collectNeighbors`), `RiverTree`, `RiverNetwork`, `applyClimate`, `findPits`, `balanceLakes`, `smoothRiverPaths`, `meanderChain`, `extractRiverSegments`, `extractLakeNodes`, `queryRiverSegments`, `RIVER_MIN_LAKE_CATCHMENT`, `RIVER_MIN_LAKE_NODES`.
+
+**rivers/riverClimate.ts**
+- What it is: the water budget from Rainfall, Temperature and Liquid, and each liquid's ranges and behavior.
+- Key names: `LIQUIDS`, `liquidNamed`, `waterBudget`, `referenceTemperature`, `rainfallMax`, `flowingMinC`, `viscosityAt`, `reachKeepAt`.
+
+**rivers/streamPower.ts**
+- What it is: the land as the rivers shaped it, one pass from the sea up.
+- Key names: `erodeTerrain`, `MIN_RISE`, `MAX_STEP`.
+
+**rivers/valleyMap.ts**
+- What it is: bakes eroded height and water level into one map, with river widths and tapered tips. R and G are height times land, and land; B and A are water level times cover, and cover, negative for lakes.
+- Key names: `buildValleyMap`, `blurLand`, `paintWater`, `VALLEY_MAP_WIDTH`, `RIDGE_BLUR_PASSES`, `RIVER_BASE_WIDTH`.
+
+**rivers/riverTree.worker.ts**
+- What it is: holds the tree off the main thread and answers build, climate, valley and camera queries.
+- Key names: `applyAndReport`.
+
+**rivers/riverControls.ts**
+- What it is: `useRivers`, which rebuilds on terrain or sea level, sends only the newest climate, waits for sliders to settle before the map, and returns `valleyRevision`.
+- Key names: `useRivers`, `sendClimate`, `sendValleyWhenSettled`.
+
+**rivers/riverView.ts**
+- What it is: which rivers to draw from where the camera is.
+- Key names: `riverQueryForCamera`, `riverQueriesMatch`.
+
+**rivers/riverDebug.ts**
+- What it is: [TEMP] the River debug lines and lake dots.
+- Key names: `buildRiverDebugLines`, `buildLakeDebugDots`.
+
 ## ☁️ Atmosphere (`atmosphere/`)
 
 *The sky, haze, glow, clouds, wind, moons and tides, saved with the planet.*
 
 **atmosphere/atmosphereSettings.ts**
 - What it is: the settings and their defaults, the locks, and the Atmosphere's Randomize; older saves take their wind from the water and their shared Crescent, Texture, Halo, Inner glow and "Lock colors" into each moon.
-- Key names: `AtmosphereSettings` (incl. `shadowHue`, `clouds`, `cloudColor2`, `moonCount`, `moons`, `lockedColors`), `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (the drivers `storm`, `air`, `climate`; `follow`, `MILD_DRIVER`, `EXTREME_DRIVER`, `EXTREME_CHANCE`, `JITTER`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
+- Key names: `AtmosphereSettings` (incl. `shadowHue`, `clouds`, `cloudColor2`, `moonCount`, `moons`, `lockedColors`, `rainfall`, `temperature`, `liquid`, `erosion`, `riverDebug`), `randomClimate`, `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (the drivers `storm`, `air`, `climate`; `follow`, `MILD_DRIVER`, `EXTREME_DRIVER`, `EXTREME_CHANCE`, `JITTER`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
 
 **atmosphere/moonTexture.ts**
 - What it is: the moons: their settings, simple noise layers, Randomize (sizes, places in view, colors from the sky, textures), the colors built from the sky and a harmony rule, and the five defaults.

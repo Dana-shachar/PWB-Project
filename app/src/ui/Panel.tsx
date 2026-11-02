@@ -1,3 +1,4 @@
+import { LIQUIDS, liquidNamed, rainfallMax, referenceTemperature } from '../rivers/riverClimate';
 import { useState } from 'react';
 import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle, Dial } from './UIElements';
 import type { SpinSettings } from '../scene/planetSpin';
@@ -109,6 +110,7 @@ interface PanelProps {
   chunkElevationRange: { min: number; max: number };
   // Sea level and water look (planet/planetControls.ts), and the planet's heights for the land share readout.
   water: WaterSettings;
+  waterClarityShare: number;
   onWaterChange: (changes: Partial<WaterSettings>) => void;
   atmosphere: AtmosphereSettings;
   onAtmosphereChange: (changes: Partial<AtmosphereSettings>) => void;
@@ -260,6 +262,7 @@ export function Panel({
   heightScale,
   planetElevationRange,
   water,
+  waterClarityShare,
   onWaterChange,
   atmosphere,
   onAtmosphereChange,
@@ -282,10 +285,10 @@ export function Panel({
   const [expandedStages, setExpandedStages] = useState<Set<PipelineStage>>(new Set());
   // Raw height to the planet's meters, the same conversion the color ramp uses for the planet.
   const planetMetersPerHeight = (heightScale / 100) * radiusKm * 1000;
-  // With water on, the land ramp spans the depth light reaches to the top (planet/seaLevel.ts, landRampFloor).
+  // With water on, the land ramp starts below sea level (planet/seaLevel.ts, landRampFloor).
   const viewElevationRange = activeViewContext === 'landChunk' ? chunkElevationRange : planetElevationRange;
   const landRampRange = water.enabled
-    ? { min: Math.max(viewElevationRange.min, landRampFloor(water.seaLevel, planetElevationRange.min, water.clarity)), max: viewElevationRange.max }
+    ? { min: Math.max(viewElevationRange.min, landRampFloor(water.seaLevel, planetElevationRange.min)), max: viewElevationRange.max }
     : viewElevationRange;
   // Raw depth from sea level down to the planet's lowest ramp point, which the water ramp spans.
   const waterDepthRange = Math.max(0.0001, water.seaLevel - planetElevationRange.min);
@@ -491,7 +494,6 @@ export function Panel({
             <div className="panel-section-divider" />
             <span className="panel-section-title">View</span>
             {/* The planet turning on its own when left alone; dragging pauses it (scene/planetSpin.ts). */}
-            <Slider label="Spin speed" unit="°/s" value={spin.speed} onChange={(speed) => onSpinChange({ speed })} min={0} max={30} step={0.5} precision={1} description="How fast the planet turns on its own when you leave it alone, in degrees per second. 0 stops it. Dragging pauses it; it starts again a few seconds after you let go." />
             <Dial label="Spin direction" value={spin.direction} onChange={(direction) => onSpinChange({ direction })} description="Which way the spin's axis leans." />
             {/* Walk mode's vertical view angle; 20 to 150 is Unity's documented sample slider range. */}
             <Slider
@@ -578,7 +580,10 @@ export function Panel({
               }
             />
             {activeViewContext !== 'landChunk' && (
-              <Slider label="Spin angle" unit="°" value={spin.tilt} onChange={(tilt) => onSpinChange({ tilt })} min={0} max={180} step={1} precision={0} disabled={activeViewContext === null} description="How far the planet's spin axis leans from straight up: 0 is upright, 23 is Earth's tilt, 98 Uranus's, on its side, 180 upside down." />
+              <>
+                <Slider label="Spin angle" unit="°" value={spin.tilt} onChange={(tilt) => onSpinChange({ tilt })} min={0} max={180} step={1} precision={0} disabled={activeViewContext === null} description="How far the planet's spin axis leans from straight up: 0 is upright, 23 is Earth's tilt, 98 Uranus's, on its side, 180 upside down." />
+                <Slider label="Spin speed" unit="°/s" value={spin.speed} onChange={(speed) => onSpinChange({ speed })} min={0} max={30} step={0.5} precision={1} description="How fast the planet turns on its own when you leave it alone, in degrees per second. 0 stops it. Dragging pauses it; it starts again a few seconds after you let go." />
+              </>
             )}
             {/* The voxel chunk's mesh Resolution; smooth detail follows Scene's Auto detail. */}
             {activeViewContext === 'landChunk' && displayMode === 'voxel' && (
@@ -666,14 +671,16 @@ export function Panel({
             />
             <Slider
               label="Clarity"
-              value={water.clarity}
-              onChange={(clarity) => onWaterChange({ clarity })}
-              min={0.01}
-              max={2}
-              step={0.01}
-              precision={2}
+              value={water.clarityMeters}
+              onChange={(clarityMeters) => onWaterChange({ clarityMeters })}
+              min={1}
+              max={200}
+              step={1}
+              precision={0}
+              unit="m"
+              scale="log"
               disabled={!water.enabled}
-              description="How far light reaches into the water, as a share of the deepest water. Higher shows more of the seabed."
+              description="The depth in meters where the water has absorbed about two thirds of the light. Higher shows more of the seabed: about 5 is murky coast, 20 clear ocean."
             />
             <Slider
               label="Foam"
@@ -742,8 +749,8 @@ export function Panel({
               elevationRange={{ min: 0, max: waterDepthRange }}
               elevationScaleMeters={planetMetersPerHeight}
               positionLabel="Depth (m)"
-              positionToMeters={(position) => rampPositionToDepth(position, water.clarity) * waterDepthRange * planetMetersPerHeight}
-              metersToPosition={(meters) => depthToRampPosition(meters / Math.max(waterDepthRange * planetMetersPerHeight, 0.0001), water.clarity)}
+              positionToMeters={(position) => rampPositionToDepth(position, waterClarityShare) * waterDepthRange * planetMetersPerHeight}
+              metersToPosition={(meters) => depthToRampPosition(meters / Math.max(waterDepthRange * planetMetersPerHeight, 0.0001), waterClarityShare)}
             />
           </Accordion>
         </div>
@@ -800,6 +807,53 @@ export function Panel({
               disabled={!atmosphere.enabled}
               description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
             />
+            <div className="panel-section-divider" />
+            <span className="panel-section-title">Climate</span>
+            <Select
+              label="Liquid"
+              value={atmosphere.liquid}
+              onChange={(liquid) => onAtmosphereChange({ liquid, rainfall: liquidNamed(liquid).typicalRainfall, temperature: referenceTemperature(liquidNamed(liquid)) })}
+              options={LIQUIDS.map(({ name }) => ({ value: name, label: name }))}
+              disabled={!atmosphere.enabled}
+              description="What falls as rain and runs in the rivers and lakes. Dry has none, and cold water freezes."
+            />
+            <Slider
+              label="Rainfall"
+              value={atmosphere.rainfall}
+              onChange={(rainfall) => onAtmosphereChange({ rainfall })}
+              min={1}
+              max={rainfallMax(liquidNamed(atmosphere.liquid))}
+              step={1}
+              precision={0}
+              unit="mm"
+              scale="log"
+              disabled={!atmosphere.enabled}
+              description="How much of the liquid falls in a year. More fills lakes and swells rivers."
+            />
+            <Slider
+              label="Temperature"
+              value={atmosphere.temperature}
+              onChange={(temperature) => onAtmosphereChange({ temperature })}
+              min={liquidNamed(atmosphere.liquid).minC}
+              max={liquidNamed(atmosphere.liquid).maxC}
+              step={1}
+              precision={0}
+              unit="°C"
+              disabled={!atmosphere.enabled}
+              description="Runs across the range this liquid stays liquid. Hotter evaporates more, so lakes shrink and rivers fade."
+            />
+            <Slider
+              label="Erosion"
+              value={atmosphere.erosion}
+              onChange={(erosion) => onAtmosphereChange({ erosion })}
+              min={0}
+              max={1}
+              step={0.01}
+              precision={2}
+              disabled={!atmosphere.enabled}
+              description="How far rivers have shaped the land into ridges and valleys. 0 is the plain noise terrain."
+            />
+            <Toggle label="River debug" value={atmosphere.riverDebug} onChange={(riverDebug) => onAtmosphereChange({ riverDebug })} description="Shows the rivers as lines and the lakes as dots, over the terrain." />
           </Accordion>
         </div>
 

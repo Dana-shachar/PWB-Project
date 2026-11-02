@@ -98,6 +98,7 @@ interface LandChunkCanvasProps {
   // Sea level and water look, shared with the planet, and the planet's lowest height for the depth scale.
   water: WaterSettings;
   waterDeepest: number;
+  waterClarityShare: number;
   atmosphere: AtmosphereSettings;
   // The light turns with the camera instead of staying fixed (scene/sceneControls.ts).
   lightFollowsCamera: boolean;
@@ -153,6 +154,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     groundHeights,
     water,
     waterDeepest,
+    waterClarityShare,
     atmosphere,
     lightFollowsCamera,
   },
@@ -574,7 +576,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     material.uniforms.uRampCount.value = ramp.count;
     // With water on, the land ramp starts at the depth light reaches, as on the planet.
     material.uniforms.uElevationMin.value = water.enabled
-      ? Math.max(elevationMin, landRampFloor(water.seaLevel, waterDeepest, water.clarity))
+      ? Math.max(elevationMin, landRampFloor(water.seaLevel, waterDeepest))
       : elevationMin;
     material.uniforms.uElevationMax.value = elevationMax;
     material.uniforms.uShadowsEnabled.value = shadowsEnabled ? 1 : 0;
@@ -593,7 +595,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     heightMapGreenChannel,
     water.enabled,
     water.seaLevel,
-    water.clarity,
+    water.seaLevel,
     waterDeepest,
   ]);
 
@@ -601,9 +603,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   useEffect(() => {
     const chunkWater = waterRef.current;
     if (!chunkWater) return;
-    updateChunkWater(chunkWater, water, chunkSize, maxHeight, waterDeepest, heightMap, heightMapGreenChannel, Math.min(atmosphere.wind, MAX_WAVE_WIND));
+    updateChunkWater(chunkWater, water, chunkSize, maxHeight, waterDeepest, waterClarityShare, heightMap, heightMapGreenChannel, Math.min(atmosphere.wind, MAX_WAVE_WIND));
     chunkWater.mesh.visible = water.enabled && heightMap !== null;
-  }, [water, waterDeepest, heightMap, heightMapGreenChannel, chunkSize, maxHeight, atmosphere.wind]);
+  }, [water, waterDeepest, waterClarityShare, heightMap, heightMapGreenChannel, chunkSize, maxHeight, atmosphere.wind]);
 
   // The atmosphere: the sky dome, and the haze the ground and water fade into (shaders/atmosphere/haze.glsl). Haze 1 halves
   // the color half a chunk width past the orbit point at height 0 (1 - e^-0.69 is 0.5); less higher up. Inferred, TUNABLE.

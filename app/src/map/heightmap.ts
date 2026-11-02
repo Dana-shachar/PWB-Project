@@ -20,12 +20,14 @@ import { HISTOGRAM_BINS, percentileRangeFromBins } from './elevationRange';
 // relative to the actual texture, not however big the canvas is displayed.
 export const HEIGHTMAP_WIDTH = 1024;
 export const HEIGHTMAP_HEIGHT = 512; // exported for MapView.tsx's aspect-ratio sizing
+const RIVER_MAP_WIDTH = 4096;
+const RIVER_MAP_HEIGHT = 2048;
 
 // Matches strokePath.frag.glsl's MAX_STROKE_POINTS.
 const MAX_STROKE_POINTS = 64;
 
 // Matches heightmap.frag.glsl's MAX_LAYERS.
-export const MAX_LAYERS = 16;
+export const MAX_LAYERS = 15; // 16 samplers is the limit: the 16th is uValleyMap
 
 // Narrowed to real base generators + 'none' (Dana, 2026-09-30: "Modifiers as
 // toggles, not types" — Ridged/Octaves/Terrace/Domain warp used to be
@@ -390,6 +392,7 @@ function paintTextureUniformName(index: number): string {
 // same pattern already established there.
 export class HeightmapPipeline {
   readonly renderTarget: THREE.WebGLRenderTarget;
+  private riverTarget: THREE.WebGLRenderTarget | null = null;
   private scene: THREE.Scene;
   private camera: THREE.OrthographicCamera;
   private material: THREE.ShaderMaterial;
@@ -426,6 +429,9 @@ export class HeightmapPipeline {
   private chunkBaseKey = '';
   private chunkBaseLayers: NoiseLayer[] | null = null;
   private paintRevision = 0;
+  private valleyTexture: THREE.DataTexture | null = null;
+  private valleyRevision = 0;
+  private erosionStrength = 0.7;
   private planetRadiusMeters = 6_000_000;
   private reduceScene: THREE.Scene;
   private reduceCamera: THREE.OrthographicCamera;
@@ -443,7 +449,7 @@ export class HeightmapPipeline {
 
   // [B66] Bakes the land chunk's base map when the chunk, layers, paint or planet settings changed since the last one.
   ensureChunkBase(renderer: THREE.WebGLRenderer, layers: NoiseLayer[], face: number, min: THREE.Vector2, max: THREE.Vector2, origin: THREE.Vector2): void {
-    const key = [face, min.x, min.y, max.x, max.y, this.detailAmount, this.shoreSeaLevel, this.planetRadiusMeters, this.paintRevision].join(',');
+    const key = [face, min.x, min.y, max.x, max.y, this.detailAmount, this.shoreSeaLevel, this.planetRadiusMeters, this.paintRevision, this.valleyRevision, this.erosionStrength].join(',');
     if (key === this.chunkBaseKey && layers === this.chunkBaseLayers && this.chunkBaseTarget) return;
     const size = CHUNK_BASE_SAMPLES + 2 * CHUNK_BASE_BORDER;
     if (!this.chunkBaseTarget) {
@@ -483,6 +489,27 @@ export class HeightmapPipeline {
 
   setDetailAmount(amount: number): void {
     this.detailAmount = amount;
+  }
+
+  setErosionStrength(strength: number): void {
+    this.erosionStrength = strength;
+    this.material.uniforms.uErosionStrength.value = strength;
+  }
+
+  // The rivers' mark on the land (rivers/valleyMap.ts): region bakes apply it, whole-globe bakes don't, so rivers never see it.
+  setValleyMap(map: Float32Array | null, width: number, height: number): void {
+    this.valleyTexture?.dispose();
+    this.valleyTexture = null;
+    if (map) {
+      this.valleyTexture = new THREE.DataTexture(map, width, height, THREE.RGBAFormat, THREE.FloatType);
+      this.valleyTexture.magFilter = THREE.LinearFilter;
+      this.valleyTexture.minFilter = THREE.LinearFilter;
+      this.valleyTexture.wrapS = THREE.RepeatWrapping;
+      this.valleyTexture.needsUpdate = true;
+    }
+    this.material.uniforms.uValleyMap.value = this.valleyTexture;
+    this.material.uniforms.uValleyEnabled.value = map ? 1 : 0;
+    this.valleyRevision++;
   }
 
   // The sea level Roughness fades out toward from both sides, or null with water off (heightmap.frag.glsl).
@@ -550,6 +577,9 @@ export class HeightmapPipeline {
         uDetailAmount: { value: 0 },
         uShoreEnabled: { value: 0 },
         uShoreSeaLevel: { value: 0 },
+        uValleyMap: { value: null },
+        uValleyEnabled: { value: 0 },
+        uErosionStrength: { value: 0.7 },
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerHeightScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
@@ -861,6 +891,26 @@ export class HeightmapPipeline {
     return this.renderTarget.texture;
   }
 
+  // The whole globe at the rivers' own larger size, about 9 km a cell on a 6000 km planet: at the shared map's 37 km,
+  // river paths skip the valleys you can see (rivers/riverTree.ts). Baked only when the terrain settles.
+  renderRiverHeights(renderer: THREE.WebGLRenderer, layers: NoiseLayer[]): THREE.WebGLRenderTarget {
+    this.riverTarget ??= new THREE.WebGLRenderTarget(RIVER_MAP_WIDTH, RIVER_MAP_HEIGHT, { type: THREE.FloatType });
+    this.syncPaintTargets(renderer, layers);
+    this.syncLayerUniforms(renderer, layers);
+    this.material.uniforms.uRegionMode.value = 0;
+    this.material.uniforms.uSampleSpacing.value = 0;
+    renderer.setRenderTarget(this.riverTarget);
+    renderer.render(this.scene, this.camera);
+    renderer.setRenderTarget(null);
+    return this.riverTarget;
+  }
+
+  // Its 134 MB of video memory is only needed until the heights are read back.
+  releaseRiverTarget(): void {
+    this.riverTarget?.dispose();
+    this.riverTarget = null;
+  }
+
   // Bakes one area of the planet at its own resolution, instead of the whole
   // globe at the shared map's fixed size. A region is a cube face plus a
   // rectangle on it — the same way a subdividing patch is described, so this
@@ -1011,14 +1061,14 @@ export class HeightmapPipeline {
   // its own separate pass. See ISSUES.md, [B32].
   async getRegionElevationDataAsync(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget): Promise<ElevationReadback> {
     const gl = renderer.getContext() as WebGL2RenderingContext;
-    const size = target.width;
-    const rgba = new Float32Array(size * size * 4);
+    const { width, height } = target;
+    const rgba = new Float32Array(width * height * 4);
 
     renderer.setRenderTarget(target);
     const pbo = gl.createBuffer();
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
     gl.bufferData(gl.PIXEL_PACK_BUFFER, rgba.byteLength, gl.STREAM_READ);
-    gl.readPixels(0, 0, size, size, gl.RGBA, gl.FLOAT, 0);
+    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     renderer.setRenderTarget(null);
 
@@ -1046,15 +1096,15 @@ export class HeightmapPipeline {
 
     // Same bottom-to-top → top-to-bottom row flip and G-channel extraction
     // as the synchronous version, so the two are interchangeable to a caller.
-    const elevation = new Float32Array(size * size);
-    for (let row = 0; row < size; row++) {
-      const srcRowStart = row * size * 4;
-      const destRowStart = (size - 1 - row) * size;
-      for (let col = 0; col < size; col++) {
+    const elevation = new Float32Array(width * height);
+    for (let row = 0; row < height; row++) {
+      const srcRowStart = row * width * 4;
+      const destRowStart = (height - 1 - row) * width;
+      for (let col = 0; col < width; col++) {
         elevation[destRowStart + col] = rgba[srcRowStart + col * 4 + 1]; // G
       }
     }
-    return { data: elevation, width: size, height: size };
+    return { data: elevation, width, height };
   }
 
   // The patch's real low/high, without ever reading back its full-resolution
@@ -1337,7 +1387,7 @@ export class HeightmapPipeline {
       }
     }
     const uniforms = this.material.uniforms;
-    const visibleLayers = layers.filter((layer) => layer.visible !== false);
+    const visibleLayers = layers.filter((layer) => layer.visible !== false).slice(0, MAX_LAYERS);
     uniforms.uLayerCount.value = visibleLayers.length;
     visibleLayers.forEach((layer, i) => {
       // -1 = unmasked, else the mask pattern's generator type.
@@ -1407,6 +1457,8 @@ export class HeightmapPipeline {
 
   dispose(): void {
     this.renderTarget.dispose();
+    this.riverTarget?.dispose();
+    this.valleyTexture?.dispose();
     this.regionTarget?.dispose();
     this.displayRegionTarget?.dispose();
     this.maskSampleTarget?.dispose();

@@ -8,14 +8,27 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-01, twelfth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
+> **Start from here (2026-11-01, thirteenth handover):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
 >
-> **State.** Everything is committed and pushed. This round (2026-10-31 to 11-01): water Fresnel in both views, sun-sharp sparkles (`[B81]` still not visible to Dana), lace foam by distance from shore (`[B83]`), Terrain Randomize by world types (`[S52]`), the planet itself spins at any tilt (`[S51]`), clouds along its equator against the spin, and a shader check. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. **After any shader edit run `node scripts/checkShaders.mjs` from `app/`** (needs `brew install glslang`) before Dana reloads; add new shader pieces to its list. In new shaders use `texture(...)`, never `texture2D` or `textureCube`, and search a file for a name before adding a constant.
+> **State.** The whole river, climate and erosion round is committed and pushed. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. **After any shader edit run `node scripts/checkShaders.mjs` from `app/`** (needs `brew install glslang`) before Dana reloads; add new shader pieces to its list. In new shaders use `texture(...)`, never `texture2D` or `textureCube`, except in `heightmap.frag.glsl`, which is GLSL ES 1.00; search a file for a name before adding a constant.
 >
-> **Right now, in order:**
-> 1. `[B84]`: Clarity recolors the land. Anchor the land ramp above sea level so Clarity moves only its underwater part (`landRampFloor`).
-> 2. **Slope rock** (land shader stage 2): the plan below, with Slope in degrees, default rock colors from the planet's ramp, Randomize and a lock on the rock ramp, no rocky summits. Dana noted the height and slope texturing of the Procedural Stochastic Terrain Shader as a reference for these stages, and Zucconi's Journey sand for deserts.
-> 3. Then stage 3 (snow) gets its own plan.
+> **What exists now** (decisions in `[S53]` to `[S59]`, code in `CODE-INDEX.md`, Rivers section):
+> - ✅ The drainage tree, lakes by water budget, Climate in the Atmosphere section (Liquid, Rainfall, Temperature, Erosion, River debug), other liquids, stream power erosion, river and lake water on the planet, per-point water height in the bake's blue channel.
+> - 🟡 The last round is built but unseen by Dana: inland color fading to the sea at mouths, softer banks, tapered tips, four blur passes (`[B90]`, `[B91]`). Start by asking how they look.
+> - ⚠️ Never pass river arrays through React props or state. Use the scene handle (`setRiverSegments`, `setValleyMap`).
+> - ⚠️ Every code edit goes through Dana first, as a plan; a reaction isn't a go. Papers are in the course folder: read those before any web search.
+>
+> **Next, in order:**
+> 1. Dana's check of the last round. Tune `RIVER_BASE_WIDTH`, `RIVER_CHANNEL_DEPTH`, `INLAND_DEPTH_RAMP`, and Lava's `channelWidth` (3) if she asks.
+> 2. **Water on the chunk:** `voxel/chunkWater.ts`, `chunkWater.vert.glsl`, `chunkWater.frag.glsl`: the sheet is one flat square; subdivide it and lift it to the water heights. Depth, Clarity and foam measure from the local water height. The tide moves only the sea. The chunk's patch pass has no water channel yet (`CHUNK_PATCH_PASS`, its blue is 0), so the base map must carry it. ⚠️ River water at the chunk's edge meets the water walls, which only know sea level. Then `scene/walkMode.ts` reads the same height.
+> 3. **River controls and cleanup:** `planet/planetControls.ts` adds `rivers` to `WaterSettings` with a `migrateWater` update; `ui/Panel.tsx` adds an on/off switch with Width and Depth (Rainfall replaces Amount). Remove `rivers/riverDebug.ts`, the River debug toggle and the `[TEMP rivers]` logs.
+> 4. **Memory (agreed in principle, not built):** free the JS copy of the map after upload (`onUpdate`, about 134 MB of RAM); half-float map with heights stored relative to sea level (about 67 MB of video memory, may band); reuse the map's arrays in the worker; keep only land nodes (about 350 MB; the worker holds about 500 MB today); re-bake only patches a change touched. Slider steps now include `erodeTerrain`, so measure them on Dana's machine.
+> 5. **Slope rock** (land shader stage 2): the plan below. It colors by slope, and the eroded land now gives it real slopes. Dana noted the height and slope texturing of the Procedural Stochastic Terrain Shader as a reference, and Zucconi's Journey sand for deserts. Moss belongs to the biome stage, using these masks.
+> 6. Then stage 3 (snow) gets its own plan. The bake's blue channel is now taken by water.
+>
+> 📌 Later: rerun the tree on eroded land for two or three passes (`[B91]`, adds seconds to a rebuild); sea-filled fjords by letting land near the coast drop below sea level, which moves the coast (Dana's call); chunk branches, since a 9 km cell is more than half the 16 km chunk (`buildChunkTributaries`, Clay John's noise or Nick McDonald's hydrology); stored foam in a decaying buffer (`[B92]`); tidal bores up rivers (Chanson; a bore needs a tide over 4.5 to 6 m and a funnel mouth); river color and surface per liquid (lava's glow, sulfur's yellow).
+>
+> **Also agreed:** the timeline moves to its own section with one world clock, and every system stores its history there (Dana, 2026-11-01). Plan it after rivers.
 >
 > **Terrain, parked as good enough (Dana may return to it):** `[TEMP terrain]` still logs each Randomize (`map/noiseLayers.ts`) with its world type. ❓ Canyons: no documented recipe yet (Gaea's Canyon node is "drainage based", no method given; Shane's gorge carves along a path; Quilez's canyon is all rights reserved, ideas only). ❓ Clay John's Eroded Terrain Noise (MIT; slope-aligned stripes with branching, faded near water) would weather any terrain and answer "erode one I already like", but needs a new bake step and adapting to the sphere. Dana: not new systems without a reason. 📌 A "Smooth" control fading fine octaves was offered, not built.
 >
@@ -32,12 +45,11 @@
 > **Open threads:**
 > - 🔴 `[B81]` No visible glitter path: Dana wanted the sun's sparkling column; a sun-sharp highlight and the Cox and Munk glint are in, she saw no difference. Unmeasured; check with the sun low and in front.
 > - 🔴 `[B82]` The Cast shadow toggle seems to do nothing. Not checked.
-> - 🔴 `[B84]` Clarity recolors the land (first in "Right now").
 > - 📌 The foam's lace sizes are first guesses, not tuned (`FOAM_LACE_SCALE`, `FOAM_LACE_WIDTH`); Dana's references are soft lacy swash and breaking waves.
 > - 📌 Water looks too clear in shallows at any Clarity (Dana, 2026-11-01); not addressed.
 > - 💡 `renderer.debug.onShaderError` could show shader errors on screen; `checkShaders` could join the build.
 >
-> **Working style (Dana, this round):** a skipped check has passed, don't re-ask. Test only at big points. Short, exact answers. Say which parts are sourced and which are inferred, before building. Never call a workaround safe and the standard way risky without showing why. A bug that shares a root with another gets one holistic plan. `.obsidian/workspace.json` stays out of commits.
+> **Working style (Dana, this round):** worlds can be bizarre as long as they don't read as bugs. Bring only real choices, not obvious ones. A skipped check has passed, don't re-ask. Test only at big points. Short, exact answers. Say which parts are sourced and which are inferred, before building. Never call a workaround safe and the standard way risky without showing why. A bug that shares a root with another gets one holistic plan. `.obsidian/workspace.json` stays out of commits.
 >
 > **Stage 2 plan, approved by Dana:**
 > 1. `shaders/terrain/landLayers.glsl`: add `landSurfaceColor(rampColor, normal, up, elevationFraction)`. Rock blends in by `1 − dot(normal, up)` through a `smoothstep`, colored by the rock ramp by height (`terrainRampColor`, reused). Optional height term so flat summits can be rocky.
@@ -506,14 +518,15 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 ---
 
 ## Stage 09 · Climate
-░░░░░░░░░░ 0%
+▓▓░░░░░░░░ 20%
 
 *Temperature, humidity and wind, which Biome needs before it can mean anything.*
 
 🧭 Temperature, humidity, precipitation and wind across the terrain. The input Biome needs to mean anything, and a named stage in real tools and literature rather than invented here. Sequenced after Erosion, because rain-shadow effects depend on the eroded shape.
 
-> **📋 To do**
-> - Everything.
+> **📋 Done and to do**
+> - ✅ One climate per planet: Liquid, Rainfall, Temperature, driving rivers, lakes and erosion (`[S54]`, `[S56]`).
+> - ⚪ Temperature, humidity, rain and wind that vary by place.
 
 ---
 

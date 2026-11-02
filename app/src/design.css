@@ -790,6 +790,11 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   border-color: var(--color-accent);
 }
 
+.ui-select:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
 /* ── Control panel (Panel.tsx) ────────────────────────────── */
 
 .panel-outer {

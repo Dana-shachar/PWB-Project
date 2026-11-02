@@ -27,9 +27,10 @@ void main() {
   vec2 textureUv = uBakeSamples > 0.5
     ? (vec2(uBorderTexels + 0.5) + uv * (uBakeSamples - 1.0)) / (uBakeSamples + 2.0 * uBorderTexels)
     : uv;
-  float elevation = texture2D(uHeightMap, textureUv).g;
+  vec4 heightSample = texture2D(uHeightMap, textureUv);
+  float elevation = heightSample.g;
   // With water on, the ground below sea level is drawn at the sea surface (the planet's ocean, shaders/water/water.glsl).
-  if (uWaterEnabled > 0.5) elevation = max(elevation, uSeaLevel);
+  if (uWaterEnabled > 0.5) elevation = max(elevation, max(uSeaLevel, heightSample.b));
   vec3 displaced = position + normal * elevation * uDisplacementAmplitude;
 
   vWorldPosition = (modelMatrix * vec4(displaced, 1.0)).xyz;

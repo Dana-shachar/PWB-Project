@@ -56,6 +56,8 @@ uniform mat4 modelMatrix;
 // Sea level and water look (shaders/water/water.glsl). uWaterDeepest is the planet's lowest height, where depthShare is 1.
 uniform float uWaterEnabled;
 uniform float uSeaLevel;
+const float INLAND_MIN_DEPTH = 0.15; // Inferred, TUNABLE
+const float INLAND_DEPTH_RAMP = 7.5; // reaches that depth share 0.02 above the sea. Inferred, TUNABLE
 uniform float uWaterDeepest;
 uniform vec3 uWaterRampColors[MAX_COLOR_STOPS];
 uniform float uWaterRampPositions[MAX_COLOR_STOPS];
@@ -151,7 +153,9 @@ void main() {
   vec3 surfaceColor = uBaseColor;
   float ambient = uAmbient;
   vec3 fill = fillLight(normal, normalize(mat3(modelMatrix) * localNormal), uFillColor, uAmbient);
-  float elevationRaw = texture2D(uHeightMap, textureUv).g;
+  vec4 heightSample = texture2D(uHeightMap, textureUv);
+  float elevationRaw = heightSample.g;
+  float waterSurface = max(uSeaLevel, heightSample.b); // lakes and rivers stand above the sea (heightmap.frag.glsl)
   if (uColorByElevation > 0.5) {
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
@@ -162,8 +166,10 @@ void main() {
   // The ocean: Seascape's waves and sea color (shaders/water/oceanWaves.glsl) at a planet scale, in each point's own
   // frame (x along the face, y up), smoothed with distance into a soft glare, with sporadic whitecaps that read from
   // orbit, the seabed showing through the shallows (shaders/water/water.glsl), and ripples and shore foam up close.
-  if (uWaterEnabled > 0.5 && elevationRaw < uSeaLevel) {
-    float depthShare = (uSeaLevel - elevationRaw) / max(0.0001, uSeaLevel - uWaterDeepest);
+  if (uWaterEnabled > 0.5 && elevationRaw < waterSurface) {
+    float depthShare = (waterSurface - elevationRaw) / max(0.0001, uSeaLevel - uWaterDeepest);
+    // Inland water deepens away from the sea, so a river's mouth matches the sea's pale shallows.
+    if (waterSurface > uSeaLevel) depthShare = max(depthShare, min(INLAND_MIN_DEPTH, (waterSurface - uSeaLevel) * INLAND_DEPTH_RAMP));
     vec3 seaBase = terrainRampColor(waterRampPosition(depthShare, uWaterClarity), uWaterRampColors, uWaterRampPositions, int(uWaterRampCount));
     vec3 seaWaterColor = uWaterRampColors[0];
     vec3 frameX = normalize(dPdu - localNormal * dot(localNormal, dPdu));

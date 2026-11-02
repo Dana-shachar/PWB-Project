@@ -810,6 +810,72 @@
 - Holding a key turns a drag into a pan. Space + drag added to both views; Shift + drag is three.js OrbitControls' own default ("left mouse + ctrl/meta/shiftKey", read in its source 2026-10-30).
 - ⚠️ The app conventions are recalled, not checked against each app's docs.
 
+### Rivers, lakes and climate
+
+**Sapiens river post (David Frampton)** · `used 2026-11-01`
+- the river tree: nodes jittered per cell, grown from the sea, flow summed from the springs. The base of `buildRiverTree`.
+- *r/proceduralgeneration*
+
+**Plate-Local River Generation (Davis 2026)** · `used 2026-11-01`
+- river segments, blending terrain toward river height by distance, lakes at dead ends. Its blend shaped the first valleys, later replaced by `[S55]`.
+- *PDF in the course folder*
+
+**River Networks for Instant Procedural Planets (Derzapf et al. 2011)** · `used 2026-11-01`
+- section 3.3: ground and water altitude stored per point, water shown where it stands higher. Also warns grids give parallel rivers.
+- *PDF in the course folder*
+
+**Procedural Riverscapes (Peytavie et al. 2019)** · `used 2026-11-01`
+- depression filling before the drainage calculation, piecewise cubic splines between confluences, meanders only on low slopes.
+- *PDF in the course folder*
+
+**Priority-Flood (Barnes, Lehman and Mulla 2014)** · `used 2026-11-01, known through Peytavie, not read`
+- the pit fill from the coast up, in `waterLevels`.
+
+**Large Scale Terrain Generation from Tectonic Uplift and Fluvial Erosion (Cordonnier et al. 2016)** · `used 2026-11-01`
+- the stream power equation over a stream graph, `n = 1`, `m = 0.5`, an implicit update from the root up, 100 to 300 steps, slopes capped at 30 degrees, lake overflow.
+- *PDF in the course folder · [record](https://diglib.eg.org/handle/10.1111/cgf12820)*
+
+**A very efficient O(n), implicit and parallel method to solve the stream power equation (Braun and Willett 2013)** · `used 2026-11-01`
+- the stack order, the linear solve for `n = 1`, lakes draining over their sill. `erodeTerrain` adapts this to a fixed tree, in one pass (inferred).
+- *PDF in the course folder · doi 10.1016/j.geomorph.2012.10.008*
+
+**The Budyko framework (Greve et al. 2016)** · `used 2026-11-01, from a search summary`
+- runoff from the ratio of evaporation demand to rainfall, with Budyko's curve at omega 2.6 in Fu's form. Fu's formula itself was written from memory.
+- *[Greve et al. 2016](https://hess.copernicus.org/articles/20/393/2016/)*
+
+**Steady-state closed-lake balance (Bracht-Flyr, Istanbulluoglu and Fritz)** · `used 2026-11-01, from a search summary`
+- lake-to-basin area from an aridity index, computed directly. The paper itself was not read.
+- *[Record](https://digitalcommons.unl.edu/geosciencefacpub/377)*
+
+**Viscous flow (Jeffreys) and cooling-limited lava (Pinkerton and Wilson 1994)** · `used 2026-11-01, from search summaries`
+- speed falls with viscosity, and a flow's length ends where it cools. The idea behind `reachKeepAt`; the amounts are chosen for the look.
+- *[Lecture notes](https://www.sfu.ca/earth-sciences/courses/ugrad/webpages/OLD/421/Lect_3_Effusive.pdf)*
+
+**Titan's rivers (Burr et al. 2013, Birch et al. 2023)** · `used 2026-11-01, from search summaries`
+- Earth's flow equations hold on Titan; its rivers run wider and gentler for the same flow.
+- *[Burr et al.](https://lamb.caltech.edu/documents/19622/Burr_etal_GSAB_Titan.pdf) · [MIT on river flows beyond Earth](https://news.mit.edu/2023/river-flows-beyond-earth-0710)*
+
+**Titan's lakes (lake evaporation and paleoclimate studies)** · `used 2026-11-01, from search summaries`
+- evaporation follows vapor pressure, and ethane's is far lower than methane's.
+- *[Lake evaporation](https://arxiv.org/pdf/1904.00120) · [Paleoclimate](https://arxiv.org/pdf/1412.7997)*
+
+**Sulfur on Io (McEwen and Soderblom 1983, Wijns, Greeley et al. 1984)** · `used 2026-11-01, from search summaries`
+- sulfur's viscosity peaks near 187 C and is low either side, and it can travel far through lava tubes.
+- *[USGS record](https://pubs.usgs.gov/publication/70011210) · [UBC thesis](https://circle.ubc.ca/handle/2429/4224)*
+
+**Foam saturation (Parberry 2011) and foam buffers (Crest)** · `used 2026-11-01`
+- foam as saturation minus a clumpy mask, faded, times a fine texture. Crest's stored foam that decays is the later step.
+
+**Nick McDonald's hydrology posts** · `considered 2026-11-01`
+- real channels by simulation, slow but natural: about 60 s on 256 by 256. Too slow for a planet.
+
+**Hybrid breaching (Lindsay 2016)** · `considered 2026-11-01`
+- cut through small pits, fill large ones. Dropped: a filled pit is a local sea, and erosion now removes most basins.
+- *[RichDEM docs](https://mirrors.ibiblio.org/pub/mirrors/grass/code_and_data/grass-stable/manuals/addons/r.richdem.breachdepressions.html)*
+
+**Dendry (Gaillard et al. 2019)** · `considered 2026-11-01`
+- noise that follows dendritic patterns, a fallback if rivers need detail finer than the map.
+
 ### Stylized sky, planet and terrain shaders (candidates)
 
 *Collected 2026-10-27 for the moon, haze, clouds and later terrain shading. Most need stylizing to fit the art direction.*
