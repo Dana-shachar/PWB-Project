@@ -55,7 +55,15 @@
 >
 > **Open, Dana's to decide:** none pending. Inferred and tunable values to revisit: `HILLSLOPE_SHARE` 0.05, `DRAINAGE_PASSES` 350, `PLANET_PASSES_AT_MAX_DURATION` 1,500, the demo-proportion mapping in `erodedSurface`, `engineRainfall`'s scaling, `RIVER_MIN_CELLS` 300.
 >
-> **Working style (Dana, this round):** diagnose (logs need no approval) and research on my own initiative before proposing; one plan in numbered steps naming files and new names; no code without an explicit yes, except fixing a crash from my own new code; summaries instead of rereading papers; short replies, no piling plans; status at the end of a turn as done, next, open.
+> **Dana's directions from this round, all in force** (also in memory and `.claude/CLAUDE.md`)
+> - Diagnose (logs need no approval) and research on my own initiative before proposing; existing implementations and course papers first, via the summaries; give Dana the links when a fetch fails.
+> - One plan in numbered steps naming files and new names; no code without an explicit yes, except fixing a crash from my own new code.
+> - Short replies, the why only when asked, own mistakes plainly, one plan at a time, end with done, next, open.
+> - Dana tests at visual crossroads; give her a clear before and after to compare; never switch heavy features on at load (Erosion starts off).
+> - Every change recomputes only its delta; the patch system answers performance limits.
+> - Placement of a control follows procedural-tool convention (check Gaea, World Machine, Houdini), and every value has one control in one place.
+> - The design system rules (the `ui-design` skill): Title Case names; sections 12 px bold, sub-sections 12 px regular and indented; a Progress bar wherever the wait can be measured; UI matters less than the system.
+> - Extreme, fantastical results are fine; bugs are not. Nothing fancy for rivers, but they must look good from afar.
 
 > [!NOTE]
 > **Previous handover (2026-11-01, thirteenth):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
