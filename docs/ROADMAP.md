@@ -8,36 +8,54 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-03, sixteenth handover):** *read `.claude/CLAUDE.md` first, then this block, then `docs/CODE-INDEX.md` before searching the code. Paper summaries are in `docs/REFERENCES.md`: read those, not the PDFs.*
+> **Start from here (2026-11-03, sixteenth handover):** *read `.claude/CLAUDE.md` first, then this block, then `docs/CODE-INDEX.md` (Water and erosion) before searching the code. Paper summaries with key quotes are in `docs/REFERENCES.md`: read those, never the PDFs again. Bugs of this round: `[B106]` to `[B109]` in `docs/ISSUES.md`.*
 >
-> **State.** Committed: the planet's land and lakes from erosion, river drawing off (`DRAW_RIVERS` in `heightmap.frag.glsl`). Run the app from `app/` with `npx vite` (localhost:5173), hard reload after shader edits, `node scripts/checkShaders.mjs` and `npx tsc --noEmit -p tsconfig.app.json` before Dana reloads.
+> **State.**
+> - `main` has the code at `fd29b3a` and this docs pass (SPEC `[S65]` to `[S70]`, the Session 11 weekly push, the 2026-11-04 diagram) in the commit after it; not pushed. `.obsidian/workspace.json` never goes into commits.
+> - Run from `app/` with `npx vite` (localhost:5173). After any shader edit: `node scripts/checkShaders.mjs` (17 materials), and `npx tsc --noEmit -p tsconfig.app.json` (the root `-p .` checks nothing, `[B105]`). Hard reload after shader or worker edits.
+> - The branch `water-network-2026-11-02` keeps the Nov 2 network rework, reference only.
 >
-> **What exists now** (code in `CODE-INDEX.md`, Water and erosion; bugs in `[B106]` to `[B109]`)
-> - ✅ Erosion lives in the Climate System's right panel, under the moons: a switch (off on load), Duration, Strength, and Shape (Gully Size, Gully Depth, Ridge Sharpness, Detail). One set for the planet and the land chunk; no Run button, a change reruns only what it affects.
-> - ✅ The planet: pit fill in a worker, Schott's stream power on a 2048 × 1024 grid (drainage first, then erosion, continued or restarted from a save), Rune's erosion filter in 3D on the smooth eroded ground, coasts moving with erosion.
-> - ✅ Lakes: Fill-Spill-Merge on the eroded ground with the Climate's budget; they follow the liquid (Dry has none), not Ocean.
-> - ✅ UI: Ocean (sea only), Climate System with Atmosphere (Color inside) and Climate, World Clock holding the timeline, the Progress bar component (in the `ui-design` skill).
-> - 🔴 Rivers: built in the worker and packed (`riverGrid.ts`) but not drawn, `[B109]`.
+> **How the water works now** (one chain, each step recomputing only what changed)
+> 1. A terrain or sea level change (`useDrainage` in `rivers/drainageControls.ts`, keyed on the heights' content, not the object) reads the globe heights at 2048 × 1024 (`renderRiverHeights`), about 18 km a cell.
+> 2. `drainage.worker.ts` fills the pits (Priority-Flood + ε, `pitFill.ts`): about 0.4 s.
+> 3. `planetDrainage.ts` runs Schott's pass on the GPU, 4 passes a frame: 350 passes of drainage with erosion off (saved), then the erosion passes on top. About 1 to 3 s with the progress bar. Duration and Strength continue from the save or restart from it.
+> 4. The worker builds the ground (terrain plus carving), lakes by Fill-Spill-Merge with `waterBudget` (`depressions.ts`), the river network (`extractRiverNodes`, unused while drawing is off), the valley spacing, and the water map: R carving, G drainage in cells, B ground, A lake level; rows **south first**, the river grid's rows after them. 0.1 to 0.7 s. A climate change reruns only this step.
+> 5. `setPlanetWaterMap` uploads it; the bake (`heightmap.frag.glsl`) adds the carving, runs the erosion filter (`erodedSurface`, `erosionFilter3d.glsl`) in Rune's demo proportions (valley spacing to his hill spacing, relief to his relief), and draws lakes per point where A stands above B and above the ground. Shape sliders only re-bake patches.
 >
-> **🧭 Decisions (Dana, 2026-11-02 to 11-03)**
-> - Water from erosion; the patch system answers every performance limit; every change recomputes only its delta.
-> - Dana tests at visual crossroads; logs need no approval, every code change does (a crash from my own new code is the one exception).
-> - Erosion is part of the Climate System; coasts move with it; lakes and rivers follow Climate, Ocean is only the sea.
+> **What exists now**
+> - ✅ Erosion in the Climate System's right panel, under the moons: switch (off on load), Duration (years, maps to up to 1,500 planet passes), Strength (0 to 1 fades from the noise terrain to the eroded one), Shape (Gully Size 0.25 to 4, Gully Depth 0 to 0.5 per Bevy's range, Ridge Sharpness, Detail). One set for planet and chunk; the chunk's virtual-pipes run reruns by itself 0.3 s after a change; its rain comes from Climate, scaled from the liquid's typical rainfall (inferred).
+> - ✅ Lakes by climate: at 450 mm of rain about 5,800 lake cells (lake share 0.058); at 1,100 mm every basin is full. Lakes drain as erosion carves their rims.
+> - ✅ UI: Ocean is the sea only; Climate System holds Atmosphere (its switch, Color inside) and Climate; World Clock holds the timeline dock; sections 12 px bold, sub-sections 12 px regular and indented 8 px; the Progress bar component, all in the `ui-design` skill.
+> - 🔴 Rivers `[B109]`: built and packed, not drawn (`DRAW_RIVERS = false`).
 >
-> **Next: rivers, research first** *(Dana: "I don't need anything fancy but it needs to look good from afar"; "we had a river system before switching to erosion, see if it could help, find a way to do both")*
-> 1. Read the summaries in `REFERENCES.md` (Peytavie, Cordonnier, Braun and Willett, Derzapf, Génevaux, Plate-Local), not the PDFs.
-> 2. Study the earlier system: the Delaunay tree on commit `1f421af` (`rivers/riverGraph.ts`, `riverTree.ts`, Génevaux's priority growth) gave branching rivers without grid lines (`[B95]`), but on a terrain they never shaped (`[B94]`). The option to weigh: grow that tree on the eroded ground, so rivers branch like the old ones and sit in the eroded valleys.
-> 3. Peytavie's graph has nodes only at confluences with splines between; the 18 km grid can't carry per-cell paths. Rivers narrower than a texel from afar need a look that holds at a distance (Williams' coverage, `REFERENCES.md`).
-> 4. Bring one plan, with the files, before any code.
+> **🧭 Decisions (Dana, 2026-11-02 to 11-03), with reasons**
+> - Water comes from erosion (every terrain tool takes water from the height map it shows).
+> - The patch system answers every performance limit; only drainage and lakes are global, since a river depends on its whole catchment.
+> - Every change recomputes only its delta, never whole geometry or data.
+> - Erosion belongs to the Climate System; coasts move with erosion; lakes and rivers follow Climate's liquid, Ocean is only the sea (Gaea and World Machine keep sea and lakes separate).
+> - Extreme, fantastical results are fine; bugs are not.
 >
-> **Loose threads**
-> - 📌 The weekly push for Session 11 (Nov 4) in `WEEKLY-PUSHES.md`, with `docs/diagrams/architecture-2026-11-04.svg` (new since last week: `rivers/drainageControls.ts`, `planetDrainage.ts`, `drainage.worker.ts`, `pitFill.ts`, `depressions.ts`, `riverGrid.ts`, `shaders/heightmap/erosionFilter3d.glsl`; removed: the tree, graph, valley map and controls).
-> - 📌 TEMP logs to remove when rivers settle: `[TEMP water]` in `drainageControls.ts`, `drainage.worker.ts`, `SceneCanvas.tsx` (`probeWaterMap`, 18 bakes per change) and `PlanetPatchRenderer.ts`.
-> - 📌 Liquids should erode differently: research after the water system is done.
-> - 📌 Phase 2, the chunk's water from the virtual-pipes engine (Šťava, Jákó), after rivers.
-> - 📌 Stage 08 in this roadmap is outdated and gets rewritten.
+> **Tried and failed this round (don't repeat)**
+> - The water map uploaded north first: every point read its mirror (`[B106]`). Rows must stay south first.
+> - The erosion filter fed the bumpy detailed terrain, with Rune's lowering offset, and with a 109 km scale: chaos, flooding, land wiped out (`[B107]`). Feed it the smooth base only.
+> - Holding coasts at sea level made flat strips; Dana chose moving coasts.
+> - Repurposing the B channel for lake levels flattened the filter's base in basins (cliffs). B is the ground; A is the lake level.
+> - Rivers with a node at every 18 km cell along eight directions: zigzags, straight parallel lines, broken rivers (`[B109]`, the same as `[B95]`).
 >
-> **Working style (Dana, this round):** diagnose and research before proposing, on my own initiative; one plan in numbered steps naming files; no code without a yes; summaries instead of rereading papers; short replies.
+> **Next, in order**
+> 1. ✅ **The weekly push for Session 11, due Nov 4** (done 2026-11-03, needs a push to GitHub before class): fill the pre-built entry at the end of `docs/WEEKLY-PUSHES.md` and move it above the newest; the diagram `docs/diagrams/architecture-2026-11-04.svg` from `docs/diagrams/build_architecture.py` (local only), with this week's structural changes: added `rivers/drainageControls.ts`, `planetDrainage.ts`, `drainage.worker.ts`, `pitFill.ts`, `depressions.ts`, `riverGrid.ts`, `shaders/erosion/streamPowerPlanet.frag.glsl`, `shaders/heightmap/erosionFilter3d.glsl`; removed the tree, graph, valley map, stream power, view, debug and `useRivers`; Erosion moved into the Climate System; the World Clock added. Screenshot copies go to `docs/screenshots/` (originals in `Cornell/Fall 26/PWB/Screenshots/`). Point the README's diagram at the new file.
+> 2. **Rivers, research first** (Dana: "I don't need anything fancy but it needs to look good from afar"; "we had a river system before switching to erosion, see if it could help, find a way to do both"):
+>    - Read the summaries in `REFERENCES.md`: Peytavie (graph nodes only at confluences, splines between; built for 1 to 30 m cells), Cordonnier, Braun and Willett, Derzapf (rivers on a coarse mesh, refined as the view needs), Génevaux, Plate-Local, Williams (sub-texel coverage).
+>    - Study the earlier system on commit `1f421af`: `rivers/riverGraph.ts` (Delaunay nodes, no grid lines, `[B95]`) and `riverTree.ts` (Génevaux's priority growth, branching). Its failure was a terrain it never shaped (`[B94]`). The lead to weigh: grow that tree on the eroded ground (B), so rivers branch like the old ones and sit in the eroded valleys.
+>    - Decide how a river narrower than a bake texel shows from afar (coverage rather than a forced one-texel channel: the forced width made the blobs).
+>    - The drainage splits many ways (Schott, Freeman), so a network following one steepest neighbor stops where that neighbor gets too little: whatever network is chosen must agree with how water is routed.
+>    - Bring one plan in numbered steps with files and sources before any code. `riverGrid.ts`, `riverEdgeDistance` and the Génevaux carve are ready to reuse; drop the Catmull-Rom lead-in from a side branch, which made the zigzags.
+> 3. **Cleanup** when rivers settle: every `[TEMP water]` log (`drainageControls.ts`, `drainage.worker.ts`, `SceneCanvas.tsx`, `PlanetPatchRenderer.ts`), and `probeWaterMap` in `map/heightmap.ts`, which bakes 18 regions per change and slows slider drags.
+> 4. **Later:** liquids eroding differently (research after the water system); the chunk's water from the virtual-pipes engine (phase 2: Šťava sources and sinks, Jákó rain and evaporation, water under 0.1 m hidden); Stage 08 of this roadmap rewritten; the concept draft revised with Dana.
+>
+> **Open, Dana's to decide:** none pending. Inferred and tunable values to revisit: `HILLSLOPE_SHARE` 0.05, `DRAINAGE_PASSES` 350, `PLANET_PASSES_AT_MAX_DURATION` 1,500, the demo-proportion mapping in `erodedSurface`, `engineRainfall`'s scaling, `RIVER_MIN_CELLS` 300.
+>
+> **Working style (Dana, this round):** diagnose (logs need no approval) and research on my own initiative before proposing; one plan in numbered steps naming files and new names; no code without an explicit yes, except fixing a crash from my own new code; summaries instead of rereading papers; short replies, no piling plans; status at the end of a turn as done, next, open.
 
 > [!NOTE]
 > **Previous handover (2026-11-01, thirteenth):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*

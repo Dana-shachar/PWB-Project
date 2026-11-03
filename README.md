@@ -38,7 +38,7 @@ This will eventually grow into the fuller README the course's final deliverable 
 
 You move a control in the interface. `App.tsx` passes it to that feature's own hook, which holds the new value. The planet view then recomputes the terrain on the graphics card, and the views redraw. The yellow path traces one example, a noise slider, all the way to the 3D planet.
 
-![Architecture: the interface, the wiring in App.tsx, one hook per feature, the planet view that owns the heavy work, and the views on screen.](docs/diagrams/architecture-2026-11-01.svg)
+![Architecture: the interface, the wiring in App.tsx, one hook per feature, the planet view that owns the heavy work, and the views on screen.](docs/diagrams/architecture-2026-11-04.svg)
 
 For every function and the chains between files, open [`CODE-INDEX.md`](docs/CODE-INDEX.md).
 
@@ -69,6 +69,7 @@ Locked colors stay put and the other colors are built around them, so you can ke
         ├── scene/            planet view, shared renderer, camera, grid, gumball, lighting
         ├── voxel/            close-up chunk: meshing in a background worker, its own view
         ├── erosion/          GPU erosion solver and the scrub timeline
+        ├── rivers/           the planet's water: pit fill, stream power, lakes by climate, the river network
         ├── ui/               panels, design-system components, icons
         ├── shaders/          GLSL, loaded as text
         ├── firebase/         client, anonymous sign-in, reads and writes
@@ -97,6 +98,7 @@ Related small pieces are grouped by the feature they serve, so one file can hold
 | `map/` | the heightmap pipeline, the shared noise ranges table, and its 2D preview, including the brush |
 | `voxel/` | the land chunk: its two render styles and its own viewport |
 | `erosion/` | the grid-based erosion solver, its state hook and the scrub timeline |
+| `rivers/` | the planet's water from erosion: the drainage hook, its GPU pass and worker, lakes and the river network |
 | `shaders/` | GLSL, loaded as text |
 | `firebase/` | the client, anonymous auth, and reads and writes |
 | `projectSettings/` | saving, loading and naming projects, built on `firebase/` |

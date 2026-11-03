@@ -489,9 +489,10 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 ## 🏞️ Rivers and climate
 
-*Decided 2026-11-01. The land and its water are built from one drainage tree, in a worker, on any planet.*
+*Decided 2026-11-01. The drainage tree (`[S53]`, `[S55]`, `[S60]` to `[S64]`) was replaced on 2026-11-03 by water from erosion (`[S65]` to `[S70]`); those decisions are kept for their reasons, which the river research reuses.*
 
-### [S53] Rivers are a tree grown from the coast · `decided`
+### [S53] Rivers are a tree grown from the coast · `deferred`
+**Superseded:** 2026-11-03 by `[S65]`
 **Decided:** 2026-11-01
 
 - A tree of jittered nodes grows inland on a 4096 by 2048 map (about 9 km a cell), lower ground first, so every land node reaches the sea and flow is summed from the springs (Frampton's Sapiens).
@@ -499,7 +500,8 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - The tree lives in a worker, and river data never passes through React props, since its dev timing copies them and ran out of memory.
 - A control updates only what it affects: terrain or sea level regrow the tree, climate reruns only the balance, and Erosion only re-bakes.
 
-### [S54] Lakes come from a water budget, not from filling every pit · `open`
+### [S54] Lakes come from a water budget, not from filling every pit · `decided`
+**Built:** 2026-11-03 as `[S67]`
 **Decided:** 2026-11-01 · **Reopened:** 2026-11-02, every pit is filled for now (`[S64]`)
 
 - A lake grows until evaporation from its surface meets what flows in, computed directly, with no time stepping. Short of its rim it stays closed; at the rim it spills the rest downstream (Braun and Willett's sill).
@@ -507,7 +509,8 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - A catchment under `RIVER_MIN_LAKE_CATCHMENT` gets no lake: its water sinks into the ground.
 - Water at every point has its own height (Derzapf 2011, section 3.3), stored per texel, and shows where it stands above the ground. Lakes draw their shores from the terrain.
 
-### [S55] Stream power shapes the land · `decided`
+### [S55] Stream power shapes the land · `deferred`
+**Superseded:** 2026-11-03 by `[S65]`
 **Decided:** 2026-11-01
 
 - Noise is the input, not the final terrain: it sets how fast each place rises, and rivers cut it down with the stream power law, `n = 1`, `m = 0.5` (Braun and Willett 2013, Cordonnier et al. 2016).
@@ -517,6 +520,7 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - With Water or Atmosphere off, nothing erodes, so the terrain is the plain noise.
 
 ### [S56] Climate lives with the atmosphere, for the whole planet · `decided`
+**Changed:** 2026-11-03: the section is the Climate System, with Atmosphere and Climate inside; Erosion moved out of Climate (`[S68]`); turning Atmosphere off no longer removes water (`[S69]`)
 **Decided:** 2026-11-01
 
 - Atmosphere and climate are one section, with a Climate part: Liquid, Rainfall, Temperature, Erosion.
@@ -542,13 +546,15 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - A fragment shader commonly gets 16 texture slots, counted by what's declared, not by what's in use. Paint took all 16, so the river map takes the last one.
 - Layers past 15 are ignored, so the bake can't crash.
 
-### [S60] River nodes neighbor by triangulation · `decided`
+### [S60] River nodes neighbor by triangulation · `deferred`
+**Superseded:** 2026-11-03 by `[S65]`
 **Decided:** 2026-11-02
 
 - Each node's neighbors come from a Delaunay triangulation of the nodes, not the grid's row pattern, so water can flow in any direction (Cordonnier et al. 2016, section 4.1; Derzapf et al. 2011 on grids giving parallel rivers).
 - The nodes stay on the map's rows, so the valley map still finds a pixel's node by its row. The triangulation depends only on the grid and seed, so it's built once when the worker starts.
 
-### [S61] River levels come from the shown terrain · `decided`
+### [S61] River levels come from the shown terrain · `deferred`
+**Superseded:** 2026-11-03 by `[S65]`
 **Decided:** 2026-11-02
 
 - A river's level is the shown coarse height, noise mixed with eroded land by Erosion, lowered wherever it would climb, so rivers only run downhill (Peytavie et al. 2019, 5.1; Plate-Local River Generation). A lake lies at its outlet's height.
@@ -560,14 +566,55 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Near a river the bake applies Génevaux et al. 2013's replace operator, h = (1 − w) land + w river, w = (1 − d²/r²)², measured per patch texel from the river's curve, so rivers are sharp at any zoom.
 - A river never raises land: raised banks dammed rivers at the coast.
 
-### [S63] Basins grow by priority · `decided`
+### [S63] Basins grow by priority · `deferred`
+**Superseded:** 2026-11-03 by `[S65]`
 **Decided:** 2026-11-02
 
 - The tree grows from the coast taking, among waiting nodes within ζ of the lowest, the one with the highest Horton-Strahler priority (Génevaux et al. 2013, section 5), so a few rivers gather big basins. Mouth priorities follow Horton's law.
 - ζ, the branching odds and the drawing threshold are the papers' user settings; they're meant to become sliders.
 
-### [S64] Every pit is filled, for now · `decided`
+### [S64] Every pit is filled, for now · `deferred`
+**Superseded:** 2026-11-03 by `[S67]`
 **Decided:** 2026-11-02 · Dana chose this over keeping only large lakes
 
 - Pits are filled with a slight slope so water always flows on (Priority-Flood + ε, Barnes et al. 2014, as Peytavie does), so rivers never break up and there are no lakes.
 - Dana wants some lakes back: Fill-Spill-Merge (Barnes, Callaghan and Wickert 2020) is to decide which dips hold water. See the `ROADMAP.md` handover.
+
+### [S65] The planet's water and land come from erosion on the GPU · `decided`
+**Decided:** 2026-11-03
+
+- Every terrain tool takes water from the height map it shows (World Machine, Gaea, Houdini), so the land is eroded first and the water read from it.
+- Pits are filled first (Priority-Flood + ε, in a worker), then Schott et al. 2023's stream power runs on the GPU on a 2048 × 1024 globe grid: drainage with erosion off, saved, then erosion on top. Duration continues from where the land is or restarts from the save; Strength restarts from the save.
+- Only drainage and lakes are global, since a river depends on its whole catchment; everything shown is built per patch (Derzapf: erosion simulation under adaptive level of detail changes the terrain as you zoom).
+- The ocean is the outlet, held at its height (Braun and Willett's base level).
+
+### [S66] An erosion filter shapes the surface · `decided`
+**Decided:** 2026-11-03
+
+- Rune Skovbo Johansen's filter, in 3D as Estqes ports it, adds branching gullies and ridges per point, so patches stay seamless at any zoom.
+- It reads only the smooth coarse eroded ground, never the detailed terrain ("a chaotic mess" otherwise), with no lowering offset (as Bevy's port), in the proportions of Rune's demo (the land's valley spacing to his hills, its relief to his).
+- Strength fades from the noise terrain to the eroded one; Shape (Gully Size, Gully Depth up to Bevy's 0.5, Ridge Sharpness, Detail) only re-bakes patches.
+- Coasts move with erosion (Dana: real erosion does).
+
+### [S67] Lakes fill by the climate on the eroded ground · `decided`
+**Decided:** 2026-11-03
+
+- Fill-Spill-Merge (Barnes, Callaghan and Wickert 2021) fills each basin with the water Rainfall and Temperature leave it (`waterBudget`, Langbein's balance); a climate change refills only the lakes.
+- Basins are found on the eroded ground, so carved rims let them drain (Braun and Willett: sills erode as water passes).
+- Water is drawn per point where the lake level stands above the ground, so shores follow the terrain (Cordonnier et al. 2016, 6.2).
+
+### [S68] Erosion is part of the Climate System, with one set of settings · `decided`
+**Decided:** 2026-11-03
+
+- Erosion sits in the Climate System's right panel, under the moons: one switch and one set of settings for the planet and the land chunk. Sea level comes from Ocean and rain from Climate, never set twice.
+- There is no Run button: a change reruns only what it affects.
+
+### [S69] Ocean is only the sea · `decided`
+**Decided:** 2026-11-03
+
+- Lakes and rivers follow the Climate's liquid (Dry has none), not the Ocean switch, as Gaea and World Machine keep the sea apart from lakes.
+
+### [S70] Time has its own World Clock · `decided`
+**Decided:** 2026-11-03
+
+- The timeline dock moved out of Erosion into its own World Clock section, the one clock every time-based system will share.

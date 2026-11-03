@@ -1,6 +1,6 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-11-02`
+`Last updated: 2026-11-03`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
 
@@ -13,11 +13,11 @@
 
 `Covers 2026-10-28 to 2026-11-04 · Due: start of class, 10:10 am`
 
-*Gave the planet a water system, with rivers, lakes, a climate and land eroded by its rivers. Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map, rebuilt the moons (up to five, randomized, with tides), then made every panel follow one hierarchy and softened the planet's haze into a rim.*
+*Gave the planet a water system, then rebuilt it so the land and lakes come from erosion itself: GPU stream power, an erosion filter and lakes sized by the climate. Fixed the regular pattern on the ground up close by giving the land chunk its own high-resolution height map, rebuilt the moons (up to five, randomized, with tides), then made every panel follow one hierarchy and softened the planet's haze into a rim.*
 
 ![Walk mode on the land chunk after the fix: smooth slopes down to the water, no stripes.](screenshots/2026-10-28-ground-smooth-after.png)
 
-![The architecture diagram: the rivers join as their own module, in a worker.](diagrams/architecture-2026-11-01.svg)
+![The architecture diagram: the planet's water from erosion, in a GPU pass and a worker; erosion settings shared by planet and chunk.](diagrams/architecture-2026-11-04.svg)
 
 ### 🛠️ Done
 - **Ground pattern fixed (`[B66]`, 2026-10-28):** up close the chunk showed stripes and stair-stepped ridges, because its heights were computed as points on the whole 6000 km planet, where floats round to about 0.6 m. The chunk now bakes its own 4096 height map from the planet's noise and resamples it smoothly; finer texture comes from Roughness. Before and after screenshots are in the issue. The water and shadows now read the same map, so the seabed is smooth too.
@@ -61,6 +61,11 @@
 
 - **A real shader compiler (`[S58]`):** Khronos's glslangValidator now checks all 15 materials after every shader edit, because a passing build can't see inside shader text. It caught two errors this round before they reached the screen.
 - **Limits:** noise layers capped at 15 to free a texture slot for the river map (`[S59]`). Rivers only reach the planet view so far; the chunk still shows sea water.
+- **Water from erosion (2026-11-03, `[S65]` to `[S70]`):** the old river tree was removed. The planet now erodes on the graphics card (Schott et al.'s stream power, after a pit fill in a background worker), in 1 to 3 s with a progress bar, and Rune Skovbo Johansen's erosion filter, in its 3D port by Estqes, carves branching gullies into the smooth eroded ground. Lakes fill each basin by the climate's water budget (Fill-Spill-Merge), so a dry world keeps few lakes and a wet one fills its basins, and lakes drain as erosion cuts their rims. Rivers are built but not drawn yet: per-cell paths on the 18 km grid zigzagged (`[B109]`).
+- **Erosion moved into the Climate System (`[S68]`):** one switch and one set of settings for the planet and the land chunk (Duration, Strength, and Shape sliders for the gullies), no Run button, and every change reruns only what it affects. Ocean became the sea only (`[S69]`); the timeline moved to its own World Clock (`[S70]`); a new design-system Progress bar shows how long is left.
+
+![The eroded planet: branching gullies and ridges across the continent, lakes in its basins.](screenshots/2026-11-03-erosion-filter.png)
+
 - **Rivers rebuilt around one cause (2026-11-02, `[B94]`):** a debug view measured that rivers were drawn onto a terrain they didn't shape. Kept from the day: a triangulated network instead of grid rows (`[B95]`), river levels from the shown terrain (`[B96]`), Génevaux's replace operator and basin priorities, and pits filled so rivers connect. The rest is written up as one water system design for the next session, with its open bugs (`[B97]` to `[B104]`).
 
 ### 🤖 AI process
@@ -80,6 +85,8 @@
 - **Misreadings cost rounds:** "a different liquid" became Temperature picking the liquid, when Dana expected a dropdown; "contextual ranges" got a guess instead of a question. Her diagnosis of the terrain itself was right from the start: the landscape has to account for water.
 - **A wrong figure:** Claude said the worker would hold about 100 MB; the arrays add up to about 500 MB.
 - **A lost day on rivers (2026-11-02):** Claude fixed one symptom per screenshot, built on guesses and its own inventions, put several unproven changes into one test, and repeated failing approaches, so nearly every round looked worse. New rules came out of it: read the sources before the first fix, no inventions, one change per test, stop when a fix makes it worse. A web-reading agent used about 58k tokens. Claude also reported type checks as passing for a whole day when the command checked no files (`[B105]`), and an edit Dana rejected was written anyway, then undone.
+- **2026-11-03, measure first, again:** the water map was applied upside down for half a day (`[B106]`): Claude defended "erosion off is unchanged" from its own probe while Dana kept seeing shifted land, until a log of land pulled to sea level (99%) proved the flip. The erosion filter was first fed the bumpy terrain against its author's own warning (`[B107]`). What worked: reading two existing ports of the filter on GitHub (Estqes, Bevy) before redoing it, and a probe that baked the planet with and without each layer.
+- **2026-11-03, process:** Claude piled plan on plan, asked permission for crashes it had caused, coded a one-line fix before approval, and reread the same papers three times. New rules: diagnose and research before proposing; no code without a yes, except a crash from its own new code; keep paper summaries in `REFERENCES.md`.
 - **Fixed recipes flatten variety:** copying one saved planet's numbers made every world alike; they became the center of ranges by world type. Dana's logs of liked and disliked rolls drove each round.
 
 ### 📊 Worked / didn't / next
@@ -100,7 +107,11 @@
 - ❌ Actions without a go, and research around sources already at hand.
 - ✅ A debug view of ground minus river level found the root cause in one look.
 - ❌ A symptom per screenshot, several unproven changes per test, and invented methods: a day of churn.
-- ⏭️ The water system design in the `ROADMAP.md` handover, rebuilt in order; then water on the chunk, river controls and cleanup, cutting the worker's memory, then slope rock; walk mode's `[B71]` is deferred.
+- ✅ Water from erosion: the planet's land and lakes now come from one simulation, with a real before and after.
+- ✅ Existing implementations (Estqes, Bevy) showed the right input for the filter in one read.
+- ❌ A fix and its probe both wrong in the same direction (the flipped map): an hour of "it's working" against what Dana saw.
+- ❌ Per-cell rivers on an 18 km grid: off until researched.
+- ⏭️ Rivers, research first, combining the earlier river tree with the erosion (`ROADMAP.md` handover); then cleanup of the TEMP logs, the chunk's water, and slope rock; walk mode's `[B71]` is deferred.
 
 ---
 
