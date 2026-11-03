@@ -825,6 +825,7 @@
 - *PDF in the course folder*
 
 **Procedural Riverscapes (Peytavie et al. 2019)** · `used 2026-11-01`
+- Summary, read 2026-11-03: input terrains at "sampling resolutions (1m - 30m per pixel)" (sec. 1); drainage by Freeman's multiple flow, rivers are cells past "a user-controlled threshold", pits filled first by Priority-Flood (sec. 4); the discrete network becomes a graph "by defining a node at cells with more than one contributor and smoothing the trajectory of the river between nodes with piecewise cubic splines" (sec. 4); flow φ = 0.42 A^0.69 (Dunne 1978).
 - depression filling before the drainage calculation, piecewise cubic splines between confluences, meanders only on low slopes.
 - 2026-11-02: flow from drainage area, 0.42 A^0.69, and width from the cross-section; the drawing threshold as a user setting; river heights made monotonic downstream.
 - *PDF in the course folder*
@@ -833,11 +834,13 @@
 - the pit fill from the coast up, in `waterLevels`.
 
 **Large Scale Terrain Generation from Tectonic Uplift and Fluvial Erosion (Cordonnier et al. 2016)** · `used 2026-11-01`
+- Summary, read 2026-11-03: border nodes "at the sea level ... are the outflows" (sec. 4); lakes are drawn "by comparing the pass height with the height of all the points flowing into the bottom of the lake" (6.2); detail at any zoom comes from primitives placed from the coarse eroded map (6.2, after Génevaux); to speed up, "progressively refine the sampling grid" (6.3).
 - the stream power equation over a stream graph, `n = 1`, `m = 0.5`, an implicit update from the root up, 100 to 300 steps, slopes capped at 30 degrees, lake overflow.
 - 2026-11-02: section 4.1, Poisson points joined by a Delaunay triangulation instead of a regular grid, "because the edges of the graph better represent possible directions for local streams."
 - *PDF in the course folder · [record](https://diglib.eg.org/handle/10.1111/cgf12820)*
 
 **A very efficient O(n), implicit and parallel method to solve the stream power equation (Braun and Willett 2013)** · `used 2026-11-01`
+- Summary, read 2026-11-03: base level is the part of the domain held at a fixed height (sec. 1); K "depends on lithology and mean precipitation"; local minima are either left as closed (endorheic) basins or drained over their sill, and "sills [are] efficiently eroded away as they receive the discharge" (sec. 6).
 - the stack order, the linear solve for `n = 1`, lakes draining over their sill. `erodeTerrain` adapts this to a fixed tree, in one pass (inferred).
 - *PDF in the course folder · doi 10.1016/j.geomorph.2012.10.008*
 
@@ -879,6 +882,7 @@
 - noise that follows dendritic patterns, a fallback if rivers need detail finer than the map.
 
 **River Networks for Instant Procedural Planets (Derzapf, Ganster, Guthe and Klein 2011)** · `used 2026-11-02`
+- Summary, read 2026-11-03: rivers are built on a coarse base mesh and refined as the view needs (adaptive level of detail); "while it may be possible to combine erosion simulation with adaptive level of detail ... users might note changes in the terrain caused by the simulation" (sec. 7).
 - the warning that grid flow gives eight directions and parallel rivers; water height per vertex; the bank limits of Table 2 (10 m bank edge, 1 m/km near rivers, 1000 m/km steepest), tried and removed.
 - *PDF in the course folder*
 
@@ -907,9 +911,17 @@
 - a closed lake balances its inflow by changing its surface area until evaporation takes all of it. Used as each dip's capacity in Fill-Spill-Merge.
 - *[USGS record](https://pubs.usgs.gov/publication/pp412)*
 
-**Fast and Gorgeous Erosion Filter (Rune Skovbo Johansen, 2026)** · `planned` · Mozilla Public License 2.0
-- gullies along the slope as a per-point filter, after Clay John's 2018 Shadertoy; for the land between rivers.
+**Fast and Gorgeous Erosion Filter (Rune Skovbo Johansen, 2026)** · `used 2026-11-03, code pasted by Dana` · Mozilla Public License 2.0
+- gullies along the slope as a per-point filter, after Clay John's 2018 Shadertoy, in `shaders/heightmap/erosionFilter3d.glsl`. Its input must be a smooth height: on a bumpy one "we get a chaotic mess"; his demo's settings are used unchanged, in his demo's proportions (valley spacing to his hill spacing, relief to his relief).
 - *[Blog](https://blog.runevision.com/2026/03/) · Shadertoy `wXcfWn`*
+
+**3D-Erosion-Filter-Unity (Estqes, 2026)** · `used 2026-11-03` · Mozilla Public License 2.0
+- Rune's filter in 3D for spheres: the Phacelle noise over 3×3×3 cells with stripes across `cross(dir, normal)`, and the slope taken from a smooth base noise's gradient (`GetNoiseGradient`).
+- *[Repository](https://github.com/Estqes/3D-Erosion-Filter-Unity)*
+
+**bevy_erosion_filter (korbindeman)** · `used 2026-11-03` · MIT and Mozilla Public License 2.0
+- the filter's defaults and ranges (strength 0 to 0.5), `eroded = base + delta` on a smooth base with no lowering, and the scale rule "mountain_width / 5..10".
+- *[Repository](https://github.com/korbindeman/bevy_erosion_filter)*
 
 **River meanders (Langbein and Leopold 1966; Leopold and Wolman 1957; Leopold 1994)** · `used 2026-11-02, from search summaries`
 - meander wavelength about 11 channel widths (7 to 12 in 1957), used for the winding's wavelength; the sine-generated curve, tried and removed.
@@ -953,8 +965,8 @@
 - constant rain per cell instead of drops (eq. 1); evaporation d × (1 − Ke·Δt) each step, without which "the scene would fill up with water" (eq. 16).
 - *[PDF](https://www.old.cescg.org/CESCG-2011/papers/TUBudapest-Jako-Balazs.pdf)*
 
-**Large-scale Terrain Authoring through Interactive Erosion Simulation (Schott et al. 2023)** · `code read 2026-11-02, paper not read` · MIT
-- GPU stream power in one pass per iteration: each cell gathers drainage area from uphill neighbors by slope, erodes by k · area^0.8 · slope^2 plus hillslope smoothing, never below the cell it drains to. The drainage area is the river map on the same grid.
+**Large-scale Terrain Authoring through Interactive Erosion Simulation (Schott et al. 2023)** · `code read in full 2026-11-03, paper not read` · MIT
+- GPU stream power in one pass per iteration (`data/shaders/spe_shader.glsl`): each cell gathers drainage from uphill neighbors split by slope^p_flow (Freeman's form, p_flow 1), erodes by k · area^0.8 · slope^2 toward its steepest receiver plus k_h × the Laplacian, never below that receiver; the map's border is fixed at 0 as the outlet; no pit handling. Defaults k 0.0005, k_h 200, dt 50. Ported in `shaders/erosion/streamPowerPlanet.frag.glsl`, with the ocean as outlet and the hillslope term as a share per pass (his k_h does almost nothing at 18 km cells).
 - *[Code](https://github.com/H-Schott/StreamPowerErosion) · [HAL](https://hal.science/hal-04049125v1) · doi 10.1145/3592787*
 
 **Physically-based Analytical Erosion for fast Terrain Generation (Tzathas, Gailleton, Steer and Cordonnier 2024)** · `abstract only`

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Select } from '../ui/UIElements';
-import { PlayIcon, PauseIcon, RunIcon, ResetIcon } from '../ui/icons';
+import { PlayIcon, PauseIcon } from '../ui/icons';
 import { YEARS_PER_STEP } from './erosionEngine';
 import type { ErosionResult } from './erosionControls';
 
@@ -11,13 +11,8 @@ interface ErosionTimelineProps {
   result: ErosionResult | null;
   onScrub: (targetStep: number) => void;
   isStale: boolean;
-  // Play/Pause (below) animate the playhead through this already-computed
-  // run. Run/Reset are the real simulation actions, same as the right
-  // panel's own buttons, just reachable from the dock too (Dana, 2026-10-14:
-  // "it's fine to have a button on the right panel, but these should also
-  // live on the timeline itself").
-  onRun: () => void;
-  onReset: () => void;
+  // Play/Pause (below) animate the playhead through this already-computed run. Erosion reruns by itself on any
+  // change, so there is no Run or Reset (Dana, 2026-11-03).
 }
 
 type TimelineUnit = 'auto' | 'years' | 'thousand' | 'million';
@@ -99,7 +94,7 @@ function formatCompactYears(years: number): string {
 // (whether dragged, typed, or played) never runs the simulation backward —
 // it loads the nearest checkpoint and replays forward [S27]. See
 // erosion/erosionControls.ts's scrubTo(), which this drives via onScrub.
-export function ErosionTimeline({ result, onScrub, isStale, onRun, onReset }: ErosionTimelineProps) {
+export function ErosionTimeline({ result, onScrub, isStale }: ErosionTimelineProps) {
   // The visible window, as fractions of the whole run — spanFraction=1,
   // startFraction=0 is fully zoomed out. An actual visible *range*, not just
   // a tick-density multiplier, is what gives the navigator bar something
@@ -324,14 +319,6 @@ export function ErosionTimeline({ result, onScrub, isStale, onRun, onReset }: Er
         <button type="button" className="erosion-timeline-transport-btn ui-tooltip-anchor" onClick={togglePlay} disabled={!hasResult}>
           {isPlaying ? <PauseIcon /> : <PlayIcon />}
           <span className="ui-tooltip">{isPlaying ? 'Pause' : 'Play'}</span>
-        </button>
-        <button type="button" className="erosion-timeline-transport-btn ui-tooltip-anchor" onClick={onRun}>
-          <RunIcon />
-          <span className="ui-tooltip">Run</span>
-        </button>
-        <button type="button" className="erosion-timeline-transport-btn ui-tooltip-anchor" onClick={onReset} disabled={!hasResult}>
-          <ResetIcon />
-          <span className="ui-tooltip">Reset</span>
         </button>
       </div>
 

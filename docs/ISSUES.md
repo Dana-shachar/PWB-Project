@@ -740,10 +740,10 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Needed: river water that accounts for flow direction, so its surface moves downstream.
 
 ### [B94] Rivers drawn onto a terrain they didn't shape · `wrong but workable`
-**🔴 Open, the root of B95 to B105** · **Found:** 2026-11-02 · **Where:** the river carve in `shaders/heightmap/heightmap.frag.glsl`, `rivers/`
+**🟡 Terrain fixed, rivers open (B109)** · **Found:** 2026-11-02 · **Where:** the river carve in `shaders/heightmap/heightmap.frag.glsl`, `rivers/`
 - Dana: every round looked worse; floods, dry trenches, tubes, vanishing water, straight lines and ragged edges kept returning.
 - Cause, measured: a debug view of shown ground minus river level put tributaries far below the ground and main rivers far above it. The noise was never shaped by water, and the rivers were a decal cut into it.
-- Fix: water from simulation (phase 1 GPU stream power on the planet, phase 2 the virtual-pipes engine on the chunk), in the `ROADMAP.md` fifteenth handover. The network rework of 2026-11-02 is kept on the branch `water-network-2026-11-02` for reference.
+- Fix so far (2026-11-03): the land and lakes now come from the erosion (stream power, the erosion filter, lakes on the eroded ground), and the old network was removed. Rivers are redone separately (B109).
 
 ### [B95] Rivers ran along the grid's rows · `wrong but workable`
 **✅ Fixed:** 2026-11-02 · **Found:** 2026-11-02 · **Where:** new `rivers/riverGraph.ts`
@@ -802,6 +802,30 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **✅ Fixed:** 2026-11-02 · **Found:** 2026-11-02 · **Where:** the check command
 - Cause: the root `tsconfig.json` only points to other configs, so `npx tsc --noEmit -p .` had no files.
 - Fixed: check with `npx tsc --noEmit -p tsconfig.app.json`. It found three real errors from that day's wiring.
+
+### [B106] The water map was applied upside down · `breaks things`
+**✅ Fixed:** 2026-11-03 · **Found:** 2026-11-03 · **Where:** `rivers/drainage.worker.ts`, `setPlanetWaterMap` in `map/heightmap.ts`
+- Dana: with erosion on, the land shifted from where it should be; lakes sat where there were no basins.
+- Cause, measured (99% of land pulled to sea level, land being 10.5% of the planet): the readback's rows run north first, the bake's uv south first, so every point read its mirror's water.
+- Fixed: the worker writes the map's rows south first.
+
+### [B107] The erosion filter wiped out or crumpled the land · `breaks things`
+**✅ Fixed:** 2026-11-03 · **Found:** 2026-11-03 · **Where:** `erodedSurface` in `shaders/heightmap/heightmap.frag.glsl`
+- Dana: "insane, not like erosion"; later the land disappeared.
+- Cause: the filter was fed the bumpy detailed terrain (Rune: "a chaotic mess"), with his lowering offset, and later with gully depths tied to a 109 km scale far deeper than the relief.
+- Fixed: the filter reads the smooth coarse eroded ground (as Estqes and Bevy feed it a smooth base), with no lowering, in his demo's proportions; its Shape sliders keep to Bevy's ranges.
+
+### [B108] Lakes in every dip, even with erosion off · `wrong but workable`
+**✅ Fixed:** 2026-11-03 · **Found:** 2026-11-03 · **Where:** `rivers/drainage.worker.ts`
+- Dana: too many lakes, with jagged edges, and water on load with erosion off.
+- Cause: the pit fill filled every basin to its brim whatever the climate, and the lake mask was cut at 0.5 on 18 km cells.
+- Fixed: Fill-Spill-Merge with the climate's budget on the eroded ground (lakes drain as erosion carves their rims), water drawn per point where the lake level stands above the ground, lakes and rivers following the Climate's liquid rather than Ocean. Measured: lakes fell from 21,416 to 5,845 cells at 450 mm of rain.
+
+### [B109] Rivers zigzag, run straight and break apart · `wrong but workable`
+**🔴 Open, drawing off** · **Found:** 2026-11-03 · **Where:** `extractRiverNodes` in `rivers/drainage.worker.ts`, `DRAW_RIVERS` in `heightmap.frag.glsl`
+- Dana: rivers look very bad up close and from afar, and don't branch.
+- Cause, from the code and the sources: a node at every 18 km cell on eight directions (B95's straight rivers again), where Peytavie's method is for 1 to 30 m cells and puts nodes only at confluences; drainage split many ways (Schott) but the network follows one steepest neighbor, so rivers stop; every channel at least a bake texel wide, with a level from the coarse ground.
+- Next: research how to draw rivers that look good from afar, combining the earlier river system with the erosion (ROADMAP handover).
 
 ### [B67] From walk mode the water is barely visible · `minor`
 **🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`

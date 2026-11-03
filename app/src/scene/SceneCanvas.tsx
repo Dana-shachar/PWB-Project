@@ -1,6 +1,4 @@
 import { useEffect, useImperativeHandle, useRef, forwardRef, type RefObject } from 'react';
-import { buildLakeDebugDots, buildRiverDebugLines } from '../rivers/riverDebug';
-import { VALLEY_MAP_HEIGHT, VALLEY_MAP_WIDTH } from '../rivers/valleyMap';
 import * as THREE from 'three';
 import { scene } from './scene';
 import { camera, DEFAULT_CAMERA_DISTANCE } from './camera';
@@ -9,9 +7,10 @@ import { grid } from './grid';
 import type { SharedViewportRenderer } from './sharedViewportRenderer';
 import { planet, planetGeometry } from '../planet/mesh';
 import type { GumballTarget } from './Gumball';
-import { HeightmapPipeline, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
+import { HeightmapPipeline, type ErosionFilterShape, type NoiseLayer, type StrokeRecord, type UV } from '../map/heightmap';
 import { percentileRangeFromBins } from '../map/elevationRange';
 import { buildHeightDistribution, type HeightDistribution } from '../planet/seaLevel';
+import { PlanetDrainage, type DrainageResult } from '../rivers/planetDrainage';
 import { MAX_WAVE_WIND, windTimeScale } from '../planet/oceanSpectrum';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { fillColorFor } from './fillLight';
@@ -70,18 +69,16 @@ export interface SceneCanvasHandle {
   // `samples` is how finely the patch is measured; the patch itself is which
   // ground is measured. Independent on purpose. See planet/patch.ts.
   getPatchElevationData(patch: TerrainPatch, samples: number): ElevationData | null;
-  // The whole-globe heights at the rivers' own size, read back without stalling (rivers/riverTree.ts).
+  // The whole-globe heights at the drainage's own size, read back without stalling (rivers/planetDrainage.ts).
   getGlobeElevationAsync(): Promise<ElevationData | null>;
-  // [TEMP rivers] shows these segments as lines on the planet, turning with it; null clears them.
-  setRiverSegments(segments: Float32Array | null): void;
-  // [TEMP rivers] shows every lake node as a dot; null clears them.
-  setRiverLakes(lakeNodes: Float32Array | null): void;
-  setRiverDebugVisible(visible: boolean): void;
-  // The rivers' mark on the land (rivers/valleyMap.ts): re-bakes the shown patches.
-  setValleyMap(map: Float32Array | null): void;
-  setErosionStrength(strength: number): void;
-  // The camera in the planet's own frame, which sets the rivers in view (rivers/riverView.ts).
-  getRiverView(): { x: number; y: number; z: number; radius: number } | null;
+  // Stream power on pit-filled globe heights (rivers/planetDrainage.ts): drainage, then erosionPasses on top.
+  runPlanetDrainage(filled: Float32Array, width: number, height: number, seaLevel: number, erosionPasses: number, strength: number, onProgress: (share: number) => void): Promise<DrainageResult | null>;
+  // Erosion moved: continues from the last run, or restarts from its drainage-only state.
+  setPlanetErosionPasses(passes: number, strength: number, onProgress: (share: number) => void): Promise<DrainageResult | null>;
+  // The finished water map (rivers/drainage.worker.ts) and its valley spacing in meters: re-bakes the shown patches.
+  setPlanetWaterMap(map: Float32Array | null, width: number, height: number, totalRows: number, valleySpacing: number): void;
+  // The erosion filter's strength, 0 for off (erosion/erosionControls.ts): re-bakes the shown patches.
+  setErosionFilter(strength: number, shape: ErosionFilterShape): void;
   // The patch's real min/max, without the full synchronous readback
   // getPatchElevationData above pays for — a GPU reduction pyramid instead
   // (map/heightmap.ts's getRegionMinMaxAsync()), reading back one texel
@@ -347,11 +344,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   });
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const planetGroupRef = useRef<THREE.Group | null>(null);
-  const riverLinesRef = useRef<ReturnType<typeof buildRiverDebugLines> | null>(null);
-  const riverLakesRef = useRef<ReturnType<typeof buildLakeDebugDots> | null>(null);
-  const riverDebugVisibleRef = useRef(false);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const heightmapPipelineRef = useRef<HeightmapPipeline | null>(null);
+  const planetDrainageRef = useRef<PlanetDrainage | null>(null);
   const erosionEngineRef = useRef<ErosionEngine | null>(null);
   const gumballTargetRef = useRef<GumballTarget | null>(null);
   const layersRef = useRef<NoiseLayer[]>(layers); // lets the imperative handle read the current layers without re-creating itself
@@ -421,6 +416,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         sharedUniformsRef.current.elevationMax = range.max;
         sharedUniformsRef.current.terrainBottom = histogram.min;
         sharedUniformsRef.current.terrainTop = histogram.max;
+        heightmapPipeline.setTerrainTop(histogram.max);
         planetPatchRendererRef.current?.applyShared(sharedUniformsRef.current);
         onElevationRangeChangeRef.current?.({ min: range.min, max: range.max });
         onHeightDistributionChangeRef.current?.(buildHeightDistribution(histogram));
@@ -484,64 +480,6 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         if (!webglRenderer || !heightmapPipeline) return null;
         return heightmapPipeline.getElevationData(webglRenderer);
       },
-      setRiverSegments(segments) {
-        const planetGroup = planetGroupRef.current;
-        if (!planetGroup) return;
-        const previous = riverLinesRef.current;
-        if (previous) {
-          planetGroup.remove(previous);
-          previous.geometry.dispose();
-          previous.material.dispose();
-        }
-        const shared = sharedUniformsRef.current;
-        riverLinesRef.current = segments ? buildRiverDebugLines(segments, shared.radius, shared.displacementAmplitude) : null;
-        if (riverLinesRef.current) {
-          riverLinesRef.current.visible = riverDebugVisibleRef.current;
-          planetGroup.add(riverLinesRef.current);
-        }
-      },
-      setRiverLakes(lakeNodes) {
-        const planetGroup = planetGroupRef.current;
-        if (!planetGroup) return;
-        const previous = riverLakesRef.current;
-        if (previous) {
-          planetGroup.remove(previous);
-          previous.geometry.dispose();
-          previous.material.dispose();
-        }
-        const shared = sharedUniformsRef.current;
-        riverLakesRef.current = lakeNodes ? buildLakeDebugDots(lakeNodes, shared.radius, shared.displacementAmplitude) : null;
-        if (riverLakesRef.current) {
-          riverLakesRef.current.visible = riverDebugVisibleRef.current;
-          planetGroup.add(riverLakesRef.current);
-        }
-      },
-      setRiverDebugVisible(visible) {
-        riverDebugVisibleRef.current = visible;
-        if (riverLinesRef.current) riverLinesRef.current.visible = visible;
-        if (riverLakesRef.current) riverLakesRef.current.visible = visible;
-      },
-      setValleyMap(map) {
-        const webglRenderer = webglRendererRef.current;
-        const heightmapPipeline = heightmapPipelineRef.current;
-        if (!webglRenderer || !heightmapPipeline) return;
-        heightmapPipeline.setValleyMap(map, VALLEY_MAP_WIDTH, VALLEY_MAP_HEIGHT, map ? map.length / 4 / VALLEY_MAP_WIDTH : 0);
-        planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
-      },
-      setErosionStrength(strength) {
-        const webglRenderer = webglRendererRef.current;
-        const heightmapPipeline = heightmapPipelineRef.current;
-        if (!webglRenderer || !heightmapPipeline) return;
-        heightmapPipeline.setErosionStrength(strength);
-        planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
-      },
-      getRiverView() {
-        const planetGroup = planetGroupRef.current;
-        const camera = gumballTargetRef.current?.camera;
-        if (!planetGroup || !camera) return null;
-        const local = planetGroup.worldToLocal(camera.position.clone());
-        return { x: local.x, y: local.y, z: local.z, radius: sharedUniformsRef.current.radius };
-      },
       async getGlobeElevationAsync() {
         const webglRenderer = webglRendererRef.current;
         const heightmapPipeline = heightmapPipelineRef.current;
@@ -549,6 +487,35 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const elevation = await heightmapPipeline.getRegionElevationDataAsync(webglRenderer, heightmapPipeline.renderRiverHeights(webglRenderer, layersRef.current));
         heightmapPipeline.releaseRiverTarget();
         return elevation;
+      },
+      runPlanetDrainage(filled, width, height, seaLevel, erosionPasses, strength, onProgress) {
+        const webglRenderer = webglRendererRef.current;
+        if (!webglRenderer) return Promise.resolve(null);
+        planetDrainageRef.current ??= new PlanetDrainage();
+        const shared = sharedUniformsRef.current;
+        const metersPerUnit = shared.displacementAmplitude * KM_PER_SCENE_UNIT * 1000;
+        return planetDrainageRef.current.run(webglRenderer, filled, width, height, seaLevel, metersPerUnit, shared.radius * KM_PER_SCENE_UNIT * 1000, erosionPasses, strength, onProgress);
+      },
+      setErosionFilter(strength, shape) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return;
+        heightmapPipeline.setErosionFilter(strength, shape);
+        console.log('[TEMP water] bake probe, globe map units', JSON.stringify(heightmapPipeline.probeWaterMap(webglRenderer, layersRef.current)));
+        planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
+      },
+      setPlanetWaterMap(map, width, height, totalRows, valleySpacing) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return;
+        heightmapPipeline.setPlanetWaterMap(map, width, height, totalRows, valleySpacing);
+        if (map) console.log('[TEMP water] bake probe, globe map units', JSON.stringify(heightmapPipeline.probeWaterMap(webglRenderer, layersRef.current)));
+        planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
+      },
+      setPlanetErosionPasses(passes, strength, onProgress) {
+        const webglRenderer = webglRendererRef.current;
+        if (!webglRenderer || !planetDrainageRef.current) return Promise.resolve(null);
+        return planetDrainageRef.current.setErosionPasses(webglRenderer, passes, strength, onProgress);
       },
       getPatchElevationData(patch, samples) {
         const webglRenderer = webglRendererRef.current;
@@ -920,6 +887,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
       heightmapPipelineRef.current = null;
       erosionEngineRef.current?.dispose();
       erosionEngineRef.current = null;
+      planetDrainageRef.current?.dispose();
+      planetDrainageRef.current = null;
       // webglRendererRef itself is owned by the sync effect above, not this
       // one — it mirrors sharedRenderer.renderer for as long as that effect
       // stays mounted, which outlives a single registration cycle here.

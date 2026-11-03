@@ -48,10 +48,10 @@ interface UseSaveProjectArgs {
 function currentErosionRun(erosion: ReturnType<typeof useErosion>, patch: TerrainPatch): SavedErosionRun | null {
   if (!erosion.result) return null;
   return {
-    rates: erosion.rates,
+    rates: erosion.result.rates,
     durationYears: erosion.durationYears,
     gridResolution: erosion.gridResolution,
-    seaLevel: erosion.seaLevel,
+    seaLevel: erosion.result.seaLevel,
     patch: serializePatch(patch),
   };
 }
@@ -188,7 +188,6 @@ export function useSaveProject({
     erosion.rates,
     erosion.durationYears,
     erosion.gridResolution,
-    erosion.seaLevel,
     landChunk.patch,
     planetControls.radiusKm,
     planetControls.baseColor,

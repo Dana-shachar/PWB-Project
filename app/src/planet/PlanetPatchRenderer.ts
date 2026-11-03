@@ -117,8 +117,11 @@ export class PlanetPatchRenderer {
   // if they return (see PatchLifecycle.bumpBakeVersion).
   rebakeAll(renderer: THREE.WebGLRenderer, heightmapPipeline: HeightmapPipeline, layers: NoiseLayer[]): void {
     this.lifecycle.bumpBakeVersion();
+    let rebaked = 0; // TEMP water: how many patches a change re-bakes
+    let skipped = 0;
     for (const [key, entry] of this.entries) {
-      if (this.lifecycle.entries.get(key)?.state === 'cached') continue;
+      if (this.lifecycle.entries.get(key)?.state === 'cached') { skipped++; continue; }
+      rebaked++;
       heightmapPipeline.bakeRegionToTarget(
         renderer,
         { layers, face: faceIndex(entry.patch.face), min: entry.patch.min, max: entry.patch.max, resolution: entry.bakeSamples, borderTexels: PATCH_BORDER_TEXELS },
@@ -126,6 +129,7 @@ export class PlanetPatchRenderer {
       );
       this.lifecycle.markRebaked(key);
     }
+    console.log('[TEMP water] patches re-baked', { rebaked, skipped });
   }
 
   // The bake a patch should have: what its on-screen width asks for within the

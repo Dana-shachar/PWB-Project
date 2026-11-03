@@ -771,6 +771,22 @@ export function Popup({ open, anchorRef, onClose, children }: PopupProps) {
 
 // A row saying work is running in the background, so the app doesn't read as stuck. Not interactive: shown while
 // busy, gone when done; with reduced motion the ring holds still.
+// A determinate progress row: what is running, how far along it is, and about how long is left.
+export function ProgressBar({ label, share, secondsLeft }: { label: string; share: number; secondsLeft: number | null }) {
+  const percent = Math.round(Math.min(1, Math.max(0, share)) * 100);
+  return (
+    <div className="progress-bar" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
+      <div className="progress-bar-label">
+        <span>{label}</span>
+        <span>{secondsLeft !== null ? `about ${secondsLeft} s left` : ''}</span>
+      </div>
+      <div className="progress-bar-track">
+        <div className="progress-bar-fill" style={{ width: `${percent}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export function BusyIndicator({ label }: { label: string }) {
   return (
     <div className="busy-indicator" role="status" aria-live="polite">

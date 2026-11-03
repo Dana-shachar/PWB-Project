@@ -1210,6 +1210,14 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   font: 700 var(--font-size-sm) var(--font-ui);
   color: var(--color-text);
 }
+/* A sub-section: regular weight (text is thin, 300) and slightly indented, so the hierarchy reads (Dana, 2026-11-03). */
+.ui-accordion--nested {
+  padding-left: var(--gap-sm);
+}
+.ui-accordion--nested > .ui-accordion-header,
+.ui-accordion--nested > .ui-accordion-header-row > .ui-accordion-header {
+  font-weight: 400;
+}
 .ui-accordion-header:hover {
   opacity: 0.75;
 }
@@ -1235,10 +1243,6 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   border-top: 1px solid var(--color-divider);
 }
 
-.ui-accordion--nested > .ui-accordion-header,
-.ui-accordion--nested > .ui-accordion-header-row > .ui-accordion-header {
-  font-weight: 400;
-}
 /* A header with actions (Accordion's actions): the actions come first, like a layer row's ×, and the header takes the rest. */
 .ui-accordion-header-row {
   position: relative;
@@ -1872,6 +1876,32 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   border: 1.5px solid var(--color-track);
   border-top-color: var(--color-accent);
   animation: busy-indicator-spin 0.9s linear infinite;
+}
+.progress-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+}
+.progress-bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.progress-bar-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--color-track);
+  overflow: hidden;
+}
+.progress-bar-fill {
+  height: 100%;
+  background: var(--color-accent);
+  transition: width 0.2s linear;
+}
+@media (prefers-reduced-motion: reduce) {
+  .progress-bar-fill { transition: none; }
 }
 @keyframes busy-indicator-spin {
   to { transform: rotate(360deg); }

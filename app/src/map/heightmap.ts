@@ -7,6 +7,7 @@ import noiseGlsl from '../shaders/heightmap/noise.glsl?raw';
 // HeightmapPipeline constructor.
 import heightmapBrushVertexGlsl from '../shaders/heightmap/heightmapBrush.vert.glsl?raw';
 import heightmapFragmentGlsl from '../shaders/heightmap/heightmap.frag.glsl?raw'; // noise compositing (the "Noise" tab)
+import erosionFilter3dGlsl from '../shaders/heightmap/erosionFilter3d.glsl?raw'; // the erosion filter, used by the bake
 import strokePathFragmentGlsl from '../shaders/heightmap/strokePath.frag.glsl?raw'; // brush stroke rendering, see beginStroke()/paintStroke()
 import minMaxReduceFragmentGlsl from '../shaders/heightmap/minMaxReduce.frag.glsl?raw'; // elevation-range reduction pyramid, see getRegionMinMaxAsync()
 import elevationHistogramVertexGlsl from '../shaders/heightmap/elevationHistogram.vert.glsl?raw'; // see getRegionPercentileRangeAsync()
@@ -21,14 +22,14 @@ import { RIVER_BLEND_WIDTH, RIVER_GRID_HEIGHT, RIVER_GRID_WIDTH } from '../river
 // relative to the actual texture, not however big the canvas is displayed.
 export const HEIGHTMAP_WIDTH = 1024;
 export const HEIGHTMAP_HEIGHT = 512; // exported for MapView.tsx's aspect-ratio sizing
-const RIVER_MAP_WIDTH = 4096;
-const RIVER_MAP_HEIGHT = 2048;
+const RIVER_MAP_WIDTH = 2048;
+const RIVER_MAP_HEIGHT = 1024;
 
 // Matches strokePath.frag.glsl's MAX_STROKE_POINTS.
 const MAX_STROKE_POINTS = 64;
 
 // Matches heightmap.frag.glsl's MAX_LAYERS.
-export const MAX_LAYERS = 15; // 16 samplers is the limit: the 16th is uValleyMap
+export const MAX_LAYERS = 15; // 16 samplers is the limit: the 16th is uWaterMap
 
 // Narrowed to real base generators + 'none' (Dana, 2026-09-30: "Modifiers as
 // toggles, not types" — Ridged/Octaves/Terrace/Domain warp used to be
@@ -339,6 +340,55 @@ export interface RegionParams {
 // Raw single-channel elevation, real unclamped height rather than a display
 // color — the shape both getElevationData() and getRegionElevationData()
 // return, and what voxel/chunkGrid.ts samples.
+// A float target's RGBA, read back without stalling: a pixel buffer plus a fence polled each frame. Rows bottom to top.
+export async function readRenderTargetAsync(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget): Promise<Float32Array> {
+  const gl = renderer.getContext() as WebGL2RenderingContext;
+  const { width, height } = target;
+  const rgba = new Float32Array(width * height * 4);
+
+  renderer.setRenderTarget(target);
+  const pbo = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+  gl.bufferData(gl.PIXEL_PACK_BUFFER, rgba.byteLength, gl.STREAM_READ);
+  gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  renderer.setRenderTarget(null);
+
+  const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!;
+  gl.flush();
+  await new Promise<void>((resolve, reject) => {
+    function poll() {
+      const status = gl.clientWaitSync(sync, 0, 0);
+      if (status === gl.WAIT_FAILED) {
+        reject(new Error('readRenderTargetAsync: fenceSync wait failed'));
+      } else if (status === gl.TIMEOUT_EXPIRED) {
+        requestAnimationFrame(poll);
+      } else {
+        resolve();
+      }
+    }
+    poll();
+  });
+  gl.deleteSync(sync);
+
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
+  gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, rgba);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  gl.deleteBuffer(pbo);
+  return rgba;
+}
+
+// The erosion filter's shape (Erosion panel): gully size as a multiple of the measured scale, depth (Rune's strength,
+// 0 to 0.5 per bevy_erosion_filter), weight (0 sharp peaks only, 1 full gullies) and detail.
+export interface ErosionFilterShape {
+  size: number;
+  depth: number;
+  weight: number;
+  detail: number;
+}
+
+export const DEFAULT_EROSION_FILTER_SHAPE: ErosionFilterShape = { size: 1, depth: 0.22, weight: 0.5, detail: 1.5 };
+
 export interface ElevationReadback {
   data: Float32Array;
   width: number;
@@ -394,6 +444,9 @@ function paintTextureUniformName(index: number): string {
 export class HeightmapPipeline {
   readonly renderTarget: THREE.WebGLRenderTarget;
   private riverTarget: THREE.WebGLRenderTarget | null = null;
+  private waterMapTexture: THREE.DataTexture | null = null;
+  private waterMapRevision = 0;
+  private erosionFilterKey = ''; // strength and shape, so the chunk base re-bakes when either changes
   private scene: THREE.Scene;
   private camera: THREE.OrthographicCamera;
   private material: THREE.ShaderMaterial;
@@ -430,9 +483,6 @@ export class HeightmapPipeline {
   private chunkBaseKey = '';
   private chunkBaseLayers: NoiseLayer[] | null = null;
   private paintRevision = 0;
-  private valleyTexture: THREE.DataTexture | null = null;
-  private valleyRevision = 0;
-  private erosionStrength = 0.7;
   private planetRadiusMeters = 6_000_000;
   private reduceScene: THREE.Scene;
   private reduceCamera: THREE.OrthographicCamera;
@@ -450,7 +500,7 @@ export class HeightmapPipeline {
 
   // [B66] Bakes the land chunk's base map when the chunk, layers, paint or planet settings changed since the last one.
   ensureChunkBase(renderer: THREE.WebGLRenderer, layers: NoiseLayer[], face: number, min: THREE.Vector2, max: THREE.Vector2, origin: THREE.Vector2): void {
-    const key = [face, min.x, min.y, max.x, max.y, this.detailAmount, this.shoreSeaLevel, this.planetRadiusMeters, this.paintRevision, this.valleyRevision, this.erosionStrength].join(',');
+    const key = [face, min.x, min.y, max.x, max.y, this.detailAmount, this.shoreSeaLevel, this.planetRadiusMeters, this.paintRevision, this.waterMapRevision, this.erosionFilterKey].join(',');
     if (key === this.chunkBaseKey && layers === this.chunkBaseLayers && this.chunkBaseTarget) return;
     const size = CHUNK_BASE_SAMPLES + 2 * CHUNK_BASE_BORDER;
     if (!this.chunkBaseTarget) {
@@ -486,34 +536,52 @@ export class HeightmapPipeline {
   // Part of the chunk base map's key, so a radius change re-bakes it.
   setPlanetRadiusMeters(meters: number): void {
     this.planetRadiusMeters = meters;
+    this.material.uniforms.uPlanetRadiusMeters.value = meters;
   }
 
   setDetailAmount(amount: number): void {
     this.detailAmount = amount;
   }
 
-  setErosionStrength(strength: number): void {
-    this.erosionStrength = strength;
-    this.material.uniforms.uErosionStrength.value = strength;
+  // The erosion filter on region bakes: strength 0 is off, otherwise the shared Erosion Strength; shape is the Erosion
+  // panel's gully settings (erosion/erosionControls.ts).
+  setErosionFilter(strength: number, shape: ErosionFilterShape): void {
+    this.erosionFilterKey = [strength, shape.size, shape.depth, shape.weight, shape.detail].join(',');
+    const uniforms = this.material.uniforms;
+    uniforms.uErosionFilterStrength.value = strength;
+    uniforms.uGullySize.value = shape.size;
+    uniforms.uGullyDepth.value = shape.depth;
+    uniforms.uGullyWeight.value = shape.weight;
+    uniforms.uGullyDetail.value = shape.detail;
   }
 
-  // The rivers' mark on the land (rivers/valleyMap.ts): region bakes apply it, whole-globe bakes don't, so rivers never see it.
-  // height is the land rows; the river grid fills the rows after them, up to totalRows.
-  setValleyMap(map: Float32Array | null, width: number, height: number, totalRows: number): void {
-    this.valleyTexture?.dispose();
-    this.valleyTexture = null;
+  // The land's highest point, which with the sea level sets the filter's fade target (erosionFilter3d.glsl).
+  setTerrainTop(top: number): void {
+    this.material.uniforms.uTerrainTop.value = top;
+  }
+
+  // The planet's water from erosion (rivers/drainage.worker.ts): region bakes add its carving and draw its lakes; the
+  // whole-globe bake doesn't, so the drainage always starts from the plain terrain. Null clears it.
+  // valleySpacing (meters) sets the erosion filter's horizontal proportions (heightmap.frag.glsl, erodedSurface).
+  // The map's rows run south first; totalRows adds the river grid's rows after them (rivers/riverGrid.ts).
+  setPlanetWaterMap(map: Float32Array | null, width: number, height: number, totalRows: number, valleySpacing: number): void {
+    this.waterMapTexture?.dispose();
+    this.waterMapTexture = null;
     if (map) {
-      this.valleyTexture = new THREE.DataTexture(map, width, totalRows, THREE.RGBAFormat, THREE.FloatType);
-      this.valleyTexture.magFilter = THREE.LinearFilter;
-      this.valleyTexture.minFilter = THREE.LinearFilter;
-      this.valleyTexture.wrapS = THREE.RepeatWrapping;
-      this.valleyTexture.needsUpdate = true;
-      (this.material.uniforms.uValleyMapSize.value as THREE.Vector2).set(width, height);
-      this.material.uniforms.uValleyTextureRows.value = totalRows;
+      // The worker writes the rows south first, as the bake's uv runs; read north first, every point read its mirror's water.
+      this.waterMapTexture = new THREE.DataTexture(map, width, totalRows, THREE.RGBAFormat, THREE.FloatType);
+      this.waterMapTexture.magFilter = THREE.LinearFilter;
+      this.waterMapTexture.minFilter = THREE.LinearFilter;
+      this.waterMapTexture.wrapS = THREE.RepeatWrapping;
+      this.waterMapTexture.needsUpdate = true;
     }
-    this.material.uniforms.uValleyMap.value = this.valleyTexture;
-    this.material.uniforms.uValleyEnabled.value = map ? 1 : 0;
-    this.valleyRevision++;
+    this.material.uniforms.uWaterMap.value = this.waterMapTexture;
+    this.material.uniforms.uWaterMapEnabled.value = map ? 1 : 0;
+    this.material.uniforms.uValleySpacing.value = valleySpacing;
+    this.material.uniforms.uWaterMapTexel.value = map ? Math.PI / height : 0;
+    (this.material.uniforms.uWaterMapSize.value as THREE.Vector2).set(width, height);
+    this.material.uniforms.uWaterTextureRows.value = Math.max(1, totalRows);
+    this.waterMapRevision++;
   }
 
   // The sea level Roughness fades out toward from both sides, or null with water off (heightmap.frag.glsl).
@@ -544,7 +612,7 @@ export class HeightmapPipeline {
     }
     this.material = new THREE.ShaderMaterial({
       vertexShader: heightmapBrushVertexGlsl,
-      fragmentShader: noiseGlsl + heightmapFragmentGlsl,
+      fragmentShader: noiseGlsl + erosionFilter3dGlsl + heightmapFragmentGlsl,
       uniforms: {
         uLayerCount: { value: 0 },
         uLayerNoiseType: { value: new Array(MAX_LAYERS).fill(1) },
@@ -581,13 +649,21 @@ export class HeightmapPipeline {
         uDetailAmount: { value: 0 },
         uShoreEnabled: { value: 0 },
         uShoreSeaLevel: { value: 0 },
-        uValleyMap: { value: null },
-        uValleyMapSize: { value: new THREE.Vector2(1, 1) },
-        uValleyTextureRows: { value: 1 },
+        uWaterMap: { value: null },
+        uWaterMapEnabled: { value: 0 },
+        uWaterMapTexel: { value: 0 },
+        uWaterMapSize: { value: new THREE.Vector2(1, 1) },
+        uWaterTextureRows: { value: 1 },
         uRiverGridSize: { value: new THREE.Vector2(RIVER_GRID_WIDTH, RIVER_GRID_HEIGHT) },
         uRiverBlendWidth: { value: RIVER_BLEND_WIDTH },
-        uValleyEnabled: { value: 0 },
-        uErosionStrength: { value: 0.7 },
+        uErosionFilterStrength: { value: 0 },
+        uGullySize: { value: 1 },
+        uGullyDepth: { value: 0.22 },
+        uGullyWeight: { value: 0.5 },
+        uGullyDetail: { value: 1.5 },
+        uValleySpacing: { value: 1 },
+        uPlanetRadiusMeters: { value: 6_000_000 },
+        uTerrainTop: { value: 1 },
         uLayerOpacity: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerHeightScale: { value: new Array(MAX_LAYERS).fill(1) },
         uLayerBlendMode: { value: new Array(MAX_LAYERS).fill(0) },
@@ -626,7 +702,7 @@ export class HeightmapPipeline {
     // Same shader and the same uniforms, compiled without paint so the base map gets a texture slot ([B66]).
     this.chunkPatchMaterial = new THREE.ShaderMaterial({
       vertexShader: heightmapBrushVertexGlsl,
-      fragmentShader: noiseGlsl + heightmapFragmentGlsl,
+      fragmentShader: noiseGlsl + erosionFilter3dGlsl + heightmapFragmentGlsl,
       defines: { CHUNK_PATCH_PASS: '' },
       uniforms: this.material.uniforms,
     });
@@ -899,8 +975,9 @@ export class HeightmapPipeline {
     return this.renderTarget.texture;
   }
 
-  // The whole globe at the rivers' own larger size, about 9 km a cell on a 6000 km planet: at the shared map's 37 km,
-  // river paths skip the valleys you can see (rivers/riverTree.ts). Baked only when the terrain settles.
+  // The whole globe at the drainage's own size, about 18 km a cell on a 6000 km planet (rivers/planetDrainage.ts): at
+  // 4096 x 2048 the run took 12.6 s and lagged the page; patches carry the detail.
+  // Baked only when the terrain settles.
   renderRiverHeights(renderer: THREE.WebGLRenderer, layers: NoiseLayer[]): THREE.WebGLRenderTarget {
     this.riverTarget ??= new THREE.WebGLRenderTarget(RIVER_MAP_WIDTH, RIVER_MAP_HEIGHT, { type: THREE.FloatType });
     this.syncPaintTargets(renderer, layers);
@@ -917,6 +994,49 @@ export class HeightmapPipeline {
   releaseRiverTarget(): void {
     this.riverTarget?.dispose();
     this.riverTarget = null;
+  }
+
+  // TEMP: the six faces baked plain, with the water map, and with the water map and the erosion filter: the mean
+  // change of each, the filter's largest drop, and how many samples the filter moved across sea level (should be 0).
+  probeWaterMap(renderer: THREE.WebGLRenderer, layers: NoiseLayer[]): Record<string, number> {
+    const uniforms = this.material.uniforms;
+    const mapWas = uniforms.uWaterMapEnabled.value;
+    const filterWas = uniforms.uErosionFilterStrength.value;
+    const seaLevel = this.shoreSeaLevel ?? 0;
+    let mapSum = 0;
+    let filterSum = 0;
+    let filterLargestDrop = 0;
+    let coastCrossings = 0;
+    let count = 0;
+    let landCount = 0;
+    let landHeldAtSea = 0;
+    let landFilterSum = 0;
+    const bake = (params: RegionParams, map: number, filter: number) => {
+      uniforms.uWaterMapEnabled.value = map;
+      uniforms.uErosionFilterStrength.value = filter;
+      return this.getRegionElevationData(renderer, this.renderRegion(renderer, params)).data.slice();
+    };
+    for (let face = 0; face < 6; face++) {
+      const params = { layers, face, min: new THREE.Vector2(-1, -1), max: new THREE.Vector2(1, 1), localOrigin: new THREE.Vector2(0, 0), resolution: 64 };
+      const plain = bake(params, 0, 0);
+      const mapped = bake(params, mapWas, 0);
+      const filtered = bake(params, mapWas, filterWas);
+      for (let idx = 0; idx < plain.length; idx++) {
+        mapSum += mapped[idx] - plain[idx];
+        filterSum += filtered[idx] - mapped[idx];
+        filterLargestDrop = Math.min(filterLargestDrop, filtered[idx] - mapped[idx]);
+        if ((mapped[idx] >= seaLevel) !== (filtered[idx] >= seaLevel)) coastCrossings++;
+        if (mapped[idx] >= seaLevel) {
+          landCount++;
+          landFilterSum += filtered[idx] - mapped[idx];
+          if (filterWas > 0 && filtered[idx] - seaLevel < 1e-4) landHeldAtSea++;
+        }
+        count++;
+      }
+    }
+    uniforms.uWaterMapEnabled.value = mapWas;
+    uniforms.uErosionFilterStrength.value = filterWas;
+    return { mapMeanChange: mapSum / Math.max(1, count), filterMeanChange: filterSum / Math.max(1, count), filterLargestDrop, coastCrossings, filterStrength: filterWas, waterMapOn: mapWas, seaLevel, terrainTop: uniforms.uTerrainTop.value, valleySpacingKm: uniforms.uValleySpacing.value / 1000, landShare: landCount / Math.max(1, count), landShareHeldAtSea: landHeldAtSea / Math.max(1, landCount), landMeanFilterChange: landFilterSum / Math.max(1, landCount) };
   }
 
   // Bakes one area of the planet at its own resolution, instead of the whole
@@ -1068,39 +1188,8 @@ export class HeightmapPipeline {
   // change to how those effects are sequenced, not a drop-in swap, left for
   // its own separate pass. See ISSUES.md, [B32].
   async getRegionElevationDataAsync(renderer: THREE.WebGLRenderer, target: THREE.WebGLRenderTarget): Promise<ElevationReadback> {
-    const gl = renderer.getContext() as WebGL2RenderingContext;
     const { width, height } = target;
-    const rgba = new Float32Array(width * height * 4);
-
-    renderer.setRenderTarget(target);
-    const pbo = gl.createBuffer();
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
-    gl.bufferData(gl.PIXEL_PACK_BUFFER, rgba.byteLength, gl.STREAM_READ);
-    gl.readPixels(0, 0, width, height, gl.RGBA, gl.FLOAT, 0);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    renderer.setRenderTarget(null);
-
-    const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)!;
-    gl.flush();
-    await new Promise<void>((resolve, reject) => {
-      function poll() {
-        const status = gl.clientWaitSync(sync, 0, 0);
-        if (status === gl.WAIT_FAILED) {
-          reject(new Error('getRegionElevationDataAsync: fenceSync wait failed'));
-        } else if (status === gl.TIMEOUT_EXPIRED) {
-          requestAnimationFrame(poll);
-        } else {
-          resolve();
-        }
-      }
-      poll();
-    });
-    gl.deleteSync(sync);
-
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
-    gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, rgba);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    gl.deleteBuffer(pbo);
+    const rgba = await readRenderTargetAsync(renderer, target);
 
     // Same bottom-to-top → top-to-bottom row flip and G-channel extraction
     // as the synchronous version, so the two are interchangeable to a caller.
@@ -1466,7 +1555,7 @@ export class HeightmapPipeline {
   dispose(): void {
     this.renderTarget.dispose();
     this.riverTarget?.dispose();
-    this.valleyTexture?.dispose();
+    this.waterMapTexture?.dispose();
     this.regionTarget?.dispose();
     this.displayRegionTarget?.dispose();
     this.maskSampleTarget?.dispose();

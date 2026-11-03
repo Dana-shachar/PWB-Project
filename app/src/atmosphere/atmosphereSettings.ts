@@ -42,8 +42,6 @@ export interface AtmosphereSettings {
   rainfall: number;
   temperature: number;
   liquid: string;
-  erosion: number; // how far the land has been shaped by its rivers, 0 (plain noise) to 1
-  riverDebug: boolean; // [TEMP rivers] the lines and dots
   moon: boolean;
   // How many moons show (1 to 5), and all five, so changing the count never loses one (atmosphere/moonTexture.ts).
   moonCount: number;
@@ -90,8 +88,6 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   rainfall: 450,
   temperature: 15,
   liquid: 'Water',
-  erosion: 0.7,
-  riverDebug: false,
   moon: false,
   moonCount: 1,
   moons: DEFAULT_MOONS,

@@ -16,10 +16,9 @@
 | Task | Read first, in order |
 |---|---|
 | Add or change a noise control | `map/noiseRanges.ts`, `map/heightmap.ts` (`NoiseLayer`), `ui/NoisePanel.tsx`, `shaders/heightmap/heightmap.frag.glsl` |
-| Change rivers or lakes | `rivers/riverTree.ts` (`buildRiverTree`, `balanceLakes`), `rivers/riverGrid.ts` (`buildRiverGrid`), `rivers/riverTree.worker.ts`, `rivers/riverControls.ts` |
-| Change how rivers carve the terrain | `riverEdgeDistance` and the carve after Roughness in `shaders/heightmap/heightmap.frag.glsl`, `rivers/riverGrid.ts` |
-| Change which nodes neighbor | `rivers/riverGraph.ts` (`buildRiverGraph`) |
-| Change how land erodes | `rivers/streamPower.ts`, `rivers/valleyMap.ts`, `uValleyMap` in `shaders/heightmap/heightmap.frag.glsl` |
+| Change lakes or the river network | `rivers/drainage.worker.ts` (`buildWaterMap`, `extractRiverNodes`), `rivers/depressions.ts` (`fillSpillMerge`), `rivers/riverGrid.ts` |
+| Change how rivers carve and draw (off) | `riverEdgeDistance`, `DRAW_RIVERS` and the carve after Roughness in `shaders/heightmap/heightmap.frag.glsl` |
+| Change how the planet erodes | `rivers/planetDrainage.ts`, `shaders/erosion/streamPowerPlanet.frag.glsl`, `erodedSurface` and `waterMapAt` in `shaders/heightmap/heightmap.frag.glsl`, `shaders/heightmap/erosionFilter3d.glsl` |
 | Add a liquid or a climate control | `rivers/riverClimate.ts` (`LIQUIDS`, `waterBudget`), `atmosphere/atmosphereSettings.ts` (`randomClimate`), the Climate part in `ui/Panel.tsx` |
 | Add a field to a layer | `map/heightmap.ts` (`NoiseLayer`, `createDefaultLayer`, `migrateLegacyLayers`, `syncLayerUniforms`), then the shader uniform |
 | Change a layer's mask | `ui/MaskControls.tsx`, `map/heightmap.ts` (`hasMask`, `quantileOf`), the mask code in `shaders/heightmap/heightmap.frag.glsl` |
@@ -91,7 +90,7 @@
 **map/heightmap.ts**
 - What it is: the layer type, its migrations, and the pipeline that bakes layers into a heightmap on the GPU.
 - Key names: `NoiseLayer`, `NOISE_TYPE_OPTIONS`, `FRACTAL_TYPE_OPTIONS`, `VORONOI_DISTANCE_OPTIONS`, `BLEND_MODE_OPTIONS`, `hasMask`, `quantileOf`, `createDefaultLayer`, `migrateLegacyLayers`, `HeightmapPipeline` (`beginStroke`, `endStroke`, `replayLayerHistory`, `bakeRegionToTarget`, `getRegionElevationData`, `setDetailAmount`, `setPlanetRadiusMeters`, `getChunkBaseTexture` (the 4096 map for the chunk's water and shadows), the globe size option in the constructor, `bakeRegionInto`, `ensureChunkBase`: the land chunk's own 4096 height map, `chunkPatchMaterial`: the bake compiled as `CHUNK_PATCH_PASS` to resample it, `maskSortedValues`, `resolveMaskBand`), `RegionParams` (`localOrigin`, `fromChunkBase`), `CHUNK_BASE_SAMPLES`, `syncLayerUniforms`.
-- Talks to: `shaders/heightmap/heightmap.frag.glsl`, `SceneCanvas`, the patch renderer. `setValleyMap` takes the valley map with the river grid's rows after it (`uValleyMapSize`, `uValleyTextureRows`, `uRiverGridSize`, `uRiverBlendWidth`).
+- Talks to: `shaders/heightmap/heightmap.frag.glsl`, `SceneCanvas`, the patch renderer. `setPlanetWaterMap` takes the water map (R carving, G drainage, B ground, A lake level; rows south first) with the river grid's rows after it (`uWaterMapSize`, `uWaterTextureRows`, `uRiverGridSize`); `setErosionFilter` takes Strength and the filter's shape (`ErosionFilterShape`); `setTerrainTop` feeds the filter's fade. [TEMP] `probeWaterMap`.
 
 **map/noiseRanges.ts**
 - What it is: one table of every noise control's range and scale, plus Randomize's narrower range (`random`).
@@ -171,49 +170,49 @@
 
 ---
 
-## 🏞️ Rivers (`rivers/`)
+## 🏞️ Water and erosion (`rivers/`, `erosion/`)
 
-*The drainage tree, lakes, climate, erosion and the map that carries them into the bake. It runs in a worker.*
+*The planet's water from erosion: pit fill, stream power on the GPU, lakes by climate, the erosion filter, and the map that carries them into the bake. River drawing is off (`DRAW_RIVERS`).*
 
-**rivers/riverTree.ts**
-- What it is: the tree, grown from the coast by Génevaux's priority rule after filling every pit; the climate step that balances lakes, sums flow and fills reused arrays; smoothing and the arrays handed to the app.
-- Key names: `buildRiverTree` (inner `waterLevels`, `collectNeighbors`, `popNext`), `seededRandom`, `RiverTree`, `RiverNetwork`, `applyClimate`, `findPits`, `balanceLakes`, `smoothRiverPaths`, `extractRiverSegments`, `extractLakeNodes`, `queryRiverSegments`, `FILL_EPSILON`, `OCEAN_MIN_NODES`, `RIVER_PRIORITY_RANGE`, `RIVER_MIN_LAKE_CATCHMENT`, `RIVER_MIN_LAKE_NODES`.
+**rivers/drainageControls.ts**
+- What it is: `useDrainage`, which reruns everything on a terrain or sea level change, only the erosion passes on Duration or Strength, and only the lakes on a climate change; returns the progress bar's state and a revision for the land chunk.
+- Key names: `useDrainage`, `WaterProgress`, `terrainKey`, `handleResult`, `changeErosion`, `carving`.
 
-**rivers/riverGraph.ts**
-- What it is: where the nodes sit and which ones neighbor, from a Delaunay triangulation (Delaunator), built once when the worker starts.
-- Key names: `buildRiverGraph`, `RiverGraph`, `RIVER_NODE_JITTER`.
+**rivers/planetDrainage.ts**
+- What it is: Schott's stream power pass in batches per frame: drainage first with erosion off, saved, then erosion on top, continued or restarted from the save.
+- Key names: `PlanetDrainage` (`run`, `setErosionPasses`, `runPasses`, `readResult`), `DrainageResult`, `DRAINAGE_PASSES`, `HILLSLOPE_SHARE`, `SCHOTT_K`.
+
+**rivers/drainage.worker.ts**
+- What it is: the CPU half off the main thread: the pit fill, lakes by Fill-Spill-Merge on the eroded ground, the river network and its grid, the checks, the valley spacing, and the bake's water map (rows south first, river grid rows after). [TEMP] logs lakes, rivers, carving and valley spacing.
+- Key names: `buildWaterMap`, `extractRiverNodes`, `gridNeighbors`, `valleySpacingMeters`, `RIVER_MIN_CELLS`, `RIVER_HALF_WIDTH_AT_THRESHOLD`.
+
+**rivers/pitFill.ts**
+- What it is: Priority-Flood + ε on the globe grid, and the heap it and the lakes share.
+- Key names: `fillPits`, `NodeHeap`, `FILL_EPSILON`.
+
+**rivers/depressions.ts**
+- What it is: the depression hierarchy and Fill-Spill-Merge (Barnes 2020, 2021) on any node graph.
+- Key names: `buildDepressionHierarchy`, `fillSpillMerge`, `DepressionHierarchy`, `LakeResult`, `MIN_DEPRESSION_CELLS`.
 
 **rivers/riverGrid.ts**
-- What it is: every drawn river stretch as curve points with widths and levels, filed by place so each patch bake measures distance to rivers at its own resolution; winding, estuaries, lake disks.
-- Key names: `buildRiverGrid`, `windNoise`, `RIVER_GRID_WIDTH`, `RIVER_GRID_HEIGHT`, `RIVER_MAX_BUCKET_PIECES`, `RIVER_BLEND_WIDTH`, `RIVER_CURVE_STEPS`, `RIVER_MIN_AREA`, `LAKE_NODE_RADIUS`, `ESTUARY_LENGTH`, `SOURCE_HEAD_SHARE`.
+- What it is: river spans as Catmull-Rom curves filed into lat-long buckets for the bake. Built but not drawn.
+- Key names: `buildRiverGrid`, `RiverNodes`, `RIVER_GRID_WIDTH`, `RIVER_GRID_HEIGHT`, `RIVER_BLEND_WIDTH`, `RIVER_CURVE_STEPS`.
 
 **rivers/riverClimate.ts**
-- What it is: the water budget from Rainfall, Temperature and Liquid, and each liquid's ranges and behavior.
-- Key names: `LIQUIDS`, `liquidNamed`, `waterBudget`, `referenceTemperature`, `rainfallMax`, `flowingMinC`, `viscosityAt`, `reachKeepAt`.
+- What it is: the water budget from Rainfall, Temperature and Liquid, and each liquid's ranges.
+- Key names: `LIQUIDS`, `liquidNamed`, `waterBudget` (`lakeShare`, `flowScale`), `referenceTemperature`, `rainfallMax`, `flowingMinC`.
 
-**rivers/streamPower.ts**
-- What it is: the land as the rivers shaped it, one pass from the sea up.
-- Key names: `erodeTerrain`, `MIN_RISE`, `MAX_STEP`.
+**erosion/erosionControls.ts**
+- What it is: the shared Erosion settings (switch, Duration, Strength, the filter's Shape) for the planet and the land chunk, and the chunk's automatic run.
+- Key names: `useErosion` (`enabled`, `strength`, `filterShape`, `updateFilterShape`, `filterRevision`), `useErosionAutoRun`, `engineRainfall`, `planetErosionPasses`.
 
-**rivers/valleyMap.ts**
-- What it is: bakes the eroded height into one map, with the river grid in the rows after it, and takes river levels from the shown terrain. R and G are height times land, and land; B and A still carry the old lake circles, no longer read.
-- Key names: `buildValleyMap`, `levelsFromTerrain`, `blurLand`, `paintLake`, `VALLEY_MAP_WIDTH`, `VALLEY_MAP_HEIGHT`, `RIDGE_BLUR_PASSES`, `LAKE_EDGE_SCALE`.
+**shaders/erosion/streamPowerPlanet.frag.glsl**, **streamPowerSeed.frag.glsl**
+- What it is: one stream power pass (Schott's, wrapped east to west, the ocean as outlet, hillslope as a share per pass) and its seed from the filled heights.
+- Key names: `hillslope`, `flowCoeff`, `flowSteepest`, `uDiffusion`, `uK`.
 
-**rivers/riverTree.worker.ts**
-- What it is: holds the graph and the tree off the main thread and answers build, climate, valley and camera queries. [TEMP] logs lake outflows, basins and grid alignment.
-- Key names: `applyAndReport`, `gridAlignedShare`, `lakeOutflows`.
-
-**rivers/riverControls.ts**
-- What it is: `useRivers`, which rebuilds on terrain or sea level, sends only the newest climate and Erosion, waits for sliders to settle before the map, and returns `valleyRevision` and `riversBusy`.
-- Key names: `useRivers`, `sendClimate`, `sendValleyWhenSettled`.
-
-**rivers/riverView.ts**
-- What it is: which rivers to draw from where the camera is.
-- Key names: `riverQueryForCamera`, `riverQueriesMatch`.
-
-**rivers/riverDebug.ts**
-- What it is: [TEMP] the River debug lines and lake dots.
-- Key names: `buildRiverDebugLines`, `buildLakeDebugDots`.
+**shaders/heightmap/erosionFilter3d.glsl**
+- What it is: Rune Skovbo Johansen's erosion filter in 3D with Estqes's Phacelle noise (MPL).
+- Key names: `erosionFilter3d`, `erosionPhacelle`, `erosionHash33`.
 
 ## ☁️ Atmosphere (`atmosphere/`)
 
@@ -221,7 +220,7 @@
 
 **atmosphere/atmosphereSettings.ts**
 - What it is: the settings and their defaults, the locks, and the Atmosphere's Randomize; older saves take their wind from the water and their shared Crescent, Texture, Halo, Inner glow and "Lock colors" into each moon.
-- Key names: `AtmosphereSettings` (incl. `shadowHue`, `clouds`, `cloudColor2`, `moonCount`, `moons`, `lockedColors`, `rainfall`, `temperature`, `liquid`, `erosion`, `riverDebug`), `randomClimate`, `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (the drivers `storm`, `air`, `climate`; `follow`, `MILD_DRIVER`, `EXTREME_DRIVER`, `EXTREME_CHANCE`, `JITTER`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
+- Key names: `AtmosphereSettings` (incl. `shadowHue`, `clouds`, `cloudColor2`, `moonCount`, `moons`, `lockedColors`, `rainfall`, `temperature`, `liquid`), `randomClimate`, `AtmosphereColorKey`, `colorLockProps`, `randomAtmosphere` (the drivers `storm`, `air`, `climate`; `follow`, `MILD_DRIVER`, `EXTREME_DRIVER`, `EXTREME_CHANCE`, `JITTER`), `DEFAULT_ATMOSPHERE_SETTINGS`, `migrateAtmosphere`, `migrateMoons` (old single-moon saves become moon 1).
 
 **atmosphere/moonTexture.ts**
 - What it is: the moons: their settings, simple noise layers, Randomize (sizes, places in view, colors from the sky, textures), the colors built from the sky and a harmony rule, and the five defaults.

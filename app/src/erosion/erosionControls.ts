@@ -1,16 +1,20 @@
-import { useEffect, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import * as THREE from 'three';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
-import type { NoiseLayer } from '../map/heightmap';
+import { DEFAULT_EROSION_FILTER_SHAPE, type ErosionFilterShape, type NoiseLayer } from '../map/heightmap';
 import { clampPatchSamples, type TerrainPatch } from '../planet/patch';
 import type { SavedErosionRun } from '../firebase/storage';
 import { createDefaultErosionRates, type ErosionOutcome, type ErosionRates } from './erosionEngine';
+import { liquidNamed } from '../rivers/riverClimate';
 
 // How long one press of Run covers, in story time rather than in solver
 // steps. The engine converts it (see YEARS_PER_STEP in erosionEngine.ts),
 // which is the only place the two clocks meet.
 const DEFAULT_DURATION_YEARS = 100_000;
 export const MAX_DURATION_YEARS = 1_000_000;
+// The planet's stream power passes for a Duration: its longest run at the longest Duration. Inferred, TUNABLE
+const PLANET_PASSES_AT_MAX_DURATION = 1500;
+export const planetErosionPasses = (years: number) => Math.round((years / MAX_DURATION_YEARS) * PLANET_PASSES_AT_MAX_DURATION);
 
 // How finely the physics is computed. A third thing from the chunk's mesh
 // detail and from which ground the patch covers, and the one that decides
@@ -18,9 +22,8 @@ export const MAX_DURATION_YEARS = 1_000_000;
 // mesh's 16 and ran on a 17 cell grid, where nothing visible can happen.
 const DEFAULT_GRID_RESOLUTION = 257;
 
-// Where the sea sits, in the same elevation units the heightmap carries,
-// which are centered on zero.
-const DEFAULT_SEA_LEVEL = -0.1;
+// Erosion runs on its own this long after the last change, so a slider drag runs once, when it settles.
+const AUTO_RUN_DELAY_MS = 300;
 
 // One finished run, kept with the patch it was run on. Carrying the patch is
 // what lets the chunk tell whether the result still describes the ground it
@@ -29,6 +32,9 @@ const DEFAULT_SEA_LEVEL = -0.1;
 export interface ErosionResult {
   outcome: ErosionOutcome;
   patch: TerrainPatch;
+  // What the run read from Ocean and Climate, so a saved project replays it exactly.
+  seaLevel: number;
+  rates: ErosionRates;
   // Where the scrub slider currently sits, 0..outcome.steps. outcome.steps
   // and outcome.years always describe the full run; this is the only thing
   // that moves while scrubbing. Starts at the end, the same place Run leaves it.
@@ -45,11 +51,23 @@ export function useErosion(
   // Watched only to notice that the terrain feeding erosion has changed.
   layers: NoiseLayer[],
   paintVersion: number,
+  // The one sea level (Ocean) and the engine's rain from the one Rainfall (Climate), never set here.
+  seaLevel: number,
+  rainfall: number,
 ) {
   const [rates, setRates] = useState<ErosionRates>(createDefaultErosionRates);
   const [durationYears, setDurationYears] = useState(DEFAULT_DURATION_YEARS);
+  // One Strength for both erosions: it scales the chunk engine's Erosion Rate and the planet's k from their tuned defaults.
+  const [strength, setStrength] = useState(1);
+  const [enabled, setEnabled] = useState(false); // off on load (Dana, 2026-11-03); off means no carving anywhere
+  // The erosion filter on the planet's surface follows the same switch and Strength (map/heightmap.ts).
+  const [filterShape, setFilterShape] = useState<ErosionFilterShape>(DEFAULT_EROSION_FILTER_SHAPE); // the gullies' look
+  const [filterRevision, setFilterRevision] = useState(0); // steps when the filter changes, so the land chunk re-bakes
+  useEffect(() => {
+    sceneHandleRef.current?.setErosionFilter(enabled ? strength : 0, filterShape);
+    setFilterRevision((value) => value + 1);
+  }, [sceneHandleRef, enabled, strength, filterShape]);
   const [gridResolution, setGridResolution] = useState(DEFAULT_GRID_RESOLUTION);
-  const [seaLevel, setSeaLevel] = useState(DEFAULT_SEA_LEVEL);
   const [result, setResult] = useState<ErosionResult | null>(null);
   const [isStale, setIsStale] = useState(false);
 
@@ -85,12 +103,12 @@ export function useErosion(
       rates: runRates,
     });
     if (!outcome) return;
-    setResult({ outcome, patch, scrubStep: outcome.steps });
+    setResult({ outcome, patch, seaLevel: runSeaLevel, rates: runRates, scrubStep: outcome.steps });
     setIsStale(false);
   }
 
   function run(patch: TerrainPatch) {
-    runWithSettings(patch, rates, durationYears, gridResolution, seaLevel);
+    runWithSettings(patch, { ...rates, rainfall, erosionRate: createDefaultErosionRates().erosionRate * strength }, durationYears, gridResolution, seaLevel);
   }
 
   // Restores a saved run on project load — reruns it rather than loading
@@ -101,9 +119,9 @@ export function useErosion(
   // other loaded setting.
   function loadSavedRun(saved: SavedErosionRun, patch: TerrainPatch) {
     setRates(saved.rates);
+    setStrength(saved.rates.erosionRate / createDefaultErosionRates().erosionRate);
     setDurationYears(saved.durationYears);
     setGridResolution(saved.gridResolution);
-    setSeaLevel(saved.seaLevel);
     runWithSettings(patch, saved.rates, saved.durationYears, saved.gridResolution, saved.seaLevel);
   }
 
@@ -126,6 +144,8 @@ export function useErosion(
     setResult({
       outcome: { ...result.outcome, elevation },
       patch: result.patch,
+      seaLevel: result.seaLevel,
+      rates: result.rates,
       scrubStep: Math.max(0, Math.min(result.outcome.steps, Math.round(targetStep))),
     });
   }
@@ -139,10 +159,15 @@ export function useErosion(
     updateRates,
     durationYears,
     setDurationYears,
+    strength,
+    setStrength,
+    enabled,
+    setEnabled,
+    filterRevision,
+    filterShape,
+    updateFilterShape: (changed: Partial<ErosionFilterShape>) => setFilterShape((previous) => ({ ...previous, ...changed })),
     gridResolution,
     setGridResolution,
-    seaLevel,
-    setSeaLevel,
     result,
     isStale,
     run,
@@ -150,4 +175,29 @@ export function useErosion(
     scrubTo,
     loadSavedRun,
   };
+}
+
+// Runs erosion on the chunk's piece by itself whenever anything it reads changes: its settings, the sea level, the
+// rain, the terrain or the piece. Replaces the Run button (Dana, 2026-11-03).
+export function useErosionAutoRun(erosion: ReturnType<typeof useErosion>, patch: TerrainPatch, seaLevel: number, rainfall: number, layers: NoiseLayer[], paintVersion: number) {
+  const { rates, durationYears, gridResolution, strength, enabled } = erosion;
+  const clearRef = useRef(erosion.clear);
+  clearRef.current = erosion.clear;
+  const runRef = useRef(erosion.run);
+  runRef.current = erosion.run;
+  useEffect(() => {
+    if (!enabled) {
+      clearRef.current();
+      return;
+    }
+    const timer = window.setTimeout(() => runRef.current(patch), AUTO_RUN_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [patch, rates, durationYears, gridResolution, strength, enabled, seaLevel, rainfall, layers, paintVersion]);
+}
+
+// The engine's rain per cell per step from Climate's Rainfall: its tuned default at the liquid's typical rainfall,
+// scaled in proportion. Inferred, TUNABLE (the engine's step is 500 compressed years, so a literal conversion is meaningless).
+export function engineRainfall(rainfallMm: number, liquid: string): number {
+  const typical = liquidNamed(liquid).typicalRainfall;
+  return typical > 0 ? (createDefaultErosionRates().rainfall * rainfallMm) / typical : 0;
 }

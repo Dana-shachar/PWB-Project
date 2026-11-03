@@ -51,11 +51,13 @@ const MATERIALS = [
   { name: 'clouds (atmosphere/cloudLayer.ts)', vertex: ['atmosphere/airGround.glsl', 'atmosphere/clouds.vert.glsl'], fragment: ['heightmap/noise.glsl', 'atmosphere/clouds.frag.glsl'] },
   { name: 'sky dome (atmosphere/skyDome.ts)', vertex: ['atmosphere/skyDome.vert.glsl'], fragment: ['atmosphere/skyDome.frag.glsl'] },
   { name: 'grid (scene/grid.ts)', vertex: ['scene/grid.vert.glsl'], fragment: ['scene/grid.frag.glsl'] },
-  { name: 'heightmap (map/heightmap.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['heightmap/noise.glsl', 'heightmap/heightmap.frag.glsl'] },
-  { name: 'heightmap, chunk pass (map/heightmap.ts)', defines: '#define CHUNK_PATCH_PASS\n', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['heightmap/noise.glsl', 'heightmap/heightmap.frag.glsl'] },
+  { name: 'heightmap (map/heightmap.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['heightmap/noise.glsl', 'heightmap/erosionFilter3d.glsl', 'heightmap/heightmap.frag.glsl'] },
+  { name: 'heightmap, chunk pass (map/heightmap.ts)', defines: '#define CHUNK_PATCH_PASS\n', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['heightmap/noise.glsl', 'heightmap/erosionFilter3d.glsl', 'heightmap/heightmap.frag.glsl'] },
   { name: 'stroke path (map/heightmap.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['heightmap/strokePath.frag.glsl'] },
   { name: 'min/max reduce (map/heightmap.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['heightmap/minMaxReduce.frag.glsl'] },
   { name: 'elevation histogram (map/heightmap.ts)', vertex: ['heightmap/elevationHistogram.vert.glsl'], fragment: ['heightmap/elevationHistogram.frag.glsl'] },
+  { name: 'stream power seed (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerSeed.frag.glsl'] },
+  { name: 'stream power pass (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerPlanet.frag.glsl'] },
 ];
 
 const folder = mkdtempSync(join(tmpdir(), 'shaders-'));

@@ -1,6 +1,6 @@
 import { LIQUIDS, liquidNamed, rainfallMax, referenceTemperature } from '../rivers/riverClimate';
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle, Dial, BusyIndicator } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle, Dial } from './UIElements';
 import type { SpinSettings } from '../scene/planetSpin';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
@@ -114,7 +114,6 @@ interface PanelProps {
   onWaterChange: (changes: Partial<WaterSettings>) => void;
   atmosphere: AtmosphereSettings;
   onAtmosphereChange: (changes: Partial<AtmosphereSettings>) => void;
-  riversBusy: boolean;
   heightDistribution: HeightDistribution | null;
   // Planet Resolution: a detail bias, 1 is automatic (planet/planetPatches.ts).
   maxErrorPixels: number;
@@ -267,7 +266,6 @@ export function Panel({
   onWaterChange,
   atmosphere,
   onAtmosphereChange,
-  riversBusy,
   heightDistribution,
   chunkElevationRange,
   maxErrorPixels,
@@ -634,29 +632,11 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          {/* Erosion shapes the terrain, so it sits right under it, before Water (Dana, 2026-10-27). */}
-          {PIPELINE_STAGES.filter((stage) => stage.key === 'erosion').map((stage) => (
-            <PipelineStageRow
-              key={stage.key}
-              label={stage.label}
-              active={activeStage === stage.key}
-              expanded={expandedStages.has(stage.key)}
-              enabled={stageEnabled[stage.key]}
-              onSelect={() => onStageChange(stage.key)}
-              onToggleExpand={() => toggleExpanded(stage.key)}
-              onToggleEnabled={(value) => onToggleStageEnabled(stage.key, value)}
-            />
-          ))}
-        </div>
-
-        <div className="panel-section-divider" />
-
-        <div className="panel-section">
-          {/* Its own section, so the water's controls and colors are easy to find (Dana, 2026-10-27). */}
+          {/* The sea: its level and its look (Dana, 2026-10-27; named Ocean 2026-11-03). */}
           <Accordion
-            title="Water"
+            title="Ocean"
             description="Fills everything below sea level with water, on the planet and in the land chunk."
-            headerSwitch={{ value: water.enabled, onChange: (enabled) => onWaterChange({ enabled }), label: 'Water on or off' }}
+            headerSwitch={{ value: water.enabled, onChange: (enabled) => onWaterChange({ enabled }), label: 'Ocean on or off' }}
           >
             {/* Sea level is stored as a raw height so both views share one coastline; shown in planet meters. */}
             <Slider
@@ -762,109 +742,94 @@ export function Panel({
         <div className="panel-section">
           {/* The planet's atmosphere: its general controls here; wind, clouds and the moon on the right (Dana, 2026-10-27). */}
           <Accordion
-            title="Atmosphere"
+            title="Climate System"
             onHeaderClick={() => onStageChange('atmosphere')}
             active={activeStage === 'atmosphere'}
-            description="A sky, haze and clouds around the planet and over the land chunk, and a glow around the planet from space."
-            headerSwitch={{ value: atmosphere.enabled, onChange: (enabled) => onAtmosphereChange({ enabled }), label: 'Atmosphere on or off' }}
+            description="The planet's air and its climate: sky, haze, clouds and glow, and the rain, heat and liquid that shape its water."
           >
             <div className="panel-btn-row">
               <button type="button" className="noise-add-layer-btn" onClick={() => onAtmosphereChange(randomAtmosphere(atmosphere))} disabled={!atmosphere.enabled}>
                 <DiceIcon /> Randomize
               </button>
             </div>
-            <Slider
-              label="Haze"
-              value={atmosphere.haze}
-              onChange={(haze) => onAtmosphereChange({ haze })}
-              min={0}
-              max={6}
-              step={0.01}
-              precision={2}
-              disabled={!atmosphere.enabled}
-              description="How thick the air is: distant ground fades into the horizon color. 0 is clear."
-            />
-            <Slider
-              label="Glow"
-              value={atmosphere.glow}
-              onChange={(glow) => onAtmosphereChange({ glow })}
-              min={0}
-              max={6}
-              step={0.01}
-              precision={2}
-              disabled={!atmosphere.enabled}
-              description="How strongly the planet's edge glows from space, in the sky color."
-            />
-            <div className="panel-section-divider" />
-            <span className="panel-section-title">Color</span>
-            <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} {...colorLockProps(atmosphere, 'horizonColor', onAtmosphereChange)} />
-            <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} {...colorLockProps(atmosphere, 'zenithColor', onAtmosphereChange)} />
-            <HueSlider
-              label="Shadow hue"
-              value={atmosphere.shadowHue}
-              onChange={(shadowHue) => onAtmosphereChange({ shadowHue })}
-              trackBackground={hueTrackGradient(atmosphere.zenithColor)}
-              swatchColor={displayColorFor(fillColorFor(true, atmosphere.zenithColor, atmosphere.shadowHue)).getStyle()}
-              {...colorLockProps(atmosphere, 'shadowHue', onAtmosphereChange)}
-              disabled={!atmosphere.enabled}
-              description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
-            />
-            <div className="panel-section-divider" />
-            <span className="panel-section-title">Climate</span>
-            <Select
-              label="Liquid"
-              value={atmosphere.liquid}
-              onChange={(liquid) => onAtmosphereChange({ liquid, rainfall: liquidNamed(liquid).typicalRainfall, temperature: referenceTemperature(liquidNamed(liquid)) })}
-              options={LIQUIDS.map(({ name }) => ({ value: name, label: name }))}
-              disabled={!atmosphere.enabled}
-              description="What falls as rain and runs in the rivers and lakes. Dry has none, and cold water freezes."
-            />
-            <Slider
-              label="Rainfall"
-              value={atmosphere.rainfall}
-              onChange={(rainfall) => onAtmosphereChange({ rainfall })}
-              min={1}
-              max={rainfallMax(liquidNamed(atmosphere.liquid))}
-              step={1}
-              precision={0}
-              unit="mm"
-              scale="log"
-              disabled={!atmosphere.enabled}
-              description="How much of the liquid falls in a year. More fills lakes and swells rivers."
-            />
-            <Slider
-              label="Temperature"
-              value={atmosphere.temperature}
-              onChange={(temperature) => onAtmosphereChange({ temperature })}
-              min={liquidNamed(atmosphere.liquid).minC}
-              max={liquidNamed(atmosphere.liquid).maxC}
-              step={1}
-              precision={0}
-              unit="°C"
-              disabled={!atmosphere.enabled}
-              description="Runs across the range this liquid stays liquid. Hotter evaporates more, so lakes shrink and rivers fade."
-            />
-            <Slider
-              label="Erosion"
-              value={atmosphere.erosion}
-              onChange={(erosion) => onAtmosphereChange({ erosion })}
-              min={0}
-              max={1}
-              step={0.01}
-              precision={2}
-              disabled={!atmosphere.enabled}
-              description="How far rivers have shaped the land into ridges and valleys. 0 is the plain noise terrain."
-            />
-            <Toggle label="River debug" value={atmosphere.riverDebug} onChange={(riverDebug) => onAtmosphereChange({ riverDebug })} description="Shows the rivers as lines and the lakes as dots, over the terrain." />
-            {riversBusy && <BusyIndicator label="Building rivers…" />}
+            <Accordion title="Atmosphere" nested headerSwitch={{ value: atmosphere.enabled, onChange: (enabled) => onAtmosphereChange({ enabled }), label: 'Atmosphere on or off' }}>
+              <Slider
+                label="Haze"
+                value={atmosphere.haze}
+                onChange={(haze) => onAtmosphereChange({ haze })}
+                min={0}
+                max={6}
+                step={0.01}
+                precision={2}
+                disabled={!atmosphere.enabled}
+                description="How thick the air is: distant ground fades into the horizon color. 0 is clear."
+              />
+              <Slider
+                label="Glow"
+                value={atmosphere.glow}
+                onChange={(glow) => onAtmosphereChange({ glow })}
+                min={0}
+                max={6}
+                step={0.01}
+                precision={2}
+                disabled={!atmosphere.enabled}
+                description="How strongly the planet's edge glows from space, in the sky color."
+              />
+              <div className="panel-section-divider" />
+              <span className="panel-section-title">Color</span>
+              <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} {...colorLockProps(atmosphere, 'horizonColor', onAtmosphereChange)} />
+              <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} {...colorLockProps(atmosphere, 'zenithColor', onAtmosphereChange)} />
+              <HueSlider
+                label="Shadow hue"
+                value={atmosphere.shadowHue}
+                onChange={(shadowHue) => onAtmosphereChange({ shadowHue })}
+                trackBackground={hueTrackGradient(atmosphere.zenithColor)}
+                swatchColor={displayColorFor(fillColorFor(true, atmosphere.zenithColor, atmosphere.shadowHue)).getStyle()}
+                {...colorLockProps(atmosphere, 'shadowHue', onAtmosphereChange)}
+                disabled={!atmosphere.enabled}
+                description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
+              />
+            </Accordion>
+            <Accordion title="Climate" nested>
+              <Select
+                label="Liquid"
+                value={atmosphere.liquid}
+                onChange={(liquid) => onAtmosphereChange({ liquid, rainfall: liquidNamed(liquid).typicalRainfall, temperature: referenceTemperature(liquidNamed(liquid)) })}
+                options={LIQUIDS.map(({ name }) => ({ value: name, label: name }))}
+                description="What falls as rain and runs in the rivers and lakes. Dry has none, and cold water freezes."
+              />
+              <Slider
+                label="Rainfall"
+                value={atmosphere.rainfall}
+                onChange={(rainfall) => onAtmosphereChange({ rainfall })}
+                min={1}
+                max={rainfallMax(liquidNamed(atmosphere.liquid))}
+                step={1}
+                precision={0}
+                unit="mm"
+                scale="log"
+                description="How much of the liquid falls in a year. More fills lakes and swells rivers."
+              />
+              <Slider
+                label="Temperature"
+                value={atmosphere.temperature}
+                onChange={(temperature) => onAtmosphereChange({ temperature })}
+                min={liquidNamed(atmosphere.liquid).minC}
+                max={liquidNamed(atmosphere.liquid).maxC}
+                step={1}
+                precision={0}
+                unit="°C"
+                description="Runs across the range this liquid stays liquid. Hotter evaporates more, so lakes shrink and rivers fade."
+              />
+            </Accordion>
           </Accordion>
         </div>
 
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          {/* Terrain and Atmosphere are selected from their own sections above, Erosion sits under Terrain. */}
-          {PIPELINE_STAGES.filter((stage) => stage.key !== 'terrain' && stage.key !== 'erosion' && stage.key !== 'atmosphere').map((stage) => (
+          {/* Terrain and the Climate System are selected from their own sections above; Erosion lives in the Climate System's right panel. */}
+          {PIPELINE_STAGES.filter((stage) => stage.key !== 'terrain' && stage.key !== 'atmosphere').map((stage) => (
             <PipelineStageRow
               key={stage.key}
               label={stage.label}

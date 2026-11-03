@@ -8,7 +8,7 @@ import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 import type { useErosion } from '../erosion/erosionControls';
-import type { TerrainPatch } from '../planet/patch';
+import type { WaterProgress } from '../rivers/drainageControls';
 
 interface RightPanelProps {
   // Which stage's detail to show — selected via the left panel's pipeline
@@ -48,9 +48,8 @@ interface RightPanelProps {
   // separate props — it is one hook's result being handed to one panel, and
   // this component only forwards it.
   erosion: ReturnType<typeof useErosion>;
-  // Which piece of ground erosion runs on, and how finely the chunk draws
-  // it. Both belong to the land chunk, which is where the piece is chosen.
-  erosionPatch: TerrainPatch;
+  // The planet water's run, for the Erosion section's progress bar (rivers/drainageControls.ts).
+  waterProgress: WaterProgress | null;
   // Null unless the chunk is voxel, the only style whose mesh limits what a run shows.
   chunkMeshResolution: number | null;
   // User-resizable, not content-driven — see ui/panelResize.ts and App.tsx's
@@ -63,31 +62,31 @@ interface RightPanelProps {
 // (ui/Panel.tsx's `activeStage`/`onStageChange`). Terrain gets the existing
 // full `NoisePanel` and Erosion its own; every remaining stage is still an
 // empty placeholder until that stage's own feature gets built.
-export function RightPanel({ width, activeStage, atmosphere, onAtmosphereChange, erosion, erosionPatch, chunkMeshResolution, ...props }: RightPanelProps) {
+export function RightPanel({ width, activeStage, atmosphere, onAtmosphereChange, erosion, waterProgress, chunkMeshResolution, ...props }: RightPanelProps) {
   return (
     <div className="panel-outer" style={{ width }}>
       <div className="panel-content">
         {activeStage === 'terrain' && <NoisePanel {...props} />}
-        {activeStage === 'erosion' && (
-          <ErosionPanel
-            rates={erosion.rates}
-            onRatesChange={erosion.updateRates}
-            durationYears={erosion.durationYears}
-            onDurationYearsChange={erosion.setDurationYears}
-            gridResolution={erosion.gridResolution}
-            onGridResolutionChange={erosion.setGridResolution}
-            seaLevel={erosion.seaLevel}
-            onSeaLevelChange={erosion.setSeaLevel}
-            patch={erosionPatch}
-            meshResolution={chunkMeshResolution}
-            onRun={erosion.run}
-            onClear={erosion.clear}
-            result={erosion.result}
-            isStale={erosion.isStale}
-          />
+        {activeStage === 'atmosphere' && (
+          <>
+            <AtmospherePanel atmosphere={atmosphere} onAtmosphereChange={onAtmosphereChange} />
+            <div className="panel-section-divider" />
+            <ErosionPanel
+              enabled={erosion.enabled}
+              onEnabledChange={erosion.setEnabled}
+              durationYears={erosion.durationYears}
+              onDurationYearsChange={erosion.setDurationYears}
+              strength={erosion.strength}
+              onStrengthChange={erosion.setStrength}
+              filterShape={erosion.filterShape}
+              onFilterShapeChange={erosion.updateFilterShape}
+              waterProgress={waterProgress}
+              meshResolution={chunkMeshResolution}
+              result={erosion.result}
+            />
+          </>
         )}
-        {activeStage === 'atmosphere' && <AtmospherePanel atmosphere={atmosphere} onAtmosphereChange={onAtmosphereChange} />}
-        {activeStage !== 'terrain' && activeStage !== 'erosion' && activeStage !== 'atmosphere' && (
+        {activeStage !== 'terrain' && activeStage !== 'atmosphere' && (
           <StagePlaceholder label={PIPELINE_STAGES.find((stage) => stage.key === activeStage)!.label} />
         )}
       </div>

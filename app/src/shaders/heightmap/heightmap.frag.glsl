@@ -50,23 +50,30 @@ uniform float uDetailAmount;
 uniform float uShoreEnabled;
 uniform float uShoreSeaLevel;
 #ifndef CHUNK_PATCH_PASS
-uniform sampler2D uValleyMap; // RG = eroded height times land, land; BA = lake level times cover, minus cover (rivers/valleyMap.ts)
-uniform vec2 uValleyMapSize; // columns, land rows
-uniform float uValleyTextureRows; // land rows plus the river grid's (rivers/riverGrid.ts)
+// The planet's water from erosion (rivers/drainage.worker.ts): R = carving, G = drainage in cells, B = ground, A = lake level.
+uniform sampler2D uWaterMap;
+uniform float uWaterMapEnabled;
+uniform float uWaterMapTexel; // one map row, in radians
+uniform vec2 uWaterMapSize; // columns, map rows (south first)
+uniform float uWaterTextureRows; // map rows plus the river grid's (rivers/riverGrid.ts)
 uniform vec2 uRiverGridSize;
-uniform float uRiverBlendWidth; // radians over which the land blends to a river (rivers/riverGrid.ts)
+uniform float uRiverBlendWidth; // radians past a river's edge over which the land blends to it (rivers/riverGrid.ts)
 const int RIVER_MAX_BUCKET_PIECES = 48; // RIVER_MAX_BUCKET_PIECES in rivers/riverGrid.ts
 const int RIVER_CURVE_STEPS = 4; // RIVER_CURVE_STEPS in rivers/riverGrid.ts
-// Nearby water joins in one smooth shape, as Genevaux blends terrain fields (after Wyvill's BlobTree): lake disks round
-// into one shore and junctions get soft corners. Radians. Inferred, TUNABLE
-const float WATER_SMOOTH_UNION = 0.0008;
-// Where rivers meet or reach the sea the join widens with them, as confluences scour and widen (Best 1987). Of the
-// wider one's half width. Inferred, TUNABLE
-const float WATER_UNION_PER_WIDTH = 1.5;
-uniform float uValleyEnabled;
-uniform float uErosionStrength;
+// Rivers are off until they are redone from research: per-cell paths on the 18 km grid zigzagged and broke apart
+// (Dana, 2026-11-03). The network and its grid are still built (rivers/drainage.worker.ts).
+const bool DRAW_RIVERS = false;
+// The erosion filter (erosionFilter3d.glsl) on the coarse eroded heights: 0 off, else the shared Erosion Strength.
+uniform float uErosionFilterStrength;
+// The filter's shape (Erosion panel): gully size as a multiple of Rune's demo scale, depth (his strength), weight, detail.
+uniform float uGullySize;
+uniform float uGullyDepth;
+uniform float uGullyWeight;
+uniform float uGullyDetail;
+uniform float uValleySpacing; // meters, measured by the drainage worker
+uniform float uPlanetRadiusMeters;
+uniform float uTerrainTop;
 #endif
-const float RIVER_CHANNEL_DEPTH = 0.002; // how far a river's bed sits under its water. Inferred, TUNABLE
 const float NO_WATER_MARGIN = 0.0001; // off the water, B is the ground just under itself, so shores fall between texels
 const float NO_LOCAL_WATER = -1000.0; // far under any sea, so filtering toward it only trims an edge
 // Each layer's own mask pattern: a base generator type (-1 = unmasked), its
@@ -563,21 +570,34 @@ float chunkBaseElevation(vec2 localFace) {
 #endif
 
 #ifndef CHUNK_PATCH_PASS
-// One texel of the river grid, by its index past the land rows.
-vec4 riverGridTexel(float idx) {
-  float row = floor(idx / uValleyMapSize.x);
-  return texture2D(uValleyMap, vec2(idx - row * uValleyMapSize.x + 0.5, uValleyMapSize.y + row + 0.5) / vec2(uValleyMapSize.x, uValleyTextureRows));
+// The water map at a point: its map rows only, as the river grid's rows follow them in the same texture.
+vec4 waterMapAt(vec3 position) {
+  vec2 uv = spherePositionToPaintUv(position);
+  return texture2D(uWaterMap, vec2(uv.x, min(uv.y * uWaterMapSize.y, uWaterMapSize.y - 0.5) / uWaterTextureRows));
 }
-// Signed distance past the nearest river's edge (negative inside it), and the river's height there. Each span is stored
-// as its curve's points (rivers/riverGrid.ts), joined by straight pieces. The height follows riverFields in Plate-Local
-// River Generation's rivers.cpp: the mean inside channels, else an inverse-distance blend of nearby spans.
-float riverEdgeDistance(vec3 position, vec2 uv, out float level, out float halfWidth) {
+
+// The coarse eroded ground at a point (the water map's B: the terrain plus its carving), in the globe map's units.
+float erodedBaseAt(vec3 position) {
+  return waterMapAt(position).b;
+}
+
+// One texel of the river grid, by its index past the map rows. Restored from commit 1f421af.
+vec4 riverGridTexel(float idx) {
+  float row = floor(idx / uWaterMapSize.x);
+  return texture2D(uWaterMap, vec2(idx - row * uWaterMapSize.x + 0.5, uWaterMapSize.y + row + 0.5) / vec2(uWaterMapSize.x, uWaterTextureRows));
+}
+
+// Signed distance past the nearest river's edge (negative inside it), with the river's level, half width and depth
+// there. Each span is its curve's points joined by straight pieces (rivers/riverGrid.ts). The level follows riverFields
+// in Plate-Local River Generation's rivers.cpp: the mean inside channels, else an inverse-distance blend of nearby spans.
+// Restored from commit 1f421af, without its smooth union of nearby shapes (inferred).
+float riverEdgeDistance(vec3 position, vec2 uv, out float level, out float halfWidth, out float depth) {
   vec2 bucketCell = clamp(floor(uv * uRiverGridSize), vec2(0.0), uRiverGridSize - 1.0);
   vec4 bucket = riverGridTexel(bucketCell.y * uRiverGridSize.x + bucketCell.x);
   float nearest = 1e6;
-  float smoothNearest = 1e6;
   float nearestLevel = 0.0;
   float nearestHalfWidth = 0.0;
+  float nearestDepth = 0.0;
   float insideSum = 0.0;
   float insideCount = 0.0;
   float weightedSum = 0.0;
@@ -587,30 +607,29 @@ float riverEdgeDistance(vec3 position, vec2 uv, out float level, out float halfW
     float spanEdge = 1e6;
     float spanLevel = 0.0;
     float spanHalfWidth = 0.0;
+    float spanDepth = 0.0;
     float first = riverGridTexel(bucket.r + float(i)).r;
-    vec2 halfWidths = riverGridTexel(first + float(RIVER_CURVE_STEPS) + 1.0).rg; // at its upstream and downstream ends
+    vec4 ends = riverGridTexel(first + float(RIVER_CURVE_STEPS) + 1.0); // half widths, then depths, at its two ends
     vec4 prevPoint = riverGridTexel(first);
-    for (int step = 1; step <= RIVER_CURVE_STEPS; step++) {
-      vec4 point = riverGridTexel(first + float(step));
+    for (int pieceStep = 1; pieceStep <= RIVER_CURVE_STEPS; pieceStep++) {
+      vec4 point = riverGridTexel(first + float(pieceStep));
       vec3 stepDir = point.xyz - prevPoint.xyz;
       float share = clamp(dot(position - prevPoint.xyz, stepDir) / max(1e-12, dot(stepDir, stepDir)), 0.0, 1.0);
-      float along = (float(step) - 1.0 + share) / float(RIVER_CURVE_STEPS);
-      float edge = length(position - prevPoint.xyz - share * stepDir) - mix(halfWidths.x, halfWidths.y, along);
+      float along = (float(pieceStep) - 1.0 + share) / float(RIVER_CURVE_STEPS);
+      float edge = length(position - prevPoint.xyz - share * stepDir) - mix(ends.x, ends.y, along);
       if (edge < spanEdge) {
         spanEdge = edge;
         spanLevel = mix(prevPoint.w, point.w, share);
-        spanHalfWidth = mix(halfWidths.x, halfWidths.y, along);
+        spanHalfWidth = mix(ends.x, ends.y, along);
+        spanDepth = mix(ends.z, ends.w, along);
       }
       prevPoint = point;
     }
-    // Polynomial smooth minimum: equal to min apart from where two shapes come within the union radius.
-    float unionRadius = WATER_SMOOTH_UNION + WATER_UNION_PER_WIDTH * max(spanHalfWidth, nearestHalfWidth);
-    float overlap = max(unionRadius - abs(smoothNearest - spanEdge), 0.0) / unionRadius;
-    smoothNearest = min(smoothNearest, spanEdge) - overlap * overlap * unionRadius * 0.25;
     if (spanEdge < nearest) {
       nearest = spanEdge;
       nearestLevel = spanLevel;
       nearestHalfWidth = spanHalfWidth;
+      nearestDepth = spanDepth;
     }
     if (spanEdge <= 0.0) {
       insideSum += spanLevel;
@@ -624,7 +643,37 @@ float riverEdgeDistance(vec3 position, vec2 uv, out float level, out float halfW
   }
   level = insideCount > 0.0 ? insideSum / insideCount : weightSum > 0.0 ? weightedSum / weightSum : nearestLevel;
   halfWidth = nearestHalfWidth;
-  return smoothNearest;
+  depth = nearestDepth;
+  return nearest;
+}
+
+// The erosion filter's surface: the coarse eroded base plus its gullies, mixed over the noise terrain by Strength up to 1. The filter runs in the proportions of Rune's demo: the land's valley spacing becomes his
+// hills' spacing and its relief his relief, with all his settings, so gully depth keeps his ratio to the relief. The
+// base's slope is a central difference one map row apart, as Estqes's GetNoiseGradient takes the base noise's. Coasts
+// move with it, as real erosion moves them (Dana, 2026-11-03). The mapping into his proportions and the mix are inferred.
+const float DEMO_SCALE = 0.15; // Rune's demo EROSION_SCALE
+const float DEMO_HILL_SPACING = 1.0 / 3.0; // his demo's HEIGHT_FREQUENCY of 3
+const float DEMO_RELIEF = 0.25; // his demo heights: HEIGHT_AMP 0.125 over [-1, 1], halved into [0, 1]
+float erodedSurface(vec3 position, float elevation, out float erosionMix) {
+  vec3 normal = normalize(position);
+  vec3 tangentA = normalize(cross(normal, abs(normal.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+  vec3 tangentB = cross(normal, tangentA);
+  float stepAngle = max(uWaterMapTexel, 1e-5);
+  float base = erodedBaseAt(normal);
+  float slopeA = (erodedBaseAt(normalize(normal + tangentA * stepAngle)) - erodedBaseAt(normalize(normal - tangentA * stepAngle))) / (2.0 * stepAngle);
+  float slopeB = (erodedBaseAt(normalize(normal + tangentB * stepAngle)) - erodedBaseAt(normalize(normal - tangentB * stepAngle))) / (2.0 * stepAngle);
+  float seaLevel = uShoreEnabled > 0.5 ? uShoreSeaLevel : 0.0;
+  float relief = max(uTerrainTop - seaLevel, 1e-6);
+  // Into the demo's proportions: demo units per radian of arc, and per unit of height.
+  float horizontal = DEMO_HILL_SPACING / max(uValleySpacing, 1.0) * uPlanetRadiusMeters;
+  float vertical = DEMO_RELIEF / relief;
+  vec3 slope = (tangentA * slopeA + tangentB * slopeB) * vertical / horizontal;
+  // Rune's demo: -1 at valleys, 1 at peaks, from altitude over 0.6 of the half range.
+  float fadeTarget = ((base - seaLevel) / relief * 2.0 - 1.0) / 0.6;
+  float delta = erosionFilter3d(normal * horizontal, normal, slope, fadeTarget, uGullyDepth, DEMO_SCALE * uGullySize, uGullyWeight, uGullyDetail);
+  float eroded = base + delta / vertical;
+  erosionMix = clamp(uErosionFilterStrength, 0.0, 1.0);
+  return mix(elevation, eroded, erosionMix);
 }
 #endif
 
@@ -778,18 +827,25 @@ void main() {
 
   // B carries a lake or river's surface (Derzapf 2011). The sea stays out of it, so it can move without a re-bake.
   float waterSurface = NO_LOCAL_WATER;
-  float riverLevel = 0.0;
+  float lakeLevel = NO_LOCAL_WATER;
+  float lakeGround = 1e6; // the ground before the erosion filter: a lake fills only what was already below it
+  float erosionMix = 0.0; // how far the surface is replaced by the eroded one, so Roughness fades with it
   float riverEdge = 1e6;
+  float riverLevel = 0.0;
   float riverHalfWidth = 0.0;
+  float riverDepth = 0.0;
 #ifndef CHUNK_PATCH_PASS
-  // The land as the rivers shaped it (rivers/streamPower.ts), under Roughness so its bumps stay.
-  if (uRegionMode > 0.5 && uValleyEnabled > 0.5) {
-    vec2 paintUv = spherePositionToPaintUv(basePosition);
-    // The land rows only: the river grid sits above them in the same texture.
-    vec4 valley = texture2D(uValleyMap, vec2(paintUv.x, min(paintUv.y * uValleyMapSize.y, uValleyMapSize.y - 0.5) / uValleyTextureRows));
-    elevation = elevation * (1.0 - valley.g * uErosionStrength) + valley.r * uErosionStrength;
-    // Rivers and lakes alike: lakes are disks of water in the same grid (rivers/riverGrid.ts), placed after Roughness.
-    riverEdge = riverEdgeDistance(basePosition, paintUv, riverLevel, riverHalfWidth);
+  // The erosion's carving on the noise terrain, under Roughness so its bumps stay: the coarse simulation's change, added
+  // as detail is kept (Cordonnier et al. 2016, 6.2: a coarse eroded terrain amplified). Inferred
+  if (uRegionMode > 0.5 && uWaterMapEnabled > 0.5) {
+    vec4 water = waterMapAt(basePosition);
+    elevation += water.r;
+    // A lake's level (A) where it stands above the coarse ground (B); both blend between cells, and the level is compared
+    // with the ground at this point below, so shores follow the terrain, not the 18 km cells (Cordonnier et al. 2016, 6.2).
+    if (water.a - water.b > 1e-5) lakeLevel = water.a;
+    lakeGround = elevation;
+    if (uErosionFilterStrength > 0.0) elevation = erodedSurface(basePosition, elevation, erosionMix);
+    if (DRAW_RIVERS) riverEdge = riverEdgeDistance(basePosition, spherePositionToPaintUv(basePosition), riverLevel, riverHalfWidth, riverDepth);
   }
 #endif
 
@@ -801,14 +857,14 @@ void main() {
     // None below sea level, then linear over twice the detail's largest swing (its octaves sum below 2), so a dip
     // never reaches the sea and the coastline never moves (Dana: no rough patches where there's water).
     float shoreFade = uShoreEnabled > 0.5 ? clamp((elevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
-    elevation += uDetailAmount * shoreFade * planetDetail(basePosition, sampleSpacing, 0.0);
+    elevation += uDetailAmount * shoreFade * (1.0 - erosionMix) * planetDetail(basePosition, sampleSpacing, 0.0);
   }
-  // After Roughness, so bumps can't lift a riverbed above its water and break the river up.
 #ifndef CHUNK_PATCH_PASS
   // Génevaux et al. 2013, section 7: the river replaces the land, h = (1 - w) hLand + w hRiver, with the compact weight
-  // w = (1 - d^2 / r^2)^2 and hRiver = river height + its profile across the channel; water exists only in the channel.
-  // A channel is never narrower than one bake texel, so it can't fall between samples (a line's minimum width).
-  if (uRegionMode > 0.5 && uValleyEnabled > 0.5) {
+  // w = (1 - d^2 / r^2)^2 and hRiver = the river's level plus its profile across the channel; water only in the channel.
+  // A channel is never narrower than one bake texel, so it can't fall between samples. After Roughness, so bumps can't
+  // lift a riverbed above its water. Restored from commit 1f421af; the depth now comes from the river's flow.
+  if (uRegionMode > 0.5 && uWaterMapEnabled > 0.5) {
     float channelHalf = max(riverHalfWidth, sampleSpacing);
     float centerDistance = riverEdge + riverHalfWidth;
     float reach = channelHalf + uRiverBlendWidth;
@@ -817,16 +873,17 @@ void main() {
       float weight = (1.0 - ratio) * (1.0 - ratio);
       float across = centerDistance / channelHalf;
       // A parabola across the channel, carried on past its edge so the bank rises above the water. Inferred, TUNABLE
-      float profile = RIVER_CHANNEL_DEPTH * min(1.0, across * across - 1.0);
+      float profile = riverDepth * min(1.0, across * across - 1.0);
       float carved = (1.0 - weight) * elevation + weight * (riverLevel + profile);
-      // A river only cuts, never raises: raising low land to its bank built walls that dammed rivers at the coast, and
-      // raising the sea floor at a mouth left pale stubs.
+      // A river only cuts, never raises.
       elevation = min(elevation, carved);
-      // Water reaches a texel past the channel, so the shore is where the rising bank crosses it, not a texel's edge.
       if (centerDistance < channelHalf + sampleSpacing) waterSurface = riverLevel;
     }
   }
 #endif
+  // A lake from Priority-Flood's filled level (rivers/pitFill.ts), only where the ground was below it before the filter,
+  // so the filter's lowering can't spread it. Inferred
+  if (lakeLevel > elevation && lakeLevel > lakeGround) waterSurface = lakeLevel;
   if (uRegionMode > 0.5 && waterSurface < -500.0) waterSurface = elevation - NO_WATER_MARGIN;
   gl_FragColor = uElevationInRed > 0.5 ? vec4(elevation, elevation, waterSurface, 1.0) : vec4(clamp(composite, 0.0, 1.0), elevation, waterSurface, 1.0);
 }

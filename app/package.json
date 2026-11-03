@@ -10,7 +10,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "delaunator": "^5.1.0",
     "firebase": "^12.19.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

@@ -1,3 +1,5 @@
+import { liquidNamed } from './rivers/riverClimate';
+import { useDrainage } from './rivers/drainageControls';
 import type * as THREE from 'three';
 import type { TerrainPatch } from './planet/patch';
 import { useRef, useState } from 'react';
@@ -17,8 +19,7 @@ import { MapView } from './map/MapView';
 import { useBrush } from './map/2Dbrush';
 import { useCurrentUser } from './firebase/currentUser';
 import { useSaveProject } from './projectSettings/saveProject';
-import { useErosion } from './erosion/erosionControls';
-import { useRivers } from './rivers/riverControls';
+import { engineRainfall, planetErosionPasses, useErosion, useErosionAutoRun } from './erosion/erosionControls';
 import { randomClimate } from './atmosphere/atmosphereSettings';
 import { ErosionTimeline } from './erosion/ErosionTimeline';
 import { useLandChunk } from './voxel/landChunk';
@@ -48,7 +49,6 @@ function App() {
   const planetControls = usePlanetControls();
   const waterClarityShare = clarityDepthShare(planetControls.water.clarityMeters, planetControls.water.seaLevel, planetControls.elevationRange.min, planetControls.heightScale);
   const noiseLayers = useNoiseLayers(INITIAL_LAYER_ID);
-  const { valleyRevision, riversBusy } = useRivers(sceneHandleRef, planetControls.water.enabled && planetControls.atmosphere.enabled, planetControls.water.seaLevel, planetControls.atmosphere, planetControls.atmosphere.riverDebug, planetControls.atmosphere.erosion, planetControls.heightDistribution);
   // Terrain Randomize also rolls how the planet spins (scene/planetSpin.ts) and its climate.
   const randomizeWorld = () => {
     noiseLayers.randomizeTerrain();
@@ -59,7 +59,8 @@ function App() {
   // Declared before the land chunk, which consumes its result: erosion runs
   // on the patch the chunk is showing, and that patch reaches it as a prop
   // through the panel rather than the two hooks depending on each other.
-  const erosion = useErosion(sceneHandleRef, noiseLayers.layers, brush.paintVersion);
+  const chunkRainfall = engineRainfall(planetControls.atmosphere.rainfall, planetControls.atmosphere.liquid);
+  const erosion = useErosion(sceneHandleRef, noiseLayers.layers, brush.paintVersion, planetControls.water.seaLevel, chunkRainfall);
   const landChunk = useLandChunk(
     sceneHandleRef,
     noiseLayers.layers,
@@ -69,6 +70,8 @@ function App() {
     planetControls.detailAmount,
     planetControls.shoreSeaLevel,
   );
+  const { progress: waterProgress, revision: waterRevision } = useDrainage(sceneHandleRef, liquidNamed(planetControls.atmosphere.liquid).flows, planetControls.water.seaLevel, erosion.enabled ? planetErosionPasses(erosion.durationYears) : 0, erosion.strength, planetControls.atmosphere, planetControls.heightDistribution);
+  useErosionAutoRun(erosion, landChunk.patch, planetControls.water.seaLevel, chunkRainfall, noiseLayers.layers, brush.paintVersion);
   // The chunk's patches bake through the planet view's heightmap pipeline.
   const bakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch) => sceneHandleRef.current?.bakePatchInto(patch, target, root) ?? false;
   // Declared after erosion/landChunk, which it persists alongside layers and
@@ -220,7 +223,6 @@ function App() {
         onWaterChange={planetControls.updateWater}
         atmosphere={planetControls.atmosphere}
         onAtmosphereChange={planetControls.updateAtmosphere}
-        riversBusy={riversBusy}
         heightDistribution={planetControls.heightDistribution}
         activeStage={activeStage}
         onStageChange={setActiveStage}
@@ -351,7 +353,7 @@ function App() {
                 shadowsEnabled={planetControls.shadowsEnabled}
                 patch={landChunk.patch}
                 patchesEnabled={planetControls.displayMode !== 'voxel'}
-                bakeVersion={landChunk.bakeVersion + valleyRevision}
+                bakeVersion={landChunk.bakeVersion + waterRevision + erosion.filterRevision}
                 maxErrorPixels={planetControls.effectiveMaxErrorPixels}
                 bakePatch={bakeChunkPatch}
                 groundHeights={landChunk.groundHeights}
@@ -398,7 +400,7 @@ function App() {
         isMapExpanded={isMapExpanded}
         onMapExpandedChange={setIsMapExpanded}
         erosion={erosion}
-        erosionPatch={landChunk.patch}
+        waterProgress={waterProgress}
         chunkMeshResolution={planetControls.displayMode === 'voxel' ? landChunk.resolution : null}
         width={rightPanel.width}
       />
@@ -411,8 +413,6 @@ function App() {
           result={erosion.result}
           onScrub={erosion.scrubTo}
           isStale={erosion.isStale}
-          onRun={() => erosion.run(landChunk.patch)}
-          onReset={erosion.clear}
         />
       </div>
       </>
