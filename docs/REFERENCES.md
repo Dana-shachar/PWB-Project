@@ -897,8 +897,15 @@
 **Priority-Flood + ε (Barnes, Lehman and Mulla 2014)** · `used 2026-11-02, not read`
 - every pit filled with a slight slope so water flows on (`FILL_EPSILON`).
 
-**Fill-Spill-Merge (Barnes, Callaghan and Wickert 2020)** · `planned, not read`
-- which dips hold lakes, from the water that reaches them.
+**Depression hierarchies (Barnes, Callaghan and Wickert 2020) and Fill-Spill-Merge (same authors 2021)** · `used 2026-11-02, read`
+- Part 2, section 3: every dip labeled by a Priority-Flood from the ocean and the pits, the lowest sill kept per pair, sills sorted into a forest of binary trees; the ocean is the below-sea region touching the map's edge, so inland basins stay distinct; dips under 30 cells filtered out (Fig. 9c).
+- Part 3, sections 3.2 and 3.3: runoff fills dips, a full dip spills into its neighbor, two full neighbors merge; the lake level from the lowest-first walk and the lake-level equation. The amount of water is the user's, losses included.
+- Built in `rivers/depressions.ts` on the branch `water-network-2026-11-02`; its lakes didn't match the shown terrain.
+- *[Part 2](https://par.nsf.gov/biblio/10173177-computing-water-flow-through-complex-landscapes-part2-finding-hierarchies-depressions-morphological-segmentations) · [Part 3](https://esurf.copernicus.org/articles/9/105/2021/)*
+
+**Salinity and hydrology of closed lakes (Langbein 1961, USGS Professional Paper 412)** · `used 2026-11-02, from a search summary`
+- a closed lake balances its inflow by changing its surface area until evaporation takes all of it. Used as each dip's capacity in Fill-Spill-Merge.
+- *[USGS record](https://pubs.usgs.gov/publication/pp412)*
 
 **Fast and Gorgeous Erosion Filter (Rune Skovbo Johansen, 2026)** · `planned` · Mozilla Public License 2.0
 - gullies along the slope as a per-point filter, after Clay John's 2018 Shadertoy; for the land between rivers.
@@ -908,11 +915,20 @@
 - meander wavelength about 11 channel widths (7 to 12 in 1957), used for the winding's wavelength; the sine-generated curve, tried and removed.
 - *[USGS PP 422-H](https://pubs.usgs.gov/pp/0422h/report.pdf) · [USGS PP 282-B](https://pubs.usgs.gov/pp/0282b/report.pdf)*
 
-**Hydraulic geometry (Leopold and Maddock 1953)** · `used 2026-11-02, from memory, not verified`
-- width growing with the square root of discharge. Verify before relying on it.
+**Hydraulic geometry (Leopold and Maddock 1953, USGS Professional Paper 252)** · `used 2026-11-02, read`
+- downstream, width grows as discharge^0.5, depth as discharge^0.4 and velocity as discharge^0.1; at a station 0.26, 0.40 and 0.34 (p. 27, Fig. 19).
+- *[USGS record](https://pubs.usgs.gov/publication/pp252)*
 
-**Estuary shape (Savenije 2005), confluences (Best 1987), channel heads (Montgomery and Dietrich 1988)** · `used 2026-11-02, from memory, not read`
-- exponential widening toward the sea, widening at junctions, rivers starting in hollows. The numbers in the code are guesses until these are read.
+**Estuary shape (Nguyen and Savenije 2006)** · `used 2026-11-02, read`
+- width B = B0 exp(−x / b) from the mouth (eq. 11); in the Mekong branches b is about 10 to 14 mouth widths (Table 1). How much wider the mouth is depends on the tide.
+- *[HESS 10, 743](https://hess.copernicus.org/articles/10/743/2006/)*
+
+**Confluences (Best 1987), channel heads (Montgomery and Dietrich 1988)** · `not read`
+- widening at junctions, rivers starting in hollows.
+
+**Pyramidal parametrics (Williams 1983)** · `used 2026-11-02, from summaries`
+- mipmapping: detail finer than a sample is averaged into it, not enlarged. Used for river coverage below a texel.
+- *[SIGGRAPH record](https://history.siggraph.org/?p=106019)*
 
 **Rosgen stream types (Rosgen 1994)** · `considered 2026-11-02, from secondary summaries`
 - slope classes for meandering; tried and removed.
@@ -923,6 +939,43 @@
 
 **SimpleHydrology (weigert, likely Nick McDonald)** · `rejected 2026-11-02`
 - meanders from a momentum map; the repository has no license, so its code can't be used.
+
+**How terrain tools place water (World Machine, Gaea, Houdini, Unreal)** · `read 2026-11-02, from their docs`
+- World Machine: rivers and lakes from the terrain's form, Create Water fills every depression, Flow Restructure first so the terrain drains. Gaea: Lakes simulate rainfall with the erosion engine, Rivers fit the terrain to its rivers, Sea is its own node. Houdini: erosion leaves water, flow and flow direction layers; evaporation sets lake size. Unreal: a lake is a closed spline with water inside, the landscape edited to meet it.
+- In every one, the water comes from the height map that is shown.
+- *[Gaea Lakes](https://docs.quadspinner.com/Reference/Water/Lakes.html) · [World Machine build 3025](https://help.world-machine.com/topic/build-3025/) · [Houdini flow fields](https://www.sidefx.com/docs/houdini/heightfields/flowfields.html) · [Unreal WaterBodyType](https://dev.epicgames.com/documentation/en-us/unreal-engine/python-api/class/WaterBodyType)*
+
+**Interactive Terrain Modeling Using Hydraulic Erosion (Šťava et al. 2008)** · `read 2026-11-02`
+- the virtual-pipes model with layers; water enters by rain or user-placed sources; free-slip edges by ghost cells, so no water leaves except at sinks; tiles synchronized by copying border cells before each step; water thinner than 0.1 m not drawn.
+- *[PDF](https://www.cs.purdue.edu/cgvlab/www/resources/papers/Stava-2008-Interactive_Terrain_Modeling_Using_Hydraulic_Erosion.pdf)*
+
+**Fast Hydraulic and Thermal Erosion on the GPU (Jákó 2011)** · `read 2026-11-02`
+- constant rain per cell instead of drops (eq. 1); evaporation d × (1 − Ke·Δt) each step, without which "the scene would fill up with water" (eq. 16).
+- *[PDF](https://www.old.cescg.org/CESCG-2011/papers/TUBudapest-Jako-Balazs.pdf)*
+
+**Large-scale Terrain Authoring through Interactive Erosion Simulation (Schott et al. 2023)** · `code read 2026-11-02, paper not read` · MIT
+- GPU stream power in one pass per iteration: each cell gathers drainage area from uphill neighbors by slope, erodes by k · area^0.8 · slope^2 plus hillslope smoothing, never below the cell it drains to. The drainage area is the river map on the same grid.
+- *[Code](https://github.com/H-Schott/StreamPowerErosion) · [HAL](https://hal.science/hal-04049125v1) · doi 10.1145/3592787*
+
+**Physically-based Analytical Erosion for fast Terrain Generation (Tzathas, Gailleton, Steer and Cordonnier 2024)** · `abstract only`
+- analytical solutions of the stream power law, so time is a slider that ages an input terrain; multigrid acceleration; landslides and hillslopes. The paper blocked automated access.
+- *[Eurographics](https://diglib.eg.org/handle/10.1111/cgf15033) · [HAL](https://hal.science/hal-04525371)*
+
+**3D Real-Time Hydraulic Erosion Simulation using Multi-Layered Heightmaps (Nilles et al. 2024)** · `from a search summary`
+- virtual pipes on multi-layered heightmaps: about 6 ms per step at 2048² on an RTX 3070, about 1.4 ns per cell against our engine's measured 8.3 ns.
+- *[Eurographics](https://diglib7.eg.org/handle/10.2312/vmv20241211)*
+
+**Browser erosion demos (tessapower, Terrain Laboratory)** · `looked at 2026-11-02`
+- tessapower/hydraulic-erosion: Beyer's droplet erosion and a physics-based variant, TypeScript on the CPU with Three.js, one square grid. No license, ideas only. Terrain Laboratory: uplift and "hydraulic flow" on one grid of 128² to 512², method and source not shown.
+- *[tessapower](https://github.com/tessapower/hydraulic-erosion) · [Terrain Laboratory](https://terrainlab.netlify.app/)*
+
+**Water Simulation on WebGL and Three.js (Pereira 2013)** · `read 2026-11-02`
+- a flat water plane moved by sine waves in the vertex shader, with a texture; no rivers or erosion. Nothing to adopt; the app's water already goes further.
+- *PDF in the course folder · [Record](https://aquila.usm.edu/honors_theses/137/)*
+
+**A System for Analysis and Simulating Hydraulic and Hydrogeological Risks Through WebGIS 3D Digital Platforms (Mazzei and Quaroni 2025)** · `read 2026-11-02` · CC BY
+- floods along a mapped river: a runoff map from steepest-descent paths, then the river raised each step by (rain + runoff) × (1 − permeability), its edge spreading only where the water stands above the ground. A sourced method for a flood disaster later.
+- *PDF in the course folder · doi 10.3390/ijgi14020073*
 
 **Water Flow in Portal 2 (Vlachos 2010) and Catlike Coding's flow tutorial** · `planned for [B93]`
 - flow maps that slide ripples downstream.

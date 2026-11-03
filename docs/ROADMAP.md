@@ -8,66 +8,64 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-02, fourteenth handover):** *read `.claude/CLAUDE.md` first (new rules today: read sources before the first fix, no inventions, one change per test, stop when a fix makes it worse). Then this block. The block below it is the previous handover.*
+> **Start from here (2026-11-02, fifteenth handover):** *read `.claude/CLAUDE.md` first, then this block, then `docs/CODE-INDEX.md` before searching the code. The block below it is the thirteenth handover; the fourteenth's water design is superseded by this one.*
 >
-> **State.** The 2026-11-02 river session is committed as one work-in-progress commit on top of `a444a75`, and it is a pile of patches. Do not build on it as a whole. Rebuild the water system in the order below, carrying over only the parts marked ✅ (compare against `a444a75` to see them). `delaunator` 5.1.0 was added to `app/package.json`.
+> **State.**
+> - `main` is at `1f421af` (the river work in progress of 2026-11-02, a pile of patches). Uncommitted on `main`: a temporary README concept entry (to be rewritten with Dana) and `docs/REFERENCES.md` (every water source of 2026-11-02, under Rivers, lakes and climate).
+> - The branch `water-network-2026-11-02` (`2b7ad78`) keeps the 2026-11-02 network rework for reference, never to be merged as is: Plate-Local river heights and blend, rivers clamped under the ground (Derzapf eq. 10), source taper, Savenije mouth flare, sub-texel coverage, one connected ocean, and lakes by depression hierarchy and Fill-Spill-Merge (`rivers/depressions.ts`, reusable). Its lakes failed: computed on the raw heights, drawn on the shown ones, so rivers missed the shores and some shores were blocky. 112 river stretches climbed.
 >
-> **Root cause, measured 2026-11-02:** the rivers were a layer drawn onto a terrain that water never shaped. A debug view of ground minus river level showed tributaries far below and main rivers far above the shown ground. Every drawing fix moved the problem instead of solving it.
+> **Root cause, final:** the water was a separate network drawn onto a terrain it never shaped. Every professional tool (World Machine, Gaea, Houdini) takes water from the height map it shows. A working GPU erosion engine (`erosion/erosionEngine.ts`, Mei's virtual pipes, checked against huw-man's simulator) has been in the repo since 2026-10-13 and the rivers never used it.
 >
-> **🧭 The water system, one design, in this order** *(Dana approved the direction 2026-11-02; approve this written design once before building)*
+> **🧭 Decisions (Dana, 2026-11-02)**
+> - Water comes from simulation, in `main`. Detail matters on the land chunk, not the planet: the planet only needs credible water.
+> - The poles are dealt with later, only if their water becomes a problem.
+> - Everything properly sourced, one complete plan, no partial fixes; Dana looks once per phase.
+> - ❓ Still open, with recommendations (silence approves them): the progress display (recommended: the existing Busy indicator plus a percentage; the alternative is a new progress component Dana adds to the design system first); the chunk grid (recommended: 513², about 10 s, about 31 m cells; 257² is about 1 to 2 s).
 >
-> **1. Ocean**
-> - One connected body below sea level, as Earth's oceans are one World Ocean. Every other dip is land.
-> - Today: a 2,000-node cutoff (`OCEAN_MIN_NODES` in `rivers/riverTree.ts`), a guess. Replace with the connected-to-ocean rule.
+> **Measured 2026-11-02 (Dana's machine)**
+> - The erosion engine: 200 steps at 256² in 109 ms, about 0.55 ms per step, checkpoints included.
+> - Planet patches: 3 to 20 new patches per zoom step, each first baked at 129²; 150k to 185k texels on screen.
+> - Load today: the triangulation 5 s, the river build 6 s, the valley map 0.5 s.
+> - Water crosses at most about 0.1 cell per step in the engine (`CFL_SAFETY`), so a patch of 129 cells needs about 1,300 steps to carry a river across, 513 cells about 5,000. Derived, not measured.
 >
-> **2. Pits and lakes**
-> - Fill-Spill-Merge (Barnes, Callaghan and Wickert 2020): a dip holds a lake only if the water reaching it fills it, otherwise it spills on. ❓ Not read yet: read it before planning.
-> - Today: Priority-Flood + ε fills every pit (Barnes et al. 2014, as Peytavie et al. 2019), so there are 0 lakes. Dana wants some lakes.
+> **Phase 1: planet water from GPU stream-power erosion** *(Dana looks once at the end)*
+> 1. **Gate, measure first:** a TEMP version of Schott et al. 2023's pass (code read, MIT: `data/shaders/spe_shader.glsl` in `H-Schott/StreamPowerErosion`) on the globe height map the rivers bake (4096 × 2048, about 9 km per texel), timed per iteration, plus the iterations the drainage needs to settle. Too slow means 2048 × 1024. Nothing else is built before this number.
+> 2. **The pass:** new `shaders/erosion/streamPowerPlanet.frag.glsl` and `rivers/planetDrainage.ts`. One fragment pass per iteration, ping-pong targets: each texel gathers drainage area from uphill neighbors by slope, erodes by k · area^0.8 · slope^2 plus hillslope smoothing, never below the texel it drains to. The map wraps east to west; distances shrink with latitude. Run once per terrain change, with the progress display.
+> 3. **The bake** (`shaders/heightmap/heightmap.frag.glsl`) reads the eroded height and the drainage. A river is where drainage passes Peytavie's threshold; width ∝ discharge^0.5 and depth ∝ discharge^0.4 (Leopold and Maddock, read); water at ground plus depth; edges from the interpolated drainage field, so they curve; rivers under a texel tinted by coverage (Williams).
+> 4. **Lakes:** `depressions.ts` from the branch, run on this same eroded map, so shores and rivers match.
+> 5. **Erosion slider** becomes the number of iterations (time), not a mix with the noise.
+> 6. **Remove** the triangulation, the CPU tree, the drawn river curves and the valley map. Load time should drop; step 1 confirms.
 >
-> **3. Network** ✅
-> - Points joined by a Delaunay triangulation (Cordonnier et al. 2016, 4.1), `rivers/riverGraph.ts`, built once at worker start (about 5 s) with a "Building rivers…" busy indicator. Measured: 23.6% of river steps on the old grid's 8 directions (22% is even).
-> - Growth by Génevaux et al. 2013, section 5: priority within ζ, Horton's 4:1 for mouth ranks. ζ and the branching odds are the paper's user settings: make them sliders.
+> **Phase 2: chunk water from the existing simulation** *(Dana walks through once at the end)*
+> 1. The virtual-pipes engine runs on the chunk in batches per frame with the progress display, cached until the terrain changes. Today it is one blocking loop in `scene/SceneCanvas.tsx`, so the page freezes.
+> 2. Water enters as constant rain (Jákó eq. 1) plus sources where the planet's drainage crosses the chunk's edge (Šťava 5.5); it leaves at sinks where rivers exit and into the sea (Šťava 6: the edges otherwise let no water out); evaporation each step keeps it from flooding (Jákó eq. 16).
+> 3. The chunk's water surface is the simulation's water layer (`voxel/chunkWater.ts`, `shaders/water/chunkWater.*`), water under 0.1 m hidden (Šťava). Fixes `[B54]`.
 >
-> **4. River data per stretch**
-> - River levels from the shown terrain, only ever downhill (`levelsFromTerrain` in `rivers/valleyMap.ts`, from Peytavie 5.1 and Plate-Local). ✅ Measured: main rivers matched the ground.
-> - Width from drainage area: flow 0.42 A^0.69 (Peytavie), width ∝ √flow (Leopold and Maddock). Depth ∝ flow^0.4 (Leopold and Maddock), checked against Derzapf's 300 m. Estuaries widen at the sea and at lake outlets (Savenije). Sources taper. Winding by noise along the stem, wavelength 11 widths (Leopold). ❓ Look up each remaining number; none may stay a guess.
+> **Where each piece plugs in (read 2026-11-02, names not line numbers)**
+> - **Globe heights for phase 1:** `renderRiverHeights` and `getRegionElevationDataAsync` in `map/heightmap.ts` (`RIVER_MAP_WIDTH` 4096 × `RIVER_MAP_HEIGHT` 2048, about 134 MB, released by `releaseRiverTarget`), called by `getGlobeElevationAsync` in `scene/SceneCanvas.tsx`. The drainage pass can run on that render target before readback, staying on the GPU.
+> - **What the bake reads today:** the valley map (`uValleyMap`, R = eroded height × land, G = land, B and A free), set through `setValleyMap` in `SceneCanvas.tsx` and mixed in `heightmap.frag.glsl` by `uErosionStrength` (`setErosionStrength` in `heightmap.ts`, default 0.7). The river grid rows after it feed `riverEdgeDistance`. Phase 1 replaces both with the eroded height and drainage textures; the patch bakes sample them by the same `spherePositionToPaintUv`.
+> - **To remove in phase 1, step 6:** `rivers/riverGraph.ts`, `riverTree.ts`, `riverTree.worker.ts`, `riverGrid.ts`, `valleyMap.ts`, `streamPower.ts`, `riverView.ts`, `riverDebug.ts`; `useRivers` in `rivers/riverControls.ts` (wired in `App.tsx`, returns `valleyRevision`, `riversBusy`); `setRiverSegments`, `setRiverLakes`, `setValleyMap` in `SceneCanvas.tsx`; the River debug toggle in `ui/Panel.tsx` and `riverDebug` in `atmosphere/atmosphereSettings.ts`; the `delaunator` dependency. Keep `rivers/riverClimate.ts`: Rainfall, Temperature and Liquid become the simulation's rain, evaporation and erodibility (`waterBudget`, `LIQUIDS`).
+> - **The pass itself:** Schott's shader is an OpenGL 4.5 compute shader on buffers; here it becomes a WebGL fragment shader on float ping-pong targets (each texel only reads neighbors and writes itself, as the erosion shaders already do). Flow coefficients read a neighbor's own neighbors, so each texel samples a 5 × 5 area. Schott fixes the map's border to height 0 as the outlet; here the ocean (below sea level) is the outlet and keeps its height. Drainage moves one texel per iteration, so it settles in about as many iterations as the longest river is long in texels: measured in step 1.
+> - **Lakes on the grid:** `buildDepressionHierarchy` and `fillSpillMerge` (branch) take a node graph (`neighborStarts`, `neighborList`); on the globe map, neighbors are the 8 texels around, wrapping east to west.
+> - **Phase 2's engine:** `ErosionEngine` in `erosion/erosionEngine.ts` (`seed`, `step`, `readElevation`, `captureCheckpoint`), run by the erosion run in `SceneCanvas.tsx` (the blocking `for` loop), driven by `useErosion` in `erosion/erosionControls.ts` and `ui/panels/ErosionPanel.tsx`. Sea level already acts as an outlet (`uSeaLevel` in `shaders/erosion/flux.frag.glsl` and `seed.frag.glsl`). Water enters in `shaders/erosion/rain.frag.glsl`, which already has a disc source mode (`uSourceMode`, `uSourceCenter`, `uSourceRadius`): river sources extend it to several points. The chunk's terrain is `ensureChunkBase` (4096², `getChunkBaseTexture`) in `heightmap.ts`; `useLandChunk` in `voxel/landChunk.ts` only uses an erosion run in the voxel style (`[B54]`).
 >
-> **5. Shaping the terrain**
-> - Génevaux's replace operator: h = (1 − w) land + w river, w = (1 − d²/r²)², rivers and lakes only cut. ✅ Built in `shaders/heightmap/heightmap.frag.glsl`.
-> - Then Johansen's erosion filter (2026, Mozilla Public License, Shadertoy `wXcfWn`) on the land between, so small valleys drain into the rivers. Not built.
+> **Checks each phase must pass before Dana looks**
+> - Phase 1: the timing from step 1; every drawn river cell drains to the ocean or a lake (count, 0 dead ends); 0 lakes touching the ocean; no river water above the ground beside it (a TEMP debug view); load time against today's 11 s; `node scripts/checkShaders.mjs` and `npx tsc --noEmit -p tsconfig.app.json` clean.
+> - Phase 2: the run time at the chosen grid; water reaching the chunk's sinks (count); the page stays responsive during the run, with progress showing; no water layer thinner than 0.1 m drawn.
 >
-> **6. Drawing the water**
-> - One water height field for sea, lakes and rivers. Off the water, the bake's B channel is the ground just under itself, so shores fall between texels. Channels at least one texel wide at any zoom.
+> **Sources to read before phase 1, step 2:** Schott et al. 2023 and Tzathas et al. 2024 (analytical stream power: time as a slider, multigrid, possibly faster). Both block automated access: ask Dana to put the PDFs in the course folder. Without Schott's paper, the code's defaults are used, marked tunable.
 >
-> **7. Coast handoff**
-> - Every river is carved through to where the shown ocean begins, measured in the shader, not a fixed reach.
+> **Dana's water requests still in force** (met by the simulation, not drawn by hand): main rivers clearly wider than tributaries; tapering sources; mouths that flare; no land in front of a mouth; nothing sticking out of the ground; lakes connected to their rivers, with natural shores; some cliff banks.
 >
-> **Tests, one per part, measured before Dana looks:** every river reaches the ocean or a spilling lake (the `lake outflows` log); no islands inside channels; shores between texels; grid-aligned share near 22%; no lakes at river mouths.
+> **Also from 2026-11-02:** the concept draft (alien planetary exploration and evolution; planets from landscape, atmosphere and biome settings, explored; maybe evolving plant and animal agents; extreme, disaster-like conditions) is to be revised with Dana before any doc states it. Mazzei and Quaroni 2025 is a sourced flood-disaster method for the events stage. Stage 08 in this roadmap is outdated and gets rewritten in the next docs pass. Final Review is Dec 2; Nov 4 is Session 11's minor presentation. TEMP logs to remove in cleanup: `[TEMP erosion cost]` is on the branch only; `[TEMP rivers]` on both.
 >
-> **Known bugs in the uncommitted patches (2026-11-02), so they aren't carried over:**
-> - 🔴 Tiny islands at every river node: a smooth minimum between consecutive pieces of one river pushed the distance below the channel. Remove it; widen confluences with a pool at each junction instead.
-> - 🔴 Rivers stop short of the shown coast: the network sees the coast at 9 km, the shown coast comes from finer noise.
-> - 🔴 Blunt, square river heads; Dana's rule: a river tapers at its source and widens at its mouth, or widens at both ends when it joins two large bodies of water.
+> **Loose threads and docs owed**
+> - 📌 The weekly push for Session 11 (Nov 4) in `WEEKLY-PUSHES.md`, with this week's architecture diagram (`docs/diagrams/architecture-2026-11-04.svg` from `build_architecture.py`; new since last week on `main`: `rivers/riverGraph.ts`, `rivers/riverGrid.ts`).
+> - 📌 Commit the uncommitted docs on `main` (`README.md`, `docs/REFERENCES.md`, this file) when Dana says; `.obsidian/workspace.json` stays out of commits.
+> - 📌 The `ui-design` skill gained a Busy indicator on 2026-11-02 (the phase progress display uses it).
+> - 📌 `CODE-INDEX.md` matches `main`; update it in phase 1 as the river files are removed and the drainage files added.
 >
-> **Dana's requests for the water system (2026-11-02), each to be met by a sourced method:**
-> - Main rivers clearly thicker than tributaries; a tributary arrives at its own width, never the width of what it joins (`[B101]`).
-> - A river tapers at its source and widens at its mouth, or widens at both ends when it joins two large bodies of water (`[B102]`).
-> - Confluences and mouths soft and blobby, eroded, like deltas; no thin, sharp joins and no tiny islands (`[B97]`).
-> - No land left in front of a river near the ocean: rivers open into the shown sea (`[B98]`).
-> - Some lakes, but none that make no sense: no blobs, no lakes right at river mouths, smooth soft shores (`[B100]`). 178 of 260 lakes never spilled before pits were filled.
-> - Fewer rivers, and neighboring systems joined into big basins whose trunk crosses the land and branches out (`[B104]`). The drainage threshold, ζ and the branching odds become sliders.
-> - Natural curves, like her reference photo: wide smooth bends, rounded banks.
-> - The inland color fade at mouths is her call; water in the chunk's rivers and the flow shader (`[B93]`) follow the water system.
-> - Not all land beside water should be flat: some banks are cliffs. Cordonnier et al. 2016 vary the maximum slope by a rock-strength noise (6° to 54°) and raise it above a height for crest cliffs.
-> - No small scraps of land along the coast (seen in the chunk at the start of the session; cause not measured).
-> - Lava rivers are parked until each liquid gets its own look.
-> - Later: rivers refined per patch as the camera zooms (Derzapf section 5), after the design above works.
->
-> **Costs today:** the triangulation takes about 5 s once when the app loads (a "Building rivers…" indicator shows), the first river build about 4.3 s instead of 1.2 s, and the worker holds about 130 MB more for the neighbor lists. Banks or meanders in meters would depend on the Height setting, so Height changes would rebuild the river map.
->
-> **Docs owed:** this week's architecture diagram (new modules `rivers/riverGraph.ts` and `rivers/riverGrid.ts`) is due with the 2026-11-04 push, per the diagram rule. The `ui-design` skill gained a Busy indicator. The `[TEMP rivers]` logs (`gridAlignedShare`, `lakeOutflows`, basins, valleys, graph) and the dead lake circles in `rivers/valleyMap.ts` are removed in the rebuild's cleanup. Bugs are `[B94]` to `[B105]` in `ISSUES.md`.
->
-> **Also learned:** `npx tsc --noEmit -p .` checks nothing here (the root `tsconfig.json` only points to others). Use `-p tsconfig.app.json` (`[B105]`).
+> **Working style (Dana, this round):** never promise behavior from the code alone (rivers "connected" to lakes weren't); check what the repo already has and what professional tools do before designing a pipeline; give honest scope; Dana tests only at the end of a phase.
 
 > [!NOTE]
 > **Previous handover (2026-11-01, thirteenth):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*

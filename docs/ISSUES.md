@@ -743,7 +743,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **🔴 Open, the root of B95 to B105** · **Found:** 2026-11-02 · **Where:** the river carve in `shaders/heightmap/heightmap.frag.glsl`, `rivers/`
 - Dana: every round looked worse; floods, dry trenches, tubes, vanishing water, straight lines and ragged edges kept returning.
 - Cause, measured: a debug view of shown ground minus river level put tributaries far below the ground and main rivers far above it. The noise was never shaped by water, and the rivers were a decal cut into it.
-- Fix: the water system design in the `ROADMAP.md` handover (2026-11-02), with water and terrain from one field.
+- Fix: water from simulation (phase 1 GPU stream power on the planet, phase 2 the virtual-pipes engine on the chunk), in the `ROADMAP.md` fifteenth handover. The network rework of 2026-11-02 is kept on the branch `water-network-2026-11-02` for reference.
 
 ### [B95] Rivers ran along the grid's rows · `wrong but workable`
 **✅ Fixed:** 2026-11-02 · **Found:** 2026-11-02 · **Where:** new `rivers/riverGraph.ts`

@@ -6,7 +6,7 @@
 
 *What this is, the idea behind it, and what inspired it.*
 
-> 📌 To be written: an intro to the project, the concept, and the inspiration.
+> 📌 **Temporary draft (2026-11-02), to be revised with Dana and replaced:** alien planetary exploration and evolution. You create planets from settings for landscape, atmosphere and biome, then explore them. Possibly evolving plant and animal agents, and extreme, disaster-like conditions.
 
 ---
 
