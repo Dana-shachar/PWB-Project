@@ -42,11 +42,11 @@ function squareNeighbors(size: number): { neighborStarts: Int32Array; neighborLi
 
 // The planet's lakes on the chunk's own ground: from the planet's outline, water at its level spreads to every neighbor
 // whose ground is below it, so a lake always ends against rising ground or at the cut, never in the air (a flood fill).
-function floodPlanetLakes(ground: Float32Array, planetLakes: Float32Array, size: number): Float32Array {
+function floodPlanetLakes(ground: Float32Array, planetLakes: Float32Array, size: number, seaLevel: number): Float32Array {
   const level = new Float32Array(size * size).fill(NO_CHUNK_LAKE);
   const queue: number[] = [];
   for (let cell = 0; cell < level.length; cell++) {
-    if (planetLakes[cell] > ground[cell]) {
+    if (planetLakes[cell] > ground[cell] && ground[cell] >= seaLevel) {
       level[cell] = planetLakes[cell];
       queue.push(cell);
     }
@@ -58,7 +58,8 @@ function floodPlanetLakes(ground: Float32Array, planetLakes: Float32Array, size:
     for (const [nextRow, nextCol] of [[row + 1, col], [row - 1, col], [row, col + 1], [row, col - 1]]) {
       if (nextRow < 0 || nextCol < 0 || nextRow >= size || nextCol >= size) continue;
       const next = nextRow * size + nextCol;
-      if (ground[next] < level[cell] && level[next] < level[cell]) {
+      // The sea stops it, as it stops the chunk's own lakes: a lake never spreads over the sea floor.
+      if (ground[next] < level[cell] && ground[next] >= seaLevel && level[next] < level[cell]) {
         level[next] = level[cell];
         queue.push(next);
       }
@@ -113,7 +114,7 @@ self.onmessage = (event: MessageEvent<ChunkLakesRequest>) => {
   const hierarchy = buildDepressionHierarchy(ground, isOcean, neighborStarts, neighborList, heap);
   const lakes = fillSpillMerge(hierarchy, ground, neighborStarts, neighborList, waterBudget(climate).lakeShare, heap);
   // Each cell takes the higher of its own lake and the planet's lake flooded over this ground.
-  const level = floodPlanetLakes(ground, planetLakes, size);
+  const level = floodPlanetLakes(ground, planetLakes, size, seaLevel);
   for (let cell = 0; cell < cells; cell++) {
     const lake = lakes.lakeOf[cell];
     if (lake >= 0 && lakes.lakeLevel[lake] > level[cell]) level[cell] = lakes.lakeLevel[lake];

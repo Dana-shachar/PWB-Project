@@ -272,7 +272,7 @@
 
 **scene/Gumball.tsx**, **scene/sharedGumball.ts**
 - What it is: the navigation widget, and its shared control of one or two cameras. A target with a `surface` zooms by log height above the ground.
-- Key names: `Gumball`, `GumballTarget` (`surface`, `setWalkSpeed`), the walk Speed row (`walkSpeedRow`, `handleWalkSpeedInput`, shown only while walking), `levelToDistance`, `distanceToLevel`, `zoomAnchors`, `useSharedGumball`.
+- Key names: `Gumball`, `GumballTarget` (`surface`, `setWalkSpeed`, `setEyeHeight`), the Zoom row turning into Eye height while walking (`eyeHeightAt`, `EYE_HEIGHT_MAX_METERS`), the walk Speed row (`walkSpeedRow`, `handleWalkSpeedInput`, shown only while walking), `levelToDistance`, `distanceToLevel`, `zoomAnchors`, `useSharedGumball`.
 
 **scene/camera.ts**, **controls.ts**
 - What it is: the camera and its orbit controls. Every frame the planet view scales rotate, pan and zoom speed, and the near and far planes, by height above the surface; the far plane always contains the glow (`[B75]`). Space + drag pans, as does Shift + drag.
@@ -322,12 +322,12 @@
 
 **scene/walkMode.ts**
 - What it is: the chunk's person view. Drag to look, long-press to walk forward (`HOLD_TO_WALK_MS`; dragging then steers), WASD or arrows to move, arrows turn, R/F look up and down, Shift runs, `[` `]` or the wheel scale speed (default 10x), Esc leaves. A 1.5 s fly-in eases the camera from the orbit view.
-- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`, `speedMultiplier`, `holding`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `HOLD_TO_WALK_MS`, `MIN_EYE_CLEARANCE_METERS` (the eye's floor above the ground), `flyIn`; water rules `getWaterHeight` (the sea or a lake at a point), `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
+- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`, `speedMultiplier`, `holding`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `HOLD_TO_WALK_MS`, `eyeHeightMeters` (set by the Eye height slider), `GROUND_PROBE_METERS` (the eye stands above the highest ground within it, rising at once), `flyIn`; water rules `getWaterHeight` (the sea or a lake at a point), `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
 - Talks to: `LandChunkCanvas.tsx` (saves and restores the orbit camera, eases fov/near/far with `progress`), `ChunkPatchRenderer.sampleHeight` for the eye height.
 
 **voxel/chunkWater.ts**
 - What it is: the chunk's water, TDM's Seascape on a sheet that stands flat at the sea and at each lake's level, recolored by the water ramp, see-through in the shallows, with shore and crest foam, and side walls down to the chunk's base.
-- Key names: `ChunkWater` (`walls`, `baseDepth`), `WATER_SHEET_SEGMENTS`, `WALL_TOP_SHARE`, lake ripples (`RIPPLE_TILE_SHARE`, `uRippleTile`, `LAKE_RIPPLE_STRENGTH` and `lakeRipple` in `chunkWater.frag.glsl`), `applyTide` (`uLakeEbb`), `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
+- Key names: `ChunkWater` (`walls`, `baseDepth`), `WATER_SHEET_SEGMENTS`, `WALL_TOP_SHARE`, the walls' cross-section (`WALL_GROUND_OVERLAP` in `chunkWaterWall.frag.glsl`, drawn behind the land wall by polygon offset), lake ripples (`RIPPLE_TILE_SHARE`, `uRippleTile`, `LAKE_RIPPLE_STRENGTH` and `lakeRipple` in `chunkWater.frag.glsl`), `applyTide` (`uLakeEbb`), `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
 
 **voxel/chunkLakes.ts**
 - What it is: keeps the chunk's lake levels fresh: reads the preview map without stalling a frame, keeps only the latest request, and holds the result as a texture (R the level, G the tide share), read by the sheet and both walls.
@@ -339,7 +339,7 @@
 
 **voxel/LandChunkCanvas.tsx**
 - What it is: the chunk view, its chunk material (shared by the voxel mesh and every patch), map-style orbit (`zoomToCursor`, pivot on the ground under the cursor) and the patch renderer.
-- Key names: `LandChunkCanvas`, `LandChunkCanvasHandle`, `pivotAtScreenPoint` (screen point to ground pivot), `pivotOnGround` (mouse handler), `currentGround`; one `HeightmapPipeline` per moon (`moonPipelinesRef`, `MOON_TEXTURE_WIDTH`).
+- Key names: `LandChunkCanvas`, `LandChunkCanvasHandle`, `pivotAtScreenPoint` (screen point to ground pivot), `waterHeightAt` (the sea or a lake at a point, the floor for both cameras), `pivotOnGround` (mouse handler), `currentGround`; one `HeightmapPipeline` per moon (`moonPipelinesRef`, `MOON_TEXTURE_WIDTH`).
 
 **voxel/smoothMesh.ts**, **meshWorker.ts**, **density.ts**, **chunkGrid.ts**
 - What it is: smooth and blocky meshing, and the chunk's grid constants.

@@ -93,6 +93,11 @@ export function createChunkWater(): ChunkWater {
     fragmentShader: terrainGlsl + waterGlsl + hazeGlsl + wallFragmentBody,
     transparent: true,
     depthWrite: false,
+    // In the land wall's plane and pushed just behind it, so where both draw (at the shore, whose place the two read from
+    // different maps) the land wins and water shows only where there is no land.
+    polygonOffset: true,
+    polygonOffsetFactor: 1,
+    polygonOffsetUnits: 1,
     uniforms: { ...material.uniforms },
   });
   const walls = new THREE.Mesh(wallGeometry, [wallMaterial]);

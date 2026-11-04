@@ -666,12 +666,17 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 **Decided:** 2026-11-04
 
 - Anywhere a water or land surface is cut, it ends in a wall, never open in the air. Dana's rule.
-- At the square's sides, a column whose edge lies under water is water from the base up, for lakes as for the sea.
+- At the square's sides, the true cross-section (Dana, 2026-11-04): the land wall runs from the base to the ground, and the sea or a lake fills from the ground to its surface (`[B131]`). This replaces the earlier whole-column water.
 
 ### [S78] A new planet starts bare · `decided`
 **Decided:** 2026-11-04
 
 - A new planet starts with every system off (Atmosphere, Ocean, Erosion) and every panel closed. Dana.
+
+### [S80] Walk mode's eye height · `decided`
+**Decided:** 2026-11-04
+
+- No new slider (Dana: "too many sliders"): in walk mode the Zoom slider becomes Eye height, from a person's 1.7 m to 200 m on a log scale, and turns back into Zoom on leaving. Both views keep the camera above the ground and the water.
 
 ### [S79] Every detail has a real size · `decided`
 **Decided:** 2026-11-04

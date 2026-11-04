@@ -157,11 +157,7 @@ void main() {
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
     surfaceColor = ramp;
   }
-  if (vIsTopSurface < 0.5 && uWaterOn > 0.5) {
-    vec4 edgeTexel = texture2D(uChunkHeightMap, mix(uPatchUvMin, uPatchUvMax, vUv));
-    float edgeWater = max(uSeaLevel, texture2D(uChunkLakeLevels, mix(uPatchUvMin, uPatchUvMax, vUv)).r); // the sea or a lake
-    if (mix(edgeTexel.r, edgeTexel.g, uHeightMapGreenChannel) < edgeWater) discard;
-  }
+  // The land's wall always runs from the base up to the ground; water sits on top of it (chunkWaterWall.frag.glsl).
 
   vec3 litColor = surfaceColor * (fill + diffuse) + specular;
   gl_FragColor = vec4(applyHaze(litColor, vWorldPosition, uCameraPosition, uLightDirection), 1.0);

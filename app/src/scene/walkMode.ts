@@ -15,8 +15,9 @@ const MIN_TRAVEL_SCALE = 1;
 const MAX_TRAVEL_SCALE = 2000;
 const WHEEL_TRAVEL_FACTOR = 1.25;
 const HEIGHT_SMOOTHING_PER_SECOND = 10;
-// The eye never sinks below the ground plus this, so the height smoothing can't lag it into a rise. Inferred, TUNABLE.
-const MIN_EYE_CLEARANCE_METERS = 0.5;
+// The eye stands above the highest ground within this radius, so a rise just ahead lifts it before the camera reaches
+// it (a character controller's capsule, not a point). Inferred, TUNABLE.
+const GROUND_PROBE_METERS = 1;
 const EDGE_MARGIN = 0.999;
 const LOOK_RADIANS_PER_PIXEL = 0.0025;
 const MAX_PITCH = Math.PI / 2 - 0.02;
@@ -55,6 +56,7 @@ export class WalkMode {
   active = false;
   travelScale = DEFAULT_TRAVEL_SCALE;
   speedMultiplier = 1; // the gumball's walk Speed slider, ×0.5 to ×5
+  eyeHeightMeters = EYE_HEIGHT_METERS; // the gumball's Eye height slider, which replaces Zoom while walking
   // 0 at the start of the fly-in, 1 once arrived (and for the whole walk after).
   progress = 1;
 
@@ -315,10 +317,17 @@ export class WalkMode {
       groundHeight = this.heightAt(ground, shore.x, shore.y);
       sea = this.getWaterHeight(shore.x, shore.y);
     }
-    const eyeHeight = Math.max(groundHeight, sea ?? -Infinity) + EYE_HEIGHT_METERS / METERS_PER_UNIT;
-    const blend = 1 - Math.exp(-HEIGHT_SMOOTHING_PER_SECOND * deltaSeconds);
-    this.camera.position.y += (eyeHeight - this.camera.position.y) * blend;
-    this.camera.position.y = Math.max(this.camera.position.y, Math.max(groundHeight, sea ?? -Infinity) + MIN_EYE_CLEARANCE_METERS / METERS_PER_UNIT);
+    // The eye rises with the ground at once and eases only going down, so it never lags into a slope ([B129]).
+    const probe = GROUND_PROBE_METERS / METERS_PER_UNIT;
+    const { x, z } = this.camera.position;
+    let groundAround = groundHeight;
+    for (const [dx, dz] of [[probe, 0], [-probe, 0], [0, probe], [0, -probe]]) groundAround = Math.max(groundAround, this.heightAt(ground, x + dx, z + dz));
+    const eyeHeight = Math.max(groundAround, sea ?? -Infinity) + this.eyeHeightMeters / METERS_PER_UNIT;
+    if (eyeHeight >= this.camera.position.y) {
+      this.camera.position.y = eyeHeight;
+    } else {
+      this.camera.position.y += (eyeHeight - this.camera.position.y) * (1 - Math.exp(-HEIGHT_SMOOTHING_PER_SECOND * deltaSeconds));
+    }
   }
 
   // The fly-in: position and facing ease from the orbit view to the standing spot.
@@ -327,7 +336,7 @@ export class WalkMode {
     transition.elapsed += deltaSeconds;
     const raw = Math.min(1, transition.elapsed / TRANSITION_SECONDS);
     const eased = raw < 0.5 ? 4 * raw ** 3 : 1 - (-2 * raw + 2) ** 3 / 2;
-    const endY = this.heightAt(ground, transition.endX, transition.endZ) + EYE_HEIGHT_METERS / METERS_PER_UNIT;
+    const endY = this.heightAt(ground, transition.endX, transition.endZ) + this.eyeHeightMeters / METERS_PER_UNIT;
     this.camera.position.set(
       THREE.MathUtils.lerp(transition.startPosition.x, transition.endX, eased),
       THREE.MathUtils.lerp(transition.startPosition.y, endY, eased),

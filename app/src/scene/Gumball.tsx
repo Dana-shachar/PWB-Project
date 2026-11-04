@@ -31,12 +31,19 @@ export interface GumballTarget {
   isWalking?: () => boolean;
   // Sets walk mode's speed, a multiple of a person's walking pace.
   setWalkSpeed?: (multiplier: number) => void;
+  // Sets walk mode's eye height above the ground, in meters.
+  setEyeHeight?: (meters: number) => void;
 }
 
 const MIN_ZOOM_LEVEL = 10;
 const MAX_ZOOM_LEVEL = 400;
 const MIN_WALK_SPEED = 0.5;
 const MAX_WALK_SPEED = 10;
+// While walking, the Zoom slider sets the eye height instead (Dana): a person's at 0, up to a low flight at 100, on a
+// log scale so the low end has room. The top is inferred, TUNABLE.
+const EYE_HEIGHT_MIN_METERS = 1.7;
+const EYE_HEIGHT_MAX_METERS = 200;
+const eyeHeightAt = (level: number) => EYE_HEIGHT_MIN_METERS * (EYE_HEIGHT_MAX_METERS / EYE_HEIGHT_MIN_METERS) ** (level / 100);
 
 // Zoom level to distance. Without a surface it is a percent of the reference
 // distance; with one, height above the surface steps evenly on a log scale
@@ -119,6 +126,8 @@ export class Gumball {
   private readonly snapSpeed = 0.08;
   private zoomLevel: number;
   private zoomInput: HTMLInputElement | null = null;
+  private zoomLabel: HTMLSpanElement | null = null;
+  private eyeLevel = 0; // the Eye height slider's position while walking, 0 to 100
   private walkSpeedRow: HTMLDivElement | null = null;
   private walkSpeedInput: HTMLInputElement | null = null;
   private walkBtn: HTMLButtonElement | null = null;
@@ -206,6 +215,7 @@ export class Gumball {
     const zoomLabel = document.createElement('span');
     zoomLabel.textContent = 'Zoom';
     zoomLabel.className = 'gumball-zoom-label';
+    this.zoomLabel = zoomLabel;
 
     this.zoomInput = document.createElement('input');
     this.zoomInput.type = 'range';
@@ -290,6 +300,14 @@ export class Gumball {
     this.walkBtn.disabled = !(this.targets.length === 1 && this.targets[0].toggleWalkMode);
     this.walkBtn.classList.toggle('gumball-btn--active', this.walking);
     if (this.walkSpeedRow) this.walkSpeedRow.style.display = this.walking ? '' : 'none';
+    // The Zoom row becomes Eye height while walking, and goes back to the zoom it had on leaving.
+    if (this.zoomInput && this.zoomLabel) {
+      this.zoomLabel.textContent = this.walking ? 'Eye height' : 'Zoom';
+      this.zoomInput.min = String(this.walking ? 0 : MIN_ZOOM_LEVEL);
+      this.zoomInput.max = String(this.walking ? 100 : MAX_ZOOM_LEVEL);
+      this.zoomInput.value = String(this.walking ? this.eyeLevel : this.zoomLevel);
+      this.zoomInput.title = this.walking ? `Eye height, ${EYE_HEIGHT_MIN_METERS} to ${EYE_HEIGHT_MAX_METERS} m` : '';
+    }
   }
 
   private handleWalkSpeedInput = () => {
@@ -307,6 +325,11 @@ export class Gumball {
 
   private handleZoomInput = () => {
     if (!this.zoomInput) return;
+    if (this.walking) {
+      this.eyeLevel = parseFloat(this.zoomInput.value);
+      for (const target of this.targets) target.setEyeHeight?.(eyeHeightAt(this.eyeLevel));
+      return;
+    }
     this.zoomLevel = parseFloat(this.zoomInput.value);
     for (const target of this.targets) {
       const { camera, cameraControls } = target;
@@ -371,7 +394,7 @@ export class Gumball {
     const currentDistance = primary.camera.position.distanceTo(primary.cameraControls.target);
     this.zoomLevel = Math.max(MIN_ZOOM_LEVEL, Math.min(MAX_ZOOM_LEVEL, Math.round(distanceToLevel(primary, currentDistance))));
 
-    if (this.zoomInput && document.activeElement !== this.zoomInput) {
+    if (this.zoomInput && !this.walking && document.activeElement !== this.zoomInput) {
       const zoomStr = String(this.zoomLevel);
       if (this.zoomInput.value !== zoomStr) this.zoomInput.value = zoomStr;
     }

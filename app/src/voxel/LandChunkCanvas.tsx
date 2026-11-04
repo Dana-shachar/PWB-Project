@@ -7,7 +7,7 @@ import landLayersGlsl from '../shaders/terrain/landLayers.glsl?raw';
 import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
 import { camera, defaultCameraPosition, DEFAULT_FAR } from '../scene/camera';
 import { controls, keepAboveFlatGround } from '../scene/controls';
-import { EYE_HEIGHT_METERS, WalkMode } from '../scene/walkMode';
+import { WalkMode } from '../scene/walkMode';
 import { grid } from '../scene/grid';
 import type { GumballTarget } from '../scene/Gumball';
 import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
@@ -285,6 +285,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         return enterWalk();
       },
       isWalking: () => walkMode.active,
+      setEyeHeight: (meters) => {
+        walkMode.eyeHeightMeters = meters;
+      },
       setWalkSpeed: (multiplier) => {
         walkMode.speedMultiplier = multiplier;
       },
@@ -292,18 +295,22 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
 
     // Walk mode ([walkMode.ts]): entering saves the orbit camera and turns orbit off; leaving restores it.
     const orbitSaved = { position: new THREE.Vector3(), target: new THREE.Vector3(), up: new THREE.Vector3(), fov: 60, near: 0.1, far: 1000 };
-    const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
-      const renderer = sharedRendererRef.current.renderer;
-      return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight), patchSettingsRef.current.heightBase) : null;
-    }, (x, z) => {
-      // The sea or the lake there, whichever is higher, in world height (applyTide's rule for the lake).
+    // The sea or the lake at a point, whichever is higher, in world height (applyTide's rule for the lake); null if none.
+    // Both views keep the camera above it, so it never sees the water from underneath.
+    function waterHeightAt(x: number, z: number): number | null {
       const sea = water.mesh.visible ? water.mesh.position.y : null;
       const size = Math.max(patchSettingsRef.current.chunkSize, 1e-6);
-      const lake = chunkLakes.levelAt(x / size + 0.5, z / size + 0.5);
+      const u = x / size + 0.5;
+      const v = z / size + 0.5;
+      const lake = u >= 0 && u <= 1 && v >= 0 && v <= 1 ? chunkLakes.levelAt(u, v) : null;
       const { heightBase, maxHeight } = patchSettingsRef.current;
       const lakeHeight = lake === null ? null : Math.max(0, lake + heightBase) * Math.max(0, maxHeight);
       return sea === null ? lakeHeight : lakeHeight === null ? sea : Math.max(sea, lakeHeight);
-    }, () => {
+    }
+    const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
+      const renderer = sharedRendererRef.current.renderer;
+      return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight), patchSettingsRef.current.heightBase) : null;
+    }, waterHeightAt, () => {
       perspectiveCamera.position.copy(orbitSaved.position);
       perspectiveCamera.up.copy(orbitSaved.up);
       orbitControls.target.copy(orbitSaved.target);
@@ -472,7 +479,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       if (walkMode.active) {
         // The lens eases with the fly-in: near follows the eye height (a quarter of it, as
         // keepAboveFlatGround does) and far stops past the chunk, blended from the orbit values.
-        const walkNear = (EYE_HEIGHT_METERS / 1000) * 0.25;
+        const walkNear = (walkMode.eyeHeightMeters / 1000) * 0.25;
         const progress = walkMode.progress;
         const fov = THREE.MathUtils.lerp(orbitSaved.fov, walkFovRef.current, progress);
         const near = orbitSaved.near * (walkNear / orbitSaved.near) ** progress;
@@ -488,7 +495,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         orbitControls.update();
         const ground = currentGround();
         const groundHeight = ground ? groundHeightAt(ground, perspectiveCamera.position.x, perspectiveCamera.position.z) : null;
-        keepAboveFlatGround(orbitControls, perspectiveCamera, groundHeight ?? 0, patchSettingsRef.current.chunkSize, Math.max(patchSettingsRef.current.maxHeight, 0));
+        const waterHeight = waterHeightAt(perspectiveCamera.position.x, perspectiveCamera.position.z);
+        const floorHeight = Math.max(groundHeight ?? 0, waterHeight ?? -Infinity);
+        keepAboveFlatGround(orbitControls, perspectiveCamera, floorHeight, patchSettingsRef.current.chunkSize, Math.max(patchSettingsRef.current.maxHeight, 0));
       }
       // Same reason as SceneCanvas's own onFrame: the specular term needs
       // the eye position, and the camera moves every frame under orbit

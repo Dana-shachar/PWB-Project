@@ -27,6 +27,7 @@
 - **Tides as ratios (`[S76]`):** planet size, moon size, liquid and lake width all scale the tide, tied to no Earth value.
 - **Walls and selection (`[B123]`, `[B125]`, `[S77]`):** the white lines on the chunk's sides are gone, and a drawn square starts under the cursor.
 - **Lakes, walking and haze (`[B126]` to `[B128]`):** the chunk shows the planet's large lakes (1.8% to 79% of one square), lakes ripple at every zoom, walking stops at lake shores, and haze reaches the horizon.
+- **Walk mode and walls (`[B129]` to `[B132]`, `[S80]`):** no more stripes or getting stuck on bumps, an Eye height setting on the Zoom slider, cameras stay above water, and the side walls show the true cross-section with the seabed under the water.
 - **Saving and defaults (`[S74]`, `[S78]`):** the Erosion switch saves; a new planet starts bare with closed panels.
 - **Direction:** a concept and research question in the README, and a vertical slice of 3 to 5 distinct planets for the final, with rivers, plants and animals as chunk detail by real size (`[S79]`).
 

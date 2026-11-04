@@ -8,6 +8,22 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
+> **Start from here (2026-11-04, eighteenth handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Newer than the blocks below.*
+>
+> **State.** `main` holds everything through the walk mode and wall fixes (`[B126]` to `[B132]`, `[S78]` to `[S80]`), not pushed. Uncommitted on purpose: `README.md` (Dana's concept and research question, edited at her request this session; ask whether to commit it), `.obsidian/workspace.json` (never), the old handover file and its screenshots (Dana's call to delete).
+>
+> **How Dana wants work run.** Diagnose first, confirm with a measurement, then fix only the confirmed cause (memory `diagnose-before-proposing`). A clear "fix it" is the go. Keep tokens down. Chrome pauses a tab that's behind another, so measurements need the test tab in front; ask Dana to bring it forward. Two tabs on one planet can overwrite each other's autosave. Measure against the sea's base level (`uShoreSeaLevel`), never `uSeaLevel`, which includes the tide.
+>
+> **Direction.** About 3 weeks to the final: a vertical slice of 3 to 5 distinct planets (❓ Dana to confirm: pink desert, water world, lava world, methane ice, forest if trees fit). Rivers, plants and animals are chunk detail by real size (`[S79]`).
+>
+> **Next, in order.**
+> 1. 🔴 `[B134]` water walls too high, and 🔴 `[B133]` side walls and top disagree at the coast: diagnose on New Planet 04's current square. The tide's 8% swing is the lead for `[B134]`.
+> 2. ⚪ Walk lag: `sampleHeight` stalls on a GPU read every frame (17.6 of 20.7 ms measured); read from a CPU copy instead. Approved in principle.
+> 3. ⚪ Rivers on the chunk: plan approved (flow per GRASS `r.stream.extract` on the chunk's ground in `rivers/chunkLakes.worker.ts`, width in meters from flow, painted in `chunk.frag.glsl` when wider than a pixel). Not started.
+> 4. ⚪ Layered haze (after Dana looks at the haze fix), then vegetation (`ROADMAP` item 5 below), then per-pixel grain `[B122]`.
+> 5. ⚪ Walk mode jitter on a fresh planet, if it still shows after `[B129]`.
+>
+> [!IMPORTANT]
 > **Start from here (2026-11-04, seventeenth handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. This is newer than the block below.*
 >
 > **State.**

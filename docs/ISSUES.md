@@ -904,9 +904,33 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Dana: barely any haze, none at the horizon even at full strength. From the code: the haze thinned over a fixed 1.2 units, and the ground sits hundreds of units up, so at a measured eye height of 299 it was multiplied by about e^-249.
 - The fix: heights from the sea's height, thinning over a share of the terrain's height. Seen in walk mode; not measured.
 
-### [B129] Stripes in walk mode · `wrong but workable`
+### [B129] Stripes and getting stuck in walk mode · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `update` in `scene/walkMode.ts`
+- Dana: stripes and feeling stuck in the ground when walking fast over bumps with click-and-hold. Measured from her own walk: the eye's height smoothing lagged uphill and sank to its 0.5 m floor, which only checked the point under the eye, so the ground just ahead stood up to 0.65 m above the eye and the camera sat inside the slope.
+- Ruled out first: holes between patches (coverage 100% every frame), coarse temporary bakes, keyboard tilting.
+- The fix: the eye rises with the ground at once and eases only going down, standing above the highest ground within 1 m (`GROUND_PROBE_METERS`). Measured: 1.85 to 3.9 m above the ground, 0 frames inside a slope.
+
+### [B130] Water hid the sky when dragging the chunk view down · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `waterHeightAt` and `keepAboveFlatGround` in `voxel/LandChunkCanvas.tsx`
+- Dana: dragging down made a light blue slab take out the sky. Measured: the orbit camera sat 16 units under a lake's surface; hiding the water sheet brought the sky back. The orbit view kept the camera above the ground only.
+- The fix: the orbit camera stays above the ground or the water there, whichever is higher. Measured: placed under the lake, it was pushed to just above it.
+
+### [B131] Land wall broke off at the shore · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `chunk.frag.glsl`, `chunkWaterWall.frag.glsl`, `voxel/chunkWater.ts`
+- Dana: a mismatch in the land wall's shape at the shore. A whole column was drawn as water from the base up wherever the edge lay under water, so the land wall stopped dead at the shoreline instead of continuing as the seabed.
+- The fix: the true cross-section (`[S77]`). The land wall always runs from the base to the ground; water fills only from the ground to its surface, drawn just behind the land wall where they overlap.
+
+### [B132] Planet lakes spread over the sea floor · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `floodPlanetLakes` in `rivers/chunkLakes.worker.ts`
+- From the code: the fill spread a lake to any lower neighbor, and nothing stopped it at the sea. The fix: the sea stops it, as it stops the chunk's own lakes. Measured after: 0 lake cells over the sea floor. The "13%" quoted before the fix was measured against the sea including the tide, so it isn't valid evidence.
+
+### [B133] Side walls and top disagree on where the coast meets the edge · `minor`
+**🔴 Open** · **Found:** 2026-11-04 · **Where:** the walls (`uChunkHeightMap`) against the drawn land (patches)
+- Dana's screenshot: the water strip on the side starts left of where the coastline on top meets the edge. Likely cause, not measured: the walls place the shore from the base map, the top from the patch bakes. The measurement timed out with the tab in the background.
+
+### [B134] Water walls rise too high · `wrong but workable`
 **🔴 Open** · **Found:** 2026-11-04 · **Where:** not yet known
-- Dana's screenshot: vertical stripes on the ground ahead in walk mode. Not diagnosed.
+- Dana's screenshot: on a far face the water wall rises above the sea's surface. Measured on New Planet 04: the tide lifts the sea from 0.284 to 0.362 in raw height, the 8% cap (about 25 km on that square). A lead, not confirmed as the cause.
 
 ### [B124] The page freezes and ignores a hard refresh · `blocks work`
 **🟡 Tabled 2026-11-04** · **Found:** 2026-11-03

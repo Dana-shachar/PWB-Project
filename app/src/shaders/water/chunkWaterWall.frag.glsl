@@ -17,19 +17,20 @@ uniform float uAmbient;
 uniform float uLightIntensity;
 uniform vec3 uCameraPosition;
 varying vec3 vWorldPosition;
+const float WALL_GROUND_OVERLAP = 0.002; // raw height. Inferred, TUNABLE
 
 void main() {
   float raw = vWorldPosition.y / max(uMaxHeight, 0.0001) - uHeightBase;
-  // Where the edge lies under the sea, the whole side is water from the base up (the land's side is dropped there,
-  // chunk.frag.glsl); on dry edges there is none. Its own depth gradient is stretched over that full height.
+  // The true cross-section (Dana): the land's wall runs from the base up to the ground everywhere (chunk.frag.glsl), and
+  // water fills only from the ground up to the sea's or a lake's surface.
   vec2 chunkUv = clamp(vWorldPosition.xz / uChunkSize + 0.5, 0.0, 1.0);
   vec4 heightTexel = texture2D(uChunkHeightMap, chunkUv);
   float groundRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
-  // A lake's side behaves as the sea's: where the edge lies under it, the whole column is water from the base up.
   float waterSurface = max(uSeaLevel, texture2D(uChunkLakeLevels, chunkUv).r);
-  if (groundRaw >= waterSurface || raw > waterSurface) discard;
-  float depthShare = clamp((waterSurface - raw) / max(0.0001, waterSurface + uHeightBase), 0.0, 1.0);
-  // Evenly over the chunk's side height, surface to base, not through the clarity curve (which bunched it at the top).
+  // A little below the ground, so the land wall's top (from its own mesh) never leaves a gap under the water.
+  if (groundRaw >= waterSurface || raw > waterSurface || raw < groundRaw - WALL_GROUND_OVERLAP) discard;
+  // Colored by depth below the surface, as the sheet measures it, so the side matches the water seen from above.
+  float depthShare = clamp((waterSurface - raw) / max(0.0001, waterSurface - uWaterDeepest), 0.0, 1.0);
   vec3 rampColor = terrainRampColor(depthShare, uWaterRampColors, uWaterRampPositions, int(uWaterRampCount));
   vec3 normal = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));
   vec3 color = rampColor * (uAmbient + uLightIntensity * softDiffuse(normal, normalize(uLightDirection), 0.5));
