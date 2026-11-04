@@ -19,7 +19,7 @@ import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame, GAP_PER_JAGG
 import { createPlanetHaze, updatePlanetHaze } from '../atmosphere/planetHaze';
 import { bakeAirGround, createAirGround, type AirGround } from '../atmosphere/airGround';
 import { createPlanetSpin, type SpinSettings } from './planetSpin';
-import { AreaOutline } from './areaOutline';
+import { AREA_OUTLINE_LIFT, AreaOutline } from './areaOutline';
 
 import { isRippleMapReady } from '../planet/rippleMap';
 import { KM_PER_SCENE_UNIT, WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
@@ -125,6 +125,7 @@ export interface SceneCanvasHandle {
   // Bakes the next rows of the land chunk's full base map within a texel budget (map/heightmap.ts).
   advanceChunkBaseUpgrade(root: TerrainPatch, texelBudget: number): { texels: number; switched: boolean; pending: boolean };
   getChunkBaseTexture(): THREE.Texture | null;
+  getChunkPreview(): { target: THREE.WebGLRenderTarget; revision: number } | null;
   // Bakes a patch into a target the caller owns, for the chunk's patches
   // (voxel/ChunkPatchRenderer.ts). False if the pipeline isn't ready.
   bakePatchInto(patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch): boolean;
@@ -598,6 +599,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
       getChunkBaseTexture() {
         return heightmapPipelineRef.current?.getChunkBaseTexture()?.texture ?? null;
       },
+      getChunkPreview() {
+        return heightmapPipelineRef.current?.getChunkPreview() ?? null;
+      },
       getPatchRegionTexture(patch, resolution) {
         const webglRenderer = webglRendererRef.current;
         const heightmapPipeline = heightmapPipelineRef.current;
@@ -714,13 +718,8 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
       },
       pickPointAt(clientX, clientY) {
         const viewportElement = viewportRef.current;
-        const planetMesh = planetMeshRef.current;
         const target = gumballTargetRef.current;
-        if (!viewportElement || !planetMesh || !target) return null;
-        // Standard Three.js picking: screen point to normalized device
-        // coordinates, raycast, take the first hit on the planet. Against
-        // this pane's own element now, not a canvas — this component no
-        // longer owns one, see scene/sharedViewportRenderer.ts.
+        if (!viewportElement || !target) return null;
         const bounds = viewportElement.getBoundingClientRect();
         const pointer = new THREE.Vector2(
           ((clientX - bounds.left) / bounds.width) * 2 - 1,
@@ -728,22 +727,15 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         );
         const raycaster = new THREE.Raycaster();
         raycaster.setFromCamera(pointer, target.camera);
-        // The planet is a group of patch meshes now, not one mesh, when the
-        // patches path is active (planetMesh itself still exists either
-        // way, just hidden, see the mount effect below) — intersect
-        // whichever is actually visible.
-        const hit =
-          USE_PLANET_PATCHES && planetPatchRendererRef.current
-            ? planetPatchRendererRef.current.raycast(raycaster)
-            : raycaster.intersectObject(planetMesh, false)[0];
+        // Picks on the outline's own sphere, so a square's corner lands exactly under the cursor from any view.
+        const shared = sharedUniformsRef.current;
+        const margin = shared.displacementAmplitude * Math.max(Math.abs(shared.terrainBottom), Math.abs(shared.terrainTop));
+        const sphere = new THREE.Sphere(new THREE.Vector3(), (shared.radius + margin) * AREA_OUTLINE_LIFT);
+        const hit = raycaster.ray.intersectSphere(sphere, new THREE.Vector3());
         if (!hit) return null;
-        // The hit is in world space and the planet sits at the origin, so the
-        // point doubles as the direction from the planet's center. Height
-        // displacement happens on the GPU and isn't in this mesh, so the hit
-        // is against the undisplaced sphere — fine for choosing an area.
         // The hit is in world space; the patch grid is in the planet's own, turning frame.
         const planetGroup = planetGroupRef.current;
-        return (planetGroup ? planetGroup.worldToLocal(hit.point.clone()) : hit.point.clone()).normalize();
+        return (planetGroup ? planetGroup.worldToLocal(hit) : hit).normalize();
       },
       getGumballTarget() {
         return gumballTargetRef.current;

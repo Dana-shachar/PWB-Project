@@ -871,16 +871,23 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ### [B121] Steep walls and folds from the erosion filter · `wrong but workable`
 **🔴 Open** · **Found:** 2026-11-04 · **Where:** `erodedSurface` in `heightmap.frag.glsl`
 - Measured: slopes settle as detail rises, so these are walls, not breaks: 85 degrees at Gully Size 1, 88 at 2.15, in direct proportion. Gully Depth 0 removes them (about 50 degrees); noise alone reaches 75. Gully Size is capped at 1.5 for now.
-- Dana: a fold that should be a ridge sinks instead. Unproven: the filter's fade target comes from altitude against the planet's top, so a low ridge reads as a valley. `[B112]` records that a local target changed nothing at the stars, so test it on a ridge.
+- Dana: a fold that should be a ridge sinks instead. Tested 2026-11-04: with the fade target forced to neutral, a gash changed shape but the main fold didn't, so the fade target doesn't explain it. Cause unknown, and the fold tested may not be the one she meant; ask for a screenshot of her spot. Deferred by Dana.
 
 ### [B122] A visible line where fine grain starts · `wrong but workable`
 **🔴 Open** · **Found:** 2026-11-04 · **Where:** `planetDetail`, `heightfieldNormal` in `chunk.frag.glsl`
 - Dana: a line where granular texture begins, and Roughness seems slow to load.
-- From the code and measured: Roughness adds only what a bake's size can show, and the normal steps one bake texel, so neighbors at different bake sizes show different grain, and grain changes as patches re-bake. Below the base map's limit (428 to 651 m a sample on large squares), Roughness is the only added detail. Not yet proven to be this line. Measure next: tint patches by bake size on such a line.
+- Measured: tinting patches by meters per sample shows the grain stops exactly on a patch edge where that spacing doubles. Texture size alone doesn't show it, since same-size patches at different depths have different spacing. Ruled out: `erosionMix`, one value across the planet. The slow loading fits grain arriving as patches re-bake; not timed.
+- Agreed fix: draw the grain per pixel in `chunk.frag.glsl`, faded by its size on screen (Quilez's band-limiting), so no bake boundary can show. Measure the frame cost first.
 
 ### [B123] Hairlines between land and water walls · `minor`
-**🔴 Open** · **Found:** 2026-11-04 · **Where:** `chunk.frag.glsl`, `chunkWaterWall.frag.glsl`
-- Dana: white dashed lines on the chunk's side. From the code: the two walls test the ground at the same place through different coordinates, so a thin gap can have neither. A wall column also turns fully to water when the edge's ground is just under the sea, which reads as stripes. Neither is measured.
+**✅ Fixed 2026-11-04** · **Found:** 2026-11-04 · **Where:** `voxel/chunkWater.ts`
+- Dana: white dashed lines on the chunk's side. Cause, measured: the water wall stood slightly outside the land wall, so from an angle their cut-off points missed each other on one side of a water column. With the offset removed, the lines went, from the view tested.
+- The fix: the water wall is in the land wall's plane. The stripes where the edge's ground is under the sea are true to the data, and Dana chose to leave them.
+
+### [B125] A drawn square didn't land under the cursor · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `pickPointAt` in `scene/SceneCanvas.tsx`
+- Dana: the square doesn't show where the mouse presses. The press picked on the bare sphere while the outline is drawn on a higher one, the radius plus the highest terrain, so they separated away from straight below the camera. From the code; the earlier gap numbers were invalid.
+- The fix: the press picks on the outline's own sphere. Dana's check: "its fine i think".
 
 ### [B124] The page freezes and ignores a hard refresh · `blocks work`
 **🟡 Tabled 2026-11-04** · **Found:** 2026-11-03

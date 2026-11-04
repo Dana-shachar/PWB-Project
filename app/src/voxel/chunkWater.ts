@@ -26,10 +26,11 @@ export interface ChunkWater {
   dispose: () => void;
 }
 
-const WALL_OUTSET = 0.002; // share of the chunk's width
+const WATER_SHEET_SEGMENTS = 512; // enough vertices to lift the sheet onto lakes. Inferred, TUNABLE
+const WALL_TOP_SHARE = 2; // the walls' box top, as a share of maxHeight: above any lake. Inferred, TUNABLE
 
 export function createChunkWater(): ChunkWater {
-  const geometry = new THREE.PlaneGeometry(1, 1);
+  const geometry = new THREE.PlaneGeometry(1, 1, WATER_SHEET_SEGMENTS, WATER_SHEET_SEGMENTS);
   geometry.rotateX(-Math.PI / 2);
   const ramp = buildRampUniformArrays([{ position: 0, color: '#ffffff' }]);
   const material = new THREE.ShaderMaterial({
@@ -40,6 +41,9 @@ export function createChunkWater(): ChunkWater {
     side: THREE.DoubleSide,
     uniforms: {
       uChunkHeightMap: { value: null },
+      uChunkLakeLevels: { value: null }, // voxel/chunkLakes.ts
+      uLakeEbb: { value: 0 },
+      uMaxHeight: { value: 1 },
       uHeightMapGreenChannel: { value: 1 },
       uChunkSize: { value: 1 },
       uHeightBase: { value: 0.5 },
@@ -69,8 +73,8 @@ export function createChunkWater(): ChunkWater {
   mesh.renderOrder = 1; // after the ground, so the shallows show it through
   mesh.visible = false;
 
-  // An open box (sides only), a hair wider than the chunk so it never fights the land's own walls for the same pixels.
-  const wallGeometry = new THREE.BoxGeometry(1 + WALL_OUTSET, 1, 1 + WALL_OUTSET);
+  // An open box (sides only), in the land walls' plane: each column is either land or water, so they never overlap ([B123]).
+  const wallGeometry = new THREE.BoxGeometry(1, 1, 1);
   wallGeometry.translate(0, -0.5, 0);
   wallGeometry.clearGroups();
   wallGeometry.addGroup(0, 12, 0); // +x, -x (BoxGeometry's face order: px, nx, py, ny, pz, nz)
@@ -81,7 +85,7 @@ export function createChunkWater(): ChunkWater {
     fragmentShader: terrainGlsl + waterGlsl + hazeGlsl + wallFragmentBody,
     transparent: true,
     depthWrite: false,
-    uniforms: { ...material.uniforms, uMaxHeight: { value: 1 } },
+    uniforms: { ...material.uniforms },
   });
   const walls = new THREE.Mesh(wallGeometry, [wallMaterial]);
   walls.renderOrder = 1;
@@ -115,9 +119,13 @@ export function chunkWaterLevel(water: ChunkWater): number {
 function applyTide(water: ChunkWater): void {
   const level = chunkWaterLevel(water);
   water.mesh.position.y = Math.max(0, level + water.mesh.material.uniforms.uHeightBase.value) * water.tide.maxHeight;
-  water.walls.scale.y = Math.max(0.0001, water.mesh.position.y - water.baseDepth);
+  // The box reaches past any lake; its shader cuts each column to the water there.
+  const wallTop = water.tide.maxHeight * WALL_TOP_SHARE;
+  water.walls.position.y = wallTop - water.mesh.position.y;
+  water.walls.scale.y = Math.max(0.0001, wallTop - water.baseDepth);
   water.walls.material[0].uniforms.uMaxHeight.value = water.tide.maxHeight;
   water.mesh.material.uniforms.uSeaLevel.value = level;
+  water.mesh.material.uniforms.uLakeEbb.value = water.tide.baseSeaLevel + water.tide.height - level;
 }
 
 // Every frame: the eye, the waves' clocks (Seascape's runs faster in wind, the variance waves keep real seconds since

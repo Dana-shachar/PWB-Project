@@ -17,6 +17,9 @@ import { ChunkPatchRenderer, type AdvanceChunkBase, type BakeChunkPatch } from '
 import { chunkBaseDepth } from './chunkPatchMesh';
 import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
 import type { ElevationData } from './chunkGrid';
+import { ChunkLakes } from './chunkLakes';
+import { squareSizeKm } from './areaSelect';
+import { liquidNamed, viscosityAt } from '../rivers/riverClimate';
 import { createChunkWater, setChunkWaterLight, setChunkWaterSky, setChunkWaterTide, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
 import { tideHeight } from '../atmosphere/tides';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
@@ -97,6 +100,9 @@ interface LandChunkCanvasProps {
   bakePatch: BakeChunkPatch;
   advanceChunkBase: AdvanceChunkBase;
   chunkBaseTexture: () => THREE.Texture | null;
+  chunkPreview: () => { target: THREE.WebGLRenderTarget; revision: number } | null;
+  lakesOn: boolean;
+  radiusKm: number;
   // The CPU copy of the chunk's heights, for picking the ground and staying above it.
   groundHeights: ElevationData | null;
   // Sea level and water look, shared with the planet, and the planet's lowest height for the depth scale.
@@ -161,6 +167,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     bakePatch,
     advanceChunkBase,
     chunkBaseTexture,
+    chunkPreview,
+    lakesOn,
+    radiusKm,
     groundHeights,
     water,
     waterDeepest,
@@ -195,8 +204,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   const gridVisibleRef = useRef(gridVisible); // the Scene setting; walk mode hides the grid on top of it
   const patchRendererRef = useRef<ChunkPatchRenderer | null>(null);
   // Read each frame by the patch renderer, so onFrame never goes stale.
-  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, groundHeights });
-  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, groundHeights };
+  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights });
+  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights };
 
   useImperativeHandle(
     handleRef,
@@ -401,6 +410,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uHeightMap: { value: heightMap },
         uHeightMapTexelSize: { value: 1 / Math.max(1, heightMapResolution) },
         uChunkHeightMap: { value: heightMap },
+        uChunkLakeLevels: { value: null },
         uChunkSize: { value: chunkSize },
         uPatchWorldSize: { value: chunkSize },
         uPatchUvMin: { value: new THREE.Vector2(0, 0) },
@@ -428,6 +438,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     scene.add(patchRenderer.group);
     patchRendererRef.current = patchRenderer;
     const water = createChunkWater();
+    const chunkLakes = new ChunkLakes();
+    material.uniforms.uChunkLakeLevels.value = chunkLakes.texture;
+    water.mesh.material.uniforms.uChunkLakeLevels.value = chunkLakes.texture;
     scene.add(water.mesh);
     waterRef.current = water;
     const sky = createSkyDome();
@@ -506,6 +519,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         material.uniforms.uChunkHeightMap.value = baseTexture;
         water.mesh.material.uniforms.uChunkHeightMap.value = baseTexture;
       }
+      const preview = settings.chunkPreview();
+      const lakeRenderer = sharedRendererRef.current.renderer;
+      if (preview && lakeRenderer) chunkLakes.update(lakeRenderer, preview, water.tide.baseSeaLevel, settings.atmosphere, squareSizeKm(settings.patch, settings.radiusKm), settings.radiusKm, settings.lakesOn);
     }
     sharedRenderer.registerView('landChunk', { scene, camera: perspectiveCamera, elementRef: viewportRef, onFrame });
 
@@ -523,6 +539,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       patchRenderer.dispose();
       material.dispose();
       water.dispose();
+      chunkLakes.dispose();
       waterRef.current = null;
       sky.dispose();
       skyRef.current = null;
@@ -655,8 +672,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   // live height, so a rising tide pushes the walker to the nearest dry ground.
   useEffect(() => {
     const sizes = atmosphere.moons.slice(0, atmosphere.moonCount).map((moon) => moon.size);
-    if (waterRef.current) setChunkWaterTide(waterRef.current, tideHeight(atmosphere.enabled && atmosphere.moon, sizes));
-  }, [atmosphere.enabled, atmosphere.moon, atmosphere.moons, atmosphere.moonCount]);
+    const viscosity = viscosityAt(liquidNamed(atmosphere.liquid), atmosphere.temperature);
+    if (waterRef.current) setChunkWaterTide(waterRef.current, tideHeight(atmosphere.enabled && atmosphere.moon, sizes, radiusKm, viscosity));
+  }, [atmosphere.enabled, atmosphere.moon, atmosphere.moons, atmosphere.moonCount, atmosphere.liquid, atmosphere.temperature, radiusKm]);
 
   // Each shown moon's surface, one pipeline per moon (each bake has its own target): re-baked only when that moon's
   // layers change (Randomize), and only while the moons are shown.

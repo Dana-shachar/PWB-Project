@@ -10,7 +10,7 @@ import type { TerrainPatch } from '../planet/patch';
 const POINTS_PER_EDGE = 32;
 const OUTLINE_COLOR = '#e5c11f'; // the design system's color-accent
 const OUTLINE_WIDTH_PX = 3;
-const LIFT = 1.002; // above the highest terrain, so the line never sinks in
+export const AREA_OUTLINE_LIFT = 1.002; // above the highest terrain, so the line never sinks in
 
 export class AreaOutline {
   readonly line: Line2;
@@ -46,7 +46,7 @@ export class AreaOutline {
         const share = i / POINTS_PER_EDGE;
         const point = cubeFacePoint(patch.face, startU + (endU - startU) * share, startV + (endV - startV) * share)
           .normalize()
-          .multiplyScalar(surfaceRadius * LIFT);
+          .multiplyScalar(surfaceRadius * AREA_OUTLINE_LIFT);
         this.positions[idx++] = point.x;
         this.positions[idx++] = point.y;
         this.positions[idx++] = point.z;

@@ -4,6 +4,8 @@
 // shallow water turns see-through by Beer-Lambert (shaders/water/water.glsl), and foam sits on the shore, the surf and the
 // crests. Seascape works in meters.
 uniform sampler2D uChunkHeightMap;
+uniform float uMaxHeight;
+uniform float uHeightBase; // world height = (raw + uHeightBase) * uMaxHeight
 uniform float uHeightMapGreenChannel;
 uniform float uChunkSize;
 uniform float uSeaLevel;
@@ -23,6 +25,7 @@ uniform vec3 uCameraPosition;
 // Haze uniforms live in shaders/atmosphere/haze.glsl.
 
 varying vec3 vWorldPosition;
+varying float vLake; // above 0 on a lake (chunkWater.vert.glsl)
 
 const float METERS_PER_UNIT = 1000.0;
 const float CHUNK_SURF_TILT = 0.5; // softens the sky's hard ribbons on the surf. Inferred, TUNABLE.
@@ -36,8 +39,12 @@ void main() {
   vec2 chunkUv = vWorldPosition.xz / uChunkSize + 0.5;
   vec4 heightTexel = texture2D(uChunkHeightMap, chunkUv);
   float groundRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
-  if (groundRaw >= uSeaLevel) discard;
-  float depthShare = (uSeaLevel - groundRaw) / max(0.0001, uSeaLevel - uWaterDeepest);
+  // On a lake the sheet's own height is the surface, so the fine ground cuts the shore. Elsewhere, the sea.
+  float waterSurface = vLake > 0.0 ? vWorldPosition.y / max(uMaxHeight, 0.0001) - uHeightBase : uSeaLevel;
+  if (groundRaw >= waterSurface) discard;
+  float depthShare = (waterSurface - groundRaw) / max(0.0001, uSeaLevel - uWaterDeepest);
+  // Inland water deepens away from the sea, as on the planet.
+  if (waterSurface > uSeaLevel) depthShare = max(depthShare, min(INLAND_MIN_DEPTH, (waterSurface - uSeaLevel) * INLAND_DEPTH_RAMP));
   vec3 seaBase = terrainRampColor(waterRampPosition(depthShare, uWaterClarity), uWaterRampColors, uWaterRampPositions, int(uWaterRampCount));
   vec3 seaWaterColor = uWaterRampColors[0];
 

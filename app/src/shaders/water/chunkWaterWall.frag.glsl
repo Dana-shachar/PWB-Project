@@ -1,6 +1,7 @@
 // The chunk water's side walls (Dana, 2026-10-30): the water seen from the side, so it reads as a block, not a floating
 // sheet. Colored by the water ramp by depth below the surface and clearer near the top, as the sheet shows depth.
 uniform sampler2D uChunkHeightMap; // shared with the sheet: the ground under the water
+uniform sampler2D uChunkLakeLevels; // voxel/chunkLakes.ts
 uniform float uHeightMapGreenChannel;
 uniform float uChunkSize;
 uniform float uSeaLevel;
@@ -23,8 +24,11 @@ void main() {
   // chunk.frag.glsl); on dry edges there is none. Its own depth gradient is stretched over that full height.
   vec2 chunkUv = clamp(vWorldPosition.xz / uChunkSize + 0.5, 0.0, 1.0);
   vec4 heightTexel = texture2D(uChunkHeightMap, chunkUv);
-  if (mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel) >= uSeaLevel) discard;
-  float depthShare = clamp((uSeaLevel - raw) / max(0.0001, uSeaLevel + uHeightBase), 0.0, 1.0);
+  float groundRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
+  // A lake's side behaves as the sea's: where the edge lies under it, the whole column is water from the base up.
+  float waterSurface = max(uSeaLevel, texture2D(uChunkLakeLevels, chunkUv).r);
+  if (groundRaw >= waterSurface || raw > waterSurface) discard;
+  float depthShare = clamp((waterSurface - raw) / max(0.0001, waterSurface + uHeightBase), 0.0, 1.0);
   // Evenly over the chunk's side height, surface to base, not through the clarity curve (which bunched it at the top).
   vec3 rampColor = terrainRampColor(depthShare, uWaterRampColors, uWaterRampPositions, int(uWaterRampCount));
   vec3 normal = normalize(cross(dFdx(vWorldPosition), dFdy(vWorldPosition)));

@@ -1,3 +1,5 @@
+import { DEFAULT_PLANET_SETTINGS } from '../planet/planetControls';
+
 // Tides on the land chunk (Dana, 2026-10-28): the water rises and falls with the moon. A body's tidal pull scales with
 // its density times its apparent size cubed (arXiv 1406.0323; Stony Brook's sun and moon tide notes), so a moon twice
 // as big raises tides eight times higher. Exaggerated on purpose, then capped. Inferred, TUNABLE.
@@ -8,8 +10,10 @@ export const TIDE_PERIOD_SECONDS = 120; // one rise and fall, compressed from Ea
 
 // The tide's height above and below the base sea level, in the same raw height units as the sea level. Each moon's
 // pull adds to the others' (their phases aren't modeled: one shared rise and fall).
-export function tideHeight(moonOn: boolean, moonSizes: number[]): number {
+export function tideHeight(moonOn: boolean, moonSizes: number[], radiusKm: number, viscosity: number): number {
   if (!moonOn) return 0;
   const pull = moonSizes.reduce((sum, size) => sum + TIDE_REFERENCE_SHARE * (size / TIDE_REFERENCE_SIZE) ** 3, 0);
-  return Math.min(TIDE_MAX_SHARE, pull);
+  // A ratio of the default planet. Terrain already scales with radius, so this makes larger planets' tides larger against
+  // their land: for the look (Dana). Thicker liquids move less: inferred, TUNABLE.
+  return Math.min(TIDE_MAX_SHARE, (pull * (radiusKm / DEFAULT_PLANET_SETTINGS.radiusKm)) / Math.max(viscosity, 1));
 }

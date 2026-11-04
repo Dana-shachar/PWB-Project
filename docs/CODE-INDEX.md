@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-11-02`
+`Last updated: 2026-11-04`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -17,6 +17,7 @@
 |---|---|
 | Add or change a noise control | `map/noiseRanges.ts`, `map/heightmap.ts` (`NoiseLayer`), `ui/NoisePanel.tsx`, `shaders/heightmap/heightmap.frag.glsl` |
 | Change lakes or the river network | `rivers/drainage.worker.ts` (`buildWaterMap`, `extractRiverNodes`), `rivers/depressions.ts` (`fillSpillMerge`), `rivers/riverGrid.ts` |
+| Change the chunk's lakes or tides | `rivers/chunkLakes.worker.ts`, `voxel/chunkLakes.ts`, `shaders/water/chunkWater.vert.glsl`, `applyTide` in `voxel/chunkWater.ts`, `atmosphere/tides.ts` |
 | Change how rivers carve and draw (off) | `riverEdgeDistance`, `DRAW_RIVERS` and the carve after Roughness in `shaders/heightmap/heightmap.frag.glsl` |
 | Change how the planet erodes | `rivers/planetDrainage.ts`, `shaders/erosion/streamPowerPlanet.frag.glsl`, `erodedSurface` and `waterMapAt` in `shaders/heightmap/heightmap.frag.glsl`, `shaders/heightmap/erosionFilter3d.glsl` |
 | Add a liquid or a climate control | `rivers/riverClimate.ts` (`LIQUIDS`, `waterBudget`), `atmosphere/atmosphereSettings.ts` (`randomClimate`), the Climate part in `ui/Panel.tsx` |
@@ -194,6 +195,10 @@
 - What it is: the depression hierarchy and Fill-Spill-Merge (Barnes 2020, 2021) on any node graph.
 - Key names: `buildDepressionHierarchy`, `fillSpillMerge`, `DepressionHierarchy`, `LakeResult`, `MIN_DEPRESSION_CELLS`.
 
+**rivers/chunkLakes.worker.ts**
+- What it is: the land chunk's lakes, solved off the main thread on the chunk's own ground, with the square's cut sides as outlets; returns each cell's level and the lake's share of the tide.
+- Key names: `ChunkLakesRequest`, `squareNeighbors`, `NO_CHUNK_LAKE`, `LAKE_TIDE_BOOST`.
+
 **rivers/riverGrid.ts**
 - What it is: river spans as Catmull-Rom curves filed into lat-long buckets for the bake. Built but not drawn.
 - Key names: `buildRiverGrid`, `RiverNodes`, `RIVER_GRID_WIDTH`, `RIVER_GRID_HEIGHT`, `RIVER_BLEND_WIDTH`, `RIVER_CURVE_STEPS`.
@@ -231,7 +236,7 @@
 - Key names: `AirGround` (`jaggedness`), `createAirGround`, `bakeAirGround`, `cubeMapDirection`, `cubeMapTexel`, `AIR_GROUND_SMOOTHING`; `planetAirUniforms`; in `scene/SceneCanvas.tsx`, `airGroundRef` and `jaggedGap`; `GAP_PER_JAGGEDNESS` in `cloudLayer.ts`.
 
 **atmosphere/tides.ts**
-- What it is: how far the chunk's water rises and falls with the moons (size cubed, summed, capped).
+- What it is: how far the chunk's water rises and falls: the moons' size cubed, summed, times the radius over the default planet's, divided by viscosity, capped.
 - Key names: `tideHeight`, `TIDE_PERIOD_SECONDS`, `TIDE_MAX_SHARE`.
 
 **atmosphere/skyDome.ts**, **planetGlow.ts**, **planetHaze.ts**, **cloudLayer.ts**
@@ -321,8 +326,12 @@
 - Talks to: `LandChunkCanvas.tsx` (saves and restores the orbit camera, eases fov/near/far with `progress`), `ChunkPatchRenderer.sampleHeight` for the eye height.
 
 **voxel/chunkWater.ts**
-- What it is: the chunk's water, TDM's Seascape on a flat sheet, recolored by the water ramp, see-through in the shallows, with shore and crest foam, and see-through side walls down to the chunk's base.
-- Key names: `ChunkWater` (`walls`, `baseDepth`), `WALL_OUTSET`, `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
+- What it is: the chunk's water, TDM's Seascape on a sheet that stands flat at the sea and at each lake's level, recolored by the water ramp, see-through in the shallows, with shore and crest foam, and side walls down to the chunk's base.
+- Key names: `ChunkWater` (`walls`, `baseDepth`), `WATER_SHEET_SEGMENTS`, `WALL_TOP_SHARE`, `applyTide` (`uLakeEbb`), `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
+
+**voxel/chunkLakes.ts**
+- What it is: keeps the chunk's lake levels fresh: reads the preview map without stalling a frame, keeps only the latest request, and holds the result as a texture (R the level, G the tide share), read by the sheet and both walls.
+- Key names: `ChunkLakes` (`update`, `texture`), `uChunkLakeLevels`; `getChunkPreview` in `map/heightmap.ts`.
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.

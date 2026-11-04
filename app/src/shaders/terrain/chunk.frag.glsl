@@ -44,6 +44,7 @@ uniform vec2 uPatchUvMin;
 uniform vec2 uPatchUvMax;
 // The whole chunk's texture, so shadows march across patch borders without seams.
 uniform sampler2D uChunkHeightMap;
+uniform sampler2D uChunkLakeLevels; // voxel/chunkLakes.ts
 // The voxel mesh's gradient step in uv (patches use texelStepUv instead).
 uniform float uGradientStepUv;
 // A patch's bake size and border; 0 samples means the voxel mesh's plain uv.
@@ -158,7 +159,8 @@ void main() {
   }
   if (vIsTopSurface < 0.5 && uWaterOn > 0.5) {
     vec4 edgeTexel = texture2D(uChunkHeightMap, mix(uPatchUvMin, uPatchUvMax, vUv));
-    if (mix(edgeTexel.r, edgeTexel.g, uHeightMapGreenChannel) < uSeaLevel) discard;
+    float edgeWater = max(uSeaLevel, texture2D(uChunkLakeLevels, mix(uPatchUvMin, uPatchUvMax, vUv)).r); // the sea or a lake
+    if (mix(edgeTexel.r, edgeTexel.g, uHeightMapGreenChannel) < edgeWater) discard;
   }
 
   vec3 litColor = surfaceColor * (fill + diffuse) + specular;

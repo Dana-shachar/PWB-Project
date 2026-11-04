@@ -56,8 +56,6 @@ uniform mat4 modelMatrix;
 // Sea level and water look (shaders/water/water.glsl). uWaterDeepest is the planet's lowest height, where depthShare is 1.
 uniform float uWaterEnabled;
 uniform float uSeaLevel;
-const float INLAND_MIN_DEPTH = 0.15; // Inferred, TUNABLE
-const float INLAND_DEPTH_RAMP = 7.5; // reaches that depth share 0.02 above the sea. Inferred, TUNABLE
 uniform float uWaterDeepest;
 uniform vec3 uWaterRampColors[MAX_COLOR_STOPS];
 uniform float uWaterRampPositions[MAX_COLOR_STOPS];

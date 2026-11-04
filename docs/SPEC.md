@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-11-02`
+`Last updated: 2026-11-04`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -424,7 +424,7 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - One to five moons in the chunk's sky, each with its own size, place, two colors, crescent, crescent angle, texture, halo, inner glow and simple noise layers baked by the engine. Randomize is the main control; per-moon controls are there only for adjusting (Dana: not a burden on the user).
 - Moons are added and removed like layers (2026-10-30): all five are stored, so removing one keeps its settings out of view. One moon shows its controls directly; two or more get a section each.
 - The look (Dana's references, No Man's Sky and moon photos): screened over the sky so the shadow dissolves into it, split-toned in two tones set by the sky (`[S48]`), a crescent turned from the sun's side, and one soft glow across the edge on the lit side.
-- Their sizes set the chunk's tides (size cubed, after the tidal-force rule, exaggerated and capped).
+- Their sizes set the chunk's tides (`[S76]`).
 - They set behind the sea and fade into the air toward the horizon, by the air they're seen through (2026-10-30, three.js `Sky.js`: Kasten-Young airmass, Beer-Lambert). Each moon's Blend fades it into the sky at any height.
 
 ### [S45] Randomize changes everything; locked colors stay and anchor the palette · `decided`
@@ -645,4 +645,20 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 ### [S75] Lakes on the chunk · `decided`
 **Decided:** 2026-11-04
 
-- Lakes shown on the planet also show on the chunk. Not built yet (`ROADMAP.md`).
+- The chunk solves its own lakes from the ground it draws, with the planet's depression hierarchy and Fill-Spill-Merge and the climate's `lakeShare`. Reason: a level stored from the coarse ground stood above land the erosion filter had lowered. A level found from the drawn ground can't pass its rim.
+- Water is a flat sheet at each lake's level, and the land stops it, so shores follow the fine ground.
+- The square's cut sides are outlets, as the sea is, so water drains through them and valleys don't fill against a cut. Dana: water sinking away there is fine.
+- Lakes show only with Erosion on. Solving waits for the carving, and old levels clear the moment the ground changes, so wrong water never shows. A chunk's lake can differ from the planet's view of it (Dana: fine).
+
+### [S76] Tides scale by ratios · `decided`
+**Decided:** 2026-11-04
+
+- Tide = each moon's size cubed × the planet's radius over the default planet's ÷ the liquid's viscosity, capped. The radius factor is for the look: terrain already scales with radius, so a true tide would look the same against the land on any planet. The viscosity factor is inferred.
+- A lake takes a share of the sea's tide: its width over the planet's radius, boosted so large lakes show a subtle shift. A lake only drops from its full level, since it can't stand above its rim.
+- No value is tied to Earth. Dana: keep it a ratio, her planet is smaller.
+
+### [S77] Every cut surface ends in a wall · `decided`
+**Decided:** 2026-11-04
+
+- Anywhere a water or land surface is cut, it ends in a wall, never open in the air. Dana's rule.
+- At the square's sides, a column whose edge lies under water is water from the base up, for lakes as for the sea.

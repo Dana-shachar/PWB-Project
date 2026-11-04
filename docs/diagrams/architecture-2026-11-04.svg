@@ -141,17 +141,14 @@
   <text x="711.0" y="629.5" class="desc" text-anchor="middle">checks the camera every frame, splits</text>
   <text x="711.0" y="642.5" class="desc" text-anchor="middle">close areas finer, caches the rest</text>
   </g>
-  <g class="node"><rect x="916" y="560" width="244" height="112"/>
-  <text x="1038.0" y="598.5" class="title" text-anchor="middle">Erosion solver</text>
-  <text x="1038.0" y="613.5" class="sub" text-anchor="middle">(erosionEngine, shaders/erosion)</text>
-  <text x="1038.0" y="629.5" class="desc" text-anchor="middle">simulates flowing water on</text>
-  <text x="1038.0" y="642.5" class="desc" text-anchor="middle">the chunk (paused)</text>
+  <g class="node"><rect x="924.4" y="560" width="243.2" height="57"/>
+  <text x="1046.0" y="577.5" class="title" text-anchor="middle">Erosion solver</text>
+  <text x="1046.0" y="592.5" class="sub" text-anchor="middle">(erosionEngine, shaders/erosion)</text>
+  <text x="1046.0" y="608.5" class="desc" text-anchor="middle">simulates water on the chunk (paused)</text>
   </g>
-  <g class="hot"><rect x="1172" y="560" width="4" height="112"/>
-  <text x="1174.0" y="598.5" class="title" text-anchor="middle">Planet water</text>
-  <text x="1174.0" y="613.5" class="sub" text-anchor="middle">(rivers/, GPU + worker)</text>
-  <text x="1174.0" y="629.5" class="desc" text-anchor="middle">stream power, lakes by climate;</text>
-  <text x="1174.0" y="642.5" class="desc" text-anchor="middle">the water map for the bake</text>
+  <g class="hot"><rect x="924.4" y="625" width="243.2" height="43"/>
+  <text x="1046.0" y="642.0" class="title" text-anchor="middle">Planet water <tspan class="sub">(rivers/, GPU + worker)</tspan></text>
+  <text x="1046.0" y="658.0" class="desc" text-anchor="middle">stream power, lakes, the bake's water map</text>
   </g>
   <rect x="16" y="752" width="1176" height="184" rx="4" class="band"/>
   <line x1="16" y1="752" x2="1192" y2="752" class="rule"/>

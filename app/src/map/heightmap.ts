@@ -347,10 +347,10 @@ function chunkBaseInfo(face: number, min: THREE.Vector2, max: THREE.Vector2, ori
   };
 }
 
-function createChunkBaseTarget(size: number): THREE.WebGLRenderTarget {
+function createChunkBaseTarget(size: number, format: THREE.PixelFormat): THREE.WebGLRenderTarget {
   return new THREE.WebGLRenderTarget(size, size, {
     type: THREE.FloatType,
-    format: THREE.RGFormat,
+    format,
     minFilter: THREE.LinearFilter, // smooth for the water and shadows; the patches' cubic read uses texel centers
     magFilter: THREE.LinearFilter,
   });
@@ -513,6 +513,7 @@ export class HeightmapPipeline {
   private chunkPatchMaterial: THREE.ShaderMaterial;
   private chunkBaseTarget: THREE.WebGLRenderTarget | null = null; // the full map, also read by the water and shadows
   private chunkBasePreviewTarget: THREE.WebGLRenderTarget | null = null;
+  private chunkPreviewRevision = 0;
   private chunkBaseActive: THREE.WebGLRenderTarget | null = null; // whichever the patches resample now
   private chunkBase: ChunkBaseInfo | null = null; // the active map's placement
   private chunkBaseUpgrade: { params: RegionParams; nextRow: number; info: ChunkBaseInfo } | null = null;
@@ -539,8 +540,10 @@ export class HeightmapPipeline {
   ensureChunkBase(renderer: THREE.WebGLRenderer, layers: NoiseLayer[], face: number, min: THREE.Vector2, max: THREE.Vector2, origin: THREE.Vector2): void {
     const key = [face, min.x, min.y, max.x, max.y, this.detailAmount, this.shoreSeaLevel, this.planetRadiusMeters, this.paintRevision, this.waterMapRevision, this.erosionFilterKey].join(',');
     if (key === this.chunkBaseKey && layers === this.chunkBaseLayers && this.chunkBaseActive) return;
-    this.chunkBaseTarget ??= createChunkBaseTarget(CHUNK_BASE_SAMPLES + 2 * CHUNK_BASE_BORDER);
-    this.chunkBasePreviewTarget ??= createChunkBaseTarget(CHUNK_BASE_PREVIEW_SAMPLES + 2 * CHUNK_BASE_BORDER);
+    this.chunkBaseTarget ??= createChunkBaseTarget(CHUNK_BASE_SAMPLES + 2 * CHUNK_BASE_BORDER, THREE.RGFormat);
+    // RGBA, the format WebGL always allows reading floats back in (getChunkPreview).
+    this.chunkBasePreviewTarget ??= createChunkBaseTarget(CHUNK_BASE_PREVIEW_SAMPLES + 2 * CHUNK_BASE_BORDER, THREE.RGBAFormat);
+    this.chunkPreviewRevision++;
     const preview = this.chunkBasePreviewTarget;
     this.material.uniforms.uElevationInRed.value = 1;
     this.bakeRegionInto(renderer, { layers, face, min, max, resolution: preview.width, borderTexels: CHUNK_BASE_BORDER, localOrigin: origin }, preview);
@@ -581,6 +584,11 @@ export class HeightmapPipeline {
   // The finished chunk base map, for the chunk's water and shadows: never the full map while its bands are being baked.
   getChunkBaseTexture(): { texture: THREE.Texture; resolution: number } | null {
     return this.chunkBaseActive ? { texture: this.chunkBaseActive.texture, resolution: this.chunkBaseActive.width } : null;
+  }
+
+  // The chunk's preview map with a revision that steps on each bake, for solving the chunk's lakes (voxel/chunkLakes.ts).
+  getChunkPreview(): { target: THREE.WebGLRenderTarget; revision: number } | null {
+    return this.chunkBasePreviewTarget && this.chunkBaseActive ? { target: this.chunkBasePreviewTarget, revision: this.chunkPreviewRevision } : null;
   }
 
   // Part of the chunk base map's key, so a radius change re-bakes it.

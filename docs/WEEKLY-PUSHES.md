@@ -23,6 +23,9 @@
 - **Water flicker (`[B116]`):** depth precision went from 3 to 11 km to under 1 m at the tested distances.
 - **Selection (`[B118]`):** turns off on release, Esc, thick outline, opens framed, works at face edges and on 4 km squares.
 - **Erosion and saving (`[B119]`, `[B120]`):** erosion shows only its final state, no lakes while it's off, and settings including the gully sliders survive a reload.
+- **Lakes on the chunk (`[S75]`):** the chunk solves its own lakes from the ground it draws, so water can't stand above its rim: 1,981 shore points with lower ground beyond them went to 0, with smooth shores. Water drains through the square's cut sides.
+- **Tides as ratios (`[S76]`):** planet size, moon size, liquid and lake width all scale the tide, tied to no Earth value.
+- **Walls and selection (`[B123]`, `[B125]`, `[S77]`):** the white lines on the chunk's sides are gone, and a drawn square starts under the cursor.
 
 ### 🤖 How AI was used
 - Claude drove the app through Chrome and measured each cause before a fix, comparing old and new behavior in the same session. Dana reproduced problems, set priorities and corrected wrong theories.

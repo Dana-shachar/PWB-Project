@@ -82,6 +82,7 @@ function App() {
   const bakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch) => sceneHandleRef.current?.bakePatchInto(patch, target, root) ?? false;
   const advanceChunkBase = (root: TerrainPatch, texelBudget: number) => sceneHandleRef.current?.advanceChunkBaseUpgrade(root, texelBudget) ?? { texels: 0, switched: false, pending: false };
   const chunkBaseTexture = () => sceneHandleRef.current?.getChunkBaseTexture() ?? null;
+  const chunkPreview = () => sceneHandleRef.current?.getChunkPreview() ?? null;
   // Declared after erosion/landChunk, which it persists alongside layers and
   // paint — see projectSettings/saveProject.ts.
   const project = useSaveProject({
@@ -368,6 +369,9 @@ function App() {
                 bakePatch={bakeChunkPatch}
                 advanceChunkBase={advanceChunkBase}
                 chunkBaseTexture={chunkBaseTexture}
+                chunkPreview={chunkPreview}
+                lakesOn={erosion.enabled && !carvingPending}
+                radiusKm={planetControls.radiusKm}
                 groundHeights={landChunk.groundHeights}
                 water={planetControls.water}
                 waterClarityShare={waterClarityShare}

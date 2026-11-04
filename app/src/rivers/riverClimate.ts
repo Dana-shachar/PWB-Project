@@ -74,7 +74,7 @@ export function referenceTemperature(liquid: Liquid): number {
   return Math.round(flowingMinC(liquid) + REFERENCE_SHARE * (liquid.maxC - flowingMinC(liquid)));
 }
 
-function viscosityAt(liquid: Liquid, temperature: number): number {
+export function viscosityAt(liquid: Liquid, temperature: number): number {
   if (liquid.name !== 'Sulfur') return liquid.viscosity;
   return liquid.viscosity + SULFUR_THICKENING * Math.exp(-(((temperature - SULFUR_THICKEST_C) / SULFUR_PEAK_WIDTH_C) ** 2));
 }

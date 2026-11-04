@@ -4,6 +4,9 @@
 // Water reflects 2% of light head-on: ((1.33 - 1) / (1.33 + 1))^2 for water's refractive index of 1.33.
 const float WATER_F0 = 0.02;
 
+const float INLAND_MIN_DEPTH = 0.15; // Inferred, TUNABLE
+const float INLAND_DEPTH_RAMP = 7.5; // reaches that depth share 0.02 above the sea. Inferred, TUNABLE
+
 // Schlick's approximation of the Fresnel reflectance: how much light the surface reflects at this viewing angle.
 float waterFresnel(vec3 normal, vec3 viewDir) {
   float cosTheta = clamp(dot(normal, viewDir), 0.0, 1.0);

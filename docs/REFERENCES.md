@@ -1,6 +1,6 @@
 # 📚 References
 
-`Last updated: 2026-11-02`
+`Last updated: 2026-11-04`
 
 *Every outside source this project relies on, with what it is and what was taken from it. Cited once here, linked from everywhere else.*
 
@@ -794,6 +794,14 @@
 **Tidal pull scales with density times apparent size cubed** · arXiv 1406.0323; Stony Brook tide notes · `method used`
 - A moon twice as big in the sky pulls eight times as hard. The chunk's tides follow each moon's size cubed, summed, exaggerated and capped.
 - *[arXiv 1406.0323](https://arxiv.org/pdf/1406.0323) · [Stony Brook, sun and moon tides](https://math.stonybrook.edu/~tony/tides/sun-moon.html)*
+
+**Equilibrium tide height** · Menke, Columbia lecture notes; a worked textbook problem · `method used, from search summaries`
+- height = 3/2 × (moon mass over planet mass) × (radius over distance) cubed × radius, 0.54 m for Earth. In terms of apparent size, that's size cubed times radius, which supports the rule above and shows height grows linearly with radius.
+- *[Menke, lecture 14](https://www.ldeo.columbia.edu/~menke/www_users_menke/SED23/SED23_Lec14.pdf) · [Worked problem](https://www.vaia.com/en-us/textbooks/physics/classical-mechanics-5-edition/chapter-6/problem-17-suppose-that-at-some-time-the-moon-had-been-ocean/)*
+
+**Tides on lakes** · NOAA; Fisheries and Oceans Canada · `used 2026-11-04, from search summaries`
+- The Great Lakes' spring tide is under 5 cm (NOAA), with about 3 cm recorded (Canada), masked by wind and pressure. Visible lake "tides" are usually seiches. Lake width over planet radius, applied to a 0.5 m tide, gives about 4 cm for Lake Superior, which fits. That share is inferred, using lake and tide figures from memory.
+- *[NOAA](https://oceanservice.noaa.gov/facts/gltides.html) · [Fisheries and Oceans Canada](https://tides.gc.ca/en/about-tides-and-currents)*
 
 **Angle dial** · Photoshop's angle controls · `convention`
 - A circle with a line pointing at the angle, plus a number field. The design system's `Dial`.

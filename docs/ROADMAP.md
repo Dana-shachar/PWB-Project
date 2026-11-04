@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-02`
+`Last updated: 2026-11-04`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -10,16 +10,38 @@
 > [!IMPORTANT]
 > **Start from here (2026-11-04, seventeenth handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. This is newer than the block below.*
 >
-> **State.** Today's chunk round is committed (`[B113]` to `[B120]`). The dev server runs from `app/` with `npx vite`. Test in Chrome yourself and only as needed; Dana wants rounds of fixes reported together, without test loops. Autosave writes to whichever project is open, so use "New Planet 05" for tests that change erosion settings or the square.
+> **State.**
+> - `main` holds the chunk round and the lakes round (`[S75]` to `[S77]`, `[B123]`, `[B125]`), not pushed.
+> - Uncommitted on purpose: `README.md` (Dana's concept text: **don't change it, grammar fixes only**), `.obsidian/workspace.json` (never commit it), and the temporary handover file with its screenshots (Dana's call whether to delete them).
+> - Run from `app/` with `npx vite` (localhost:5173). After a `.glsl` edit, run `node scripts/checkShaders.mjs`. After adding a new three.js import, restart with `npx vite --force`.
+>
+> **How Dana wants this round run** (`.claude/CLAUDE.md` still applies; memory `fix-rounds-necessary-tests`)
+> - Do rounds of fixes and report together, with short status updates. She said: don't get stuck in a test loop; if stuck, log it and move on.
+> - Test in Chrome yourself, only what a fix needs. Reproduce her way first (the water flicker only showed when zooming in gradually). Confirm the cause before fixing, with old against new in the same session.
+> - Keep tokens down: small screenshots, short scripts, no full-size shots per step. Avoid the Chrome tool's `scroll`, which returns a full screenshot each time; dispatch `WheelEvent`s from `javascript_tool`.
 >
 > **Next, in order.**
-> 1. 🟡 Lakes on the chunk (`[S75]`). Sketch: the 1,024 preview base map keeps the water surface (its third channel, dropped today), and a second water sheet is lifted to it. Read `chunkWater.frag.glsl` and `voxel/chunkWater.ts` first; the full map as RGBA would cost about 134 MB more.
-> 2. 🔴 Diagnose `[B122]` (the grain line) by tinting patches by bake size, then `[B121]` (a ridge that sinks), then `[B123]` (wall hairlines).
-> 3. ⚪ Erosion units: Gully Size in km and Gully Depth in meters, with options for Dana first. Strength and the ratios need checking against the filter's math.
-> 4. ⏸️ Soft close-ups: deferred by Dana. The real fix is fine gully detail at patch bake.
-> 5. ⚪ Rivers (`[B109]`): the next step after these, not parked.
+> 1. 🟡 **Per-pixel grain for `[B122]`** (Dana approved). The cause is measured; see `ISSUES.md`. Measure the frame cost first. Tinting a patch's fill by meters per sample shows the line.
+> 2. ⏸️ **`[B121]` the ridge that sinks:** Dana will circle back. The fade target is ruled out for the fold tested; ask for a screenshot of her spot.
+> 3. ⚪ **Erosion units** (Dana approved; bring options first). From the code, not yet checked by test: gully width in meters is about `0.45 × Gully Size × valley spacing`, and the height change sums `depth × scale` over octaves divided by `vertical`, so Depth in meters depends on Size. Duration is already in years. Ridge Sharpness and Detail may be true ratios. Strength scales a rate from its default.
+> 4. ⚪ **Rivers** (`[B109]`): not parked; next after the above. Research is in `REFERENCES.md` (GRASS `r.stream.extract` was the lead). The choice between A and B there was never made, and I measured no 8-direction bias in the carving, so recheck that reasoning.
+> 5. ⏸️ **Soft close-ups:** deferred by Dana. Below the 4096 map's limit (428 m a sample on a 1,753 km square), only Roughness adds detail. The real fix is fine gully detail at patch bake. A finer map on small squares is the cheaper partial option.
+> 6. ⏸️ **Freeze** (`[B124]`): tabled by Dana. Water corners (`[B110]`) await her look.
 >
-> **Leftovers.** `chunkDepth` and `changeDepth` in `landChunk.ts`, `uWaterDeepest` in the wall shader, and `docs/HANDOVER-chunk-2026-11-03.md` with its shots (local only; delete once nothing in it is needed). The Height slider's meters in Chunk view still understate what's drawn. The architecture diagram wasn't redrawn; do it with the next weekly push.
+> **Decisions in force.** Gully Size is capped at 1.5 (`GULLY_SIZE_MAX`, tunable). Erosion starts off on load. The outline stays off until a square is drawn. Wall colors stay as they are. Selection turns off on release, and a new square opens framed.
+>
+> ❓ **Open for Dana.** She said the gully sliders should be added "to history". They now save with the project; ask whether she also wants them in Undo and Redo, which cover only paint strokes.
+>
+> **Unverified, check only if it comes up.** Esc during an active drag (a simulated drag never registered). Gully sliders reappearing in the panel after a reload (stored correctly; the restore path is shared). Water flicker at very low views over water (near plane is 5% of the height above ground, tunable). Slopes clipping at that near plane. Walk mode with the new near plane.
+>
+> **Testing notes.**
+> - Autosave writes to whichever project is open, about 3 s after a change. Use "New Planet 05" for tests that change erosion settings or the square. It's Dana's to delete, and it has no ocean, so it can't test water. "New Planet 04" has land and water, and my tests changed its stored square; put back any setting you change, and note that two open tabs can overwrite each other. Dana02, Dana 01 and New Planet 02 weren't touched.
+> - After an edit, the app loads modules with a `?t=` tag. To hook one from the browser, find its URL in `performance.getEntriesByType('resource')` and `import()` that, or you patch a copy. `ChunkPatchRenderer.prototype.update` and `swap` give the camera, details, bake function and patches. The renderer is in the React tree at `memoizedProps.sharedRenderer.renderer`.
+> - Chrome pauses drawing between tool calls, so a long frame gap between calls isn't a stall. The "message channel closed" and `ERR_BLOCKED_BY_CLIENT` console errors look like extensions, not the app.
+>
+> **Measured, so nothing is measured twice.** Filter walls reach 85 degrees at Gully Size 1 and 88 at 2.15; slope settles as detail rises, so they're real walls. Noise alone reaches 75. A slider change takes about 1 s, about 680 ms of it the 4096 map. A selection takes about 720 ms. Toggling Erosion: worst frame 33 ms, 1 GPU read, no long stalls, so planet re-bake and GPU reads need no fix. Roughness reaches close-ups: about 6 m at 81 m spacing with it on, 0.05 m off; it fades out under the sea, so compare on land. The default chunk's Reset View is about 2.5 units per km.
+>
+> **Leftovers.** `chunkDepth` and `changeDepth` in `landChunk.ts`, `uWaterDeepest` in the wall shader, `chunkBaseDepth`'s unused parameter. The Height slider's meters in Chunk view still understate what's drawn. The architecture diagram wasn't redrawn; do it with the next weekly push. Patches at most 4 bakes per frame, so a close-up still builds gradually.
 
 > [!IMPORTANT]
 > **Start from here (2026-11-03, sixteenth handover):** *read `.claude/CLAUDE.md` first, then this block, then `docs/CODE-INDEX.md` (Water and erosion) before searching the code. Paper summaries with key quotes are in `docs/REFERENCES.md`: read those, never the PDFs again. Bugs of this round: `[B106]` to `[B109]` in `docs/ISSUES.md`.*
