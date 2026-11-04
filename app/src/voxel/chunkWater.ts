@@ -11,6 +11,7 @@ import { chunkBaseDepth } from './chunkPatchMesh';
 import { buildRampUniformArrays, MAX_COLOR_STOPS } from '../planet/colorRamp';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import { TIDE_PERIOD_SECONDS } from '../atmosphere/tides';
+import { getRippleMap, isRippleMapReady } from '../planet/rippleMap';
 import { applyWaveSet, buildWaveSet, createWaveUniforms, surfZoneShare, windLengthScale, windTimeScale } from '../planet/oceanSpectrum';
 
 // The chunk's water: TDM's Seascape waves and sea color (shaders/water/oceanWaves.glsl, CC BY-NC-SA 3.0), with large Gerstner
@@ -27,6 +28,7 @@ export interface ChunkWater {
 }
 
 const WATER_SHEET_SEGMENTS = 512; // enough vertices to lift the sheet onto lakes. Inferred, TUNABLE
+const RIPPLE_TILE_SHARE = 0.08; // a ripple tile's size over the view's distance. Inferred, TUNABLE
 const WALL_TOP_SHARE = 2; // the walls' box top, as a share of maxHeight: above any lake. Inferred, TUNABLE
 
 export function createChunkWater(): ChunkWater {
@@ -43,6 +45,10 @@ export function createChunkWater(): ChunkWater {
       uChunkHeightMap: { value: null },
       uChunkLakeLevels: { value: null }, // voxel/chunkLakes.ts
       uLakeEbb: { value: 0 },
+      uRippleMap: { value: getRippleMap() },
+      uRippleOn: { value: 0 },
+      uRippleTile: { value: 1 },
+      uRippleBlend: { value: 0 },
       uMaxHeight: { value: 1 },
       uHeightMapGreenChannel: { value: 1 },
       uChunkSize: { value: 1 },
@@ -66,6 +72,8 @@ export function createChunkWater(): ChunkWater {
       uHazeSkyColor: { value: new THREE.Color(WATER_SKY_COLOR) },
       uHazeDensity: { value: 0 },
       uHazeStart: { value: 0 },
+      uHazeFloor: { value: 0 },
+      uHazeScaleHeight: { value: 1 },
       uResolution: { value: 1000 },
     },
   });
@@ -136,6 +144,13 @@ export function updateChunkWaterFrame(water: ChunkWater, cameraPosition: THREE.V
   (uniforms.uCameraPosition.value as THREE.Vector3).copy(cameraPosition);
   uniforms.uSeaTime.value += deltaSeconds * windTimeScale(uniforms.uSeaWind.value as number);
   uniforms.uSeaClock.value += deltaSeconds;
+  // Ripple size as a ratio of the distance to the nearest point of the chunk, snapped to doublings and blended between them.
+  const half = (uniforms.uChunkSize.value as number) / 2;
+  const toChunk = Math.hypot(Math.max(0, Math.abs(cameraPosition.x) - half), cameraPosition.y - water.mesh.position.y, Math.max(0, Math.abs(cameraPosition.z) - half));
+  const sizeLevel = Math.log2(Math.max(toChunk * RIPPLE_TILE_SHARE, 1e-3));
+  uniforms.uRippleTile.value = 2 ** Math.floor(sizeLevel);
+  uniforms.uRippleBlend.value = sizeLevel - Math.floor(sizeLevel);
+  uniforms.uRippleOn.value = isRippleMapReady() ? 1 : 0;
   if (water.tide.height > 0) {
     water.tide.phase = (water.tide.phase + deltaSeconds / TIDE_PERIOD_SECONDS) % 1;
     applyTide(water);

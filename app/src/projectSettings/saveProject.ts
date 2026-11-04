@@ -136,6 +136,7 @@ export function useSaveProject({
             erosion.loadSavedRun(project.erosionRun);
           } else {
             erosion.clear();
+            erosion.setEnabled(false);
           }
           // null only for saves made before planetSettings existed — the
           // real defaults, not whatever's currently in memory, same
@@ -183,6 +184,7 @@ export function useSaveProject({
     erosion.durationYears,
     erosion.strength,
     erosion.filterShape,
+    erosion.enabled,
     erosion.gridResolution,
     landChunk.patch,
     planetControls.radiusKm,
@@ -211,7 +213,8 @@ export function useSaveProject({
     setLayers(freshLayers);
     setSelectedLayerIds([freshId]);
     setStrokeHistory([]);
-    erosion.clear(); // otherwise a previous planet's run would linger onto a blank one
+    erosion.clear();
+    erosion.setEnabled(false); // otherwise a previous planet's run would linger onto a blank one
     planetControls.resetToDefaults(); // same reasoning — Display/Radius/colors shouldn't leak in either
     return freshLayers;
   }
@@ -255,6 +258,7 @@ export function useSaveProject({
       erosion.loadSavedRun(project.erosionRun);
     } else {
       erosion.clear();
+      erosion.setEnabled(false);
     }
     planetControls.applySettings(project.planetSettings ?? DEFAULT_PLANET_SETTINGS);
   }

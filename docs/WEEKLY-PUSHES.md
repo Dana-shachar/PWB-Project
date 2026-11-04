@@ -26,6 +26,9 @@
 - **Lakes on the chunk (`[S75]`):** the chunk solves its own lakes from the ground it draws, so water can't stand above its rim: 1,981 shore points with lower ground beyond them went to 0, with smooth shores. Water drains through the square's cut sides.
 - **Tides as ratios (`[S76]`):** planet size, moon size, liquid and lake width all scale the tide, tied to no Earth value.
 - **Walls and selection (`[B123]`, `[B125]`, `[S77]`):** the white lines on the chunk's sides are gone, and a drawn square starts under the cursor.
+- **Lakes, walking and haze (`[B126]` to `[B128]`):** the chunk shows the planet's large lakes (1.8% to 79% of one square), lakes ripple at every zoom, walking stops at lake shores, and haze reaches the horizon.
+- **Saving and defaults (`[S74]`, `[S78]`):** the Erosion switch saves; a new planet starts bare with closed panels.
+- **Direction:** a concept and research question in the README, and a vertical slice of 3 to 5 distinct planets for the final, with rivers, plants and animals as chunk detail by real size (`[S79]`).
 
 ### 🤖 How AI was used
 - Claude drove the app through Chrome and measured each cause before a fix, comparing old and new behavior in the same session. Dana reproduced problems, set priorities and corrected wrong theories.

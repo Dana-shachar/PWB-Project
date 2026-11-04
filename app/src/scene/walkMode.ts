@@ -64,7 +64,7 @@ export class WalkMode {
   // The drawn ground's height at a point, or null when it can't be read yet.
   private readonly getGroundHeight: (x: number, z: number) => number | null;
   // The water surface's height, or null when there is no water.
-  private readonly getSeaHeight: () => number | null;
+  private readonly getWaterHeight: (x: number, z: number) => number | null; // the sea or a lake there, null if none
   private readonly onExit: () => void;
   private readonly keys = new Set<string>();
   private readonly euler = new THREE.Euler(0, 0, 0, 'YXZ');
@@ -81,14 +81,14 @@ export class WalkMode {
     domElement: HTMLElement,
     getGround: () => ChunkGround | null,
     getGroundHeight: (x: number, z: number) => number | null,
-    getSeaHeight: () => number | null,
+    getWaterHeight: (x: number, z: number) => number | null,
     onExit: () => void,
   ) {
     this.camera = camera;
     this.domElement = domElement;
     this.getGround = getGround;
     this.getGroundHeight = getGroundHeight;
-    this.getSeaHeight = getSeaHeight;
+    this.getWaterHeight = getWaterHeight;
     this.onExit = onExit;
   }
 
@@ -100,15 +100,15 @@ export class WalkMode {
   // the drawn ground (one GPU read), and when the coarse copy reads too high there, the level rises by the gap and the
   // search runs again. Returns the point itself when it is dry.
   private nearestShore(ground: ChunkGround, x: number, z: number): THREE.Vector2 {
-    const sea = this.getSeaHeight();
-    const isDry = (px: number, pz: number) => (this.getGroundHeight(px, pz) ?? groundHeightAt(ground, px, pz) ?? 0) >= sea!;
+    const sea = this.getWaterHeight(x, z);
+    const isDry = (px: number, pz: number) => (this.getGroundHeight(px, pz) ?? groundHeightAt(ground, px, pz) ?? 0) >= (this.getWaterHeight(px, pz) ?? -Infinity);
     if (sea === null || isDry(x, z)) return new THREE.Vector2(x, z);
     let level = sea;
     for (let attempt = 0; attempt < SHORE_VERIFY_ATTEMPTS; attempt++) {
       const candidate = this.nearestCoarseAbove(ground, x, z, level);
       if (!candidate) break;
       const drawn = this.getGroundHeight(candidate.x, candidate.y);
-      if (drawn === null || drawn >= sea + SHORE_INLAND_METERS / METERS_PER_UNIT) return candidate;
+      if (drawn === null || drawn >= (this.getWaterHeight(candidate.x, candidate.y) ?? -Infinity) + SHORE_INLAND_METERS / METERS_PER_UNIT) return candidate;
       level += sea - drawn + SHORE_INLAND_METERS / METERS_PER_UNIT;
     }
     return new THREE.Vector2(this.camera.position.x, this.camera.position.z); // no dry land found: stay put
@@ -296,11 +296,13 @@ export class WalkMode {
 
     // Water stops the walker at the waterline, like a wall; the same height read serves the eye.
     let groundHeight = this.heightAt(ground, this.camera.position.x, this.camera.position.z);
-    const sea = this.getSeaHeight();
+    // The sea or a lake at the new spot: both stop the walker the same way.
+    let sea = this.getWaterHeight(this.camera.position.x, this.camera.position.z);
     if (sea !== null && groundHeight < sea && (moveX !== 0 || moveZ !== 0)) {
       this.camera.position.x = fromX;
       this.camera.position.z = fromZ;
       groundHeight = this.heightAt(ground, fromX, fromZ);
+      sea = this.getWaterHeight(fromX, fromZ);
     }
     // Never under water: if the ground under the walker is now below the sea (the terrain or sea level changed), move
     // to the nearest shore; the eye never drops below the water's surface either way.
@@ -311,6 +313,7 @@ export class WalkMode {
       this.camera.position.x = shore.x;
       this.camera.position.z = shore.y;
       groundHeight = this.heightAt(ground, shore.x, shore.y);
+      sea = this.getWaterHeight(shore.x, shore.y);
     }
     const eyeHeight = Math.max(groundHeight, sea ?? -Infinity) + EYE_HEIGHT_METERS / METERS_PER_UNIT;
     const blend = 1 - Math.exp(-HEIGHT_SMOOTHING_PER_SECOND * deltaSeconds);

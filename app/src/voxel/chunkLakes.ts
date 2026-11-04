@@ -5,8 +5,8 @@ import type { RiverClimate } from '../rivers/riverClimate';
 const NO_LAKE = -1000; // NO_CHUNK_LAKE in rivers/chunkLakes.worker.ts
 
 // Keeps the chunk's lake levels fresh: reads the ground without stalling a frame, solves it off the main thread (latest
-// request only), and holds the result as a texture (R the level, G the lake's share of the tide) for the land's walls and
-// the water. Lakes show only with Erosion on.
+// request only), joining the planet's lakes with the chunk's own dips, and holds the result as a texture (R the level,
+// G the lake's share of the tide) for the land's walls and the water. Lakes show only with Erosion on.
 export class ChunkLakes {
   readonly texture: THREE.DataTexture;
   private readonly worker = new Worker(new URL('../rivers/chunkLakes.worker.ts', import.meta.url), { type: 'module' });
@@ -43,8 +43,12 @@ export class ChunkLakes {
     void renderer.readRenderTargetPixelsAsync(preview.target, 0, 0, size, size, buffer).then(() => {
       if (requestId !== this.requestId) return;
       const ground = new Float32Array(size * size);
-      for (let cell = 0; cell < ground.length; cell++) ground[cell] = buffer[cell * 4 + 1];
-      this.pending = { ground, size, seaLevel, climate: { rainfall: climate.rainfall, temperature: climate.temperature, liquid: climate.liquid }, chunkKm, radiusKm, requestId };
+      const planetLakes = new Float32Array(size * size);
+      for (let cell = 0; cell < ground.length; cell++) {
+        ground[cell] = buffer[cell * 4 + 1];
+        planetLakes[cell] = buffer[cell * 4 + 2] > ground[cell] ? buffer[cell * 4 + 2] : NO_LAKE; // B: the planet's lake level
+      }
+      this.pending = { ground, planetLakes, size, seaLevel, climate: { rainfall: climate.rainfall, temperature: climate.temperature, liquid: climate.liquid }, chunkKm, radiusKm, requestId };
       this.sendPending();
     });
   }
@@ -54,7 +58,7 @@ export class ChunkLakes {
     const request = this.pending;
     this.pending = null;
     this.solving = true;
-    this.worker.postMessage(request, [request.ground.buffer]);
+    this.worker.postMessage(request, [request.ground.buffer, request.planetLakes.buffer]);
   }
 
   private setLevels(levels: Float32Array, size: number): void {
@@ -65,6 +69,16 @@ export class ChunkLakes {
       this.texture.image.data = levels;
     }
     this.texture.needsUpdate = true;
+  }
+
+  // The lake level (raw height) at a point given as a share of the chunk, null off every lake.
+  levelAt(u: number, v: number): number | null {
+    const size = this.texture.image.width;
+    const data = this.texture.image.data as Float32Array;
+    const col = Math.min(size - 1, Math.max(0, Math.round(u * (size - 1))));
+    const row = Math.min(size - 1, Math.max(0, Math.round(v * (size - 1))));
+    const level = data[(row * size + col) * 2];
+    return level > NO_LAKE ? level : null;
   }
 
   dispose(): void {

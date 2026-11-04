@@ -62,7 +62,7 @@ export function useErosion(
   const [durationYears, setDurationYears] = useState(DEFAULT_DURATION_YEARS);
   // One Strength for both erosions: it scales the chunk engine's Erosion Rate and the planet's k from their tuned defaults.
   const [strength, setStrength] = useState(1);
-  const [enabled, setEnabled] = useState(false); // off on load (Dana, 2026-11-03); off means no carving anywhere
+  const [enabled, setEnabled] = useState(false); // saved with the project, off on a new planet (Dana); off means no carving anywhere
   // The erosion filter on the planet's surface follows the same switch and Strength (map/heightmap.ts).
   const [filterShape, setFilterShape] = useState<ErosionFilterShape>(DEFAULT_EROSION_FILTER_SHAPE); // the gullies' look
   const [filterRevision, setFilterRevision] = useState(0); // steps when the filter changes, so the land chunk re-bakes
@@ -126,7 +126,7 @@ export function useErosion(
 
   // What a project saves: the panel's settings, which exist whether or not this run has a result.
   function savedSettings() {
-    return { rates: currentRates(), durationYears, gridResolution, seaLevel, filterShape };
+    return { rates: currentRates(), durationYears, gridResolution, seaLevel, filterShape, enabled };
   }
 
   // Restores the saved settings on project load. useErosionAutoRun reruns the simulation if the style draws it.
@@ -136,6 +136,7 @@ export function useErosion(
     setDurationYears(saved.durationYears);
     setGridResolution(saved.gridResolution);
     setFilterShape(saved.filterShape ?? DEFAULT_EROSION_FILTER_SHAPE);
+    setEnabled(saved.enabled ?? false);
   }
 
   // Back to the uneroded terrain, so a run can be compared against what it

@@ -63,7 +63,7 @@ export function colorLockProps(settings: AtmosphereSettings, key: AtmosphereColo
 
 // Inferred, TUNABLE: a soft, pale default between the references (Sable, Gris, No Man's Sky).
 export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
-  enabled: true,
+  enabled: false, // a new planet starts bare (Dana)
   horizonColor: '#f3d9c6',
   zenithColor: '#8fb4d9',
   shadowHue: 0,

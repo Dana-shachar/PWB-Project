@@ -35,6 +35,9 @@ const chunkFragmentGlsl = terrainGlsl + landLayersGlsl + hazeGlsl + chunkFragmen
 // For the single shared gumball (scene/sharedGumball.ts) to target this
 // view's camera when the land-chunk pane is selected — see ISSUES.md,
 // 2026-09-23.
+// How high the haze reaches before thinning by 1/e, as a share of the terrain's height (maxHeight). Inferred, TUNABLE.
+const HAZE_SCALE_SHARE = 0.5;
+
 export interface LandChunkCanvasHandle {
   getGumballTarget(): GumballTarget | null;
 }
@@ -292,7 +295,15 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
       const renderer = sharedRendererRef.current.renderer;
       return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight), patchSettingsRef.current.heightBase) : null;
-    }, () => (water.mesh.visible ? water.mesh.position.y : null), () => {
+    }, (x, z) => {
+      // The sea or the lake there, whichever is higher, in world height (applyTide's rule for the lake).
+      const sea = water.mesh.visible ? water.mesh.position.y : null;
+      const size = Math.max(patchSettingsRef.current.chunkSize, 1e-6);
+      const lake = chunkLakes.levelAt(x / size + 0.5, z / size + 0.5);
+      const { heightBase, maxHeight } = patchSettingsRef.current;
+      const lakeHeight = lake === null ? null : Math.max(0, lake + heightBase) * Math.max(0, maxHeight);
+      return sea === null ? lakeHeight : lakeHeight === null ? sea : Math.max(sea, lakeHeight);
+    }, () => {
       perspectiveCamera.position.copy(orbitSaved.position);
       perspectiveCamera.up.copy(orbitSaved.up);
       orbitControls.target.copy(orbitSaved.target);
@@ -407,6 +418,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uHazeSkyColor: { value: new THREE.Color() },
         uHazeDensity: { value: 0 },
         uHazeStart: { value: 0 },
+        uHazeFloor: { value: 0 },
+        uHazeScaleHeight: { value: 1 },
         uHeightMap: { value: heightMap },
         uHeightMapTexelSize: { value: 1 / Math.max(1, heightMapResolution) },
         uChunkHeightMap: { value: heightMap },
@@ -489,6 +502,14 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       const hazeStart = walkMode.active ? 0 : perspectiveCamera.position.distanceTo(orbitControls.target);
       material.uniforms.uHazeStart.value = hazeStart;
       water.mesh.material.uniforms.uHazeStart.value = hazeStart;
+      // The haze's floor is the sea's base height (applyTide's rule) and it thins over a share of the terrain's height.
+      const { heightBase: hazeHeightBase, maxHeight: hazeMaxHeight } = patchSettingsRef.current;
+      const hazeFloor = Math.max(0, water.tide.baseSeaLevel + hazeHeightBase) * Math.max(0, hazeMaxHeight);
+      const hazeScaleHeight = HAZE_SCALE_SHARE * Math.max(hazeMaxHeight, 1e-4);
+      for (const uniforms of [material.uniforms, water.mesh.material.uniforms]) {
+        uniforms.uHazeFloor.value = hazeFloor;
+        uniforms.uHazeScaleHeight.value = hazeScaleHeight;
+      }
       (water.mesh.material.uniforms.uLightDirection.value as THREE.Vector3).copy(frameLight);
       updateSkyDomeFrame(sky, perspectiveCamera, frameLight, atmosphereRef.current.wind, deltaSeconds);
       updateChunkWaterFrame(water, perspectiveCamera.position, deltaSeconds, viewportElement!.clientWidth * window.devicePixelRatio);

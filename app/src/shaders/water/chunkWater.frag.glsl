@@ -35,6 +35,19 @@ const float SURF_SLOPE_UV_STEP = 0.002;
 
 const float SHORE_FOAM_REACH_METERS = 30.0; // how far foam reaches from the waterline at the Foam slider's default. Inferred, TUNABLE.
 
+uniform sampler2D uRippleMap; // planet/rippleMap.ts
+uniform float uRippleOn;
+uniform float uRippleTile; // the smaller ripple size, world units (updateChunkWaterFrame)
+uniform float uRippleBlend; // how far toward the size twice as large
+const float LAKE_RIPPLE_STRENGTH = 0.6; // strong enough to read at a distance (Dana). Inferred, TUNABLE
+
+// The planet's two ripple layers, scrolling across each other (planetPatch.frag.glsl).
+vec2 lakeRipple(vec2 uv) {
+  vec2 layerA = texture2D(uRippleMap, uv + vec2(0.02, 0.01) * uSeaClock).xy;
+  vec2 layerB = texture2D(uRippleMap, uv * 0.7 - vec2(0.013, 0.021) * uSeaClock).xy;
+  return (layerA * 2.0 - 1.0) + (layerB * 2.0 - 1.0);
+}
+
 void main() {
   vec2 chunkUv = vWorldPosition.xz / uChunkSize + 0.5;
   vec4 heightTexel = texture2D(uChunkHeightMap, chunkUv);
@@ -68,6 +81,12 @@ void main() {
   // Large Gerstner waves under Seascape's, for slow light and dark variance.
   vec3 variance = waterVariance(meters, footprint, fetch);
   normal = normalize(normal + vec3(-variance.x, 0.0, -variance.y));
+  // Lakes always ripple, even where the meter-sized waves are too small to see: the planet's scrolling ripple layers, sized
+  // as a ratio of the view, with two sizes blended so zooming never pops.
+  if (vLake > 0.0 && uRippleOn > 0.5) {
+    vec2 tilt = mix(lakeRipple(vWorldPosition.xz / uRippleTile), lakeRipple(vWorldPosition.xz / (uRippleTile * 2.0)), uRippleBlend);
+    normal = normalize(normal + vec3(tilt.x, 0.0, tilt.y) * LAKE_RIPPLE_STRENGTH);
+  }
   // Surf rolling toward the shore, lit as a wave and leaving foam behind its crest.
   // The depth's slope from the ground's heights at neighboring points, per unit of the waves' coordinates.
   // Central differences: a one-sided slope jumps across seabed ridges, which drew the surf with sharp corners ([B110]).

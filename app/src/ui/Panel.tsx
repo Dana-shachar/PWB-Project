@@ -310,7 +310,7 @@ export function Panel({
     <div className="panel-outer" style={{ width }}>
       <div className="panel-content">
         <div className="panel-section">
-          <Accordion title="Project Settings" defaultOpen>
+          <Accordion title="Project Settings">
             {/* Click-to-edit — replaces the old prompt-based Rename button,
                 auto-saves under the new name via the existing debounced save. */}
             <EditableText className="project-name-text" value={currentPlanetName ?? ''} onCommit={onRenameProject} />
@@ -359,7 +359,7 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          <Accordion title="Edit" defaultOpen>
+          <Accordion title="Edit">
             <div className="panel-btn-row">
               {/* Mirrors the Cmd+Z/Ctrl+Z shortcut (see map/2Dbrush.ts) —
                   undoes the single most recent paint stroke, regardless of

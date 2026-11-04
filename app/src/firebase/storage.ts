@@ -20,6 +20,7 @@ export interface SavedErosionRun {
   seaLevel: number;
   patch: SerializedPatch;
   filterShape?: ErosionFilterShape; // absent in saves from before the gully sliders were saved
+  enabled?: boolean; // absent in saves from before the switch was saved: off
 }
 
 // Each user's saved planets live in a subcollection, not one fixed document

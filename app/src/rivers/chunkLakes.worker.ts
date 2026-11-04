@@ -11,6 +11,7 @@ const LAKE_TIDE_BOOST = 4;
 
 export interface ChunkLakesRequest {
   ground: Float32Array;
+  planetLakes: Float32Array; // the planet's lake level per cell, NO_CHUNK_LAKE off its lakes
   size: number;
   seaLevel: number;
   climate: RiverClimate;
@@ -39,10 +40,63 @@ function squareNeighbors(size: number): { neighborStarts: Int32Array; neighborLi
   return { neighborStarts, neighborList };
 }
 
+// The planet's lakes on the chunk's own ground: from the planet's outline, water at its level spreads to every neighbor
+// whose ground is below it, so a lake always ends against rising ground or at the cut, never in the air (a flood fill).
+function floodPlanetLakes(ground: Float32Array, planetLakes: Float32Array, size: number): Float32Array {
+  const level = new Float32Array(size * size).fill(NO_CHUNK_LAKE);
+  const queue: number[] = [];
+  for (let cell = 0; cell < level.length; cell++) {
+    if (planetLakes[cell] > ground[cell]) {
+      level[cell] = planetLakes[cell];
+      queue.push(cell);
+    }
+  }
+  for (let head = 0; head < queue.length; head++) {
+    const cell = queue[head];
+    const row = Math.floor(cell / size);
+    const col = cell % size;
+    for (const [nextRow, nextCol] of [[row + 1, col], [row - 1, col], [row, col + 1], [row, col - 1]]) {
+      if (nextRow < 0 || nextCol < 0 || nextRow >= size || nextCol >= size) continue;
+      const next = nextRow * size + nextCol;
+      if (ground[next] < level[cell] && level[next] < level[cell]) {
+        level[next] = level[cell];
+        queue.push(next);
+      }
+    }
+  }
+  return level;
+}
+
+// Each lake cell's lake area in cells: connected cells at the same level.
+function lakeAreas(level: Float32Array, size: number): Int32Array {
+  const area = new Int32Array(size * size);
+  const seen = new Uint8Array(size * size);
+  for (let start = 0; start < level.length; start++) {
+    if (seen[start] || level[start] <= NO_CHUNK_LAKE) continue;
+    const members = [start];
+    seen[start] = 1;
+    for (let head = 0; head < members.length; head++) {
+      const cell = members[head];
+      const row = Math.floor(cell / size);
+      const col = cell % size;
+      for (const [nextRow, nextCol] of [[row + 1, col], [row - 1, col], [row, col + 1], [row, col - 1]]) {
+        if (nextRow < 0 || nextCol < 0 || nextRow >= size || nextCol >= size) continue;
+        const next = nextRow * size + nextCol;
+        if (!seen[next] && level[next] === level[start]) {
+          seen[next] = 1;
+          members.push(next);
+        }
+      }
+    }
+    for (const cell of members) area[cell] = members.length;
+  }
+  return area;
+}
+
 let neighbors: { size: number; neighborStarts: Int32Array; neighborList: Int32Array } | null = null;
 
 self.onmessage = (event: MessageEvent<ChunkLakesRequest>) => {
-  const { ground, size, seaLevel, climate, chunkKm, radiusKm, requestId } = event.data;
+  const { ground, planetLakes, size, seaLevel, climate, chunkKm, radiusKm, requestId } = event.data;
   const start = performance.now();
   if (neighbors?.size !== size) neighbors = { size, ...squareNeighbors(size) };
   const { neighborStarts, neighborList } = neighbors;
@@ -58,14 +112,18 @@ self.onmessage = (event: MessageEvent<ChunkLakesRequest>) => {
   const heap = new NodeHeap(size * 64);
   const hierarchy = buildDepressionHierarchy(ground, isOcean, neighborStarts, neighborList, heap);
   const lakes = fillSpillMerge(hierarchy, ground, neighborStarts, neighborList, waterBudget(climate).lakeShare, heap);
-  const lakeCells = new Int32Array(lakes.lakeCount);
-  for (let cell = 0; cell < cells; cell++) if (lakes.lakeOf[cell] >= 0) lakeCells[lakes.lakeOf[cell]]++;
-  // Pairs per cell: the level, and how much of the sea's tide the lake takes.
-  const levels = new Float32Array(cells * 2);
+  // Each cell takes the higher of its own lake and the planet's lake flooded over this ground.
+  const level = floodPlanetLakes(ground, planetLakes, size);
   for (let cell = 0; cell < cells; cell++) {
     const lake = lakes.lakeOf[cell];
-    levels[cell * 2] = lake >= 0 ? lakes.lakeLevel[lake] : NO_CHUNK_LAKE;
-    if (lake >= 0) levels[cell * 2 + 1] = Math.min(1, (LAKE_TIDE_BOOST * Math.sqrt(lakeCells[lake]) * (chunkKm / size)) / radiusKm);
+    if (lake >= 0 && lakes.lakeLevel[lake] > level[cell]) level[cell] = lakes.lakeLevel[lake];
+  }
+  // Pairs per cell: the level, and how much of the sea's tide the lake takes (its width from its area on the chunk).
+  const levels = new Float32Array(cells * 2);
+  const area = lakeAreas(level, size);
+  for (let cell = 0; cell < cells; cell++) {
+    levels[cell * 2] = level[cell];
+    if (level[cell] > NO_CHUNK_LAKE) levels[cell * 2 + 1] = Math.min(1, (LAKE_TIDE_BOOST * Math.sqrt(area[cell]) * (chunkKm / size)) / radiusKm);
   }
   self.postMessage({ levels, requestId, lakeCount: lakes.lakeCount, ms: Math.round(performance.now() - start) }, { transfer: [levels.buffer] });
 };

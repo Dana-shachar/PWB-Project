@@ -197,7 +197,7 @@
 
 **rivers/chunkLakes.worker.ts**
 - What it is: the land chunk's lakes, solved off the main thread on the chunk's own ground, with the square's cut sides as outlets; returns each cell's level and the lake's share of the tide.
-- Key names: `ChunkLakesRequest`, `squareNeighbors`, `NO_CHUNK_LAKE`, `LAKE_TIDE_BOOST`.
+- Key names: `ChunkLakesRequest`, `squareNeighbors`, `floodPlanetLakes` (the planet's lakes at their level over the chunk's ground), `lakeAreas`, `NO_CHUNK_LAKE`, `LAKE_TIDE_BOOST`.
 
 **rivers/riverGrid.ts**
 - What it is: river spans as Catmull-Rom curves filed into lat-long buckets for the bake. Built but not drawn.
@@ -322,16 +322,16 @@
 
 **scene/walkMode.ts**
 - What it is: the chunk's person view. Drag to look, long-press to walk forward (`HOLD_TO_WALK_MS`; dragging then steers), WASD or arrows to move, arrows turn, R/F look up and down, Shift runs, `[` `]` or the wheel scale speed (default 10x), Esc leaves. A 1.5 s fly-in eases the camera from the orbit view.
-- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`, `speedMultiplier`, `holding`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `HOLD_TO_WALK_MS`, `MIN_EYE_CLEARANCE_METERS` (the eye's floor above the ground), `flyIn`; water rules `getSeaHeight`, `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
+- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`, `speedMultiplier`, `holding`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `HOLD_TO_WALK_MS`, `MIN_EYE_CLEARANCE_METERS` (the eye's floor above the ground), `flyIn`; water rules `getWaterHeight` (the sea or a lake at a point), `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
 - Talks to: `LandChunkCanvas.tsx` (saves and restores the orbit camera, eases fov/near/far with `progress`), `ChunkPatchRenderer.sampleHeight` for the eye height.
 
 **voxel/chunkWater.ts**
 - What it is: the chunk's water, TDM's Seascape on a sheet that stands flat at the sea and at each lake's level, recolored by the water ramp, see-through in the shallows, with shore and crest foam, and side walls down to the chunk's base.
-- Key names: `ChunkWater` (`walls`, `baseDepth`), `WATER_SHEET_SEGMENTS`, `WALL_TOP_SHARE`, `applyTide` (`uLakeEbb`), `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
+- Key names: `ChunkWater` (`walls`, `baseDepth`), `WATER_SHEET_SEGMENTS`, `WALL_TOP_SHARE`, lake ripples (`RIPPLE_TILE_SHARE`, `uRippleTile`, `LAKE_RIPPLE_STRENGTH` and `lakeRipple` in `chunkWater.frag.glsl`), `applyTide` (`uLakeEbb`), `createChunkWater`, `updateChunkWater`, `updateChunkWaterFrame` (also moves the tide), `setChunkWaterLight`, `setChunkWaterTide`, `chunkWaterLevel`.
 
 **voxel/chunkLakes.ts**
 - What it is: keeps the chunk's lake levels fresh: reads the preview map without stalling a frame, keeps only the latest request, and holds the result as a texture (R the level, G the tide share), read by the sheet and both walls.
-- Key names: `ChunkLakes` (`update`, `texture`), `uChunkLakeLevels`; `getChunkPreview` in `map/heightmap.ts`.
+- Key names: `ChunkLakes` (`update`, `texture`, `levelAt` for walk mode's water guard), `uChunkLakeLevels`; `getChunkPreview` in `map/heightmap.ts`.
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.
@@ -419,7 +419,7 @@
 
 **atmosphere/** (`skyDome`, `planetGlow`, `planetHaze`, `clouds`, `haze.glsl`, `airGround.glsl`, `planetAir.glsl`)
 - What it is: the chunk's sky dome, the planet's rim glow and surface haze, the planet's cloud shell, and the chunk haze shared by ground and water.
-- Key names: sky dome `topColor`, `bottomColor`, `uGlow`, sun halo, `skyFbm`, `drawMoon` (screen blend, split toning, crescent, one rounded glow across the edge), `airmass`, `MOON_EXTINCTION`, `MOON_HORIZON_FADE`, `MOON_EDGE_SOFTNESS`, `uMoonBlends`; `airGroundLift`; `planetHaze` (the haze along a ray, used by surfaces and the shell), `hazeSphereHits`; clouds `uCloudLayer`, `CLOUD_SHELL_CORE`, `CLOUD_SHELL_OPACITY`; `moonSurface`, `blendScreen`, `MOON_HALO_*`, `MOON_GLOW_*`; glow `uWidth`, `uStrength`, edge-distance fade; haze `sphereHits`, `uScaleHeight`, `HAZE_STEPS`; clouds `cloudShape` (Swirl, Feather erosion), `cloudFbm`, `cloudTone`, `toneBands`, `bandSpeed`, `GLOBAL_DRIFT`, `BAND_SWING`, Beer and powder lighting; `haze.glsl` `applyHaze` (Quilez height fog, sun and sky hues), `interleavedGradientNoise`, `HAZE_FALLOFF`, `HAZE_GRAIN`.
+- Key names: sky dome `topColor`, `bottomColor`, `uGlow`, sun halo, `skyFbm`, `drawMoon` (screen blend, split toning, crescent, one rounded glow across the edge), `airmass`, `MOON_EXTINCTION`, `MOON_HORIZON_FADE`, `MOON_EDGE_SOFTNESS`, `uMoonBlends`; `airGroundLift`; `planetHaze` (the haze along a ray, used by surfaces and the shell), `hazeSphereHits`; clouds `uCloudLayer`, `CLOUD_SHELL_CORE`, `CLOUD_SHELL_OPACITY`; `moonSurface`, `blendScreen`, `MOON_HALO_*`, `MOON_GLOW_*`; glow `uWidth`, `uStrength`, edge-distance fade; haze `sphereHits`, `uScaleHeight`, `HAZE_STEPS`; clouds `cloudShape` (Swirl, Feather erosion), `cloudFbm`, `cloudTone`, `toneBands`, `bandSpeed`, `GLOBAL_DRIFT`, `BAND_SWING`, Beer and powder lighting; `haze.glsl` `applyHaze` (Quilez height fog from `uHazeFloor`, the sea's height, thinning over `uHazeScaleHeight`, set from `HAZE_SCALE_SHARE` in `voxel/LandChunkCanvas.tsx`; sun and sky hues), `interleavedGradientNoise`, `HAZE_GRAIN`.
 
 **erosion/**, **scene/** (the grid)
 - What it is: the erosion passes and the ground grid.

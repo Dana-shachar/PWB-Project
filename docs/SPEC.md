@@ -642,6 +642,8 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Duration, Strength, the gully sliders and the chosen square save with the project. The Erosion switch doesn't, so it starts off on load.
 - The chunk erosion run belongs to the voxel style only.
 
+- Update 2026-11-04 (Dana: "start saving the erosion settings"): the Erosion switch saves too. A new planet and older saves start with it off.
+
 ### [S75] Lakes on the chunk · `decided`
 **Decided:** 2026-11-04
 
@@ -649,6 +651,9 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Water is a flat sheet at each lake's level, and the land stops it, so shores follow the fine ground.
 - The square's cut sides are outlets, as the sea is, so water drains through them and valleys don't fill against a cut. Dana: water sinking away there is fine.
 - Lakes show only with Erosion on. Solving waits for the carving, and old levels clear the moment the ground changes, so wrong water never shows. A chunk's lake can differ from the planet's view of it (Dana: fine).
+
+- Update 2026-11-04: the planet's lakes also flood over the chunk's ground at their level, since a lake larger than the square has its rim outside it (`[B127]`). Each point takes the higher of the two.
+- Lakes always ripple, sized as a ratio of the view, so even a small lake moves at any zoom (Dana).
 
 ### [S76] Tides scale by ratios · `decided`
 **Decided:** 2026-11-04
@@ -662,3 +667,13 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - Anywhere a water or land surface is cut, it ends in a wall, never open in the air. Dana's rule.
 - At the square's sides, a column whose edge lies under water is water from the base up, for lakes as for the sea.
+
+### [S78] A new planet starts bare · `decided`
+**Decided:** 2026-11-04
+
+- A new planet starts with every system off (Atmosphere, Ocean, Erosion) and every panel closed. Dana.
+
+### [S79] Every detail has a real size · `decided`
+**Decided:** 2026-11-04
+
+- Rivers, plants and animals have real sizes (a river's width from its flow), and a view draws a thing only once it's large enough on screen; smaller things add to the ground's color. So the planet shows only Amazon-scale rivers and forests as color, and the chunk shows the rest. The same rule as the terrain's band-limited detail. Dana.

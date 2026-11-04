@@ -889,6 +889,25 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Dana: the square doesn't show where the mouse presses. The press picked on the bare sphere while the outline is drawn on a higher one, the radius plus the highest terrain, so they separated away from straight below the camera. From the code; the earlier gap numbers were invalid.
 - The fix: the press picks on the outline's own sphere. Dana's check: "its fine i think".
 
+### [B126] Walk mode went under lakes · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `scene/walkMode.ts`, `voxel/LandChunkCanvas.tsx`
+- Dana: walk mode took her underwater again. The water guard knew only the sea's height, never the lake under the walker.
+- The fix: the guard asks for the water height at each point, the sea or a lake. Measured: dropped on a lake, the walker moved 78 units to the shore; walking at a lake for 5 s, 0 of 100 frames were on water.
+
+### [B127] The chunk missed the planet's large lakes · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `floodPlanetLakes` in `rivers/chunkLakes.worker.ts`
+- Dana: lakes on the planet were missing from the chunk. Measured: a lake covering 79% of the square drew on 1.8%. Its rim lies outside the square, so the chunk's own solve, with the cut sides as drains, emptied it.
+- The fix: the planet's lakes flood over the chunk's own ground at their level, and the chunk's small dips are added. The same square now shows lake on 79%.
+
+### [B128] No haze at walking height · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `applyHaze` in `shaders/atmosphere/haze.glsl`
+- Dana: barely any haze, none at the horizon even at full strength. From the code: the haze thinned over a fixed 1.2 units, and the ground sits hundreds of units up, so at a measured eye height of 299 it was multiplied by about e^-249.
+- The fix: heights from the sea's height, thinning over a share of the terrain's height. Seen in walk mode; not measured.
+
+### [B129] Stripes in walk mode · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-04 · **Where:** not yet known
+- Dana's screenshot: vertical stripes on the ground ahead in walk mode. Not diagnosed.
+
 ### [B124] The page freezes and ignores a hard refresh · `blocks work`
 **🟡 Tabled 2026-11-04** · **Found:** 2026-11-03
 - Reported at least three times, not reproduced. Dana hasn't seen it since today's fixes and tabled it. The diagnostic trail was removed; it's in git history if needed.
