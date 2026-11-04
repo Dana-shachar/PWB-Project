@@ -6,8 +6,15 @@
 
 *What this is, the idea behind it, and what inspired it.*
 
-> 📌 **Temporary draft (2026-11-02), to be revised with Dana and replaced:** alien planetary exploration and evolution. You create planets from settings for landscape, atmosphere and biome, then explore them. Possibly evolving plant and animal agents, and extreme, disaster-like conditions.
-
+> 📌 **Concept:** This is a world-building tool and experimentation setting for alien planets, inspired by exploration games such as *No Man's Sky*, *Sable* and *Everything*, and by the invented worlds of science fiction and fantasy books such as *Dune* and *Mission of Gravity*. Each planet works as an experiment: the user sets its initial conditions and observes how the world develops from them. These conditions cover its terrain, water, atmosphere, climate, materials and colors, including extreme ones, and the user can select an area and explore it up close, including on foot in a first-person walk mode. Features such as erosion and the formation of lakes emerge from simulation.
+>
+> **Research question:** How can experimenting with a planet's initial conditions lead people to imagine and create worlds they would not have thought of on their own?
+>
+> **Future features:**
+> - **Evolution:** a world clock that speeds up time to show how the planet's environment develops, and evolutionary agents that simulate different life forms.
+> - **AI backstory:** a language model that writes a backstory for each planet based on its procedural settings.
+>
+** inspiration references can be found in the REFERENCES md.
 ---
 
 Cornell Tech, DESIGN 6197/4197, a procedural planet-building tool: paint and generate terrain on a sphere, built with Three.js + GLSL. This README is written for anyone with zero context on the project, what it is, and where everything lives. Kept up to date as the project changes, not a dated log.
