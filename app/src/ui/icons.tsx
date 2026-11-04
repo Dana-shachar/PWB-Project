@@ -17,6 +17,16 @@ export const PERSON_ICON_SVG =
   '<circle cx="8" cy="3" r="2"/>' +
   '<path d="M4.6 7.4c0-.9.7-1.6 1.6-1.6h3.6c.9 0 1.6.7 1.6 1.6v3.1h-1.4V14.6H8.6v-3.2H7.4v3.2H6V10.5H4.6z"/></svg>';
 
+// Selection mode (voxel/areaSelect.ts): a dashed square with solid corners, the usual marquee.
+export function SelectAreaIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden="true">
+      <rect x={2.5} y={2.5} width={11} height={11} strokeDasharray="2 2" />
+      <path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" strokeDasharray="none" />
+    </svg>
+  );
+}
+
 export function DiceIcon({ className }: IconProps) {
   return (
     <svg

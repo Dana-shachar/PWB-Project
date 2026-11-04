@@ -63,11 +63,16 @@ void main() {
   normal = normalize(normal + vec3(-variance.x, 0.0, -variance.y));
   // Surf rolling toward the shore, lit as a wave and leaving foam behind its crest.
   // The depth's slope from the ground's heights at neighboring points, per unit of the waves' coordinates.
+  // Central differences: a one-sided slope jumps across seabed ridges, which drew the surf with sharp corners ([B110]).
   vec2 uvStep = vec2(SURF_SLOPE_UV_STEP, 0.0);
-  float groundX = mix(texture2D(uChunkHeightMap, chunkUv + uvStep.xy).r, texture2D(uChunkHeightMap, chunkUv + uvStep.xy).g, uHeightMapGreenChannel);
-  float groundZ = mix(texture2D(uChunkHeightMap, chunkUv + uvStep.yx).r, texture2D(uChunkHeightMap, chunkUv + uvStep.yx).g, uHeightMapGreenChannel);
+  vec4 texelXp = texture2D(uChunkHeightMap, chunkUv + uvStep.xy);
+  vec4 texelXm = texture2D(uChunkHeightMap, chunkUv - uvStep.xy);
+  vec4 texelZp = texture2D(uChunkHeightMap, chunkUv + uvStep.yx);
+  vec4 texelZm = texture2D(uChunkHeightMap, chunkUv - uvStep.yx);
+  float groundDeltaX = mix(texelXp.r - texelXm.r, texelXp.g - texelXm.g, uHeightMapGreenChannel) * 0.5;
+  float groundDeltaZ = mix(texelZp.r - texelZm.r, texelZp.g - texelZm.g, uHeightMapGreenChannel) * 0.5;
   float seaUnitsPerStep = SURF_SLOPE_UV_STEP * uChunkSize * METERS_PER_UNIT / uWaveScale;
-  vec2 depthGradient = -vec2(groundX - groundRaw, groundZ - groundRaw) / max(0.0001, uSeaLevel - uWaterDeepest) / seaUnitsPerStep;
+  vec2 depthGradient = -vec2(groundDeltaX, groundDeltaZ) / max(0.0001, uSeaLevel - uWaterDeepest) / seaUnitsPerStep;
   vec3 surf = surfWave(depthShare, meters, 0.0, depthGradient, footprint) * (1.0 - far);
   normal = normalize(normal + vec3(-surf.x, 0.0, -surf.y) * CHUNK_SURF_TILT);
   vec3 eye = normalize(toPoint);

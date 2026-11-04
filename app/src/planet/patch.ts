@@ -247,9 +247,10 @@ export function patchContaining(direction: THREE.Vector3, depth: number): Terrai
 export type PatchEdge = 'top' | 'bottom' | 'left' | 'right';
 export const PATCH_EDGES: PatchEdge[] = ['top', 'bottom', 'left', 'right'];
 
-// Far smaller than the smallest patch (2 / 2^MAX_PATCH_DEPTH), so a probe
-// lands inside whichever patch sits across an edge, never on a seam.
+// Far smaller than the smallest planet patch (2 / 2^MAX_PATCH_DEPTH), so a probe lands inside whichever patch sits
+// across an edge, never on a seam. A share of the patch below that, as a small chunk's patches go far smaller.
 const PROBE_NUDGE = 1e-5;
+const PROBE_NUDGE_SHARE = 1e-3;
 const FACE_EDGE_LIMIT = 1 - 1e-9;
 
 export interface EdgeProbe {
@@ -271,8 +272,9 @@ export function neighborProbe(patch: TerrainPatch, edge: PatchEdge, t: number): 
   const edgeU = edge === 'left' ? patch.min.x : edge === 'right' ? patch.max.x : alongU;
   const edgeV = edge === 'top' ? patch.min.y : edge === 'bottom' ? patch.max.y : alongV;
   const outward = edge === 'left' || edge === 'top' ? -1 : 1;
-  const stepU = edge === 'left' || edge === 'right' ? outward * PROBE_NUDGE : 0;
-  const stepV = edge === 'top' || edge === 'bottom' ? outward * PROBE_NUDGE : 0;
+  const nudge = Math.min(PROBE_NUDGE, (patch.max.x - patch.min.x) * PROBE_NUDGE_SHARE);
+  const stepU = edge === 'left' || edge === 'right' ? outward * nudge : 0;
+  const stepV = edge === 'top' || edge === 'bottom' ? outward * nudge : 0;
 
   const crossesBoundary =
     (edge === 'left' && edgeU <= -FACE_EDGE_LIMIT) ||

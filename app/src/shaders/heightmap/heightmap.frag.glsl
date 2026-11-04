@@ -541,7 +541,6 @@ float planetDetail(vec3 position, float sampleSpacing, float coveredSpacing) {
   return value;
 }
 
-#ifdef CHUNK_PATCH_PASS
 // Cubic B-spline weights for the 4 texels around a point t of the way between the middle two (Sigg and Hadwiger,
 // GPU Gems 2 ch. 20, "Fast Third-Order Texture Filtering"): smooth everywhere, so the map never shows its grid.
 vec4 bsplineWeights(float t) {
@@ -549,6 +548,8 @@ vec4 bsplineWeights(float t) {
   float t3 = t2 * t;
   return vec4((1.0 - t) * (1.0 - t) * (1.0 - t), 3.0 * t3 - 6.0 * t2 + 4.0, -3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0, t3) / 6.0;
 }
+
+#ifdef CHUNK_PATCH_PASS
 float chunkBaseTexel(vec2 idx) {
   vec2 clamped = clamp(idx, vec2(0.0), vec2(uChunkBaseSamples - 1.0));
   return texture2D(uChunkBase, (clamped + 0.5) / uChunkBaseSamples).r;
@@ -571,15 +572,34 @@ float chunkBaseElevation(vec2 localFace) {
 
 #ifndef CHUNK_PATCH_PASS
 // The water map at a point: its map rows only, as the river grid's rows follow them in the same texture.
+// One map cell, wrapped east to west and clamped at the poles.
+vec4 waterMapTexel(float col, float row) {
+  float wrapped = mod(col, uWaterMapSize.x);
+  float clamped = clamp(row, 0.0, uWaterMapSize.y - 1.0);
+  return texture2D(uWaterMap, vec2((wrapped + 0.5) / uWaterMapSize.x, (clamped + 0.5) / uWaterTextureRows));
+}
+vec4 waterMapRow(float col, float row, vec4 weightsX) {
+  return weightsX.x * waterMapTexel(col - 1.0, row) + weightsX.y * waterMapTexel(col, row)
+       + weightsX.z * waterMapTexel(col + 1.0, row) + weightsX.w * waterMapTexel(col + 2.0, row);
+}
+// Cubic B-spline over the 4 x 4 cells around the point, as the chunk's base map is read ([B66]): linear blending kept
+// the height but broke the slope at every cell edge, which lit each 18 km cell as a square facet ([B111]).
 vec4 waterMapAt(vec3 position) {
   vec2 uv = spherePositionToPaintUv(position);
-  return texture2D(uWaterMap, vec2(uv.x, min(uv.y * uWaterMapSize.y, uWaterMapSize.y - 0.5) / uWaterTextureRows));
+  vec2 texelPos = vec2(uv.x * uWaterMapSize.x, uv.y * uWaterMapSize.y) - 0.5;
+  vec2 cell = floor(texelPos);
+  vec2 frac = texelPos - cell;
+  vec4 weightsX = bsplineWeights(frac.x);
+  vec4 weightsY = bsplineWeights(frac.y);
+  return weightsY.x * waterMapRow(cell.x, cell.y - 1.0, weightsX) + weightsY.y * waterMapRow(cell.x, cell.y, weightsX)
+       + weightsY.z * waterMapRow(cell.x, cell.y + 1.0, weightsX) + weightsY.w * waterMapRow(cell.x, cell.y + 2.0, weightsX);
 }
 
 // The coarse eroded ground at a point (the water map's B: the terrain plus its carving), in the globe map's units.
 float erodedBaseAt(vec3 position) {
   return waterMapAt(position).b;
 }
+
 
 // One texel of the river grid, by its index past the map rows. Restored from commit 1f421af.
 vec4 riverGridTexel(float idx) {

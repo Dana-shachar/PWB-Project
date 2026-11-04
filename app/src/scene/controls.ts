@@ -113,6 +113,8 @@ export function applyAltitudeRates(
   }
 }
 
+const NEAR_SHARE_OF_ALTITUDE = 0.05;
+
 // The flat land chunk's version ([B56]), run after the controls update: the
 // camera stays above the ground under it (Cesium's terrain collision), and the
 // near plane follows that height. The closest height scales with the chunk.
@@ -121,6 +123,7 @@ export function keepAboveFlatGround(
   perspectiveCamera: THREE.PerspectiveCamera,
   groundHeight: number,
   chunkSize: number,
+  maxGroundHeight: number,
 ): void {
   const minAltitude = chunkSize * MIN_CAMERA_ALTITUDE;
   orbitControls.minDistance = minAltitude;
@@ -129,7 +132,13 @@ export function keepAboveFlatGround(
     perspectiveCamera.lookAt(orbitControls.target);
   }
   const altitude = Math.max(minAltitude, perspectiveCamera.position.y - groundHeight);
-  const near = Math.min(DEFAULT_NEAR, altitude * 0.25);
+  // Half the distance to the chunk's bounds: nothing is closer, and a small near plane left depth too coarse to separate
+  // shallow water from the ground (precision is distance squared over near), which flickered as the camera moved.
+  const { x, y, z } = perspectiveCamera.position;
+  const half = chunkSize / 2;
+  const outside = Math.hypot(Math.max(Math.abs(x) - half, 0), Math.max(y - maxGroundHeight, -y, 0), Math.max(Math.abs(z) - half, 0));
+  // Over the chunk, a share of the height above the ground: low enough that a nearby slope isn't cut. Inferred, TUNABLE.
+  const near = Math.max(Math.min(DEFAULT_NEAR, altitude * 0.25), outside * 0.5, altitude * NEAR_SHARE_OF_ALTITUDE);
   if (perspectiveCamera.near !== near) {
     perspectiveCamera.near = near;
     perspectiveCamera.updateProjectionMatrix();

@@ -213,9 +213,6 @@ function buildWaterMap(requestId: number): void {
     else if (lakes.lakeOf[cell] >= 0) kind[cell] = 2;
     else if (drainage[cell] > riverMin) kind[cell] = 3;
   }
-  let landCells = 0;
-  for (let cell = 0; cell < cells; cell++) if (kind[cell] !== 1) landCells++;
-  console.log('[TEMP water] lakes', { rainfall: climate.rainfall, temperature: climate.temperature, liquid: climate.liquid, lakeShare: Number(budget.lakeShare.toFixed(3)), lakes: lakes.lakeCount, lakeCells: lakes.lakeCells, lakeShareOfLand: Number((lakes.lakeCells / Math.max(1, landCells)).toFixed(3)), largestLake: lakes.largestLake });
 
   // Checks: a river cell with no lower neighbor that isn't water is a dead end; a lake beside the ocean is a mistake.
   let riverCells = 0;
@@ -263,7 +260,6 @@ function buildWaterMap(requestId: number): void {
   const totalRows = height + gridRows;
   const waterMap = new Float32Array(width * totalRows * 4);
   waterMap.set(rivers.texels, width * height * 4);
-  console.log('[TEMP water] rivers', { spans: rivers.spanCount, maxBucketCount: rivers.maxBucketCount, overflowBuckets: rivers.overflowBuckets, gridRows });
   for (let cell = 0; cell < cells; cell++) {
     const row = Math.floor(cell / width);
     const out = ((height - 1 - row) * width + (cell - row * width)) * 4;
@@ -272,19 +268,6 @@ function buildWaterMap(requestId: number): void {
     waterMap[out + 2] = ground[cell];
     waterMap[out + 3] = lakeLevel[cell];
   }
-  // TEMP: how much the erosion carved, in meters, to tune its strength.
-  let deepest = 0;
-  let carvedSum = 0;
-  let landCount = 0;
-  for (let cell = 0; cell < cells; cell++) {
-    if (kind[cell] === 1) continue;
-    const carved = filled[cell] - (eroded[cell] / metersPerUnit + seaLevel);
-    deepest = Math.max(deepest, carved);
-    carvedSum += carved;
-    landCount++;
-  }
-  console.log('[TEMP water] carving', { deepestMeters: Math.round(deepest * metersPerUnit), meanMeters: Number(((carvedSum / Math.max(1, landCount)) * metersPerUnit).toFixed(2)) });
   const valleySpacing = valleySpacingMeters(kind, width, height, cellDiagonal / Math.SQRT2);
-  console.log('[TEMP water] valley spacing', { km: Math.round(valleySpacing / 1000) });
   self.postMessage({ type: 'analyzed', requestId, waterMap, valleySpacing, width, height, totalRows, riverCells, deadEnds, lakeCells, lakesTouchingOcean, ms: Math.round(performance.now() - start) }, { transfer: [waterMap.buffer] });
 }

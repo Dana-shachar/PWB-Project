@@ -19,11 +19,12 @@ import { createCloudLayer, updateCloudLayer, updateCloudLayerFrame, GAP_PER_JAGG
 import { createPlanetHaze, updatePlanetHaze } from '../atmosphere/planetHaze';
 import { bakeAirGround, createAirGround, type AirGround } from '../atmosphere/airGround';
 import { createPlanetSpin, type SpinSettings } from './planetSpin';
+import { AreaOutline } from './areaOutline';
 
 import { isRippleMapReady } from '../planet/rippleMap';
 import { KM_PER_SCENE_UNIT, WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { ElevationData } from '../voxel/chunkGrid';
-import { clampPatchSamples, clampPatchTextureResolution, faceIndex, PATCH_BORDER_TEXELS, patchContaining, type TerrainPatch } from '../planet/patch';
+import { clampPatchSamples, clampPatchTextureResolution, faceIndex, PATCH_BORDER_TEXELS, type TerrainPatch } from '../planet/patch';
 import { PlanetPatchRenderer } from '../planet/PlanetPatchRenderer';
 import type { PlanetSharedUniforms } from '../planet/planetPatchMesh';
 import { buildRampUniformArrays, DEFAULT_COLOR_STOPS, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
@@ -121,6 +122,9 @@ export interface SceneCanvasHandle {
   // applies — this is the fix that was reverted to a CPU readback that
   // night, now reinstated for real. See ISSUES.md, [B32].
   getPatchRegionTexture(patch: TerrainPatch, resolution: number): { texture: THREE.Texture; resolution: number } | null;
+  // Bakes the next rows of the land chunk's full base map within a texel budget (map/heightmap.ts).
+  advanceChunkBaseUpgrade(root: TerrainPatch, texelBudget: number): { texels: number; switched: boolean; pending: boolean };
+  getChunkBaseTexture(): THREE.Texture | null;
   // Bakes a patch into a target the caller owns, for the chunk's patches
   // (voxel/ChunkPatchRenderer.ts). False if the pipeline isn't ready.
   bakePatchInto(patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch): boolean;
@@ -142,9 +146,11 @@ export interface SceneCanvasHandle {
   // the few steps between, never backward, per [S27] in SPEC.md. Returns
   // null if targetStep is outside what outcome actually covers.
   scrubErosion(outcome: ErosionOutcome, targetStep: number): ElevationData | null;
-  // Which patch sits under a point on screen, for picking the chunk's
-  // location by clicking the planet. Null if the click missed the planet.
-  pickPatchAt(clientX: number, clientY: number, depth: number): TerrainPatch | null;
+  // The planet point under a point on screen, as a unit direction in the planet's own turning frame; null if it missed.
+  pickPointAt(clientX: number, clientY: number): THREE.Vector3 | null;
+  // Selection mode (voxel/areaSelect.ts): camera turning off while a drag draws, and the land chunk's area on the planet.
+  setOrbitEnabled(enabled: boolean): void;
+  setAreaOutline(patch: TerrainPatch | null): void;
   // For the single shared gumball (scene/sharedGumball.ts) to target this
   // view's camera — this component no longer owns its own Gumball instance,
   // see ISSUES.md, 2026-09-23.
@@ -344,6 +350,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
   });
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   const planetGroupRef = useRef<THREE.Group | null>(null);
+  const areaOutlineRef = useRef<AreaOutline | null>(null);
   const webglRendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const heightmapPipelineRef = useRef<HeightmapPipeline | null>(null);
   const planetDrainageRef = useRef<PlanetDrainage | null>(null);
@@ -501,7 +508,6 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const heightmapPipeline = heightmapPipelineRef.current;
         if (!webglRenderer || !heightmapPipeline) return;
         heightmapPipeline.setErosionFilter(strength, shape);
-        console.log('[TEMP water] bake probe, globe map units', JSON.stringify(heightmapPipeline.probeWaterMap(webglRenderer, layersRef.current)));
         planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
       },
       setPlanetWaterMap(map, width, height, totalRows, valleySpacing) {
@@ -509,7 +515,6 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         const heightmapPipeline = heightmapPipelineRef.current;
         if (!webglRenderer || !heightmapPipeline) return;
         heightmapPipeline.setPlanetWaterMap(map, width, height, totalRows, valleySpacing);
-        if (map) console.log('[TEMP water] bake probe, globe map units', JSON.stringify(heightmapPipeline.probeWaterMap(webglRenderer, layersRef.current)));
         planetPatchRendererRef.current?.rebakeAll(webglRenderer, heightmapPipeline, layersRef.current);
       },
       setPlanetErosionPasses(passes, strength, onProgress) {
@@ -581,6 +586,17 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
           borderTexels: PATCH_BORDER_TEXELS,
         }, target);
         return true;
+      },
+      advanceChunkBaseUpgrade(root, texelBudget) {
+        const webglRenderer = webglRendererRef.current;
+        const heightmapPipeline = heightmapPipelineRef.current;
+        if (!webglRenderer || !heightmapPipeline) return { texels: 0, switched: false, pending: false };
+        // Notices a terrain change before any patch bakes, so changed patches can wait for the full map.
+        heightmapPipeline.ensureChunkBase(webglRenderer, layersRef.current, faceIndex(root.face), root.min, root.max, chunkCenter(root));
+        return heightmapPipeline.advanceChunkBaseUpgrade(webglRenderer, texelBudget);
+      },
+      getChunkBaseTexture() {
+        return heightmapPipelineRef.current?.getChunkBaseTexture()?.texture ?? null;
       },
       getPatchRegionTexture(patch, resolution) {
         const webglRenderer = webglRendererRef.current;
@@ -687,7 +703,16 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         }
         return erosionEngine.readElevation(webglRenderer, outcome.heightToCells);
       },
-      pickPatchAt(clientX, clientY, depth) {
+      setOrbitEnabled(enabled) {
+        const target = gumballTargetRef.current;
+        if (target) target.cameraControls.enabled = enabled;
+      },
+      setAreaOutline(patch) {
+        const shared = sharedUniformsRef.current;
+        const margin = shared.displacementAmplitude * Math.max(Math.abs(shared.terrainBottom), Math.abs(shared.terrainTop));
+        areaOutlineRef.current?.set(patch, shared.radius + margin);
+      },
+      pickPointAt(clientX, clientY) {
         const viewportElement = viewportRef.current;
         const planetMesh = planetMeshRef.current;
         const target = gumballTargetRef.current;
@@ -718,7 +743,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         // is against the undisplaced sphere — fine for choosing an area.
         // The hit is in world space; the patch grid is in the planet's own, turning frame.
         const planetGroup = planetGroupRef.current;
-        return patchContaining(planetGroup ? planetGroup.worldToLocal(hit.point.clone()) : hit.point.clone(), depth);
+        return (planetGroup ? planetGroup.worldToLocal(hit.point.clone()) : hit.point.clone()).normalize();
       },
       getGumballTarget() {
         return gumballTargetRef.current;
@@ -751,6 +776,9 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     const planetGroup = new THREE.Group(); // everything that turns with the planet (scene/planetSpin.ts)
     scene.add(planetGroup);
     planetGroupRef.current = planetGroup;
+    const areaOutline = new AreaOutline();
+    planetGroup.add(areaOutline.line);
+    areaOutlineRef.current = areaOutline;
     const planetSpin = createPlanetSpin(planetGroup, viewportElement);
     let lastSpinTime = performance.now();
     const gridMesh = grid(gridSpacing);
@@ -822,6 +850,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
       airGround.uniforms.uPlanetFrame.value.setFromMatrix4(planetGroup.matrixWorld).transpose(); // world to planet: a rotation's inverse
       lastSpinTime = spinNow;
       orbitControls.update(); // required every frame — damping is enabled, see controls.ts
+      areaOutline.setResolution(viewportElement!.clientWidth, viewportElement!.clientHeight);
       // The specular term needs the eye position and the camera moves every
       // frame via orbit controls, so this is read fresh rather than set once.
       const planetMesh = planetMeshRef.current;
@@ -877,6 +906,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     return () => {
       sharedRenderer.unregisterView('planet');
       planetSpin.dispose();
+      areaOutline.dispose();
       scene.remove(planetGroup);
       orbitControls.dispose();
       planetGlow.dispose();

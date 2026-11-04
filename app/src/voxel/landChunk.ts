@@ -3,6 +3,11 @@ import * as THREE from 'three';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 import type { NoiseLayer } from '../map/heightmap';
 import { buildChunkHeights } from './density';
+import { CHUNK_SLAB_SHARE } from './chunkPatchMesh';
+
+// The most a chunk's height range may span, as a share of its width, before its actual heights are scaled down. Inferred,
+// TUNABLE (Dana chose a quarter, 2026-11-03).
+const CHUNK_MAX_HEIGHT_SHARE = 0.25;
 import { DEFAULT_CHUNK_RESOLUTION, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_DEPTH, CHUNK_FACE, CHUNK_TARGET, type ElevationData } from './chunkGrid';
 import { clampPatchSamples, patchAtDepth, type TerrainPatch } from '../planet/patch';
 import type { ErosionResult } from '../erosion/erosionControls';
@@ -43,6 +48,8 @@ export function useLandChunk(
   detailAmount: number,
   // Re-bakes when the settled sea level Roughness fades toward changes (null with water off).
   shoreSeaLevel: number | null,
+  // The planet's radius: the chunk's heights use the planet's own km per height unit.
+  radiusKm: number,
 ) {
   const [viewMode, setViewMode] = useState<ViewMode>('planet'); // Dana, 2026-09-23 — planet is the default, not split
   const [geometry, setGeometry] = useState<THREE.BufferGeometry | null>(null);
@@ -70,6 +77,8 @@ export function useLandChunk(
   // can convert between raw elevation and world units the same way the mesh
   // does. See shaders/terrain/terrain.glsl.
   const [maxHeight, setMaxHeight] = useState(0);
+  // Drawn height = (raw + heightBase) * maxHeight: the chunk's own lowest ground sits at 0 (0.5 under the old rule).
+  const [heightBase, setHeightBase] = useState(0.5);
   // This patch's own real low and high, in the same raw elevation units the
   // heightmap stores — what the color ramp spans, read from the actual
   // data rather than guessed or anchored to a fixed value (Dana, 2026-10-13:
@@ -136,12 +145,7 @@ export function useLandChunk(
     // be mistaken for a current one.
     const erodedElevation = erosionResult && erosionResult.patch === patch ? erosionResult.outcome.elevation : null;
 
-    // heightScale is a percentage of context size, not an absolute
-    // scene-unit value (Dana, 2026-09-24) — chunkSize is this context's
-    // size, same conversion SceneCanvas.tsx applies against radius for the
-    // planet. Without this, the same Height value that looks reasonable
-    // against the planet's much larger radius dwarfed the chunk's own much
-    // smaller footprint. See ISSUES.md.
+    // Until the chunk's ground is read (below), and for the voxel style: a percentage of Size (Dana, 2026-09-24).
     const effectiveHeightScale = (heightScale / 100) * chunkSize;
     setMaxHeight(effectiveHeightScale);
 
@@ -191,7 +195,26 @@ export function useLandChunk(
         return null;
       });
       setBakeVersion((version) => version + 1);
-      setGroundHeights(sceneHandleRef.current?.getPatchElevationData(patch, GROUND_SAMPLES) ?? null);
+      const ground = sceneHandleRef.current?.getPatchElevationData(patch, GROUND_SAMPLES) ?? null;
+      setGroundHeights(ground);
+      if (ground) {
+        let lowest = Infinity;
+        let highest = -Infinity;
+        for (const raw of ground.data) {
+          lowest = Math.min(lowest, raw);
+          highest = Math.max(highest, raw);
+        }
+        // Actual heights: the planet's own km per height unit. Capped only when the chunk's full height range (its
+        // lowest ground to the higher of its ground and the sea) would pass CHUNK_MAX_HEIGHT_SHARE of its width, as
+        // deep water on a small chunk does, so it never turns into a pillar (Dana, 2026-11-03).
+        const top = shoreSeaLevel === null ? highest : Math.max(highest, shoreSeaLevel);
+        const planetScale = (heightScale / 100) * radiusKm;
+        const cappedScale = (CHUNK_MAX_HEIGHT_SHARE * chunkSize) / Math.max(top - lowest, 1e-6);
+        const scale = Math.min(planetScale, cappedScale);
+        setMaxHeight(scale);
+        // The lowest ground one slab thickness above 0, so the slab's base rests on the grid.
+        setHeightBase(-lowest + (CHUNK_SLAB_SHARE * chunkSize) / Math.max(scale, 1e-6));
+      }
       return;
     }
 
@@ -259,7 +282,7 @@ export function useLandChunk(
 
     return () => worker.terminate();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sceneHandleRef is a stable ref
-  }, [viewMode, layers, renderStyle, debouncedResolution, heightScale, chunkSize, patch, erosionResult, detailAmount, shoreSeaLevel]);
+  }, [viewMode, layers, renderStyle, debouncedResolution, heightScale, chunkSize, patch, erosionResult, detailAmount, shoreSeaLevel, radiusKm]);
 
   // Drag-to-resize the planet/land-chunk split — mirrors the Slider
   // scrubber's plain mousemove/mouseup pattern (ui/UIElements.tsx), against
@@ -285,13 +308,6 @@ export function useLandChunk(
     document.addEventListener('mouseup', onUp);
   }
 
-  // Clicking the planet sets which piece the chunk shows, at the current
-  // depth. Replaces the hardcoded spot — see ROADMAP.md, Stage 07.
-  function pickLocation(clientX: number, clientY: number) {
-    const picked = sceneHandleRef.current?.pickPatchAt(clientX, clientY, chunkDepth);
-    if (picked) setPatch(picked);
-  }
-
   function changeDepth(depth: number) {
     setChunkDepth(depth);
     setPatch((current) => patchAtDepth(current.face, current.min.clone().add(current.max).multiplyScalar(0.5), depth));
@@ -309,11 +325,10 @@ export function useLandChunk(
     setChunkSize,
     chunkDepth,
     setChunkDepth: changeDepth,
-    pickLocation,
     // Which piece of ground is on screen, so the Erosion stage can run on
     // that same piece rather than keeping a second copy of the selection.
     patch,
-    // The raw setter, not wrapped through pickLocation/changeDepth — for
+    // The raw setter, not wrapped through changeDepth or selection mode (voxel/areaSelect.ts) — for
     // restoring an exact saved patch on project load, where the point is to
     // reproduce precisely what was there before, not to pick or redepth
     // anything. See projectSettings/saveProject.ts.
@@ -323,6 +338,7 @@ export function useLandChunk(
     bakeVersion,
     groundHeights,
     maxHeight,
+    heightBase,
     elevationMin,
     elevationMax,
   };

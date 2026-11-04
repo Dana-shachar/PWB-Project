@@ -5,6 +5,7 @@ import { createDefaultLayer, migrateLegacyLayers, type NoiseLayer, type StrokeRe
 import { deserializePatch, serializePatch, type TerrainPatch } from '../planet/patch';
 import type { useErosion } from '../erosion/erosionControls';
 import type { useLandChunk } from '../voxel/landChunk';
+import { squareSizeKm } from '../voxel/areaSelect';
 import { DEFAULT_PLANET_SETTINGS, type usePlanetControls } from '../planet/planetControls';
 import {
   deleteProject as deleteProjectFromFirestore,
@@ -43,17 +44,9 @@ interface UseSaveProjectArgs {
   planetControls: ReturnType<typeof usePlanetControls>;
 }
 
-// What erosion persists, or null if no run exists yet — shared by every
-// save site below rather than repeating the same three lines each time.
-function currentErosionRun(erosion: ReturnType<typeof useErosion>, patch: TerrainPatch): SavedErosionRun | null {
-  if (!erosion.result) return null;
-  return {
-    rates: erosion.result.rates,
-    durationYears: erosion.durationYears,
-    gridResolution: erosion.gridResolution,
-    seaLevel: erosion.result.seaLevel,
-    patch: serializePatch(patch),
-  };
+// What erosion persists: the panel's settings and the chunk's area, with or without a run's result. Shared by every save site below.
+function currentErosionRun(erosion: ReturnType<typeof useErosion>, patch: TerrainPatch): SavedErosionRun {
+  return { ...erosion.savedSettings(), patch: serializePatch(patch) };
 }
 
 // A generic, always-present name for a newly-created planet — "New Planet
@@ -139,7 +132,8 @@ export function useSaveProject({
           if (project.erosionRun) {
             const patch = deserializePatch(project.erosionRun.patch);
             landChunk.setPatch(patch);
-            erosion.loadSavedRun(project.erosionRun, patch);
+            landChunk.setChunkSize(Math.round(squareSizeKm(patch, (project.planetSettings ?? DEFAULT_PLANET_SETTINGS).radiusKm)));
+            erosion.loadSavedRun(project.erosionRun);
           } else {
             erosion.clear();
           }
@@ -187,6 +181,8 @@ export function useSaveProject({
     erosion.result,
     erosion.rates,
     erosion.durationYears,
+    erosion.strength,
+    erosion.filterShape,
     erosion.gridResolution,
     landChunk.patch,
     planetControls.radiusKm,
@@ -255,7 +251,8 @@ export function useSaveProject({
     if (project.erosionRun) {
       const patch = deserializePatch(project.erosionRun.patch);
       landChunk.setPatch(patch);
-      erosion.loadSavedRun(project.erosionRun, patch);
+      landChunk.setChunkSize(Math.round(squareSizeKm(patch, (project.planetSettings ?? DEFAULT_PLANET_SETTINGS).radiusKm)));
+      erosion.loadSavedRun(project.erosionRun);
     } else {
       erosion.clear();
     }

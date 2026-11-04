@@ -73,7 +73,6 @@ export class WalkMode {
   private pressStart: { x: number; y: number } | null = null;
   private lastPointer = { x: 0, y: 0 };
   private dragged = false;
-  private lastWaterLog = 0; // TEMP
   private noShoreHeights: ChunkGround['heights'] | null = null;
   private transition: { startPosition: THREE.Vector3; startQuaternion: THREE.Quaternion; endQuaternion: THREE.Quaternion; endX: number; endZ: number; elapsed: number } | null = null;
 
@@ -103,14 +102,12 @@ export class WalkMode {
   private nearestShore(ground: ChunkGround, x: number, z: number): THREE.Vector2 {
     const sea = this.getSeaHeight();
     const isDry = (px: number, pz: number) => (this.getGroundHeight(px, pz) ?? groundHeightAt(ground, px, pz) ?? 0) >= sea!;
-    console.log('[TEMP water] start', { drawnM: (this.getGroundHeight(x, z) ?? NaN) * METERS_PER_UNIT, coarseM: (groundHeightAt(ground, x, z) ?? NaN) * METERS_PER_UNIT });
     if (sea === null || isDry(x, z)) return new THREE.Vector2(x, z);
     let level = sea;
     for (let attempt = 0; attempt < SHORE_VERIFY_ATTEMPTS; attempt++) {
       const candidate = this.nearestCoarseAbove(ground, x, z, level);
       if (!candidate) break;
       const drawn = this.getGroundHeight(candidate.x, candidate.y);
-      console.log('[TEMP water] shore try', attempt, { levelM: level * METERS_PER_UNIT, candidate: candidate.toArray(), drawnM: drawn === null ? null : drawn * METERS_PER_UNIT });
       if (drawn === null || drawn >= sea + SHORE_INLAND_METERS / METERS_PER_UNIT) return candidate;
       level += sea - drawn + SHORE_INLAND_METERS / METERS_PER_UNIT;
     }
@@ -119,7 +116,7 @@ export class WalkMode {
 
   // The nearest coarse sample to (x, z) whose height is at least `level`, searched in rings outward, or null.
   private nearestCoarseAbove(ground: ChunkGround, x: number, z: number, level: number): THREE.Vector2 | null {
-    const { heights, chunkSize, maxHeight } = ground;
+    const { heights, chunkSize, maxHeight, heightBase } = ground;
     const cellX = chunkSize / (heights.width - 1);
     const cellZ = chunkSize / (heights.height - 1);
     const startX = Math.round((x / chunkSize + 0.5) * (heights.width - 1));
@@ -134,7 +131,7 @@ export class WalkMode {
           const px = startX + dx;
           const py = startY + dy;
           if (px < 0 || py < 0 || px >= heights.width || py >= heights.height) continue;
-          if (Math.max(0, heights.data[py * heights.width + px] + 0.5) * maxHeight < level) continue;
+          if (Math.max(0, heights.data[py * heights.width + px] + heightBase) * maxHeight < level) continue;
           const sampleX = (px / (heights.width - 1) - 0.5) * chunkSize;
           const sampleZ = (0.5 - py / (heights.height - 1)) * chunkSize;
           const distance = Math.hypot(sampleX - x, sampleZ - z);
@@ -155,21 +152,6 @@ export class WalkMode {
     this.camera.up.set(0, 1, 0);
     const limit = (ground.chunkSize / 2) * EDGE_MARGIN;
     const shore = this.nearestShore(ground, endX, endZ);
-    // TEMP: coarse copy vs drawn ground on a 5x5 grid, 100 m apart, around the shore point: a steady offset means a
-    // conversion bug, scattered differences mean missing detail.
-    const gridRows: { dxM: number; dzM: number; coarseM: number; drawnM: number; diffM: number }[] = [];
-    for (let gz = -2; gz <= 2; gz++) {
-      for (let gx = -2; gx <= 2; gx++) {
-        const px = shore.x + (gx * 100) / METERS_PER_UNIT;
-        const pz = shore.y + (gz * 100) / METERS_PER_UNIT;
-        const coarseM = (groundHeightAt(ground, px, pz) ?? NaN) * METERS_PER_UNIT;
-        const drawnM = (this.getGroundHeight(px, pz) ?? NaN) * METERS_PER_UNIT;
-        gridRows.push({ dxM: gx * 100, dzM: gz * 100, coarseM: Math.round(coarseM), drawnM: Math.round(drawnM), diffM: Math.round(coarseM - drawnM) });
-      }
-    }
-    console.log('[TEMP water] coarse vs drawn, maxHeight km', ground.maxHeight, 'samples', ground.heights.width);
-    console.table(gridRows);
-    console.log('[TEMP water] enter', { from: [endX, endZ], shore: shore.toArray(), seaM: (this.getSeaHeight() ?? NaN) * METERS_PER_UNIT, coarseAtShoreM: (groundHeightAt(ground, shore.x, shore.y) ?? NaN) * METERS_PER_UNIT, drawnAtShoreM: (this.getGroundHeight(shore.x, shore.y) ?? NaN) * METERS_PER_UNIT });
     endX = shore.x;
     endZ = shore.y;
     this.transition = {
@@ -331,10 +313,6 @@ export class WalkMode {
       groundHeight = this.heightAt(ground, shore.x, shore.y);
     }
     const eyeHeight = Math.max(groundHeight, sea ?? -Infinity) + EYE_HEIGHT_METERS / METERS_PER_UNIT;
-    if (sea !== null && this.camera.position.y < sea && performance.now() - this.lastWaterLog > 1000) { // TEMP
-      this.lastWaterLog = performance.now();
-      console.log('[TEMP water] eye under the sea', { eyeM: this.camera.position.y * METERS_PER_UNIT, groundM: groundHeight * METERS_PER_UNIT, seaM: sea * METERS_PER_UNIT, coarseM: (groundHeightAt(ground, this.camera.position.x, this.camera.position.z) ?? NaN) * METERS_PER_UNIT, moved: moveX !== 0 || moveZ !== 0 });
-    }
     const blend = 1 - Math.exp(-HEIGHT_SMOOTHING_PER_SECOND * deltaSeconds);
     this.camera.position.y += (eyeHeight - this.camera.position.y) * blend;
     this.camera.position.y = Math.max(this.camera.position.y, Math.max(groundHeight, sea ?? -Infinity) + MIN_EYE_CLEARANCE_METERS / METERS_PER_UNIT);

@@ -5,7 +5,7 @@ import chunkFragmentBody from '../shaders/terrain/chunk.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
 import landLayersGlsl from '../shaders/terrain/landLayers.glsl?raw';
 import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
-import { camera, defaultCameraPosition } from '../scene/camera';
+import { camera, defaultCameraPosition, DEFAULT_FAR } from '../scene/camera';
 import { controls, keepAboveFlatGround } from '../scene/controls';
 import { EYE_HEIGHT_METERS, WalkMode } from '../scene/walkMode';
 import { grid } from '../scene/grid';
@@ -13,7 +13,7 @@ import type { GumballTarget } from '../scene/Gumball';
 import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
 import type { TerrainPatch } from '../planet/patch';
-import { ChunkPatchRenderer, type BakeChunkPatch } from './ChunkPatchRenderer';
+import { ChunkPatchRenderer, type AdvanceChunkBase, type BakeChunkPatch } from './ChunkPatchRenderer';
 import { chunkBaseDepth } from './chunkPatchMesh';
 import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
 import type { ElevationData } from './chunkGrid';
@@ -67,6 +67,7 @@ interface LandChunkCanvasProps {
   heightMapResolution: number;
   chunkSize: number;
   maxHeight: number;
+  heightBase: number; // drawn height = (raw + heightBase) * maxHeight: the chunk's lowest ground sits at 0
   colorByElevation: boolean;
   colorStops: ColorStop[];
   // This patch's own real low and high, in raw elevation units — the color
@@ -91,8 +92,11 @@ interface LandChunkCanvasProps {
   patch: TerrainPatch;
   patchesEnabled: boolean;
   bakeVersion: number;
+  frameVersion: number;
   maxErrorPixels: number;
   bakePatch: BakeChunkPatch;
+  advanceChunkBase: AdvanceChunkBase;
+  chunkBaseTexture: () => THREE.Texture | null;
   // The CPU copy of the chunk's heights, for picking the ground and staying above it.
   groundHeights: ElevationData | null;
   // Sea level and water look, shared with the planet, and the planet's lowest height for the depth scale.
@@ -104,9 +108,11 @@ interface LandChunkCanvasProps {
   lightFollowsCamera: boolean;
 }
 
-// TODO(DS): arbitrary — framing distance for a ~16-unit chunk, unrelated to
-// the planet's own DEFAULT_CAMERA_DISTANCE (calibrated for a much bigger scene).
-const CHUNK_CAMERA_DISTANCE = 40;
+// The camera keeps a distance ratio to the chunk, not a fixed distance (Dana, 2026-11-03): 40 at the default 16 km.
+// It never goes past most of the far plane, which stays fixed: scaling the planes drew flickering black shapes.
+const CHUNK_CAMERA_DISTANCE_PER_KM = 2.5;
+const CHUNK_CAMERA_MAX_DISTANCE = DEFAULT_FAR * 0.8;
+const chunkCameraDistance = (chunkSize: number) => Math.min(CHUNK_CAMERA_DISTANCE_PER_KM * chunkSize, CHUNK_CAMERA_MAX_DISTANCE);
 // Each moon's surface map, wider than the planet's 1024 so a large moon stays sharp (about 32 MB a moon). TUNABLE.
 const MOON_TEXTURE_WIDTH = 2048;
 
@@ -138,6 +144,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     heightMapResolution,
     chunkSize,
     maxHeight,
+    heightBase,
     colorByElevation,
     colorStops,
     elevationMin,
@@ -149,8 +156,11 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     patch,
     patchesEnabled,
     bakeVersion,
+    frameVersion,
     maxErrorPixels,
     bakePatch,
+    advanceChunkBase,
+    chunkBaseTexture,
     groundHeights,
     water,
     waterDeepest,
@@ -185,8 +195,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   const gridVisibleRef = useRef(gridVisible); // the Scene setting; walk mode hides the grid on top of it
   const patchRendererRef = useRef<ChunkPatchRenderer | null>(null);
   // Read each frame by the patch renderer, so onFrame never goes stale.
-  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, chunkSize, bakePatch, groundHeights });
-  patchSettingsRef.current = { maxErrorPixels, maxHeight, chunkSize, bakePatch, groundHeights };
+  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, groundHeights });
+  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, groundHeights };
 
   useImperativeHandle(
     handleRef,
@@ -205,12 +215,40 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     gridVisibleRef.current = gridVisible;
   }, [gridVisible]);
 
+  // A new Size (km): the zoom range and the camera's distance from its pivot scale with it.
+  const cameraSizeRef = useRef(chunkSize);
+  useEffect(() => {
+    const target = gumballTargetRef.current;
+    if (!target) return;
+    const ratio = chunkSize / cameraSizeRef.current;
+    cameraSizeRef.current = chunkSize;
+    target.referenceDistance = chunkCameraDistance(chunkSize);
+    const { camera: chunkCamera, cameraControls } = target;
+    if (ratio !== 1) {
+      chunkCamera.position.sub(cameraControls.target).multiplyScalar(ratio).add(cameraControls.target);
+      cameraControls.update();
+    }
+  }, [chunkSize]);
+
+  // A newly drawn square opens framed like Reset View, so the old zoom can't leave the camera inside its terrain.
+  const framedVersionRef = useRef(frameVersion);
+  useEffect(() => {
+    const target = gumballTargetRef.current;
+    if (!target || framedVersionRef.current === frameVersion) return;
+    framedVersionRef.current = frameVersion;
+    target.camera.position.copy(defaultCameraPosition(chunkCameraDistance(chunkSize)));
+    target.camera.up.set(0, 1, 0);
+    target.cameraControls.target.set(0, 0, 0);
+    target.cameraControls.update();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a new square frames; a Size change keeps the view
+  }, [frameVersion]);
+
   useEffect(() => {
     const viewportElement = viewportRef.current;
     if (!viewportElement) return;
 
     const perspectiveCamera = camera((viewportElement.clientWidth || 1) / (viewportElement.clientHeight || 1));
-    perspectiveCamera.position.copy(defaultCameraPosition(CHUNK_CAMERA_DISTANCE));
+    perspectiveCamera.position.copy(defaultCameraPosition(chunkCameraDistance(chunkSize)));
     perspectiveCamera.lookAt(0, 0, 0);
     // Listens on this pane's own element, not a canvas — see SceneCanvas.tsx's
     // identical setup for why, scene/sharedViewportRenderer.ts owns the one
@@ -218,11 +256,12 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     const orbitControls = controls(perspectiveCamera, viewportElement);
     // Map-style navigation ([B56]): zoom toward the cursor, with the orbit target kept on the ground plane.
     orbitControls.zoomToCursor = true;
+    orbitControls.maxDistance = CHUNK_CAMERA_MAX_DISTANCE; // inside the far plane, so a large chunk is never cut off
     orbitControls.screenSpacePanning = false;
     gumballTargetRef.current = {
       camera: perspectiveCamera,
       cameraControls: orbitControls,
-      referenceDistance: CHUNK_CAMERA_DISTANCE,
+      referenceDistance: chunkCameraDistance(chunkSize),
       // Zoom by log distance from the ground pivot, down to a share of the chunk's size.
       surface: () => ({ planetRadius: patchSettingsRef.current.chunkSize, surfaceRadius: 0 }),
       pivotToGround: () => pivotAtScreenPoint(0, 0),
@@ -243,7 +282,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     const orbitSaved = { position: new THREE.Vector3(), target: new THREE.Vector3(), up: new THREE.Vector3(), fov: 60, near: 0.1, far: 1000 };
     const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
       const renderer = sharedRendererRef.current.renderer;
-      return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight)) : null;
+      return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight), patchSettingsRef.current.heightBase) : null;
     }, () => (water.mesh.visible ? water.mesh.position.y : null), () => {
       perspectiveCamera.position.copy(orbitSaved.position);
       perspectiveCamera.up.copy(orbitSaved.up);
@@ -275,7 +314,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
 
     function currentGround(): ChunkGround | null {
       const settings = patchSettingsRef.current;
-      return settings.groundHeights ? { heights: settings.groundHeights, chunkSize: settings.chunkSize, maxHeight: Math.max(0, settings.maxHeight) } : null;
+      return settings.groundHeights ? { heights: settings.groundHeights, chunkSize: settings.chunkSize, maxHeight: Math.max(0, settings.maxHeight), heightBase: settings.heightBase } : null;
     }
     // Before a drag or wheel zoom, the pivot moves to the ground under the cursor
     // (Cesium picks the terrain), kept on the view line so the view doesn't jump.
@@ -299,30 +338,6 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       pivotAtScreenPoint(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
     }
     viewportElement.addEventListener('pointerdown', pivotOnGround, { capture: true });
-    // TEMP [B55]: Alt+click logs heights in a row across the cursor (drawn bake and its patch depth, then the coarse CPU copy).
-    function logCliffRow(event: PointerEvent) {
-      if (!event.altKey) return;
-      const ground = currentGround();
-      const renderer = sharedRendererRef.current.renderer;
-      if (!ground || !renderer) return;
-      const rect = viewportElement!.getBoundingClientRect();
-      pickPointer.set(((event.clientX - rect.left) / rect.width) * 2 - 1, -((event.clientY - rect.top) / rect.height) * 2 + 1);
-      pickRay.setFromCamera(pickPointer, perspectiveCamera);
-      const hit = raycastGround(ground, pickRay.ray, ground.chunkSize * 4);
-      if (!hit) return console.log('[TEMP B55] no hit');
-      const right = new THREE.Vector3().setFromMatrixColumn(perspectiveCamera.matrixWorld, 0).setY(0).normalize();
-      const span = ground.chunkSize * 0.01;
-      const rows = [];
-      for (let i = -10; i <= 10; i++) {
-        const x = hit.x + right.x * span * (i / 10);
-        const z = hit.z + right.z * span * (i / 10);
-        const drawn = patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight));
-        rows.push({ meters: Math.round(span * (i / 10) * 1000), drawnM: drawn === null ? null : +(drawn * 1000).toFixed(1), depth: patchRenderer.lastSampleDepth, coarseM: +((groundHeightAt(ground, x, z) ?? NaN) * 1000).toFixed(1) });
-      }
-      console.log('[TEMP B55] row across the cursor, left to right, at', hit.toArray());
-      console.table(rows);
-    }
-    viewportElement.addEventListener('pointerdown', logCliffRow);
     viewportElement.addEventListener('wheel', pivotOnGround, { capture: true });
 
     // Hold Space and drag to pan, as in Figma and Photoshop. Only over this pane and not while typing; released
@@ -394,6 +409,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uBakeSamples: { value: 0 },
         uBorderTexels: { value: 0 },
         uMaxHeight: { value: maxHeight },
+        uHeightBase: { value: heightBase },
+        uWaterOn: { value: 0 },
+        uSeaLevel: { value: 0 },
         uColorByElevation: { value: colorByElevation ? 1 : 0 },
         uRampColors: { value: initialRamp.colors },
         uRampPositions: { value: initialRamp.positions },
@@ -444,7 +462,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         orbitControls.update();
         const ground = currentGround();
         const groundHeight = ground ? groundHeightAt(ground, perspectiveCamera.position.x, perspectiveCamera.position.z) : null;
-        keepAboveFlatGround(orbitControls, perspectiveCamera, groundHeight ?? 0, patchSettingsRef.current.chunkSize);
+        keepAboveFlatGround(orbitControls, perspectiveCamera, groundHeight ?? 0, patchSettingsRef.current.chunkSize, Math.max(patchSettingsRef.current.maxHeight, 0));
       }
       // Same reason as SceneCanvas's own onFrame: the specular term needs
       // the eye position, and the camera moves every frame under orbit
@@ -476,16 +494,23 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
           chunkSize: settings.chunkSize,
           minHeight: chunkBaseDepth(settings.chunkSize),
           maxHeight: Math.max(settings.maxHeight, 0),
+          ground: settings.groundHeights ? { data: settings.groundHeights.data, size: settings.groundHeights.width, heightBase: settings.heightBase } : undefined,
         },
         settings.bakePatch,
         sharedRendererRef.current.renderer?.capabilities.maxTextureSize ?? 2048,
+        settings.advanceChunkBase,
       );
+      // The shadows and water follow the finished map, so they switch with the patches when the full one is ready.
+      const baseTexture = settings.chunkBaseTexture();
+      if (baseTexture) {
+        material.uniforms.uChunkHeightMap.value = baseTexture;
+        water.mesh.material.uniforms.uChunkHeightMap.value = baseTexture;
+      }
     }
     sharedRenderer.registerView('landChunk', { scene, camera: perspectiveCamera, elementRef: viewportRef, onFrame });
 
     return () => {
       viewportElement.removeEventListener('pointerdown', pivotOnGround, { capture: true });
-      viewportElement.removeEventListener('pointerdown', logCliffRow); // TEMP [B55]
       window.removeEventListener('keydown', handleSpaceKey);
       window.removeEventListener('keyup', handleSpaceKey);
       window.removeEventListener('blur', releaseSpace);
@@ -568,6 +593,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     material.uniforms.uChunkSize.value = chunkSize;
     material.uniforms.uPatchWorldSize.value = chunkSize;
     material.uniforms.uMaxHeight.value = maxHeight;
+    material.uniforms.uHeightBase.value = heightBase;
+    // Where the edge is under the sea the water wall covers the side, so the land's side is dropped (chunk.frag.glsl).
+    material.uniforms.uWaterOn.value = water.enabled ? 1 : 0;
+    material.uniforms.uSeaLevel.value = water.seaLevel;
     material.uniforms.uColorByElevation.value = colorByElevation ? 1 : 0;
     const ramp = buildRampUniformArrays(colorStops);
     const rampColors = material.uniforms.uRampColors.value as THREE.Color[];
@@ -586,6 +615,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     heightMapResolution,
     chunkSize,
     maxHeight,
+    heightBase,
     colorByElevation,
     baseColor,
     colorStops,
@@ -603,9 +633,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   useEffect(() => {
     const chunkWater = waterRef.current;
     if (!chunkWater) return;
-    updateChunkWater(chunkWater, water, chunkSize, maxHeight, waterDeepest, waterClarityShare, heightMap, heightMapGreenChannel, Math.min(atmosphere.wind, MAX_WAVE_WIND));
+    updateChunkWater(chunkWater, water, chunkSize, maxHeight, heightBase, waterDeepest, waterClarityShare, heightMap, heightMapGreenChannel, Math.min(atmosphere.wind, MAX_WAVE_WIND));
     chunkWater.mesh.visible = water.enabled && heightMap !== null;
-  }, [water, waterDeepest, waterClarityShare, heightMap, heightMapGreenChannel, chunkSize, maxHeight, atmosphere.wind]);
+  }, [water, waterDeepest, waterClarityShare, heightMap, heightMapGreenChannel, chunkSize, maxHeight, heightBase, atmosphere.wind]);
 
   // The atmosphere: the sky dome, and the haze the ground and water fade into (shaders/atmosphere/haze.glsl). Haze 1 halves
   // the color half a chunk width past the orbit point at height 0 (1 - e^-0.69 is 0.5); less higher up. Inferred, TUNABLE.
@@ -706,7 +736,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   }, [patchesEnabled, patch, chunkSize]);
 
   useEffect(() => {
-    if (patchesEnabled) patchRendererRef.current?.rebakeAll(bakePatch);
+    if (patchesEnabled) patchRendererRef.current?.markAllStale();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-bakes only when the terrain changes
   }, [bakeVersion]);
 

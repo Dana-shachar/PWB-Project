@@ -618,3 +618,31 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 **Decided:** 2026-11-03
 
 - The timeline dock moved out of Erosion into its own World Clock section, the one clock every time-based system will share.
+
+### [S71] A chunk area is drawn on the planet · `decided`
+**Decided:** 2026-11-03, refined 2026-11-04
+
+- Selection mode: drag a square from one corner, on one cube face. It turns off on release, Esc cancels it, and the new square opens framed.
+- The outline shows only after a square is drawn, not on load. A saved square still drives the chunk.
+
+### [S72] Chunk height is actual, with a proportion cap · `decided`
+**Decided:** 2026-11-03
+
+- The chunk uses the planet's km per height unit, drawn from its own lowest ground, with its height range capped at a share of its width (`CHUNK_MAX_HEIGHT_SHARE`, tunable).
+
+### [S73] An erosion change shows only its final state · `decided`
+**Decided:** 2026-11-04
+
+- A change that needs carving keeps the old image, with the progress bar, then the filter and carved map land together. A gully slider alone applies at once.
+- With Erosion off there are no lakes, on the planet or anywhere else.
+
+### [S74] What a project saves of erosion · `decided`
+**Decided:** 2026-11-04
+
+- Duration, Strength, the gully sliders and the chosen square save with the project. The Erosion switch doesn't, so it starts off on load.
+- The chunk erosion run belongs to the voxel style only.
+
+### [S75] Lakes on the chunk · `decided`
+**Decided:** 2026-11-04
+
+- Lakes shown on the planet also show on the chunk. Not built yet (`ROADMAP.md`).

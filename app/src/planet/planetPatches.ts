@@ -179,7 +179,7 @@ export function patchInView(patch: TerrainPatch, cameraPosition: THREE.Vector3, 
 // True if the previous selection had this patch split into deeper leaves.
 function wasSplit(patch: TerrainPatch, context: SelectionContext): boolean {
   if (!context.previousIndex) return false;
-  const previous = leafContaining(context.previousIndex, patch.face, (patch.min.x + patch.max.x) / 2, (patch.min.y + patch.max.y) / 2);
+  const previous = leafContaining(context.previousIndex, patch.face, (patch.min.x + patch.max.x) / 2, (patch.min.y + patch.max.y) / 2, FACE_FRAME);
   return !!previous && previous.depth > patch.depth;
 }
 
@@ -222,22 +222,37 @@ function cellKey(face: CubeFace, depth: number, column: number, row: number): st
   return `${face}:${depth}:${column}:${row}`;
 }
 
-function leafKeyOf(patch: TerrainPatch): string {
-  const cells = 2 ** patch.depth;
-  return cellKey(patch.face, patch.depth, Math.round(((patch.min.x + 1) / 2) * cells), Math.round(((patch.min.y + 1) / 2) * cells));
+// The square a tree of patches divides: the whole cube face for the planet, the drawn square for the land chunk,
+// whose patches don't sit on the face's grid. Cells and depths are counted from it.
+export interface LeafFrame {
+  minX: number;
+  minY: number;
+  size: number;
+  depth: number;
+}
+const FACE_FRAME: LeafFrame = { minX: -1, minY: -1, size: 2, depth: 0 };
+
+function leafKeyOf(patch: TerrainPatch, frame: LeafFrame): string {
+  const depth = patch.depth - frame.depth;
+  const cells = 2 ** depth;
+  return cellKey(patch.face, depth, Math.round(((patch.min.x - frame.minX) / frame.size) * cells), Math.round(((patch.min.y - frame.minY) / frame.size) * cells));
 }
 
-export function buildLeafIndex(leaves: TerrainPatch[]): LeafIndex {
+export function buildLeafIndex(leaves: TerrainPatch[], frame: LeafFrame = FACE_FRAME): LeafIndex {
   const index: LeafIndex = new Map();
-  for (const leaf of leaves) index.set(leafKeyOf(leaf), leaf);
+  for (const leaf of leaves) index.set(leafKeyOf(leaf, frame), leaf);
   return index;
 }
 
-function leafContaining(index: LeafIndex, face: CubeFace, u: number, v: number): TerrainPatch | undefined {
+function leafContaining(index: LeafIndex, face: CubeFace, u: number, v: number, frame: LeafFrame): TerrainPatch | undefined {
+  const fractionX = (u - frame.minX) / frame.size;
+  const fractionY = (v - frame.minY) / frame.size;
+  // Past a smaller frame's edge there is no neighbor; clamping would find the frame's own edge patch.
+  if (frame !== FACE_FRAME && (fractionX < 0 || fractionX > 1 || fractionY < 0 || fractionY > 1)) return undefined;
   for (let depth = 0; depth <= MAX_INDEX_DEPTH; depth++) {
     const cells = 2 ** depth;
-    const column = Math.min(cells - 1, Math.max(0, Math.floor(((u + 1) / 2) * cells)));
-    const row = Math.min(cells - 1, Math.max(0, Math.floor(((v + 1) / 2) * cells)));
+    const column = Math.min(cells - 1, Math.max(0, Math.floor(fractionX * cells)));
+    const row = Math.min(cells - 1, Math.max(0, Math.floor(fractionY * cells)));
     const leaf = index.get(cellKey(face, depth, column, row));
     if (leaf) return leaf;
   }
@@ -246,9 +261,9 @@ function leafContaining(index: LeafIndex, face: CubeFace, u: number, v: number):
 
 // The leaf across one of a patch's edges, `t` along it, whether on the same
 // cube face or the next one over (see neighborProbe in patch.ts).
-function leafAcross(index: LeafIndex, patch: TerrainPatch, edge: PatchEdge, t: number): TerrainPatch | undefined {
+function leafAcross(index: LeafIndex, patch: TerrainPatch, edge: PatchEdge, t: number, frame: LeafFrame): TerrainPatch | undefined {
   const probe = neighborProbe(patch, edge, t);
-  return leafContaining(index, probe.face, probe.coord.x, probe.coord.y);
+  return leafContaining(index, probe.face, probe.coord.x, probe.coord.y, frame);
 }
 
 // Restricted quadtree: no two neighboring leaves differ by more than one
@@ -259,15 +274,15 @@ function leafAcross(index: LeafIndex, patch: TerrainPatch, edge: PatchEdge, t: n
 // shallow next to a much deeper one is split, repeatedly, until none are. The
 // physical skirt per patch (planet/planetPatchMesh.ts) stays as a last-resort
 // cover, not the thing hiding cracks.
-export function balance(leaves: TerrainPatch[]): TerrainPatch[] {
+export function balance(leaves: TerrainPatch[], frame: LeafFrame = FACE_FRAME): TerrainPatch[] {
   let current = leaves;
   for (let pass = 0; pass < MAX_PATCH_DEPTH * 2; pass++) {
-    const index = buildLeafIndex(current);
+    const index = buildLeafIndex(current, frame);
     const tooShallow = new Set<TerrainPatch>();
     for (const patch of current) {
       if (patch.depth < 2) continue;
       for (const edge of PATCH_EDGES) {
-        const neighbor = leafAcross(index, patch, edge, 0.5);
+        const neighbor = leafAcross(index, patch, edge, 0.5, frame);
         if (neighbor && neighbor.depth < patch.depth - 1) tooShallow.add(neighbor);
       }
     }
@@ -285,23 +300,23 @@ export function balance(leaves: TerrainPatch[]): TerrainPatch[] {
 // The leaves of a selection that cover a given patch's ground: the patch
 // itself, the one leaf that absorbed it, or every leaf it was split into.
 // What a replaced patch waits on before it can be released.
-export function coveringLeaves(index: LeafIndex, patch: TerrainPatch): TerrainPatch[] {
-  const containing = leafContaining(index, patch.face, (patch.min.x + patch.max.x) / 2, (patch.min.y + patch.max.y) / 2);
+export function coveringLeaves(index: LeafIndex, patch: TerrainPatch, frame: LeafFrame = FACE_FRAME): TerrainPatch[] {
+  const containing = leafContaining(index, patch.face, (patch.min.x + patch.max.x) / 2, (patch.min.y + patch.max.y) / 2, frame);
   if (!containing) return [];
   if (containing.depth <= patch.depth) return [containing];
   const covering: TerrainPatch[] = [];
-  collectDescendantLeaves(index, patch, covering);
+  collectDescendantLeaves(index, patch, covering, frame);
   return covering;
 }
 
-function collectDescendantLeaves(index: LeafIndex, patch: TerrainPatch, out: TerrainPatch[]): void {
-  const leaf = index.get(leafKeyOf(patch));
+function collectDescendantLeaves(index: LeafIndex, patch: TerrainPatch, out: TerrainPatch[], frame: LeafFrame): void {
+  const leaf = index.get(leafKeyOf(patch, frame));
   if (leaf) {
     out.push(leaf);
     return;
   }
-  if (patch.depth >= MAX_INDEX_DEPTH) return;
-  for (const child of subdivide(patch)) collectDescendantLeaves(index, child, out);
+  if (patch.depth - frame.depth >= MAX_INDEX_DEPTH) return;
+  for (const child of subdivide(patch)) collectDescendantLeaves(index, child, out, frame);
 }
 
 export interface PatchSelection {
@@ -404,14 +419,14 @@ export interface EdgeStitchFlags {
 // = max.y, left = min.x, right = max.x (planetPatchMesh.ts's topRow/
 // bottomRow/leftCol/rightCol). Probes a quarter and three quarters along
 // each edge: two different finer leaves there means it's bordered by two.
-export function computeStitchFlags(leaves: TerrainPatch[]): Map<string, EdgeStitchFlags> {
-  const index = buildLeafIndex(leaves);
+export function computeStitchFlags(leaves: TerrainPatch[], frame: LeafFrame = FACE_FRAME): Map<string, EdgeStitchFlags> {
+  const index = buildLeafIndex(leaves, frame);
   const result = new Map<string, EdgeStitchFlags>();
   for (const patch of leaves) {
     const flags: EdgeStitchFlags = { top: false, bottom: false, left: false, right: false };
     for (const edge of PATCH_EDGES) {
-      const first = leafAcross(index, patch, edge, 0.25);
-      const second = leafAcross(index, patch, edge, 0.75);
+      const first = leafAcross(index, patch, edge, 0.25, frame);
+      const second = leafAcross(index, patch, edge, 0.75, frame);
       flags[edge] = !!first && !!second && first !== second && first.depth === patch.depth + 1 && second.depth === patch.depth + 1;
     }
     result.set(patchKey(patch), flags);

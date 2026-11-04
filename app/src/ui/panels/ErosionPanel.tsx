@@ -22,6 +22,9 @@ interface ErosionPanelProps {
   result: ErosionResult | null;
 }
 
+// Steepness grows with Gully Size: measured 85 degrees at 1 and 88 at 2.15. Limits the worst walls. Inferred, TUNABLE.
+const GULLY_SIZE_MAX = 1.5;
+
 // Erosion lives in the Climate System's right panel with no Run button: a change reruns only what it affects. Sea
 // level comes from Ocean, rain from Climate; the engines' other rates keep their tuned defaults (Dana, 2026-11-03).
 export function ErosionPanel({ enabled, onEnabledChange, durationYears, onDurationYearsChange, strength, onStrengthChange, filterShape, onFilterShapeChange, waterProgress, meshResolution, result }: ErosionPanelProps) {
@@ -69,7 +72,7 @@ export function ErosionPanel({ enabled, onEnabledChange, durationYears, onDurati
           value={filterShape.size}
           onChange={(size) => onFilterShapeChange({ size })}
           min={0.25}
-          max={4}
+          max={GULLY_SIZE_MAX}
           step={0.05}
           precision={2}
           disabled={!enabled}
@@ -148,7 +151,7 @@ export function ErosionPanel({ enabled, onEnabledChange, durationYears, onDurati
             the detail.
           </p>
         )}
-        {!result && (
+        {!result && meshResolution !== null && (
           <p className="erosion-note">
             Erosion runs on the piece the land chunk is showing. Double-click the planet to choose it.
           </p>

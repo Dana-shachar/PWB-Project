@@ -272,7 +272,6 @@ export function useNoiseLayers(initialLayerId: string) {
     // Round planets: the shown layers' Heights together stay under the cap.
     const heightSum = rolled.reduce((sum, layer) => sum + (layer.opacity > 0 ? Math.abs(layer.heightScale) : 0), 0);
     if (heightSum > HEIGHT_SUM_CAP) rolled.forEach((layer) => (layer.heightScale = Math.round((layer.heightScale * HEIGHT_SUM_CAP) / heightSum * 100) / 100));
-    console.log('[TEMP terrain]', world, JSON.stringify(rolled.map((layer) => ({ name: layer.name, type: layer.noiseType, fractal: layer.octavesEnabled ? layer.fractalType : 'off', octaves: layer.octaves, lacunarity: layer.lacunarity, terrace: layer.terraceEnabled ? layer.terraceSteps : 0, persistence: layer.persistence, frequency: layer.frequency, height: layer.heightScale, ridged: layer.ridgedEnabled ? layer.ridgeAmount : 0, blend: layer.blendMode, stretch: [layer.stretchX, layer.stretchY, layer.stretchZ], warp: layer.domainWarpEnabled ? layer.warpStrength : 0, mask: layer.maskNoiseType === 'none' ? 'none' : `${layer.maskCoverage}%${layer.maskInvert ? ' inv' : ''}` }))));
     setLayers(rolled);
   }
 

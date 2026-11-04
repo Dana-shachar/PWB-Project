@@ -1020,6 +1020,18 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
    than inventing new chrome, just smaller and floating instead of a
    full-width tab bar. See ROADMAP.md, Stage 07. */
 
+/* The square's size by the cursor while it is drawn, styled as a tooltip. */
+.area-size-label {
+  position: fixed;
+  padding: 4px 8px;
+  border-radius: var(--panel-radius);
+  background: var(--color-tooltip-bg);
+  border: var(--divider-weight) solid var(--color-divider);
+  color: var(--color-text);
+  font: 300 var(--font-size-xs) var(--font-ui);
+  pointer-events: none;
+  z-index: 10;
+}
 .view-mode-control {
   position: absolute;
   top: 16px;
@@ -1046,6 +1058,22 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
 .view-mode-btn--active {
   opacity: 1;
   background: var(--color-btn-hover-bg);
+}
+/* A mode switch at the strip's start (Select Area): an icon, set off from the view choices by a hairline. */
+.view-mode-btn--icon {
+  display: flex;
+  align-items: center;
+  border-right: var(--divider-weight) solid var(--color-track);
+}
+.view-mode-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+/* On: the toggle's on state, accent at 70% on the fill only, with the icon at full strength. */
+.view-mode-btn--on,
+.view-mode-btn--on:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--color-accent) 70%, transparent);
 }
 
 /* ── Noise panel (ui/NoisePanel.tsx) ───────────────────────── */

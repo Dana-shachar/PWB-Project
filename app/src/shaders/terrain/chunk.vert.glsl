@@ -31,6 +31,7 @@ varying float vDisplace;
 varying float vIsTopSurface;
 
 uniform sampler2D uHeightMap;
+uniform float uHeightBase; // drawn height = (raw + uHeightBase) * uMaxHeight; the chunk's lowest ground sits at 0
 uniform float uMaxHeight; // world-unit height a raw value of 0.5 displaces to, same convention smoothMesh.ts used to bake directly
 // true (1.0) for smooth mode's heightMap: the planet's own GPU bake format,
 // elevation in the green channel, handed across directly now that both
@@ -59,7 +60,7 @@ void main() {
       : uv;
     vec4 heightTexel = texture2D(uHeightMap, textureUv);
     float elevationRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
-    float heightNormalized = max(0.0, elevationRaw + 0.5);
+    float heightNormalized = max(0.0, elevationRaw + uHeightBase);
     displacedPosition.y = heightNormalized * uMaxHeight;
   }
 

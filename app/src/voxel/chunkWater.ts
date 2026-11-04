@@ -42,6 +42,7 @@ export function createChunkWater(): ChunkWater {
       uChunkHeightMap: { value: null },
       uHeightMapGreenChannel: { value: 1 },
       uChunkSize: { value: 1 },
+      uHeightBase: { value: 0.5 },
       uSeaLevel: { value: 0 },
       uWaterDeepest: { value: -0.5 },
       uWaterRampColors: { value: ramp.colors },
@@ -113,7 +114,7 @@ export function chunkWaterLevel(water: ChunkWater): number {
 // Moves the water sheet and its shoreline cutoff to the current level; the ground isn't re-baked.
 function applyTide(water: ChunkWater): void {
   const level = chunkWaterLevel(water);
-  water.mesh.position.y = Math.max(0, level + 0.5) * water.tide.maxHeight;
+  water.mesh.position.y = Math.max(0, level + water.mesh.material.uniforms.uHeightBase.value) * water.tide.maxHeight;
   water.walls.scale.y = Math.max(0.0001, water.mesh.position.y - water.baseDepth);
   water.walls.material[0].uniforms.uMaxHeight.value = water.tide.maxHeight;
   water.mesh.material.uniforms.uSeaLevel.value = level;
@@ -160,6 +161,7 @@ export function updateChunkWater(
   settings: WaterSettings,
   chunkSize: number,
   maxHeight: number,
+  heightBase: number,
   waterDeepest: number,
   clarityShare: number,
   heightMap: THREE.Texture | null,
@@ -171,6 +173,7 @@ export function updateChunkWater(
   water.tide.baseSeaLevel = settings.seaLevel;
   water.tide.maxHeight = maxHeight;
   const uniforms = water.mesh.material.uniforms;
+  uniforms.uHeightBase.value = heightBase;
   uniforms.uChunkHeightMap.value = heightMap;
   uniforms.uHeightMapGreenChannel.value = heightMapGreenChannel ? 1 : 0;
   uniforms.uChunkSize.value = chunkSize;

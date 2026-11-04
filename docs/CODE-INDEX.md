@@ -293,9 +293,18 @@
 - What it is: chunk state, picking and the view mode. In smooth style its main effect bakes one whole-chunk texture for shadows, a CPU copy of the heights for the camera, and bumps `bakeVersion` so the patches re-bake. Voxel style (being dropped) still builds one mesh.
 - Key names: `useLandChunk`, `pickLocation`, `startResize`, `CHUNK_SHADOW_SAMPLES`, `GROUND_SAMPLES`, `bakeVersion`, `groundHeights`.
 
+**voxel/areaSelect.ts**
+- What it is: selection mode: dragging a square on the planet, Esc, and the Size (km) slider's area.
+- Key names: `useAreaSelect`, `squareFromDrag`, `squareAroundCenter`, `squareSizeKm`, `frameVersion`.
+- Talks to: `SceneCanvasHandle.pickPointAt` and `setAreaOutline`, `scene/areaOutline.ts`, `voxel/landChunk.ts`.
+
+**scene/areaOutline.ts**
+- What it is: the chosen area's outline on the planet, a 3 px three.js `Line2`.
+- Key names: `AreaOutline`.
+
 **voxel/chunkPatches.ts**
 - What it is: which patches the chunk shows, the planet's screen-space-error rule over one flat square.
-- Key names: `selectChunkPatches`, `ChunkDetail`, `rootFractions`, `chunkPatchWorldSize`, `chunkPatchBox`, `chunkPatchPixelWidth`, `chunkPatchInView`, `CHUNK_MAX_EXTRA_DEPTH`.
+- Key names: `selectChunkPatches`, `chunkFrame`, `patchGroundRange`, `ChunkDetail`, `rootFractions`, `chunkPatchWorldSize`, `chunkPatchBox`, `chunkPatchPixelWidth`, `chunkPatchInView`, `CHUNK_MAX_EXTRA_DEPTH`.
 
 **voxel/ChunkPatchRenderer.ts**
 - What it is: bakes, builds and swaps the chunk's patches; each patch material shares the chunk material's uniforms.

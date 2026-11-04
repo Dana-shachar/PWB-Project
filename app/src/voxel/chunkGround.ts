@@ -8,6 +8,7 @@ export interface ChunkGround {
   heights: ElevationData;
   chunkSize: number;
   maxHeight: number;
+  heightBase: number; // drawn height = (raw + heightBase) * maxHeight, as chunk.vert.glsl
 }
 
 // Ground height at (x, z), bilinear between samples; null off the chunk.
@@ -27,7 +28,7 @@ export function groundHeightAt(ground: ChunkGround, x: number, z: number): numbe
   const blendY = pixelY - y0;
   const at = (px: number, py: number) => heights.data[py * heights.width + px];
   const raw = (at(x0, y0) * (1 - blendX) + at(x1, y0) * blendX) * (1 - blendY) + (at(x0, y1) * (1 - blendX) + at(x1, y1) * blendX) * blendY;
-  return Math.max(0, raw + 0.5) * maxHeight;
+  return Math.max(0, raw + ground.heightBase) * maxHeight;
 }
 
 const MARCH_STEPS = 512;

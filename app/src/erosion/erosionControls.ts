@@ -22,6 +22,9 @@ export const planetErosionPasses = (years: number) => Math.round((years / MAX_DU
 // mesh's 16 and ran on a 17 cell grid, where nothing visible can happen.
 const DEFAULT_GRID_RESOLUTION = 257;
 
+// The filter re-bakes the planet and the chunk's 4096 base map (0.5 to 1.2 s), so a drag sends its values once it settles.
+const EROSION_FILTER_DEBOUNCE_MS = 150;
+
 // Erosion runs on its own this long after the last change, so a slider drag runs once, when it settles.
 const AUTO_RUN_DELAY_MS = 300;
 
@@ -63,9 +66,15 @@ export function useErosion(
   // The erosion filter on the planet's surface follows the same switch and Strength (map/heightmap.ts).
   const [filterShape, setFilterShape] = useState<ErosionFilterShape>(DEFAULT_EROSION_FILTER_SHAPE); // the gullies' look
   const [filterRevision, setFilterRevision] = useState(0); // steps when the filter changes, so the land chunk re-bakes
+  // While carving is pending, the filter waits and lands with the carved map (rivers/drainageControls.ts).
+  const filterHoldRef = useRef(false);
   useEffect(() => {
-    sceneHandleRef.current?.setErosionFilter(enabled ? strength : 0, filterShape);
-    setFilterRevision((value) => value + 1);
+    const timer = window.setTimeout(() => {
+      if (filterHoldRef.current) return;
+      sceneHandleRef.current?.setErosionFilter(enabled ? strength : 0, filterShape);
+      setFilterRevision((value) => value + 1);
+    }, EROSION_FILTER_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
   }, [sceneHandleRef, enabled, strength, filterShape]);
   const [gridResolution, setGridResolution] = useState(DEFAULT_GRID_RESOLUTION);
   const [result, setResult] = useState<ErosionResult | null>(null);
@@ -107,22 +116,26 @@ export function useErosion(
     setIsStale(false);
   }
 
-  function run(patch: TerrainPatch) {
-    runWithSettings(patch, { ...rates, rainfall, erosionRate: createDefaultErosionRates().erosionRate * strength }, durationYears, gridResolution, seaLevel);
+  function currentRates(): ErosionRates {
+    return { ...rates, rainfall, erosionRate: createDefaultErosionRates().erosionRate * strength };
   }
 
-  // Restores a saved run on project load — reruns it rather than loading
-  // stored simulation state, since erosion is deterministic and a run's
-  // checkpoints alone are far past what Firestore can hold a single document
-  // to. See firebase/storage.ts's SavedErosionRun for the real reason.
-  // Updates the panel's own controls to match what's restored, same as any
-  // other loaded setting.
-  function loadSavedRun(saved: SavedErosionRun, patch: TerrainPatch) {
+  function run(patch: TerrainPatch) {
+    runWithSettings(patch, currentRates(), durationYears, gridResolution, seaLevel);
+  }
+
+  // What a project saves: the panel's settings, which exist whether or not this run has a result.
+  function savedSettings() {
+    return { rates: currentRates(), durationYears, gridResolution, seaLevel, filterShape };
+  }
+
+  // Restores the saved settings on project load. useErosionAutoRun reruns the simulation if the style draws it.
+  function loadSavedRun(saved: SavedErosionRun) {
     setRates(saved.rates);
     setStrength(saved.rates.erosionRate / createDefaultErosionRates().erosionRate);
     setDurationYears(saved.durationYears);
     setGridResolution(saved.gridResolution);
-    runWithSettings(patch, saved.rates, saved.durationYears, saved.gridResolution, saved.seaLevel);
+    setFilterShape(saved.filterShape ?? DEFAULT_EROSION_FILTER_SHAPE);
   }
 
   // Back to the uneroded terrain, so a run can be compared against what it
@@ -164,6 +177,7 @@ export function useErosion(
     enabled,
     setEnabled,
     filterRevision,
+    filterHoldRef,
     filterShape,
     updateFilterShape: (changed: Partial<ErosionFilterShape>) => setFilterShape((previous) => ({ ...previous, ...changed })),
     gridResolution,
@@ -173,26 +187,28 @@ export function useErosion(
     run,
     clear,
     scrubTo,
+    savedSettings,
     loadSavedRun,
   };
 }
 
 // Runs erosion on the chunk's piece by itself whenever anything it reads changes: its settings, the sea level, the
 // rain, the terrain or the piece. Replaces the Run button (Dana, 2026-11-03).
-export function useErosionAutoRun(erosion: ReturnType<typeof useErosion>, patch: TerrainPatch, seaLevel: number, rainfall: number, layers: NoiseLayer[], paintVersion: number) {
+// Voxel style only: no other style draws this run, and it blocks the page while it computes.
+export function useErosionAutoRun(erosion: ReturnType<typeof useErosion>, patch: TerrainPatch, seaLevel: number, rainfall: number, layers: NoiseLayer[], paintVersion: number, renderStyle: string) {
   const { rates, durationYears, gridResolution, strength, enabled } = erosion;
   const clearRef = useRef(erosion.clear);
   clearRef.current = erosion.clear;
   const runRef = useRef(erosion.run);
   runRef.current = erosion.run;
   useEffect(() => {
-    if (!enabled) {
+    if (!enabled || renderStyle !== 'voxel') {
       clearRef.current();
       return;
     }
     const timer = window.setTimeout(() => runRef.current(patch), AUTO_RUN_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [patch, rates, durationYears, gridResolution, strength, enabled, seaLevel, rainfall, layers, paintVersion]);
+  }, [patch, rates, durationYears, gridResolution, strength, enabled, seaLevel, rainfall, layers, paintVersion, renderStyle]);
 }
 
 // The engine's rain per cell per step from Climate's Rainfall: its tuned default at the liquid's typical rainfall,

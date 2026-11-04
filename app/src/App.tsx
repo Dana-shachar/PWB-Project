@@ -25,6 +25,8 @@ import { ErosionTimeline } from './erosion/ErosionTimeline';
 import { useLandChunk } from './voxel/landChunk';
 import { LandChunkCanvas, type LandChunkCanvasHandle } from './voxel/LandChunkCanvas';
 import { ViewModeControl } from './voxel/ViewModeControl';
+import { useAreaSelect } from './voxel/areaSelect';
+import { SelectAreaIcon } from './ui/icons';
 
 const INITIAL_LAYER_ID = 'layer-1';
 
@@ -69,11 +71,17 @@ function App() {
     erosion.result,
     planetControls.detailAmount,
     planetControls.shoreSeaLevel,
+    planetControls.radiusKm,
   );
-  const { progress: waterProgress, revision: waterRevision } = useDrainage(sceneHandleRef, liquidNamed(planetControls.atmosphere.liquid).flows, planetControls.water.seaLevel, erosion.enabled ? planetErosionPasses(erosion.durationYears) : 0, erosion.strength, planetControls.atmosphere, planetControls.heightDistribution);
-  useErosionAutoRun(erosion, landChunk.patch, planetControls.water.seaLevel, chunkRainfall, noiseLayers.layers, brush.paintVersion);
+  const { progress: waterProgress, revision: waterRevision, carvingPending } = useDrainage(sceneHandleRef, liquidNamed(planetControls.atmosphere.liquid).flows, planetControls.water.seaLevel, erosion.enabled ? planetErosionPasses(erosion.durationYears) : 0, erosion.strength, planetControls.atmosphere, planetControls.heightDistribution, { strength: erosion.enabled ? erosion.strength : 0, shape: erosion.filterShape });
+  erosion.filterHoldRef.current = carvingPending;
+  useErosionAutoRun(erosion, landChunk.patch, planetControls.water.seaLevel, chunkRainfall, noiseLayers.layers, brush.paintVersion, planetControls.displayMode);
+  // Selection mode: drag a square on the planet to choose the land chunk's area (voxel/areaSelect.ts).
+  const areaSelect = useAreaSelect(sceneHandleRef, landChunk, planetControls.radiusKm);
   // The chunk's patches bake through the planet view's heightmap pipeline.
   const bakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch) => sceneHandleRef.current?.bakePatchInto(patch, target, root) ?? false;
+  const advanceChunkBase = (root: TerrainPatch, texelBudget: number) => sceneHandleRef.current?.advanceChunkBaseUpgrade(root, texelBudget) ?? { texels: 0, switched: false, pending: false };
+  const chunkBaseTexture = () => sceneHandleRef.current?.getChunkBaseTexture() ?? null;
   // Declared after erosion/landChunk, which it persists alongside layers and
   // paint — see projectSettings/saveProject.ts.
   const project = useSaveProject({
@@ -212,7 +220,8 @@ function App() {
         autoDetail={planetControls.autoDetail}
         onAutoDetailChange={planetControls.setAutoDetail}
         chunkSize={landChunk.chunkSize}
-        onChunkSizeChange={landChunk.setChunkSize}
+        onChunkSizeChange={areaSelect.resizeArea}
+        selectingArea={areaSelect.selecting}
         heightScale={planetControls.heightScale}
         planetElevationRange={planetControls.elevationRange}
         chunkElevationRange={{ min: landChunk.elevationMin, max: landChunk.elevationMax }}
@@ -274,10 +283,9 @@ function App() {
               }
               style={landChunk.viewMode === 'split' ? { flexGrow: 0, flexShrink: 0, flexBasis: `${landChunk.splitRatio * 100}%` } : undefined}
               onClick={(event) => sharedGumball.handlePaneClick('planet', event)}
-              /* Double-click picks which piece of the planet the chunk
-                 shows. Double rather than single so it doesn't collide with
-                 the existing click-to-select-pane. See voxel/landChunk.ts. */
-              onDoubleClick={(event) => landChunk.pickLocation(event.clientX, event.clientY)}
+              onPointerDown={areaSelect.onPointerDown}
+              onPointerMove={areaSelect.onPointerMove}
+              onPointerUp={areaSelect.onPointerUp}
             >
               <SceneCanvas
                 ref={sceneHandleRef}
@@ -346,6 +354,7 @@ function App() {
                 heightMapGreenChannel={planetControls.displayMode !== 'voxel'}
                 chunkSize={landChunk.chunkSize}
                 maxHeight={landChunk.maxHeight}
+                heightBase={landChunk.heightBase}
                 colorByElevation={planetControls.colorByElevation}
                 colorStops={planetControls.colorStops}
                 elevationMin={landChunk.elevationMin}
@@ -354,8 +363,11 @@ function App() {
                 patch={landChunk.patch}
                 patchesEnabled={planetControls.displayMode !== 'voxel'}
                 bakeVersion={landChunk.bakeVersion + waterRevision + erosion.filterRevision}
+                frameVersion={areaSelect.frameVersion}
                 maxErrorPixels={planetControls.effectiveMaxErrorPixels}
                 bakePatch={bakeChunkPatch}
+                advanceChunkBase={advanceChunkBase}
+                chunkBaseTexture={chunkBaseTexture}
                 groundHeights={landChunk.groundHeights}
                 water={planetControls.water}
                 waterClarityShare={waterClarityShare}
@@ -364,7 +376,29 @@ function App() {
                 waterDeepest={planetControls.elevationRange.min}
               />
             </div>
-            <ViewModeControl viewMode={landChunk.viewMode} onChange={landChunk.setViewMode} />
+            <ViewModeControl
+              viewMode={landChunk.viewMode}
+              onChange={landChunk.setViewMode}
+              leading={
+                landChunk.viewMode !== 'landChunk' && (
+                  <button
+                    type="button"
+                    className={'view-mode-btn view-mode-btn--icon ui-tooltip-anchor' + (areaSelect.selecting ? ' view-mode-btn--on' : '')}
+                    onClick={areaSelect.toggleSelecting}
+                    aria-pressed={areaSelect.selecting}
+                    aria-label="Select Area"
+                  >
+                    <SelectAreaIcon />
+                    <span className="ui-tooltip">Select Area: drag a square on the planet for the land chunk</span>
+                  </button>
+                )
+              }
+            />
+            {areaSelect.sizeLabel && (
+              <div className="area-size-label" style={{ left: areaSelect.sizeLabel.x, top: areaSelect.sizeLabel.y }}>
+                {Math.round(areaSelect.sizeLabel.km).toLocaleString()} km
+              </div>
+            )}
           </>
         )}
       </div>

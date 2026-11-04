@@ -8,6 +8,20 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
+> **Start from here (2026-11-04, seventeenth handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. This is newer than the block below.*
+>
+> **State.** Today's chunk round is committed (`[B113]` to `[B120]`). The dev server runs from `app/` with `npx vite`. Test in Chrome yourself and only as needed; Dana wants rounds of fixes reported together, without test loops. Autosave writes to whichever project is open, so use "New Planet 05" for tests that change erosion settings or the square.
+>
+> **Next, in order.**
+> 1. 🟡 Lakes on the chunk (`[S75]`). Sketch: the 1,024 preview base map keeps the water surface (its third channel, dropped today), and a second water sheet is lifted to it. Read `chunkWater.frag.glsl` and `voxel/chunkWater.ts` first; the full map as RGBA would cost about 134 MB more.
+> 2. 🔴 Diagnose `[B122]` (the grain line) by tinting patches by bake size, then `[B121]` (a ridge that sinks), then `[B123]` (wall hairlines).
+> 3. ⚪ Erosion units: Gully Size in km and Gully Depth in meters, with options for Dana first. Strength and the ratios need checking against the filter's math.
+> 4. ⏸️ Soft close-ups: deferred by Dana. The real fix is fine gully detail at patch bake.
+> 5. ⚪ Rivers (`[B109]`): the next step after these, not parked.
+>
+> **Leftovers.** `chunkDepth` and `changeDepth` in `landChunk.ts`, `uWaterDeepest` in the wall shader, and `docs/HANDOVER-chunk-2026-11-03.md` with its shots (local only; delete once nothing in it is needed). The Height slider's meters in Chunk view still understate what's drawn. The architecture diagram wasn't redrawn; do it with the next weekly push.
+
+> [!IMPORTANT]
 > **Start from here (2026-11-03, sixteenth handover):** *read `.claude/CLAUDE.md` first, then this block, then `docs/CODE-INDEX.md` (Water and erosion) before searching the code. Paper summaries with key quotes are in `docs/REFERENCES.md`: read those, never the PDFs again. Bugs of this round: `[B106]` to `[B109]` in `docs/ISSUES.md`.*
 >
 > **State.**

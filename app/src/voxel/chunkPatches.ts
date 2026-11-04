@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { balance, buildLeafIndex, coveringLeaves, MERGE_SSE_RATIO, type LeafIndex } from '../planet/planetPatches';
+import { balance, buildLeafIndex, coveringLeaves, MERGE_SSE_RATIO, type LeafFrame, type LeafIndex } from '../planet/planetPatches';
 import { PATCH_GRID, subdivide, type TerrainPatch } from '../planet/patch';
 
 // The land chunk's level of detail: the planet's screen-space-error rule
@@ -24,6 +24,13 @@ export interface ChunkDetail {
   // The lowest and highest the chunk's ground can be, in world units.
   minHeight: number;
   maxHeight: number;
+  // The ground's heights (rows top to bottom, raw), so a patch's distance is measured to its own ground. Absent until read.
+  ground?: { data: Float32Array; size: number; heightBase: number };
+}
+
+// The chunk's square as the frame its patches are looked up in: a drawn square doesn't sit on the cube face's grid.
+export function chunkFrame(root: TerrainPatch): LeafFrame {
+  return { minX: root.min.x, minY: root.min.y, size: root.max.x - root.min.x, depth: root.depth };
 }
 
 // Where a patch sits on the chunk's square, as fractions of the root: u along
@@ -54,8 +61,46 @@ export function chunkPatchBox(root: TerrainPatch, patch: TerrainPatch, detail: C
 
 const scratchBox = new THREE.Box3();
 
+// A patch's lowest and highest raw ground, read once per ground map; includes the grid cell around it, as the grid is coarser than deep patches.
+const groundRanges = new WeakMap<Float32Array, Map<string, [number, number]>>();
+function patchGroundRange(root: TerrainPatch, patch: TerrainPatch, ground: NonNullable<ChunkDetail['ground']>): [number, number] {
+  let cache = groundRanges.get(ground.data);
+  if (!cache) {
+    cache = new Map();
+    groundRanges.set(ground.data, cache);
+  }
+  const key = `${patch.depth}:${patch.min.x}:${patch.min.y}`;
+  const known = cache.get(key);
+  if (known) return known;
+  const fractions = rootFractions(root, patch);
+  const last = ground.size - 1;
+  const firstCol = Math.max(0, Math.floor(fractions.minU * last) - 1);
+  const lastCol = Math.min(last, Math.ceil(fractions.maxU * last) + 1);
+  const firstRow = Math.max(0, Math.floor((1 - fractions.maxV) * last) - 1);
+  const lastRow = Math.min(last, Math.ceil((1 - fractions.minV) * last) + 1);
+  let low = Infinity;
+  let high = -Infinity;
+  for (let row = firstRow; row <= lastRow; row++) {
+    for (let col = firstCol; col <= lastCol; col++) {
+      const raw = ground.data[row * ground.size + col];
+      if (raw < low) low = raw;
+      if (raw > high) high = raw;
+    }
+  }
+  const range: [number, number] = [low, high];
+  cache.set(key, range);
+  return range;
+}
+
+// Measured to the patch's own ground: the chunk's whole height range counted distant patches as close, over-splitting them.
 function distanceToPatch(root: TerrainPatch, patch: TerrainPatch, cameraPosition: THREE.Vector3, detail: ChunkDetail): number {
-  const distance = chunkPatchBox(root, patch, detail, scratchBox).distanceToPoint(cameraPosition);
+  chunkPatchBox(root, patch, detail, scratchBox);
+  if (detail.ground) {
+    const [low, high] = patchGroundRange(root, patch, detail.ground);
+    scratchBox.min.y = Math.max(0, low + detail.ground.heightBase) * detail.maxHeight;
+    scratchBox.max.y = Math.max(0, high + detail.ground.heightBase) * detail.maxHeight;
+  }
+  const distance = scratchBox.distanceToPoint(cameraPosition);
   return Math.max(distance, detail.chunkSize * MIN_DISTANCE_FRACTION);
 }
 
@@ -80,12 +125,13 @@ interface ChunkContext {
   cameraPosition: THREE.Vector3;
   detail: ChunkDetail;
   threshold: number;
+  frame: LeafFrame;
   previousIndex?: LeafIndex;
 }
 
 function wasSplit(patch: TerrainPatch, context: ChunkContext): boolean {
   if (!context.previousIndex) return false;
-  return coveringLeaves(context.previousIndex, patch).some((leaf) => leaf.depth > patch.depth);
+  return coveringLeaves(context.previousIndex, patch, context.frame).some((leaf) => leaf.depth > patch.depth);
 }
 
 // Same rule as the planet's shouldSplit: mesh cell spacing in pixels against
@@ -110,13 +156,15 @@ function collectLeaves(patch: TerrainPatch, context: ChunkContext, out: TerrainP
 // This frame's patches for the chunk, balanced so neighbors differ by at most
 // one level. Over the triangle budget, the threshold rises until it fits.
 export function selectChunkPatches(root: TerrainPatch, cameraPosition: THREE.Vector3, detail: ChunkDetail, previousLeaves?: TerrainPatch[]): TerrainPatch[] {
+  const frame = chunkFrame(root);
   const context: ChunkContext = {
     root,
     maxDepth: root.depth + CHUNK_MAX_EXTRA_DEPTH,
     cameraPosition,
     detail,
     threshold: detail.maxErrorPixels,
-    previousIndex: previousLeaves ? buildLeafIndex(previousLeaves) : undefined,
+    frame,
+    previousIndex: previousLeaves ? buildLeafIndex(previousLeaves, frame) : undefined,
   };
   let leaves: TerrainPatch[] = [];
   for (let pressure = 0; pressure <= MAX_PRESSURE; pressure++) {
@@ -125,5 +173,5 @@ export function selectChunkPatches(root: TerrainPatch, cameraPosition: THREE.Vec
     collectLeaves(root, context, leaves);
     if (leaves.length * 2 * PATCH_GRID ** 2 <= CHUNK_MAX_TRIANGLES) break;
   }
-  return balance(leaves);
+  return balance(leaves, frame);
 }

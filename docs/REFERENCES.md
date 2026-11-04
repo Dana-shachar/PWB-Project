@@ -828,7 +828,25 @@
 - Summary, read 2026-11-03: input terrains at "sampling resolutions (1m - 30m per pixel)" (sec. 1); drainage by Freeman's multiple flow, rivers are cells past "a user-controlled threshold", pits filled first by Priority-Flood (sec. 4); the discrete network becomes a graph "by defining a node at cells with more than one contributor and smoothing the trajectory of the river between nodes with piecewise cubic splines" (sec. 4); flow φ = 0.42 A^0.69 (Dunne 1978).
 - depression filling before the drainage calculation, piecewise cubic splines between confluences, meanders only on low slopes.
 - 2026-11-02: flow from drainage area, 0.42 A^0.69, and width from the cross-section; the drawing threshold as a user setting; river heights made monotonic downstream.
+- Section 4, read 2026-11-03: the whole method is "drainage area ... (using the method of Freeman)", then "the set of cells that have a drainage area greater than a user-controlled threshold", then a node at cells with more than one contributor and splines between. It never says which downstream cell a river follows when multiple flow splits its water; GRASS below answers that. Pits filled first "to prevent disconnected river graphs".
 - *PDF in the course folder*
+
+**r.stream.extract (GRASS GIS manual, 8.5)** · `read 2026-11-03`
+- Accumulation by multiple flow (FD8, Holmgren 1994); `d8cut`: "minimum amount of overland flow (accumulation) when SFD (D8) will be used instead of MFD". Water spreads on hillslopes and runs in one line in channels.
+- "Whenever flow accumulation reaches threshold, a new stream is started and traced downstream to its outlet point", on the D8 direction. Vector points at stream starts, "confluences" and outlets; "Streams will not be routed out of depressions" given as real. Optional Montgomery rule: accumulation times slope^mexp against the threshold (mexp 2 recommended, 0 by default). No smoothing of the lines is mentioned.
+- References there: Holmgren 1994 (doi 10.1002/hyp.3360080405), Ehlschlaeger 1989, Montgomery and Foufoula-Georgiou 1993.
+- *[Manual](https://grass.osgeo.org/grass-stable/manuals/r.stream.extract.html)*
+
+**Picking an area for a detailed view (World Machine, Gaea, Roblox)** · `2026-11-03, from search summaries, pages not read`
+- World Machine: a "render extent" is the area you work in; "New Extent…" adds more, drawn in the layout view, and a "detail extent" at its own resolution gets past the 4096 preview cap. A forum user asks for "'select area' > 'set resolution' > 'build world'".
+- Gaea: tiled builds with a "1:1 Tile Preview" to inspect each tile at real resolution. Roblox Studio's Select tool: drag a rectangle in the 3D view, then move and resize it with handles or typed X/Y/Z.
+- The common pattern: a visible rectangle on the overview that the user places and sizes, not a fixed grid.
+- *[World Machine help](https://help.world-machine.com/?p=411) · [WM forum](https://forum.world-machine.com/t/crop-output-for-quick-preview/3920) · [Gaea resolutions](https://docs.quadspinner.com/Guide/Using-Gaea/Resolutions.html) · [Gaea 1.3](https://blog.quadspinner.com/gaea-1-3-now-available/) · [Roblox terrain editor](https://create.roblox.com/docs/studio/terrain-editor)*
+
+**Smoothing streams traced on a grid (ArcGIS, GRASS manuals)** · `2026-11-03, from search summaries, pages not read`
+- the zigzag is named as the grid's own: "the jagged representation ... matching the input raster resolution" (ArcGIS Adjust Stream to Raster, with a Remove Sharp Angles option). ArcGIS Derive Stream as Line simplifies by Douglas-Peucker at sqrt(0.5) × cell size by default; GRASS `r.to.vect` "smoothes the corners" while extracting, so lines are no longer "true" to the raster.
+- No source found for doing this on a planet; tolerance below one cell keeps a line in its valley.
+- *[Adjust Stream to Raster](https://pro.arcgis.com/en/pro-app/3.6/tool-reference/spatial-analyst/adjust-stream-to-raster.htm) · [Derive Stream as Line](https://gis.maps.uw.edu/federated/help/en/rest/services-reference/enterprise/derive-stream-as-line) · [r.to.vect](https://grass.osgeo.org/grass62/manuals/r.to.vect.html)*
 
 **Priority-Flood (Barnes, Lehman and Mulla 2014)** · `used 2026-11-01, known through Peytavie, not read`
 - the pit fill from the coast up, in `waterLevels`.
@@ -913,6 +931,8 @@
 
 **Fast and Gorgeous Erosion Filter (Rune Skovbo Johansen, 2026)** · `used 2026-11-03, code pasted by Dana` · Mozilla Public License 2.0
 - gullies along the slope as a per-point filter, after Clay John's 2018 Shadertoy, in `shaders/heightmap/erosionFilter3d.glsl`. Its input must be a smooth height: on a bumpy one "we get a chaotic mess"; his demo's settings are used unchanged, in his demo's proportions (valley spacing to his hill spacing, relief to his relief).
+- Blog post read 2026-11-03: at peaks and valleys "the gradient has no defined direction... which creates chaotic stripe patterns"; the defense is the fade target, "from -1 at valleys to 1 at peaks", which picks the rounding there. "I kind of let it be up to the user to decide what to base the input fade target parameter on"; altitude is his demos' choice, "not robust in the general case"; curvature fails because it is not between -1 and 1. Loops where waves cancel make "spiky protrusions (and holes)", fixed by normalizing only above a threshold. A pretend constant slope replaces the real input slope. Later octaves follow the previous octaves' gullies (the sign of the sine), unfaded.
+- *[Post](https://blog.runevision.com/2026/03/fast-and-gorgeous-erosion-filter.html)*
 - *[Blog](https://blog.runevision.com/2026/03/) · Shadertoy `wXcfWn`*
 
 **3D-Erosion-Filter-Unity (Estqes, 2026)** · `used 2026-11-03` · Mozilla Public License 2.0
@@ -921,6 +941,7 @@
 
 **bevy_erosion_filter (korbindeman)** · `used 2026-11-03` · MIT and Mozilla Public License 2.0
 - the filter's defaults and ranges (strength 0 to 0.5), `eroded = base + delta` on a smooth base with no lowering, and the scale rule "mountain_width / 5..10".
+- README and demo, read 2026-11-03: the filter "adds branched gully detail to any heightfield ... Works as a sub-pixel detail layer on baked terrain or the high-frequency pass of a per-fragment procedural surface"; the demo reads slopes from a smooth 3-octave base and returns `base + filtered.delta`. The change is a layer added on top, never a replacement. Estqes's `ErosionFilter` likewise returns `height + heightDelta` with the change reported on its own.
 - *[Repository](https://github.com/korbindeman/bevy_erosion_filter)*
 
 **River meanders (Langbein and Leopold 1966; Leopold and Wolman 1957; Leopold 1994)** · `used 2026-11-02, from search summaries`

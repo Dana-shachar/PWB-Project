@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-11-02`
+`Last updated: 2026-11-04`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -11,11 +11,11 @@
 > Bugs only. Architecture and the decisions behind it are in `SPEC.md`. Status by stage is in `ROADMAP.md`.
 
 ```
-🔴 Open      12
-🟡 Partial   22
+🔴 Open      13
+🟡 Partial   24
 ❓ Decision   1
 📋 Tracked    4
-✅ Fixed     39
+✅ Fixed     48
 ```
 
 <details>
@@ -826,6 +826,82 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Dana: rivers look very bad up close and from afar, and don't branch.
 - Cause, from the code and the sources: a node at every 18 km cell on eight directions (B95's straight rivers again), where Peytavie's method is for 1 to 30 m cells and puts nodes only at confluences; drainage split many ways (Schott) but the network follows one steepest neighbor, so rivers stop; every channel at least a bake texel wide, with a level from the coarse ground.
 - Next: research how to draw rivers that look good from afar, combining the earlier river system with the erosion (ROADMAP handover).
+
+### [B113] Drawn squares left old patches on screen · `breaks things`
+**✅ Fixed 2026-11-04** · **Where:** `planet/planetPatches.ts`, `voxel/chunkPatches.ts`, `voxel/ChunkPatchRenderer.ts`
+- Dana: smooth sheets and rough ground cutting through each other, erosion missing on parts of the chunk.
+- Cause, measured: the patch lookup assumed the cube face's fixed grid, and a drawn square doesn't sit on it. After a zoom, 130 patches were drawn for 22 needed, 114 of them leftovers the lookup couldn't find, covering 27.5% of the chunk twice. Leftovers also never re-baked.
+- Fix: patches are looked up in their own square's frame (`LeafFrame`). Result: 0 leftovers, 0% overlap, on 507 km and 2,740 km squares.
+
+### [B114] An unused chunk erosion run blocked the page · `breaks things`
+**✅ Fixed 2026-11-04** · **Where:** `erosion/erosionControls.ts`
+- Cause, measured: the run repeated after every change and blocked the page for 0.1 s at 100,000 years and 0.8 to 1.8 s at 500,000 to 1,000,000, though only the voxel style draws it.
+- Fix: it runs only in voxel style. Result: no stalls on the same test.
+
+### [B115] A slider change drew the chunk twice · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `map/heightmap.ts`, `voxel/ChunkPatchRenderer.ts`, `voxel/LandChunkCanvas.tsx`
+- Cause, measured: patches baked on the preview map, then again on the full map, and water and shadows could read the full map while its bands were still baking.
+- Fix: a changed patch keeps its old image until the full map is ready, and water and shadows read only the finished map. Result: 52 bakes instead of 104; the mixed look went from about 840 ms to 160 ms. Selection speed didn't change (about 720 ms).
+
+### [B116] Water flickered into blocks when zooming or panning · `breaks things`
+**✅ Fixed 2026-11-04** · **Where:** `scene/controls.ts` (`keepAboveFlatGround`)
+- Cause, confirmed by test: the near plane stayed at 0.1, leaving depth precision of 3 to 11 km at normal views, too coarse to separate shallow water from the ground. At one camera, raising only the near plane turned a jagged shore clean.
+- Fix: the near plane follows the distance to the chunk's bounds and a share of the height above ground (`NEAR_SHARE_OF_ALTITUDE`, tunable). Precision is under 1 m at the tested distances. Very low views over water aren't checked.
+
+### [B117] Distant patches were over-split · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `voxel/chunkPatches.ts`
+- Cause, measured: distance was measured to the chunk's whole height range, overstating patch size by a median of 14 times up close.
+- Fix: distance to each patch's own ground range. Result on a repeated zoom: 46 patches instead of 67, 92 bakes instead of 120, 40 MB instead of 51, same coarsest mesh cell.
+
+### [B118] Selection mode problems · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `voxel/areaSelect.ts`, `scene/areaOutline.ts`, `planet/patch.ts`
+- Selection stayed on after a drag; no way to cancel; a new square could open with the camera inside it; the outline showed on load; squares near a face edge jumped away from the cursor; on very small squares 216 of 2,200 patch edges had wrong stitch flags, because the neighbor probe was larger than the patch.
+- Fixed in turn. Esc during an active drag is unverified by test.
+
+### [B119] Saves lost the erosion settings · `breaks things`
+**✅ Fixed 2026-11-04** · **Where:** `projectSettings/saveProject.ts`, `erosion/erosionControls.ts`
+- Duration, Strength and the chosen square were stored only with a run's result, so autosave erased them while Erosion was off. The four gully sliders were never saved.
+- Fix: saved from the panel's settings, with the gully sliders and Size (km) restored on load.
+
+### [B120] Erosion appeared in two steps, and lakes showed with it off · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `rivers/drainageControls.ts`
+- The gully filter landed on uncarved land, then the carved map replaced it about a second later. Lakes were calculated and drawn with Erosion off.
+- Fix: the filter is held and applied with the carved map, one change at about 1.6 s. Lake levels are cleared while there is no carving.
+
+### [B121] Steep walls and folds from the erosion filter · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-04 · **Where:** `erodedSurface` in `heightmap.frag.glsl`
+- Measured: slopes settle as detail rises, so these are walls, not breaks: 85 degrees at Gully Size 1, 88 at 2.15, in direct proportion. Gully Depth 0 removes them (about 50 degrees); noise alone reaches 75. Gully Size is capped at 1.5 for now.
+- Dana: a fold that should be a ridge sinks instead. Unproven: the filter's fade target comes from altitude against the planet's top, so a low ridge reads as a valley. `[B112]` records that a local target changed nothing at the stars, so test it on a ridge.
+
+### [B122] A visible line where fine grain starts · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-04 · **Where:** `planetDetail`, `heightfieldNormal` in `chunk.frag.glsl`
+- Dana: a line where granular texture begins, and Roughness seems slow to load.
+- From the code and measured: Roughness adds only what a bake's size can show, and the normal steps one bake texel, so neighbors at different bake sizes show different grain, and grain changes as patches re-bake. Below the base map's limit (428 to 651 m a sample on large squares), Roughness is the only added detail. Not yet proven to be this line. Measure next: tint patches by bake size on such a line.
+
+### [B123] Hairlines between land and water walls · `minor`
+**🔴 Open** · **Found:** 2026-11-04 · **Where:** `chunk.frag.glsl`, `chunkWaterWall.frag.glsl`
+- Dana: white dashed lines on the chunk's side. From the code: the two walls test the ground at the same place through different coordinates, so a thin gap can have neither. A wall column also turns fully to water when the edge's ground is just under the sea, which reads as stripes. Neither is measured.
+
+### [B124] The page freezes and ignores a hard refresh · `blocks work`
+**🟡 Tabled 2026-11-04** · **Found:** 2026-11-03
+- Reported at least three times, not reproduced. Dana hasn't seen it since today's fixes and tabled it. The diagnostic trail was removed; it's in git history if needed.
+
+### [B110] The chunk's water has very sharp corners · `wrong but workable`
+**🟡 Built, not confirmed** · **Found:** 2026-11-03 · **Where:** the chunk's water (`voxel/chunkWater.ts`, `shaders/water/chunkWater.frag.glsl`), not yet measured
+- Dana: on the chunk the water shows straight light bands meeting at sharp corners, and a hard, straight edge where it meets the land.
+- The surf now reads the seabed with central differences instead of a one-sided slope (2026-11-04). The cause is inferred and the result is unconfirmed by eye.
+
+### [B111] The chunk looks flat and low resolution · `wrong but workable`
+**✅ Fixed 2026-11-03** · **Found:** 2026-11-03 · **Where:** the chunk's height, not yet measured
+- Dana: the chunk is very low res and much flatter than before the erosion round; smooth blobs, little detail.
+- Fixed by actual heights with a proportion cap and a selectable real-size area (`[S72]`).
+
+### [B112] The erosion's gullies pinch into stars at points · `wrong but workable`
+**🔴 Open, cause not found** · **Found:** 2026-11-03 · **Where:** `erodedSurface` in `heightmap.frag.glsl`, the carving from `rivers/planetDrainage.ts`
+- Dana: gullies converge into star points, at peaks and in dips, at every Gully Size (smaller at 0.25).
+- Measured: with Gully Depth 0 a faint star stays in the carved ground; with Strength 0 there is none; with gullies on it turns sharp. So the carving makes it and the filter sharpens it.
+- Ruled out, by measurement: the filter's slope scaling (median 0.47 in Rune's units, his range); the pit fill's flats (carving 20 times shallower inside filled dips); the grid's 8 directions (24% of carving on them against 22% even).
+- Tried and reverted: a fade target from local relief (a ring of 8 points), no visible change, since most level points are saddles; the filter's slope from the ground before carving, the big stars went but Dana found the result worse.
 
 ### [B67] From walk mode the water is barely visible · `minor`
 **🟡 Explained, not fixed** · **Found:** 2026-10-27 · **Where:** `shaders/water/chunkWater.frag.glsl`

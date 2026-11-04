@@ -49,6 +49,11 @@ uniform float uGradientStepUv;
 // A patch's bake size and border; 0 samples means the voxel mesh's plain uv.
 uniform float uBakeSamples;
 uniform float uBorderTexels;
+uniform float uHeightBase; // as chunk.vert.glsl
+// Where the edge lies under the sea, the water wall covers the whole side (chunkWaterWall.frag.glsl), so the land's
+// side is dropped there: one surface, no layering (Dana, 2026-11-03).
+uniform float uWaterOn;
+uniform float uSeaLevel;
 uniform float uMaxHeight; // world-unit height a raw value of 0.5 displaces to (effectiveHeightScale in landChunk.ts)
 // Three.js built-in, auto-set but not auto-declared in the fragment stage —
 // same reason fragment.glsl (the planet) declares it, needed here to turn a
@@ -145,11 +150,15 @@ void main() {
     // Walls/bottom cap: a plain mapping of the fragment's own real world
     // height, a separate value entirely, not blended with the top's — see
     // vIsTopSurface's own comment above for why this doesn't seam.
-    float sideElevationRaw = (vWorldPosition.y / uMaxHeight) - 0.5;
+    float sideElevationRaw = (vWorldPosition.y / uMaxHeight) - uHeightBase;
     float effectiveElevationRaw = vIsTopSurface > 0.5 ? elevationRaw : sideElevationRaw;
     float elevationFraction = (effectiveElevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
     surfaceColor = ramp;
+  }
+  if (vIsTopSurface < 0.5 && uWaterOn > 0.5) {
+    vec4 edgeTexel = texture2D(uChunkHeightMap, mix(uPatchUvMin, uPatchUvMax, vUv));
+    if (mix(edgeTexel.r, edgeTexel.g, uHeightMapGreenChannel) < uSeaLevel) discard;
   }
 
   vec3 litColor = surfaceColor * (fill + diffuse) + specular;

@@ -2,6 +2,7 @@ import { LIQUIDS, liquidNamed, rainfallMax, referenceTemperature } from '../rive
 import { useState } from 'react';
 import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle, Dial } from './UIElements';
 import type { SpinSettings } from '../scene/planetSpin';
+import { AREA_SIZE_MAX_KM, AREA_SIZE_MIN_KM } from '../voxel/areaSelect';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { ProjectSummary } from '../firebase/storage';
 import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
@@ -103,6 +104,7 @@ interface PanelProps {
   onChunkResolutionChange: (value: number) => void;
   chunkSize: number;
   onChunkSizeChange: (value: number) => void;
+  selectingArea: boolean; // selection mode shows the chunk's Size here even in the planet view
   // What the color ramp's meters calibrate to: each view's real elevation
   // range, scaled by the same Height % the terrain is displaced with.
   heightScale: number;
@@ -259,6 +261,7 @@ export function Panel({
   onChunkResolutionChange,
   chunkSize,
   onChunkSizeChange,
+  selectingArea,
   heightScale,
   planetElevationRange,
   water,
@@ -287,6 +290,7 @@ export function Panel({
   const planetMetersPerHeight = (heightScale / 100) * radiusKm * 1000;
   // With water on, the land ramp starts below sea level (planet/seaLevel.ts, landRampFloor).
   const viewElevationRange = activeViewContext === 'landChunk' ? chunkElevationRange : planetElevationRange;
+  const showChunkSize = activeViewContext === 'landChunk' || selectingArea;
   const landRampRange = water.enabled
     ? { min: Math.max(viewElevationRange.min, landRampFloor(water.seaLevel, planetElevationRange.min)), max: viewElevationRange.max }
     : viewElevationRange;
@@ -563,19 +567,21 @@ export function Panel({
                 Disabled, not hidden, when both panes are selected in Split —
                 it's a view-specific control, not a joint one. Falls back to
                 the Radius binding while disabled so it doesn't blank out. */}
+            {/* Selection mode shows the chunk's Size even in the planet view, so the square can be sized there. */}
             <Slider
-              label={activeViewContext === 'landChunk' ? 'Size' : 'Radius'}
+              label={showChunkSize ? 'Size' : 'Radius'}
               unit="km"
-              value={activeViewContext === 'landChunk' ? chunkSize : radiusKm}
-              onChange={activeViewContext === 'landChunk' ? onChunkSizeChange : onRadiusKmChange}
-              min={activeViewContext === 'landChunk' ? 4 : 1000}
-              max={activeViewContext === 'landChunk' ? 64 : 100000}
-              step={activeViewContext === 'landChunk' ? 1 : 100}
+              value={showChunkSize ? chunkSize : radiusKm}
+              onChange={showChunkSize ? onChunkSizeChange : onRadiusKmChange}
+              min={showChunkSize ? AREA_SIZE_MIN_KM : 1000}
+              max={showChunkSize ? AREA_SIZE_MAX_KM : 100000}
+              step={showChunkSize ? 1 : 100}
               precision={0}
-              disabled={activeViewContext === null}
+              disabled={activeViewContext === null && !selectingArea}
+              scale={showChunkSize ? 'log' : 'linear'}
               description={
-                activeViewContext === 'landChunk'
-                  ? 'How much ground the land chunk covers, in kilometers. Detail only comes from Resolution below, not from this.'
+                showChunkSize
+                  ? 'How much ground the land chunk covers, in kilometers, the width of its square on the planet. Detail only comes from Resolution below, not from this.'
                   : "The planet's physical radius, in kilometers. Select the planet or chunk pane to control that view's own scale."
               }
             />

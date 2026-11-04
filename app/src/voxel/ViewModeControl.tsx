@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { ViewMode } from './landChunk';
 
 const OPTIONS: { value: ViewMode; label: string }[] = [
@@ -9,6 +10,7 @@ const OPTIONS: { value: ViewMode; label: string }[] = [
 interface ViewModeControlProps {
   viewMode: ViewMode;
   onChange: (mode: ViewMode) => void;
+  leading?: ReactNode; // a mode button at the strip's start, such as Select Area
 }
 
 // Small floating control over the viewport itself, not buried in the left
@@ -17,9 +19,10 @@ interface ViewModeControlProps {
 // Mirrors the "Expand should replace, not overlay" idea already noted in
 // ROADMAP.md, Stage 04 — switching to "Land Chunk" replaces the planet pane
 // entirely rather than opening a dark overlay on top of it.
-export function ViewModeControl({ viewMode, onChange }: ViewModeControlProps) {
+export function ViewModeControl({ viewMode, onChange, leading }: ViewModeControlProps) {
   return (
     <div className="view-mode-control">
+      {leading}
       {OPTIONS.map((option) => (
         <button
           key={option.value}

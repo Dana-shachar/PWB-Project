@@ -9,9 +9,11 @@ import { rootFractions } from './chunkPatches';
 const SKIRT_LENGTH_TEST = 0.995;
 const EDGE_EPSILON = 1e-9;
 
-// The slab's base, below zero so flat low ground never meets it (see smoothMesh.ts).
-export function chunkBaseDepth(chunkSize: number): number {
-  return -chunkSize * 0.05;
+// The slab under the chunk's lowest ground, as a share of its Size: the ground is lifted by it (heightBase in
+// landChunk.ts), so the base rests on the grid at 0 instead of below it (Dana, 2026-11-03).
+export const CHUNK_SLAB_SHARE = 0.05;
+export function chunkBaseDepth(_chunkSize: number): number {
+  return 0;
 }
 
 type ChunkEdge = 'minU' | 'maxU' | 'minV' | 'maxV';

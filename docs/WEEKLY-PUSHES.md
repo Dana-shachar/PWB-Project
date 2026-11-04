@@ -1,11 +1,38 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-11-03`
+`Last updated: 2026-11-04`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
 
 > [!NOTE]
 > **How the entries are numbered.** By the syllabus's own sessions (`Syllabus-FA26-DESIGN6197-SEM130-DRAFT.pdf`, in the course folder): the class meets on Wednesdays, and each weekly report is committed by the start of that Wednesday's class (10:10 am). Work stays in the earlier session's entry until it is committed: the first commit after a class starts the next session's entry. Two entries in one session are marked "part 1 of 2". Sessions 1 and 2 (Aug 26, Sep 2) are left empty, before the project started. The next sessions are pre-built at the end of this file: fill one in, then move it to the top.
+
+---
+
+## Session 12 · Wed 2026-11-11
+
+`Covers 2026-11-04 to 2026-11-11 · Due: start of class, 10:10 am`
+
+*Made the land chunk trustworthy: found why drawn squares broke its patches, removed the overload behind the lag, stopped the water flicker, and made erosion and saving behave.*
+
+![Before the fix: smooth sheets cutting through rough ground, from patches left behind on a drawn square.](screenshots/2026-11-03-chunk-leftover-patches.jpg)
+
+### 🛠️ Done
+- **Leftover patches (`[B113]`):** a lookup that assumed a fixed grid left 114 old patches on screen, covering 27.5% of the chunk twice. Now 0.
+- **Lag (`[B114]`, `[B115]`, `[B117]`):** removed an unused run that blocked the page for up to 1.8 s, halved re-bakes per slider change, and cut patches by 31%.
+- **Water flicker (`[B116]`):** depth precision went from 3 to 11 km to under 1 m at the tested distances.
+- **Selection (`[B118]`):** turns off on release, Esc, thick outline, opens framed, works at face edges and on 4 km squares.
+- **Erosion and saving (`[B119]`, `[B120]`):** erosion shows only its final state, no lakes while it's off, and settings including the gully sliders survive a reload.
+
+### 🤖 How AI was used
+- Claude drove the app through Chrome and measured each cause before a fix, comparing old and new behavior in the same session. Dana reproduced problems, set priorities and corrected wrong theories.
+- What Claude got wrong: one plan rested on an overstated measurement, and one fix was real but not the cause of the reported slowness. Both came out in before and after tests.
+
+### ❌ What didn't work
+- Gully walls of 85 to 88 degrees remain (`[B121]`), capped for now by limiting Gully Size. A grain line and soft close-ups remain (`[B122]`).
+
+### ➡️ Next
+- Lakes on the chunk, erosion units in real units, then rivers.
 
 ---
 

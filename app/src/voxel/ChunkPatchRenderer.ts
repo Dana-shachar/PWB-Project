@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 import { buildLeafIndex, computeStitchFlags, coveringLeaves, patchKey, type EdgeStitchFlags } from '../planet/planetPatches';
 import { bakeSamplesCap, bakeSamplesForPixelWidth, createPatchTarget, PATCH_BAKE_SAMPLES_MIN, PATCH_BORDER_TEXELS, type TerrainPatch } from '../planet/patch';
-import { chunkPatchBox, chunkPatchInView,chunkPatchPixelWidth, chunkPatchWorldSize, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
+import { chunkFrame, chunkPatchBox, chunkPatchInView,chunkPatchPixelWidth, chunkPatchWorldSize, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
 import { buildChunkBaseGeometry, buildFlatPatchGeometry } from './chunkPatchMesh';
 
 // Bakes one patch's heightmap into a target; false if the planet view isn't ready.
 export type BakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarget, root: TerrainPatch) => boolean;
+// Bakes the next rows of the chunk's full base map within a texel budget; switched once it replaces the preview, pending until then.
+export type AdvanceChunkBase = (root: TerrainPatch, texelBudget: number) => { texels: number; switched: boolean; pending: boolean };
 
 // Per-frame build limits, so a big change spreads over frames instead of stalling one.
 const MAX_BUILDS_PER_FRAME = 4;
@@ -20,6 +22,7 @@ interface ChunkPatchEntry {
   target: THREE.WebGLRenderTarget;
   bakeSamples: number;
   flags: EdgeStitchFlags | undefined;
+  stale: boolean; // its terrain changed: it re-bakes through the per-frame budget, keeping its old bake until then
 }
 
 function flagsEqual(a: EdgeStitchFlags | undefined, b: EdgeStitchFlags | undefined): boolean {
@@ -44,6 +47,7 @@ export class ChunkPatchRenderer {
   private lastCameraPosition = new THREE.Vector3(Infinity, 0, 0);
   private lastCameraQuaternion = new THREE.Quaternion();
   private lastErrorPixels = 0;
+  private lastGroundData: Float32Array | undefined; // a new ground reading reselects the patches
   private boundsMaxHeight = 0;
   private readBuffer = new Float32Array(16); // a 2x2 block of RGBA floats for sampleHeight
 
@@ -64,32 +68,32 @@ export class ChunkPatchRenderer {
     this.group.add(this.baseMesh);
   }
 
-  // After a layer or detail change: every built patch bakes again in place.
-  rebakeAll(bake: BakeChunkPatch): void {
-    const root = this.root;
-    if (!root) return;
-    for (const entry of this.entries.values()) bake(entry.patch, entry.target, root);
+  // After a layer, detail or base map change: every built patch re-bakes, spread over frames by the build budget.
+  markAllStale(): void {
+    for (const entry of this.entries.values()) entry.stale = true;
   }
 
-  update(camera: THREE.PerspectiveCamera, detail: ChunkDetail, bake: BakeChunkPatch, maxTextureSize: number): void {
+  update(camera: THREE.PerspectiveCamera, detail: ChunkDetail, bake: BakeChunkPatch, maxTextureSize: number, advanceBase: AdvanceChunkBase): void {
     const root = this.root;
     if (!root) return;
     const moved =
       this.lastCameraPosition.distanceTo(camera.position) > this.chunkSize * RESELECT_DISTANCE_FRACTION ||
       this.lastCameraQuaternion.angleTo(camera.quaternion) > RESELECT_TURN_ANGLE ||
-      this.lastErrorPixels !== detail.maxErrorPixels;
+      this.lastErrorPixels !== detail.maxErrorPixels ||
+      this.lastGroundData !== detail.ground?.data;
     if (moved) {
+      this.lastGroundData = detail.ground?.data;
       this.lastCameraPosition.copy(camera.position);
       this.lastCameraQuaternion.copy(camera.quaternion);
       this.lastErrorPixels = detail.maxErrorPixels;
       this.wanted = selectChunkPatches(root, camera.position, detail, this.wanted.length ? this.wanted : undefined);
-      this.stitchFlags = computeStitchFlags(this.wanted);
+      this.stitchFlags = computeStitchFlags(this.wanted, chunkFrame(root));
     }
     if (this.boundsMaxHeight !== detail.maxHeight) {
       this.boundsMaxHeight = detail.maxHeight;
       for (const entry of this.entries.values()) this.fitBounds(entry.mesh.geometry, entry.patch, detail);
     }
-    this.build(camera, detail, bake, maxTextureSize);
+    this.build(camera, detail, bake, maxTextureSize, advanceBase);
     this.swap();
   }
 
@@ -105,11 +109,14 @@ export class ChunkPatchRenderer {
     geometry.boundingSphere = geometry.boundingBox.getBoundingSphere(new THREE.Sphere());
   }
 
-  private build(camera: THREE.PerspectiveCamera, detail: ChunkDetail, bake: BakeChunkPatch, maxTextureSize: number): void {
+  private build(camera: THREE.PerspectiveCamera, detail: ChunkDetail, bake: BakeChunkPatch, maxTextureSize: number, advanceBase: AdvanceChunkBase): void {
     const root = this.root!;
     const cap = bakeSamplesCap(this.wanted.length, maxTextureSize);
     let builds = 0;
-    let texels = 0;
+    // Half the budget goes to the base map's upgrade, so patches keep building while it bakes.
+    const base = advanceBase(root, MAX_BAKE_TEXELS_PER_FRAME / 2);
+    if (base.switched) this.markAllStale();
+    let texels = base.texels;
     for (const patch of this.wanted) {
       if (builds >= MAX_BUILDS_PER_FRAME || texels >= MAX_BAKE_TEXELS_PER_FRAME) break;
       const key = patchKey(patch);
@@ -123,15 +130,19 @@ export class ChunkPatchRenderer {
           this.fitBounds(entry.mesh.geometry, patch, detail);
           entry.flags = flags;
         }
-        // A patch grown on screen gets a bigger bake; one that shrank keeps its own.
-        if (samples > entry.bakeSamples) {
-          entry.target.dispose();
-          entry.target = createPatchTarget(samples);
+        // A patch grown on screen gets a bigger bake; one that shrank keeps its own size, re-baked if stale.
+        // A stale patch keeps its old image until the full map is ready, so a change bakes it once, not twice.
+        if (samples > entry.bakeSamples || (entry.stale && !base.pending)) {
+          if (samples > entry.bakeSamples) {
+            entry.target.dispose();
+            entry.target = createPatchTarget(samples);
+            entry.bakeSamples = samples;
+          }
           if (!bake(patch, entry.target, root)) return;
-          entry.bakeSamples = samples;
-          this.setTextureUniforms(entry.material, entry.target, samples);
+          entry.stale = false;
+          this.setTextureUniforms(entry.material, entry.target, entry.bakeSamples);
           builds++;
-          texels += samples * samples;
+          texels += entry.bakeSamples * entry.bakeSamples;
         }
         continue;
       }
@@ -145,7 +156,7 @@ export class ChunkPatchRenderer {
       this.fitBounds(mesh.geometry, patch, detail);
       mesh.visible = false;
       this.group.add(mesh);
-      this.entries.set(key, { patch, mesh, material, target, bakeSamples: samples, flags });
+      this.entries.set(key, { patch, mesh, material, target, bakeSamples: samples, flags, stale: false });
       builds++;
       texels += samples * samples;
     }
@@ -156,8 +167,7 @@ export class ChunkPatchRenderer {
   // The drawn ground's height at chunk point (x, z), read from the deepest shown
   // patch's bake, as Cesium reads terrain height from the most detailed loaded
   // tile. Null off the chunk or before a patch shows. Same texel mapping as chunk.vert.glsl.
-  lastSampleDepth = -1; // TEMP [B55]
-  sampleHeight(renderer: THREE.WebGLRenderer, x: number, z: number, maxHeight: number): number | null {
+  sampleHeight(renderer: THREE.WebGLRenderer, x: number, z: number, maxHeight: number, heightBase: number): number | null {
     const root = this.root;
     if (!root) return null;
     const chunkU = x / this.chunkSize + 0.5;
@@ -171,7 +181,6 @@ export class ChunkPatchRenderer {
       if (!best || entry.patch.depth > best.patch.depth) best = entry;
     }
     if (!best) return null;
-    this.lastSampleDepth = best.patch.depth; // TEMP [B55]
     const fractions = rootFractions(root, best.patch);
     const size = best.bakeSamples + 2 * PATCH_BORDER_TEXELS;
     const texelAt = (fraction: number, min: number, max: number) =>
@@ -186,17 +195,18 @@ export class ChunkPatchRenderer {
     const bottom = this.readBuffer[1] * (1 - blendX) + this.readBuffer[5] * blendX;
     const top = this.readBuffer[9] * (1 - blendX) + this.readBuffer[13] * blendX;
     const raw = bottom * (1 - blendY) + top * blendY;
-    return Math.max(0, raw + 0.5) * maxHeight;
+    return Math.max(0, raw + heightBase) * maxHeight;
   }
 
   private swap(): void {
-    const wantedIndex = buildLeafIndex(this.wanted);
+    const frame = chunkFrame(this.root!);
+    const wantedIndex = buildLeafIndex(this.wanted, frame);
     const wantedKeys = new Set(this.wanted.map(patchKey));
     const remainingOld: TerrainPatch[] = [];
     for (const key of [...this.shown]) {
       if (wantedKeys.has(key)) continue;
       const entry = this.entries.get(key)!;
-      const replacements = coveringLeaves(wantedIndex, entry.patch);
+      const replacements = coveringLeaves(wantedIndex, entry.patch, frame);
       if (replacements.length > 0 && replacements.every((leaf) => this.entries.has(patchKey(leaf)))) {
         for (const leaf of replacements) this.show(patchKey(leaf));
         this.remove(key);
@@ -205,11 +215,11 @@ export class ChunkPatchRenderer {
       }
     }
     // A built patch not overlapping anything old shows at once.
-    const oldIndex = buildLeafIndex(remainingOld);
+    const oldIndex = buildLeafIndex(remainingOld, frame);
     for (const patch of this.wanted) {
       const key = patchKey(patch);
       if (this.shown.has(key) || !this.entries.has(key)) continue;
-      if (coveringLeaves(oldIndex, patch).length === 0) this.show(key);
+      if (coveringLeaves(oldIndex, patch, frame).length === 0) this.show(key);
     }
     // Built but no longer wanted or shown: drop it.
     for (const key of [...this.entries.keys()]) {

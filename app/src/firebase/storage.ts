@@ -1,6 +1,6 @@
 import { collection, deleteDoc, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
 import { db } from './client';
-import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
+import type { ErosionFilterShape, NoiseLayer, StrokeRecord } from '../map/heightmap';
 import type { ErosionRates } from '../erosion/erosionEngine';
 import type { SerializedPatch } from '../planet/patch';
 import type { PlanetSettings } from '../planet/planetControls';
@@ -19,6 +19,7 @@ export interface SavedErosionRun {
   gridResolution: number;
   seaLevel: number;
   patch: SerializedPatch;
+  filterShape?: ErosionFilterShape; // absent in saves from before the gully sliders were saved
 }
 
 // Each user's saved planets live in a subcollection, not one fixed document

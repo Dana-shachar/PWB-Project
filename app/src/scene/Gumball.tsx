@@ -11,7 +11,7 @@ type ViewPreset = 'top' | 'front' | 'side' | 'perspective';
 // however many are currently set via setTargets(). `referenceDistance` is
 // this target's own "100% zoom"/reset distance (e.g. the planet's
 // DEFAULT_CAMERA_DISTANCE vs. the land chunk's own much smaller
-// CHUNK_CAMERA_DISTANCE) — without it, zoom/reset used one fixed distance
+// distance, a ratio of its Size) — without it, zoom/reset used one fixed distance
 // for every target regardless of scale, so the chunk's zoom slider could
 // only ever move it farther away, never closer (Dana, 2026-09-23: "zoom
 // isn't working for the chunk"). See ISSUES.md, 2026-09-23.

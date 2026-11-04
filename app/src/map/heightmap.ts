@@ -321,7 +321,40 @@ export interface HeightmapParams {
 // [B66] Texels across the chunk's base map (height in R and G, about 134 MB): about 4 m apart on a 16 km chunk. It also
 // serves the water and shadows (getChunkBaseTexture), so all of the chunk's terrain comes from one smooth source.
 const CHUNK_BASE_SAMPLES = 4096;
+// Baked at once after a change (about 1/16 of the full map's cost); the full map then bakes in row bands under the
+// chunk renderer's per-frame budget and replaces it: small first, then upgraded, as the patches do.
+const CHUNK_BASE_PREVIEW_SAMPLES = 1024;
 const CHUNK_BASE_BORDER = 0; // edge texels sit exactly on the chunk's edges, as the water and shadows expect
+
+interface ChunkBaseInfo {
+  face: number;
+  min: THREE.Vector2;
+  max: THREE.Vector2;
+  origin: THREE.Vector2;
+  spacing: number;
+}
+
+// The map's first and last texel centers, the same widening bakeRegionInto applies.
+function chunkBaseInfo(face: number, min: THREE.Vector2, max: THREE.Vector2, origin: THREE.Vector2, samples: number): ChunkBaseInfo {
+  const spacingX = (max.x - min.x) / (samples - 1);
+  const spacingY = (max.y - min.y) / (samples - 1);
+  return {
+    face,
+    min: new THREE.Vector2(min.x - CHUNK_BASE_BORDER * spacingX, min.y - CHUNK_BASE_BORDER * spacingY),
+    max: new THREE.Vector2(max.x + CHUNK_BASE_BORDER * spacingX, max.y + CHUNK_BASE_BORDER * spacingY),
+    origin: origin.clone(),
+    spacing: spacingX,
+  };
+}
+
+function createChunkBaseTarget(size: number): THREE.WebGLRenderTarget {
+  return new THREE.WebGLRenderTarget(size, size, {
+    type: THREE.FloatType,
+    format: THREE.RGFormat,
+    minFilter: THREE.LinearFilter, // smooth for the water and shadows; the patches' cubic read uses texel centers
+    magFilter: THREE.LinearFilter,
+  });
+}
 
 export interface RegionParams {
   layers: NoiseLayer[];
@@ -478,8 +511,11 @@ export class HeightmapPipeline {
   // [B66] The land chunk's own height map: the whole chunk baked once at high resolution, height only. Chunk patches
   // resample it (chunkPatchMaterial) instead of recomputing the layers, which round to about 0.6 m up close.
   private chunkPatchMaterial: THREE.ShaderMaterial;
-  private chunkBaseTarget: THREE.WebGLRenderTarget | null = null;
-  private chunkBase: { face: number; min: THREE.Vector2; max: THREE.Vector2; origin: THREE.Vector2; spacing: number } | null = null;
+  private chunkBaseTarget: THREE.WebGLRenderTarget | null = null; // the full map, also read by the water and shadows
+  private chunkBasePreviewTarget: THREE.WebGLRenderTarget | null = null;
+  private chunkBaseActive: THREE.WebGLRenderTarget | null = null; // whichever the patches resample now
+  private chunkBase: ChunkBaseInfo | null = null; // the active map's placement
+  private chunkBaseUpgrade: { params: RegionParams; nextRow: number; info: ChunkBaseInfo } | null = null;
   private chunkBaseKey = '';
   private chunkBaseLayers: NoiseLayer[] | null = null;
   private paintRevision = 0;
@@ -498,39 +534,53 @@ export class HeightmapPipeline {
   private histogramMaterial: THREE.ShaderMaterial;
   private readonly histogramSampleCount: number;
 
-  // [B66] Bakes the land chunk's base map when the chunk, layers, paint or planet settings changed since the last one.
+  // [B66] Bakes the land chunk's base map when the chunk, layers, paint or planet settings changed since the last one:
+  // the preview at once, then the full map through advanceChunkBaseUpgrade.
   ensureChunkBase(renderer: THREE.WebGLRenderer, layers: NoiseLayer[], face: number, min: THREE.Vector2, max: THREE.Vector2, origin: THREE.Vector2): void {
     const key = [face, min.x, min.y, max.x, max.y, this.detailAmount, this.shoreSeaLevel, this.planetRadiusMeters, this.paintRevision, this.waterMapRevision, this.erosionFilterKey].join(',');
-    if (key === this.chunkBaseKey && layers === this.chunkBaseLayers && this.chunkBaseTarget) return;
-    const size = CHUNK_BASE_SAMPLES + 2 * CHUNK_BASE_BORDER;
-    if (!this.chunkBaseTarget) {
-      this.chunkBaseTarget = new THREE.WebGLRenderTarget(size, size, {
-        type: THREE.FloatType,
-        format: THREE.RGFormat,
-        minFilter: THREE.LinearFilter, // smooth for the water and shadows; the patches' cubic read uses texel centers
-        magFilter: THREE.LinearFilter,
-      });
-    }
+    if (key === this.chunkBaseKey && layers === this.chunkBaseLayers && this.chunkBaseActive) return;
+    this.chunkBaseTarget ??= createChunkBaseTarget(CHUNK_BASE_SAMPLES + 2 * CHUNK_BASE_BORDER);
+    this.chunkBasePreviewTarget ??= createChunkBaseTarget(CHUNK_BASE_PREVIEW_SAMPLES + 2 * CHUNK_BASE_BORDER);
+    const preview = this.chunkBasePreviewTarget;
     this.material.uniforms.uElevationInRed.value = 1;
-    this.bakeRegionInto(renderer, { layers, face, min, max, resolution: size, borderTexels: CHUNK_BASE_BORDER, localOrigin: origin }, this.chunkBaseTarget);
+    this.bakeRegionInto(renderer, { layers, face, min, max, resolution: preview.width, borderTexels: CHUNK_BASE_BORDER, localOrigin: origin }, preview);
     this.material.uniforms.uElevationInRed.value = 0;
-    // The map's first and last texel centers, the same widening bakeRegionInto applies.
-    const spacingX = (max.x - min.x) / (CHUNK_BASE_SAMPLES - 1);
-    const spacingY = (max.y - min.y) / (CHUNK_BASE_SAMPLES - 1);
-    this.chunkBase = {
-      face,
-      min: new THREE.Vector2(min.x - CHUNK_BASE_BORDER * spacingX, min.y - CHUNK_BASE_BORDER * spacingY),
-      max: new THREE.Vector2(max.x + CHUNK_BASE_BORDER * spacingX, max.y + CHUNK_BASE_BORDER * spacingY),
-      origin: origin.clone(),
-      spacing: spacingX,
+    this.chunkBaseActive = preview;
+    this.chunkBase = chunkBaseInfo(face, min, max, origin, CHUNK_BASE_PREVIEW_SAMPLES);
+    this.chunkBaseUpgrade = {
+      params: { layers, face, min, max, resolution: this.chunkBaseTarget.width, borderTexels: CHUNK_BASE_BORDER, localOrigin: origin },
+      nextRow: 0,
+      info: chunkBaseInfo(face, min, max, origin, CHUNK_BASE_SAMPLES),
     };
     this.chunkBaseKey = key;
     this.chunkBaseLayers = layers;
   }
 
-  // The chunk base map, for the chunk's water and shadows: height in G, as the chunk's shaders read it.
+  // Bakes the next rows of the full base map, as many as texelBudget allows (the scissor limits drawing to them).
+  // switched is true once the last band is done and the full map has replaced the preview; pending while it is still baking.
+  advanceChunkBaseUpgrade(renderer: THREE.WebGLRenderer, texelBudget: number): { texels: number; switched: boolean; pending: boolean } {
+    const upgrade = this.chunkBaseUpgrade;
+    const target = this.chunkBaseTarget;
+    if (!upgrade || !target) return { texels: 0, switched: false, pending: false };
+    const size = target.width;
+    const rows = Math.max(1, Math.min(size - upgrade.nextRow, Math.floor(texelBudget / size)));
+    target.scissor.set(0, upgrade.nextRow, size, rows);
+    target.scissorTest = true;
+    this.material.uniforms.uElevationInRed.value = 1;
+    this.bakeRegionInto(renderer, upgrade.params, target);
+    this.material.uniforms.uElevationInRed.value = 0;
+    target.scissorTest = false;
+    upgrade.nextRow += rows;
+    if (upgrade.nextRow < size) return { texels: rows * size, switched: false, pending: true };
+    this.chunkBaseActive = target;
+    this.chunkBase = upgrade.info;
+    this.chunkBaseUpgrade = null;
+    return { texels: rows * size, switched: true, pending: false };
+  }
+
+  // The finished chunk base map, for the chunk's water and shadows: never the full map while its bands are being baked.
   getChunkBaseTexture(): { texture: THREE.Texture; resolution: number } | null {
-    return this.chunkBaseTarget ? { texture: this.chunkBaseTarget.texture, resolution: this.chunkBaseTarget.width } : null;
+    return this.chunkBaseActive ? { texture: this.chunkBaseActive.texture, resolution: this.chunkBaseActive.width } : null;
   }
 
   // Part of the chunk base map's key, so a radius change re-bakes it.
@@ -996,49 +1046,6 @@ export class HeightmapPipeline {
     this.riverTarget = null;
   }
 
-  // TEMP: the six faces baked plain, with the water map, and with the water map and the erosion filter: the mean
-  // change of each, the filter's largest drop, and how many samples the filter moved across sea level (should be 0).
-  probeWaterMap(renderer: THREE.WebGLRenderer, layers: NoiseLayer[]): Record<string, number> {
-    const uniforms = this.material.uniforms;
-    const mapWas = uniforms.uWaterMapEnabled.value;
-    const filterWas = uniforms.uErosionFilterStrength.value;
-    const seaLevel = this.shoreSeaLevel ?? 0;
-    let mapSum = 0;
-    let filterSum = 0;
-    let filterLargestDrop = 0;
-    let coastCrossings = 0;
-    let count = 0;
-    let landCount = 0;
-    let landHeldAtSea = 0;
-    let landFilterSum = 0;
-    const bake = (params: RegionParams, map: number, filter: number) => {
-      uniforms.uWaterMapEnabled.value = map;
-      uniforms.uErosionFilterStrength.value = filter;
-      return this.getRegionElevationData(renderer, this.renderRegion(renderer, params)).data.slice();
-    };
-    for (let face = 0; face < 6; face++) {
-      const params = { layers, face, min: new THREE.Vector2(-1, -1), max: new THREE.Vector2(1, 1), localOrigin: new THREE.Vector2(0, 0), resolution: 64 };
-      const plain = bake(params, 0, 0);
-      const mapped = bake(params, mapWas, 0);
-      const filtered = bake(params, mapWas, filterWas);
-      for (let idx = 0; idx < plain.length; idx++) {
-        mapSum += mapped[idx] - plain[idx];
-        filterSum += filtered[idx] - mapped[idx];
-        filterLargestDrop = Math.min(filterLargestDrop, filtered[idx] - mapped[idx]);
-        if ((mapped[idx] >= seaLevel) !== (filtered[idx] >= seaLevel)) coastCrossings++;
-        if (mapped[idx] >= seaLevel) {
-          landCount++;
-          landFilterSum += filtered[idx] - mapped[idx];
-          if (filterWas > 0 && filtered[idx] - seaLevel < 1e-4) landHeldAtSea++;
-        }
-        count++;
-      }
-    }
-    uniforms.uWaterMapEnabled.value = mapWas;
-    uniforms.uErosionFilterStrength.value = filterWas;
-    return { mapMeanChange: mapSum / Math.max(1, count), filterMeanChange: filterSum / Math.max(1, count), filterLargestDrop, coastCrossings, filterStrength: filterWas, waterMapOn: mapWas, seaLevel, terrainTop: uniforms.uTerrainTop.value, valleySpacingKm: uniforms.uValleySpacing.value / 1000, landShare: landCount / Math.max(1, count), landShareHeldAtSea: landHeldAtSea / Math.max(1, landCount), landMeanFilterChange: landFilterSum / Math.max(1, landCount) };
-  }
-
   // Bakes one area of the planet at its own resolution, instead of the whole
   // globe at the shared map's fixed size. A region is a cube face plus a
   // rectangle on it — the same way a subdividing patch is described, so this
@@ -1121,11 +1128,11 @@ export class HeightmapPipeline {
 
     const base = params.fromChunkBase && this.chunkBase && this.chunkBase.face === face ? this.chunkBase : null;
     const quad = this.scene.children[0] as THREE.Mesh;
-    if (base && origin && this.chunkBaseTarget) {
-      uniforms.uChunkBase.value = this.chunkBaseTarget.texture;
+    if (base && origin && this.chunkBaseActive) {
+      uniforms.uChunkBase.value = this.chunkBaseActive.texture;
       (uniforms.uChunkBaseMin.value as THREE.Vector2).set(base.min.x - origin.x, base.min.y - origin.y);
       (uniforms.uChunkBaseMax.value as THREE.Vector2).set(base.max.x - origin.x, base.max.y - origin.y);
-      uniforms.uChunkBaseSamples.value = this.chunkBaseTarget.width;
+      uniforms.uChunkBaseSamples.value = this.chunkBaseActive.width;
       uniforms.uChunkBaseSpacing.value = base.spacing;
       quad.material = this.chunkPatchMaterial;
     }
@@ -1569,6 +1576,7 @@ export class HeightmapPipeline {
     this.strokePathScene.remove(this.strokePathScene.children[0]);
     this.chunkPatchMaterial.dispose();
     this.chunkBaseTarget?.dispose();
+    this.chunkBasePreviewTarget?.dispose();
     this.reduceMaterial.dispose();
     this.reduceScene.remove(this.reduceScene.children[0]);
     this.histogramMaterial.dispose();
