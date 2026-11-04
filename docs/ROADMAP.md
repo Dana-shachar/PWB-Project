@@ -23,6 +23,24 @@
 > 4. ⚪ Layered haze (after Dana looks at the haze fix), then vegetation (`ROADMAP` item 5 below), then per-pixel grain `[B122]`.
 > 5. ⚪ Walk mode jitter on a fresh planet, if it still shows after `[B129]`.
 >
+> **Open decisions for Dana (ask, don't assume).**
+> - ❓ The vertical slice's planet list and her real deadline.
+> - ❓ Vegetation stages as build phases only, or grown over time by the world clock (item 5 below).
+> - ❓ Whether to commit `README.md` (concept, research question, future features, walk mode mention).
+> - ❓ Delete the old handover file and its screenshots.
+>
+> **Not yet confirmed by Dana's own eye.** Lake ripples at the stronger setting (`LAKE_RIPPLE_STRENGTH` 0.6, `RIPPLE_TILE_SHARE` 0.08), the haze reaching the horizon (`[B128]`), the stripes fix on her own walk (`[B129]`), Eye height's 200 m top, lake tides (`LAKE_TIDE_BOOST` 4, never seen with a moon on). All tunable.
+>
+> **How to test in Chrome.**
+> - Test planet: New Planet 04 (land, sea and a big lake square). Erosion must be on for lakes. New Planet 06 was deleted.
+> - Find the app's objects from the browser: walk the React tree from `#root` for `memoizedProps.sharedRenderer.renderer`, the `HeightmapPipeline` (has `ensureChunkBase`), and the chunk's gumball target (has `toggleWalkMode`, `cameraControls`); hook `ChunkPatchRenderer.prototype.update` (import its module URL from `performance.getEntriesByType('resource')`) to get the patch renderer.
+> - For a bug Dana sees but you can't reproduce, install a per-frame recorder in your tab, let her reproduce it there, then read the log; this is how `[B129]` was found. Keep any GPU reads in it rare, or the tab lags.
+> - The walk button's screen position moves with the window size; take a screenshot before clicking.
+>
+> **Deadlines.** Session 12's weekly push is due Wed 2026-11-11 at 10:10 am: its entry in `WEEKLY-PUSHES.md` is filled through today; add a screenshot copy in `docs/screenshots/` and that week's architecture diagram (new dated file, `docs/diagrams/build_architecture.py`, local only) for this week's new modules (`rivers/chunkLakes.worker.ts`, `voxel/chunkLakes.ts`).
+>
+> **Still open from the seventeenth block below.** `[B121]` ridge (deferred by Dana), erosion units, soft close-ups and freeze `[B124]` (both deferred), the Undo question for gully sliders.
+>
 > [!IMPORTANT]
 > **Start from here (2026-11-04, seventeenth handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. This is newer than the block below.*
 >
