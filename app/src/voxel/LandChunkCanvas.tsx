@@ -20,7 +20,8 @@ import type { ElevationData } from './chunkGrid';
 import { ChunkLakes } from './chunkLakes';
 import { squareSizeKm } from './areaSelect';
 import { liquidNamed, viscosityAt } from '../rivers/riverClimate';
-import { createChunkWater, setChunkWaterLight, setChunkWaterSky, setChunkWaterTide, updateChunkWater, updateChunkWaterFrame, type ChunkWater } from './chunkWater';
+import { createChunkMap } from './chunkMap';
+import { createChunkWater, setChunkWaterLight, setChunkWaterSky, setChunkWaterTide, updateChunkWater, updateChunkWaterFrame, WATER_SHEET_SEGMENTS, type ChunkWater } from './chunkWater';
 import { tideHeight } from '../atmosphere/tides';
 import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
@@ -37,6 +38,7 @@ const chunkFragmentGlsl = terrainGlsl + landLayersGlsl + hazeGlsl + chunkFragmen
 // 2026-09-23.
 // How high the haze reaches before thinning by 1/e, as a share of the terrain's height (maxHeight). Inferred, TUNABLE.
 const HAZE_SCALE_SHARE = 0.5;
+const WALK_MAP_REDRAW_MS = 2000; // how often the walk map is redrawn while walking. Inferred, TUNABLE
 
 export interface LandChunkCanvasHandle {
   getGumballTarget(): GumballTarget | null;
@@ -270,6 +272,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     orbitControls.zoomToCursor = true;
     orbitControls.maxDistance = CHUNK_CAMERA_MAX_DISTANCE; // inside the far plane, so a large chunk is never cut off
     orbitControls.screenSpacePanning = false;
+    // The walk map (voxel/chunkMap.ts): redrawn every few seconds while walking, so lakes and new patches show.
+    const walkMap = createChunkMap();
+    let walkMapDrawnAt = -Infinity;
+    const walkEuler = new THREE.Euler();
     gumballTargetRef.current = {
       camera: perspectiveCamera,
       cameraControls: orbitControls,
@@ -291,6 +297,12 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       setWalkSpeed: (multiplier) => {
         walkMode.speedMultiplier = multiplier;
       },
+      walkMap: () => {
+        if (!walkMode.active) return null;
+        walkEuler.setFromQuaternion(perspectiveCamera.quaternion, 'YXZ');
+        return { image: walkMap.canvas, x: perspectiveCamera.position.x, z: perspectiveCamera.position.z, yaw: walkEuler.y, chunkSize: patchSettingsRef.current.chunkSize };
+      },
+      teleport: (x, z) => walkMode.teleport(x, z),
     };
 
     // Walk mode ([walkMode.ts]): entering saves the orbit camera and turns orbit off; leaving restores it.
@@ -298,11 +310,14 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     // The sea or the lake at a point, whichever is higher, in world height (applyTide's rule for the lake); null if none.
     // Both views keep the camera above it, so it never sees the water from underneath.
     function waterHeightAt(x: number, z: number): number | null {
-      const sea = water.mesh.visible ? water.mesh.position.y : null;
       const size = Math.max(patchSettingsRef.current.chunkSize, 1e-6);
       const u = x / size + 0.5;
       const v = z / size + 0.5;
-      const lake = u >= 0 && u <= 1 && v >= 0 && v <= 1 ? chunkLakes.levelAt(u, v) : null;
+      const onChunk = u >= 0 && u <= 1 && v >= 0 && v <= 1;
+      // The sea counts only where it can reach, not in a dip below it with no way in.
+      const seaReaches = !onChunk || chunkLakes.seaReaches(u, v, water.mesh.material.uniforms.uSeaLevel.value as number);
+      const sea = water.mesh.visible && seaReaches ? water.mesh.position.y : null;
+      const lake = onChunk ? chunkLakes.drawnLevelAt(u, v, WATER_SHEET_SEGMENTS) : null;
       const { heightBase, maxHeight } = patchSettingsRef.current;
       const lakeHeight = lake === null ? null : Math.max(0, lake + heightBase) * Math.max(0, maxHeight);
       return sea === null ? lakeHeight : lakeHeight === null ? sea : Math.max(sea, lakeHeight);
@@ -339,9 +354,14 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       return walkMode.active;
     }
 
+    // The ground for the cameras, picking and walk mode: the preview map's (chunkLakes.ground) once it has arrived. The
+    // separate 257-sample grid was ~8 km off the drawn ground, up to 61 km, so the orbit camera sank into hills
+    // (measured 2026-11-04); it stays only as the first frames' stand-in.
     function currentGround(): ChunkGround | null {
       const settings = patchSettingsRef.current;
-      return settings.groundHeights ? { heights: settings.groundHeights, chunkSize: settings.chunkSize, maxHeight: Math.max(0, settings.maxHeight), heightBase: settings.heightBase } : null;
+      const preview = chunkLakes.ground;
+      const heights = preview ? { data: preview.data, width: preview.size, height: preview.size } : settings.groundHeights;
+      return heights ? { heights, chunkSize: settings.chunkSize, maxHeight: Math.max(0, settings.maxHeight), heightBase: settings.heightBase } : null;
     }
     // Before a drag or wheel zoom, the pivot moves to the ground under the cursor
     // (Cesium picks the terrain), kept on the view line so the view doesn't jump.
@@ -437,6 +457,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uPatchUvMax: { value: new THREE.Vector2(1, 1) },
         uGradientStepUv: { value: 32 / 1024 },
         uBakeSamples: { value: 0 },
+        uMorphStart: { value: 0 }, // per patch (ChunkPatchRenderer); 0 here leaves the voxel mesh unblended
+        uMorphEnd: { value: 0 },
         uBorderTexels: { value: 0 },
         uMaxHeight: { value: maxHeight },
         uHeightBase: { value: heightBase },
@@ -491,6 +513,23 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
           perspectiveCamera.updateProjectionMatrix();
         }
         walkMode.update(deltaSeconds);
+        const mapRenderer = sharedRendererRef.current.renderer;
+        if (mapRenderer && walkMode.progress >= 1 && performance.now() - walkMapDrawnAt > WALK_MAP_REDRAW_MS) {
+          walkMapDrawnAt = performance.now();
+          // Seen from above: the eye is the map's camera and there is no haze, then both go back for the view.
+          walkMap.render(mapRenderer, scene, patchSettingsRef.current.chunkSize, Math.max(patchSettingsRef.current.maxHeight, 1) * 2, (eye) => {
+            const uniformSets = [material.uniforms, water.mesh.material.uniforms];
+            const saved = uniformSets.map((uniforms) => ({ eye: (uniforms.uCameraPosition.value as THREE.Vector3).clone(), haze: uniforms.uHazeDensity.value as number }));
+            for (const uniforms of uniformSets) {
+              (uniforms.uCameraPosition.value as THREE.Vector3).copy(eye);
+              uniforms.uHazeDensity.value = 0;
+            }
+            return () => uniformSets.forEach((uniforms, i) => {
+              (uniforms.uCameraPosition.value as THREE.Vector3).copy(saved[i].eye);
+              uniforms.uHazeDensity.value = saved[i].haze;
+            });
+          });
+        }
       } else {
         orbitControls.update();
         const ground = currentGround();
@@ -537,12 +576,16 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
           chunkSize: settings.chunkSize,
           minHeight: chunkBaseDepth(settings.chunkSize),
           maxHeight: Math.max(settings.maxHeight, 0),
-          ground: settings.groundHeights ? { data: settings.groundHeights.data, size: settings.groundHeights.width, heightBase: settings.heightBase } : undefined,
+          // The preview map's ground when it has arrived: the coarse grid misplaced patches by kilometers in height.
+          ground: chunkLakes.ground
+            ? { data: chunkLakes.ground.data, size: chunkLakes.ground.size, heightBase: settings.heightBase }
+            : settings.groundHeights ? { data: settings.groundHeights.data, size: settings.groundHeights.width, heightBase: settings.heightBase } : undefined,
         },
         settings.bakePatch,
         sharedRendererRef.current.renderer?.capabilities.maxTextureSize ?? 2048,
         settings.advanceChunkBase,
       );
+      walkMode.settleEye(); // after the ground pieces swap in, so the eye is never inside new ground
       // The shadows and water follow the finished map, so they switch with the patches when the full one is ready.
       const baseTexture = settings.chunkBaseTexture();
       if (baseTexture) {
@@ -564,6 +607,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       viewportElement.removeEventListener('pointerleave', markPointerOut);
       viewportElement.removeEventListener('wheel', pivotOnGround, { capture: true });
       sharedRenderer.unregisterView('landChunk');
+      walkMap.dispose();
       walkMode.dispose();
       orbitControls.dispose();
       patchRenderer.dispose();

@@ -925,12 +925,54 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - From the code: the fill spread a lake to any lower neighbor, and nothing stopped it at the sea. The fix: the sea stops it, as it stops the chunk's own lakes. Measured after: 0 lake cells over the sea floor. The "13%" quoted before the fix was measured against the sea including the tide, so it isn't valid evidence.
 
 ### [B133] Side walls and top disagree on where the coast meets the edge · `minor`
-**🔴 Open** · **Found:** 2026-11-04 · **Where:** the walls (`uChunkHeightMap`) against the drawn land (patches)
-- Dana's screenshot: the water strip on the side starts left of where the coastline on top meets the edge. Likely cause, not measured: the walls place the shore from the base map, the top from the patch bakes. The measurement timed out with the tab in the background.
+**✅ Fixed 2026-11-05** · **Where:** the walls against the drawn land
+- The base map and the drawn land agree within 0.03 units on all four sides (measured), so the two-maps theory was wrong. The mismatch came from the coarse patches near the edge and from planet lakes standing without a rim (`[B134]`, `[B142]`).
 
 ### [B134] Water walls rise too high · `wrong but workable`
-**🔴 Open** · **Found:** 2026-11-04 · **Where:** not yet known
-- Dana's screenshot: on a far face the water wall rises above the sea's surface. Measured on New Planet 04: the tide lifts the sea from 0.284 to 0.362 in raw height, the 8% cap (about 25 km on that square). A lead, not confirmed as the cause.
+**✅ Fixed 2026-11-05** · **Where:** `floodPlanetLakes` and `spillHeights` in `rivers/chunkLakes.worker.ts`, the water shaders
+- A planet lake's level was flooded over the chunk's finer ground with no rim check, so it stood as a cliff of water beside lower ground: 480 edges, 45 m tall, on one square. Each cell's water is now capped at its spill height (Priority-Flood from the sea, Barnes et al. 2014): 0 cliffs.
+- Also: lakes no longer take the tide (`LAKE_TIDE_BOOST` 0, it moved a big lake 30 m); the sea shows only where its spill height lets it reach.
+
+### [B135] Walk mode ran at 40 fps · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `sampleHeight` in `voxel/ChunkPatchRenderer.ts`
+- Five synchronous GPU reads a frame for the eye's height cost 21.7 of 24.6 ms. Each patch's heights are now copied back once without stalling and read on the CPU: 16.7 ms, 0 stalls.
+
+### [B136] Black hexagon in walk mode's sky · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `shaders/atmosphere/skyDome.vert.glsl`
+- The dome at 90% of the far plane, with walk mode's tiny near plane, rounded past the far plane and lost whole facets. The sky is drawn at the far plane (`xyww`, LearnOpenGL "Cubemaps"): 95 of 95 black frames to 0.
+
+### [B137] Cut walls streaked through far hills · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `chunk.frag.glsl`
+- From inside the chunk a cut side's wall stands behind the ground and z-fought through it at distance. Walls now draw only when the camera is outside their side: 153 marked pixels to the 21 of the surface's own grain.
+
+### [B138] Walking under a lake's edge · `wrong but workable`
+**✅ Fixed 2026-11-04** · **Where:** `drawnLevelAt` in `voxel/chunkLakes.ts`
+- The water sheet reaches a cell past each lake; walk mode read only the cell under the eye, so 43 cells drew water it didn't know about, up to 127 m deep. It now reads the sheet's own reach: 0 cells.
+
+### [B139] The chunk's coarse ground copy was kilometers off · `blocks work`
+**✅ Fixed 2026-11-05** · **Where:** `ChunkLakes.ground`, `currentGround` in `voxel/LandChunkCanvas.tsx`
+- The 257-sample grid differed from the drawn ground by 7.75 km typically, up to 61 km, so patch detail near the walker stayed coarse (4 km pieces), the orbit camera sank into hills and map jumps landed in lakes. Detail selection, the cameras, picking and the shore search now use the preview map (64 m typical). The grid still sets the height scale.
+
+### [B140] The orbit camera sliced the chunk open beside its edge · `wrong but workable`
+**✅ Fixed 2026-11-05** · **Where:** `keepAboveFlatGround` in `scene/controls.ts`
+- Outside the square the height above ground counted from zero, so the near plane reached 5.5 km with the edge 4.6 km away. Beside the chunk only its bounds now set the near plane.
+
+### [B141] Map jumps put the eye inside new ground · `wrong but workable`
+**✅ Fixed 2026-11-05** · **Where:** `settleEye`, `teleport` and `placeEye` in `scene/walkMode.ts`
+- The eye was set before the frame's patches swapped in, so a finer patch could leave it 80 m inside. It is placed again after the swap, eases both ways with a 0.5 m floor, and a jump glides there (the fly-in's ease, arcing as Cesium's flyTo does). 0 frames below ground in 6 jumps.
+
+### [B142] Cracks between patches of different detail · `wrong but workable`
+**✅ Fixed 2026-11-05** · **Where:** the chunk pass in `heightmap.frag.glsl`, `chunk.vert.glsl`, `morphRange` in `voxel/chunkPatches.ts`
+- Neighbors one level apart computed different heights at the same spot (up to 3.5 m), because each faded detail by its own sample count; skirts showed through as stripes. Detail now fades by mesh spacing, and each patch blends into its coarser level over the last 30% of its range (geometry clipmaps' transition regions, timed as CDLOD's morph). Seam gap: 0.01 m at most.
+
+### [B143] The crack fix flattened the eroded land · `wrong but workable`
+**✅ Fixed 2026-11-05** · **Where:** `planetDetail` in `heightmap.frag.glsl`
+- With detail fading by mesh spacing, patches coarser than the base map gave octaves a negative weight and subtracted the base map's own shape (up to 1.6 km). Weights no longer go below zero.
+- ⚠️ Detail finer than one mesh cell is gone, so close ground is coarser than before. Restoring it for shading per patch showed borders between patches (reverted); per-pixel band-limited grain (Quilez) is the planned way.
+
+### [B144] 74 km jumps at fixed points while walking · `minor`
+**🔴 Open** · **Found:** 2026-11-05
+- Two of thousands of probe readings jumped by up to 74 km in one test; a 300-frame rerun showed none. Not reproduced, cause unknown.
 
 ### [B124] The page freezes and ignores a hard refresh · `blocks work`
 **🟡 Tabled 2026-11-04** · **Found:** 2026-11-03

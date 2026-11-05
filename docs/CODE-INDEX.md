@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-11-04`
+`Last updated: 2026-11-05`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -197,7 +197,7 @@
 
 **rivers/chunkLakes.worker.ts**
 - What it is: the land chunk's lakes, solved off the main thread on the chunk's own ground, with the square's cut sides as outlets; returns each cell's level and the lake's share of the tide.
-- Key names: `ChunkLakesRequest`, `squareNeighbors`, `floodPlanetLakes` (the planet's lakes at their level over the chunk's ground), `lakeAreas`, `NO_CHUNK_LAKE`, `LAKE_TIDE_BOOST`.
+- Key names: `ChunkLakesRequest`, `squareNeighbors`, `spillHeights` (Priority-Flood from the sea: how high water stands before it drains), `floodPlanetLakes` (the planet's lakes at their level over the chunk's ground, capped at the spill height), `lakeAreas`, `NO_CHUNK_LAKE`, `LAKE_TIDE_BOOST`.
 
 **rivers/riverGrid.ts**
 - What it is: river spans as Catmull-Rom curves filed into lat-long buckets for the bake. Built but not drawn.
@@ -309,11 +309,11 @@
 
 **voxel/chunkPatches.ts**
 - What it is: which patches the chunk shows, the planet's screen-space-error rule over one flat square.
-- Key names: `selectChunkPatches`, `chunkFrame`, `patchGroundRange`, `ChunkDetail`, `rootFractions`, `chunkPatchWorldSize`, `chunkPatchBox`, `chunkPatchPixelWidth`, `chunkPatchInView`, `CHUNK_MAX_EXTRA_DEPTH`.
+- Key names: `selectChunkPatches`, `morphRange` (a patch's blend into its coarser level, CDLOD's last 30%), `chunkSelectionThreshold`, `chunkFrame`, `patchGroundRange`, `ChunkDetail`, `rootFractions`, `chunkPatchWorldSize`, `chunkPatchBox`, `chunkPatchPixelWidth`, `chunkPatchInView`, `CHUNK_MAX_EXTRA_DEPTH`.
 
 **voxel/ChunkPatchRenderer.ts**
 - What it is: bakes, builds and swaps the chunk's patches; each patch material shares the chunk material's uniforms.
-- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`, `fitBounds`, `sampleHeight`: the drawn ground height read from the deepest shown patch's bake), `BakeChunkPatch` (patch, target, root).
+- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`, `fitBounds`, `sampleHeight`: the drawn ground height from the deepest shown patch, blended as `chunk.vert.glsl` draws it, from a CPU copy read once without stalling (`requestHeights`), `settled`: every wanted patch built and shown; per-patch `uMorphStart`/`uMorphEnd`), `BakeChunkPatch` (patch, target, root).
 - Talks to: `bakePatchInto` on `SceneCanvasHandle`, `chunkPatchMesh.ts`.
 
 **voxel/chunkPatchMesh.ts**
@@ -322,7 +322,7 @@
 
 **scene/walkMode.ts**
 - What it is: the chunk's person view. Drag to look, long-press to walk forward (`HOLD_TO_WALK_MS`; dragging then steers), WASD or arrows to move, arrows turn, R/F look up and down, Shift runs, `[` `]` or the wheel scale speed (default 10x), Esc leaves. A 1.5 s fly-in eases the camera from the orbit view.
-- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`, `speedMultiplier`, `holding`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `HOLD_TO_WALK_MS`, `eyeHeightMeters` (set by the Eye height slider), `GROUND_PROBE_METERS` (the eye stands above the highest ground within it, rising at once), `flyIn`; water rules `getWaterHeight` (the sea or a lake at a point), `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
+- Key names: `WalkMode` (`enter`, `exit`, `update`, `progress`, `travelScale`, `speedMultiplier`, `holding`), `EYE_HEIGHT_METERS`, `WALK_SPEED_MPS`, `RUN_MULTIPLIER`, `HOLD_TO_WALK_MS`, `eyeHeightMeters` (set by the Eye height slider), `GROUND_PROBE_METERS`, `placeEye` (eases both ways, never closer than `MIN_CLEARANCE_METERS` to the floor), `settleEye` (run after the patch swap), `teleport` (the walk map's glide, `JUMP_ARC_SHARE`), `flyIn`; water rules `getWaterHeight` (the sea or a lake at a point), `nearestShore`, `nearestCoarseAbove`, `SHORE_INLAND_METERS`, `SHORE_VERIFY_ATTEMPTS`, `noShoreHeights` (walking stops at the shore, entering over water starts on the nearest shore, the eye never goes under the sea).
 - Talks to: `LandChunkCanvas.tsx` (saves and restores the orbit camera, eases fov/near/far with `progress`), `ChunkPatchRenderer.sampleHeight` for the eye height.
 
 **voxel/chunkWater.ts**
@@ -331,7 +331,11 @@
 
 **voxel/chunkLakes.ts**
 - What it is: keeps the chunk's lake levels fresh: reads the preview map without stalling a frame, keeps only the latest request, and holds the result as a texture (R the level, G the tide share), read by the sheet and both walls.
-- Key names: `ChunkLakes` (`update`, `texture`, `levelAt` for walk mode's water guard), `uChunkLakeLevels`; `getChunkPreview` in `map/heightmap.ts`.
+- Key names: `ChunkLakes` (`update`, `texture` RGBA: level, tide share, spill height, unused; `levelAt`, `drawnLevelAt` the sheet's own reach, `seaReaches`, `ground` the preview map's heights for detail selection and the cameras), `uChunkLakeLevels`; `getChunkPreview` in `map/heightmap.ts`.
+
+**voxel/chunkMap.ts**
+- What it is: the walk map, the chunk drawn from above with the scene's own materials into a 256-pixel image every 2 s while walking; the gumball shows it with the walker's dot and turns a click into a `teleport`.
+- Key names: `createChunkMap`, `WALK_MAP_REDRAW_MS` in `LandChunkCanvas.tsx`, `walkMap`/`teleport` on `GumballTarget`, `drawWalkMap` and `handleMapClick` in `scene/Gumball.tsx`.
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.

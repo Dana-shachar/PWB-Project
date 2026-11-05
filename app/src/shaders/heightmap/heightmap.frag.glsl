@@ -524,6 +524,7 @@ float applyBlendMode(float composite, float layerHeight, float blendMode) {
 // fading in only once the bake grid can show it, so it appears as you zoom.
 // The starting frequency and the amount are inferred, TUNABLE ([B51]).
 const float DETAIL_BASE_FREQUENCY = 64.0;
+const float CHUNK_MESH_CELLS = 64.0; // PATCH_GRID in planet/patch.ts: a chunk patch's mesh cells across
 const float DETAIL_SEED = 17.0;
 float planetDetail(vec3 position, float sampleSpacing, float coveredSpacing) {
   float value = 0.0;
@@ -533,7 +534,9 @@ float planetDetail(vec3 position, float sampleSpacing, float coveredSpacing) {
     float fade = octaveFade(sampleSpacing * frequency);
     if (fade <= 0.0) break; // every finer octave is faded out too
     // On a chunk patch, the share of this octave the base map already holds is left out, so each counts once.
-    if (coveredSpacing > 0.0) fade -= octaveFade(coveredSpacing * frequency);
+    // Never below zero: a patch coarser than the base map would otherwise subtract the base map's own shape (measured:
+    // up to 1.6 km once the fade went by mesh spacing, which flattened the eroded land, 2026-11-05).
+    if (coveredSpacing > 0.0) fade = max(0.0, fade - octaveFade(coveredSpacing * frequency));
     value += amplitude * fade * evalBaseGenerator(uLocalDetailOn > 0.5 && frequency > LOCAL_DETAIL_SCALE ? gLocalDelta * frequency + localOctaveShift(i) : position * frequency, DETAIL_SEED, 1.0);
     amplitude *= 0.5;
     frequency *= 2.0;
@@ -727,11 +730,20 @@ void main() {
 #ifdef CHUNK_PATCH_PASS
     // The chunk's base map, resampled, plus only the Roughness octaves finer than the map.
     float baseElevation = chunkBaseElevation(localFace);
+    // Detail fades by the mesh's spacing (its CHUNK_MESH_CELLS cells), not the bake's sample count, so every patch at one
+    // depth computes the same height; and the next-coarser level's (twice the spacing) goes in blue, which the vertex shader
+    // blends toward near the patch's outer range (geometry clipmaps' transition regions, GPU Gems 2 ch. 2). Neighbors one
+    // level apart disagreed by up to 3.5 m at the same spot, opening cracks (measured, 2026-11-05).
+    float fineElevation = baseElevation;
+    float parentElevation = baseElevation;
     if (uDetailAmount > 0.0) {
       float baseShoreFade = uShoreEnabled > 0.5 ? clamp((baseElevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
-      baseElevation += uDetailAmount * baseShoreFade * planetDetail(basePosition, sampleSpacing, uChunkBaseSpacing / length(cubePoint));
+      float meshSpacing = (uRegionMax.x - uRegionMin.x) / CHUNK_MESH_CELLS / length(cubePoint);
+      float coveredSpacing = uChunkBaseSpacing / length(cubePoint);
+      fineElevation += uDetailAmount * baseShoreFade * planetDetail(basePosition, meshSpacing, coveredSpacing);
+      parentElevation += uDetailAmount * baseShoreFade * planetDetail(basePosition, 2.0 * meshSpacing, coveredSpacing);
     }
-    gl_FragColor = vec4(0.5, baseElevation, 0.0, 1.0);
+    gl_FragColor = vec4(0.5, fineElevation, parentElevation, 1.0);
     return;
 #endif
   } else {

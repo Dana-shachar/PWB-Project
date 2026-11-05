@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { groundHeightAt, type ChunkGround } from '../voxel/chunkGround';
 
 // Chunk units are kilometers (Size (km)), so meters convert by 1000.
-const METERS_PER_UNIT = 1000;
+export const METERS_PER_UNIT = 1000;
 export const EYE_HEIGHT_METERS = 1.7;
 // About a typical adult's walking pace; the run factor is inferred from Unity's
 // Starter Assets sprint-to-move ratio (5.335 / 2.0). Both TUNABLE.
@@ -15,6 +15,12 @@ const MIN_TRAVEL_SCALE = 1;
 const MAX_TRAVEL_SCALE = 2000;
 const WHEEL_TRAVEL_FACTOR = 1.25;
 const HEIGHT_SMOOTHING_PER_SECOND = 10;
+// The eye eases toward its standing height both ways (Dana, 2026-11-04: "it needs to be much smoother"); it only jumps
+// when the ground would come within this of it, and only that far, so it is never inside a slope ([B129]). TUNABLE
+const MIN_CLEARANCE_METERS = 0.5;
+// A map jump glides there with the fly-in's ease, curving up by this share of the distance so the path clears the
+// ground between, as Cesium's camera flyTo arcs over terrain. Inferred, TUNABLE
+const JUMP_ARC_SHARE = 0.25;
 // The eye stands above the highest ground within this radius, so a rise just ahead lifts it before the camera reaches
 // it (a character controller's capsule, not a point). Inferred, TUNABLE.
 const GROUND_PROBE_METERS = 1;
@@ -75,8 +81,8 @@ export class WalkMode {
   private pressStart: { x: number; y: number } | null = null;
   private lastPointer = { x: 0, y: 0 };
   private dragged = false;
-  private noShoreHeights: ChunkGround['heights'] | null = null;
-  private transition: { startPosition: THREE.Vector3; startQuaternion: THREE.Quaternion; endQuaternion: THREE.Quaternion; endX: number; endZ: number; elapsed: number } | null = null;
+  // jump: a map jump while already walking, so the orbit-to-walk blend (progress) stays at 1; arc: its lift at the middle.
+  private transition: { startPosition: THREE.Vector3; startQuaternion: THREE.Quaternion; endQuaternion: THREE.Quaternion; endX: number; endZ: number; elapsed: number; jump?: boolean; arc?: number } | null = null;
 
   constructor(
     camera: THREE.PerspectiveCamera,
@@ -103,13 +109,15 @@ export class WalkMode {
   // search runs again. Returns the point itself when it is dry.
   private nearestShore(ground: ChunkGround, x: number, z: number): THREE.Vector2 {
     const sea = this.getWaterHeight(x, z);
-    const isDry = (px: number, pz: number) => (this.getGroundHeight(px, pz) ?? groundHeightAt(ground, px, pz) ?? 0) >= (this.getWaterHeight(px, pz) ?? -Infinity);
+    // Dry by the CPU ground (the preview map), not the drawn patches: a map jump's destination hasn't loaded yet, so its
+    // coarse patches read as land above the lake and landed the walker in the water (measured, 2026-11-05).
+    const isDry = (px: number, pz: number) => (groundHeightAt(ground, px, pz) ?? 0) >= (this.getWaterHeight(px, pz) ?? -Infinity);
     if (sea === null || isDry(x, z)) return new THREE.Vector2(x, z);
     let level = sea;
     for (let attempt = 0; attempt < SHORE_VERIFY_ATTEMPTS; attempt++) {
       const candidate = this.nearestCoarseAbove(ground, x, z, level);
       if (!candidate) break;
-      const drawn = this.getGroundHeight(candidate.x, candidate.y);
+      const drawn = groundHeightAt(ground, candidate.x, candidate.y);
       if (drawn === null || drawn >= (this.getWaterHeight(candidate.x, candidate.y) ?? -Infinity) + SHORE_INLAND_METERS / METERS_PER_UNIT) return candidate;
       level += sea - drawn + SHORE_INLAND_METERS / METERS_PER_UNIT;
     }
@@ -174,6 +182,50 @@ export class WalkMode {
     this.domElement.addEventListener('pointermove', this.handlePointerMove);
     this.domElement.addEventListener('pointerup', this.handlePointerUp);
     this.domElement.addEventListener('wheel', this.handleWheel, { passive: false });
+  }
+
+  // The walk map's click: glides to (x, z), standing on the ground or the nearest shore, facing the same way.
+  teleport(x: number, z: number): void {
+    const ground = this.getGround();
+    if (!this.active || !ground) return;
+    const limit = (ground.chunkSize / 2) * EDGE_MARGIN;
+    const shore = this.nearestShore(ground, THREE.MathUtils.clamp(x, -limit, limit), THREE.MathUtils.clamp(z, -limit, limit));
+    const distance = Math.hypot(shore.x - this.camera.position.x, shore.y - this.camera.position.z);
+    this.transition = {
+      startPosition: this.camera.position.clone(),
+      startQuaternion: this.camera.quaternion.clone(),
+      endQuaternion: this.camera.quaternion.clone(),
+      endX: shore.x,
+      endZ: shore.y,
+      elapsed: 0,
+      jump: true,
+      arc: distance * JUMP_ARC_SHARE,
+    };
+  }
+
+  // The highest ground within the probe at (x, z), or the water there if higher ([B129]).
+  private floorAt(ground: ChunkGround, x: number, z: number): number {
+    const probe = GROUND_PROBE_METERS / METERS_PER_UNIT;
+    let groundAround = this.heightAt(ground, x, z);
+    for (const [dx, dz] of [[probe, 0], [-probe, 0], [0, probe], [0, -probe]]) groundAround = Math.max(groundAround, this.heightAt(ground, x + dx, z + dz));
+    return Math.max(groundAround, this.getWaterHeight(x, z) ?? -Infinity);
+  }
+
+  // Eases the eye toward standing, never closer to the floor than MIN_CLEARANCE_METERS.
+  private placeEye(ground: ChunkGround, deltaSeconds: number): void {
+    const { x, z } = this.camera.position;
+    const floor = this.floorAt(ground, x, z);
+    const standing = floor + this.eyeHeightMeters / METERS_PER_UNIT;
+    this.camera.position.y += (standing - this.camera.position.y) * (1 - Math.exp(-HEIGHT_SMOOTHING_PER_SECOND * deltaSeconds));
+    this.camera.position.y = Math.max(this.camera.position.y, floor + MIN_CLEARANCE_METERS / METERS_PER_UNIT);
+  }
+
+  // Run after the frame's ground pieces are swapped in: update() set the eye from the ground before the swap, so a piece
+  // that came in higher left the eye inside it for a frame, which drew as stripes (measured 80 m under, 2026-11-04).
+  settleEye(): void {
+    const ground = this.getGround();
+    if (!this.active || !ground || this.transition) return;
+    this.placeEye(ground, 0); // no easing step: only the clearance floor
   }
 
   exit(): void {
@@ -306,28 +358,10 @@ export class WalkMode {
       groundHeight = this.heightAt(ground, fromX, fromZ);
       sea = this.getWaterHeight(fromX, fromZ);
     }
-    // Never under water: if the ground under the walker is now below the sea (the terrain or sea level changed), move
-    // to the nearest shore; the eye never drops below the water's surface either way.
-    if (sea !== null && groundHeight < sea && ground.heights !== this.noShoreHeights) {
-      const shore = this.nearestShore(ground, this.camera.position.x, this.camera.position.z);
-      // No land at all: don't search again every frame until the terrain changes.
-      if (shore.x === this.camera.position.x && shore.y === this.camera.position.z) this.noShoreHeights = ground.heights;
-      this.camera.position.x = shore.x;
-      this.camera.position.z = shore.y;
-      groundHeight = this.heightAt(ground, shore.x, shore.y);
-      sea = this.getWaterHeight(shore.x, shore.y);
-    }
-    // The eye rises with the ground at once and eases only going down, so it never lags into a slope ([B129]).
-    const probe = GROUND_PROBE_METERS / METERS_PER_UNIT;
-    const { x, z } = this.camera.position;
-    let groundAround = groundHeight;
-    for (const [dx, dz] of [[probe, 0], [-probe, 0], [0, probe], [0, -probe]]) groundAround = Math.max(groundAround, this.heightAt(ground, x + dx, z + dz));
-    const eyeHeight = Math.max(groundAround, sea ?? -Infinity) + this.eyeHeightMeters / METERS_PER_UNIT;
-    if (eyeHeight >= this.camera.position.y) {
-      this.camera.position.y = eyeHeight;
-    } else {
-      this.camera.position.y += (eyeHeight - this.camera.position.y) * (1 - Math.exp(-HEIGHT_SMOOTHING_PER_SECOND * deltaSeconds));
-    }
+    // No per-frame push to the shore: it moved the walker sideways in one frame whenever finer ground loaded in lower than
+    // the water (Dana, 2026-11-04). The eye's floor already includes the water, so it can't go under it.
+    // Eased both ways, held off the ground by the clearance, so it never lags into a slope ([B129]).
+    this.placeEye(ground, deltaSeconds);
   }
 
   // The fly-in: position and facing ease from the orbit view to the standing spot.
@@ -337,13 +371,14 @@ export class WalkMode {
     const raw = Math.min(1, transition.elapsed / TRANSITION_SECONDS);
     const eased = raw < 0.5 ? 4 * raw ** 3 : 1 - (-2 * raw + 2) ** 3 / 2;
     const endY = this.heightAt(ground, transition.endX, transition.endZ) + this.eyeHeightMeters / METERS_PER_UNIT;
-    this.camera.position.set(
-      THREE.MathUtils.lerp(transition.startPosition.x, transition.endX, eased),
-      THREE.MathUtils.lerp(transition.startPosition.y, endY, eased),
-      THREE.MathUtils.lerp(transition.startPosition.z, transition.endZ, eased),
-    );
+    const x = THREE.MathUtils.lerp(transition.startPosition.x, transition.endX, eased);
+    const z = THREE.MathUtils.lerp(transition.startPosition.z, transition.endZ, eased);
+    // A jump arcs up in the middle and never dips under the ground it passes over.
+    const lift = (transition.arc ?? 0) * Math.sin(Math.PI * eased);
+    const y = THREE.MathUtils.lerp(transition.startPosition.y, endY, eased) + lift;
+    this.camera.position.set(x, transition.jump ? Math.max(y, this.floorAt(ground, x, z) + MIN_CLEARANCE_METERS / METERS_PER_UNIT) : y, z);
     this.camera.quaternion.slerpQuaternions(transition.startQuaternion, transition.endQuaternion, eased);
-    this.progress = eased;
+    if (!transition.jump) this.progress = eased;
     if (raw >= 1) this.transition = null;
   }
 

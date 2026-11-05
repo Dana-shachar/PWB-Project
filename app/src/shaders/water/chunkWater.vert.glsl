@@ -27,7 +27,9 @@ void main() {
   vec4 worldPosition = modelMatrix * vec4(position, 1.0);
   vLake = 0.0;
   // The ground's height rule (chunk.vert.glsl). The mesh can't stand in for the sea: it stops at the chunk's floor (applyTide).
-  if (level > uSeaLevel) {
+  // A lake also stands where the sea is higher but can't reach it (B, the spill height).
+  bool seaReaches = texture2D(uChunkLakeLevels, uv).b <= uSeaLevel;
+  if (level > uSeaLevel || (level > -999.0 && !seaReaches)) {
     worldPosition.y = (level - tideShare * uLakeEbb + uHeightBase) * uMaxHeight;
     vLake = 1.0;
   }

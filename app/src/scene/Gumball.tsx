@@ -33,16 +33,26 @@ export interface GumballTarget {
   setWalkSpeed?: (multiplier: number) => void;
   // Sets walk mode's eye height above the ground, in meters.
   setEyeHeight?: (meters: number) => void;
+  // The walk map (voxel/chunkMap.ts): its latest image, the walker's spot and facing, and the chunk's width.
+  walkMap?: () => { image: HTMLCanvasElement; x: number; z: number; yaw: number; chunkSize: number } | null;
+  // Puts the walker at a spot on the chunk, in world units.
+  teleport?: (x: number, z: number) => void;
 }
 
 const MIN_ZOOM_LEVEL = 10;
 const MAX_ZOOM_LEVEL = 400;
 const MIN_WALK_SPEED = 0.5;
-const MAX_WALK_SPEED = 10;
+const MAX_WALK_SPEED = 100; // raised from 10 (Dana, 2026-11-04: "the max speed seems very slow"). TUNABLE
+// The Speed slider runs 0 to 100 on a log scale, so the slow end stays fine-grained.
+const walkSpeedAt = (position: number) => MIN_WALK_SPEED * (MAX_WALK_SPEED / MIN_WALK_SPEED) ** (position / 100);
+const walkSpeedPosition = (multiplier: number) => (100 * Math.log(multiplier / MIN_WALK_SPEED)) / Math.log(MAX_WALK_SPEED / MIN_WALK_SPEED);
 // While walking, the Zoom slider sets the eye height instead (Dana): a person's at 0, up to a low flight at 100, on a
 // log scale so the low end has room. The top is inferred, TUNABLE.
 const EYE_HEIGHT_MIN_METERS = 1.7;
-const EYE_HEIGHT_MAX_METERS = 200;
+const EYE_HEIGHT_MAX_METERS = 2000; // raised from 200 (Dana, 2026-11-04). TUNABLE
+const WALK_MAP_PIXELS = 360; // the map canvas's own resolution, drawn at the control's width
+const WALK_MAP_DOT_PIXELS = 7;
+const WALK_MAP_FACING_PIXELS = 22;
 const eyeHeightAt = (level: number) => EYE_HEIGHT_MIN_METERS * (EYE_HEIGHT_MAX_METERS / EYE_HEIGHT_MIN_METERS) ** (level / 100);
 
 // Zoom level to distance. Without a surface it is a percent of the reference
@@ -131,6 +141,15 @@ export class Gumball {
   private walkSpeedRow: HTMLDivElement | null = null;
   private walkSpeedInput: HTMLInputElement | null = null;
   private walkBtn: HTMLButtonElement | null = null;
+  // Hidden while walking, which shows only Eye height, Speed and the walk button (Dana, 2026-11-04).
+  private axesSvg: SVGSVGElement | null = null;
+  private viewSelect: HTMLSelectElement | null = null;
+  private resetBtn: HTMLButtonElement | null = null;
+  // Walking (Dana, 2026-11-04): the walk icon sits beside the sliders, with the chunk's map under them.
+  private walkLayout: HTMLDivElement | null = null;
+  private slidersColumn: HTMLDivElement | null = null;
+  private viewRow: HTMLDivElement | null = null;
+  private mapCanvas: HTMLCanvasElement | null = null;
   private walking = false;
   private container: HTMLDivElement;
   private svgElements: Record<string, { line: SVGLineElement; text: SVGTextElement }> = {};
@@ -207,6 +226,7 @@ export class Gumball {
       this.svgElements[config.key] = { line, text };
     }
     container.appendChild(svg);
+    this.axesSvg = svg;
 
     // Zoom slider
     const zoomRow = document.createElement('div');
@@ -228,7 +248,13 @@ export class Gumball {
 
     zoomRow.appendChild(zoomLabel);
     zoomRow.appendChild(this.zoomInput);
-    container.appendChild(zoomRow);
+    this.walkLayout = document.createElement('div');
+    this.walkLayout.className = 'gumball-walk-layout';
+    this.slidersColumn = document.createElement('div');
+    this.slidersColumn.className = 'gumball-sliders';
+    this.slidersColumn.appendChild(zoomRow);
+    this.walkLayout.appendChild(this.slidersColumn);
+    container.appendChild(this.walkLayout);
 
     // Walk speed, under Zoom, shown only while walking (Dana, 2026-10-28).
     this.walkSpeedRow = document.createElement('div');
@@ -239,16 +265,16 @@ export class Gumball {
     walkSpeedLabel.className = 'gumball-zoom-label';
     this.walkSpeedInput = document.createElement('input');
     this.walkSpeedInput.type = 'range';
-    this.walkSpeedInput.min = String(MIN_WALK_SPEED);
-    this.walkSpeedInput.max = String(MAX_WALK_SPEED);
-    this.walkSpeedInput.step = '0.1';
-    this.walkSpeedInput.value = '1';
+    this.walkSpeedInput.min = '0';
+    this.walkSpeedInput.max = '100';
+    this.walkSpeedInput.step = '1';
+    this.walkSpeedInput.value = String(walkSpeedPosition(1));
     this.walkSpeedInput.className = 'gumball-zoom-input';
     this.walkSpeedInput.title = `Walk speed, ×${MIN_WALK_SPEED} to ×${MAX_WALK_SPEED}`;
     this.walkSpeedInput.addEventListener('input', this.handleWalkSpeedInput);
     this.walkSpeedRow.appendChild(walkSpeedLabel);
     this.walkSpeedRow.appendChild(this.walkSpeedInput);
-    container.appendChild(this.walkSpeedRow);
+    this.slidersColumn.appendChild(this.walkSpeedRow);
 
     // View preset dropdown — was 4 separate buttons, took up too much
     // screen space (Dana, 2026-09-14).
@@ -281,7 +307,18 @@ export class Gumball {
     this.walkBtn.addEventListener('click', this.handleWalkClick);
     viewRow.appendChild(this.walkBtn);
     viewRow.appendChild(viewSelect);
+    this.viewSelect = viewSelect;
+    this.viewRow = viewRow;
     container.appendChild(viewRow);
+    // The walk map: click a spot to stand there.
+    this.mapCanvas = document.createElement('canvas');
+    this.mapCanvas.className = 'gumball-walk-map';
+    this.mapCanvas.width = WALK_MAP_PIXELS;
+    this.mapCanvas.height = WALK_MAP_PIXELS;
+    this.mapCanvas.style.display = 'none';
+    this.mapCanvas.title = 'Click to stand there';
+    this.mapCanvas.addEventListener('click', this.handleMapClick);
+    container.appendChild(this.mapCanvas);
     this.refreshWalkButton();
 
     // Reset view button
@@ -290,6 +327,7 @@ export class Gumball {
     resetBtn.className = 'gumball-btn';
     resetBtn.addEventListener('click', () => this.resetScene());
     container.appendChild(resetBtn);
+    this.resetBtn = resetBtn;
 
     return container;
   }
@@ -300,6 +338,25 @@ export class Gumball {
     this.walkBtn.disabled = !(this.targets.length === 1 && this.targets[0].toggleWalkMode);
     this.walkBtn.classList.toggle('gumball-btn--active', this.walking);
     if (this.walkSpeedRow) this.walkSpeedRow.style.display = this.walking ? '' : 'none';
+    if (this.axesSvg) this.axesSvg.style.display = this.walking ? 'none' : '';
+    if (this.mapCanvas) this.mapCanvas.style.display = this.walking ? '' : 'none';
+    // The walk icon moves beside the sliders while walking, and back beside the View menu after.
+    if (this.walkBtn && this.walkLayout && this.slidersColumn && this.viewRow) {
+      if (this.walking) this.walkLayout.insertBefore(this.walkBtn, this.slidersColumn);
+      else this.viewRow.insertBefore(this.walkBtn, this.viewRow.firstChild);
+      this.walkLayout.classList.toggle('gumball-walk-layout--walking', this.walking);
+      this.viewRow.style.display = this.walking ? 'none' : ''; // emptied while walking
+    }
+    if (this.resetBtn) this.resetBtn.style.display = this.walking ? 'none' : '';
+    // The view presets are for the planet only: on the chunk, Side put the camera inside the ground (Dana, 2026-11-04).
+    const onChunk = this.targets.some((target) => !!target.toggleWalkMode);
+    if (this.viewSelect) this.viewSelect.style.display = onChunk ? 'none' : '';
+    // On the chunk, Reset View takes the View menu's place beside the walk icon (Dana, 2026-11-04).
+    if (this.resetBtn && this.viewRow) {
+      if (onChunk && this.resetBtn.parentElement !== this.viewRow) this.viewRow.appendChild(this.resetBtn);
+      else if (!onChunk && this.resetBtn.parentElement === this.viewRow) this.viewRow.after(this.resetBtn);
+      this.resetBtn.classList.toggle('gumball-btn--in-row', onChunk);
+    }
     // The Zoom row becomes Eye height while walking, and goes back to the zoom it had on leaving.
     if (this.zoomInput && this.zoomLabel) {
       this.zoomLabel.textContent = this.walking ? 'Eye height' : 'Zoom';
@@ -310,9 +367,42 @@ export class Gumball {
     }
   }
 
+  // A click on the map stands the walker at the same spot on the chunk.
+  private handleMapClick = (event: MouseEvent) => {
+    const target = this.targets.length === 1 ? this.targets[0] : undefined;
+    const map = target?.walkMap?.();
+    if (!target?.teleport || !map || !this.mapCanvas) return;
+    const rect = this.mapCanvas.getBoundingClientRect();
+    const u = (event.clientX - rect.left) / rect.width;
+    const v = (event.clientY - rect.top) / rect.height;
+    target.teleport((u - 0.5) * map.chunkSize, (v - 0.5) * map.chunkSize);
+  };
+
+  // Draws the map image with the walker's dot and a short mark for where they face.
+  private drawWalkMap(): void {
+    const map = this.targets.length === 1 ? this.targets[0].walkMap?.() : null;
+    const context = this.mapCanvas?.getContext('2d');
+    if (!map || !context) return;
+    const size = WALK_MAP_PIXELS;
+    context.drawImage(map.image, 0, 0, size, size);
+    const dotX = (map.x / map.chunkSize + 0.5) * size;
+    const dotY = (map.z / map.chunkSize + 0.5) * size;
+    const accent = getComputedStyle(this.container).getPropertyValue('--color-accent').trim() || '#e5c11f';
+    context.strokeStyle = accent;
+    context.lineWidth = 3;
+    context.beginPath();
+    context.moveTo(dotX, dotY);
+    context.lineTo(dotX - Math.sin(map.yaw) * WALK_MAP_FACING_PIXELS, dotY - Math.cos(map.yaw) * WALK_MAP_FACING_PIXELS);
+    context.stroke();
+    context.fillStyle = accent;
+    context.beginPath();
+    context.arc(dotX, dotY, WALK_MAP_DOT_PIXELS, 0, Math.PI * 2);
+    context.fill();
+  }
+
   private handleWalkSpeedInput = () => {
     if (!this.walkSpeedInput) return;
-    const multiplier = parseFloat(this.walkSpeedInput.value);
+    const multiplier = walkSpeedAt(parseFloat(this.walkSpeedInput.value));
     for (const target of this.targets) target.setWalkSpeed?.(multiplier);
   };
 
@@ -412,6 +502,8 @@ export class Gumball {
       }
     });
 
+    if (this.walking) this.drawWalkMap();
+
     // SVG axes update — columns 0/1 of matrixWorld are the camera's
     // world-space right/up vectors; project each world axis onto them to
     // get 2D screen coordinates (SVG Y is inverted vs. math Y). Primary
@@ -439,6 +531,7 @@ export class Gumball {
 
   dispose(): void {
     this.zoomInput?.removeEventListener('input', this.handleZoomInput);
+    this.mapCanvas?.removeEventListener('click', this.handleMapClick);
     this.container.remove();
   }
 }

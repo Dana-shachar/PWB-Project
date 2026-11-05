@@ -77,6 +77,23 @@ float sampleHeight(vec2 uv) {
   return mix(texel.r, texel.g, uHeightMapGreenChannel);
 }
 
+varying float vMorph; // chunk.vert.glsl: how far this patch has blended into its next-coarser level (blue)
+
+// A patch's height blended toward its coarser level, as chunk.vert.glsl displaces it, so shading matches the shape.
+float morphedHeight(vec2 uv) {
+  vec4 texel = texture2D(uHeightMap, uv);
+  return mix(texel.g, texel.b, vMorph);
+}
+
+// heightfieldNormal (terrain.glsl) on the blended height, for a patch's flat grid (up is +y).
+vec3 morphedFieldNormal(vec2 uv, float stepUv, vec3 dPdu, vec3 dPdv, float amplitude) {
+  float dHdu = (morphedHeight(uv + vec2(stepUv, 0.0)) - morphedHeight(uv - vec2(stepUv, 0.0))) / (2.0 * stepUv);
+  float dHdv = (morphedHeight(uv + vec2(0.0, stepUv)) - morphedHeight(uv - vec2(0.0, stepUv))) / (2.0 * stepUv);
+  vec3 up = vec3(0.0, 1.0, 0.0);
+  vec3 normal = normalize(cross(dPdv + up * dHdv * amplitude, dPdu + up * dHdu * amplitude));
+  return faceforward(normal, up, -normal);
+}
+
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
 varying vec2 vUv;
@@ -91,12 +108,24 @@ varying float vDisplace;
 varying float vIsTopSurface;
 
 void main() {
+  // A cut side's wall is only ever seen from outside; from inside it stands behind the ground, and far away the depth
+  // buffer can't tell them apart, so it streaked through hills (measured, 2026-11-04). Culled by the camera's side.
+  if (vIsTopSurface < 0.5) {
+    float halfSize = 0.5 * uChunkSize;
+    vec2 fromEdge = abs(abs(vWorldPosition.xz) - halfSize);
+    if (min(fromEdge.x, fromEdge.y) < uChunkSize * 0.001) {
+      bool onXSide = fromEdge.x < fromEdge.y;
+      float side = onXSide ? sign(vWorldPosition.x) : sign(vWorldPosition.z);
+      float cameraAlong = onXSide ? uCameraPosition.x : uCameraPosition.z;
+      if (cameraAlong * side < halfSize) discard;
+    }
+  }
   // Renormalized because interpolating across a triangle shortens it.
   vec3 normal = normalize(vNormal);
   bool isPatch = uBakeSamples > 0.5;
   vec2 textureUv = isPatch ? borderedTextureUv(vUv, uBakeSamples, uBorderTexels) : vUv;
   float textureScale = isPatch ? (uBakeSamples - 1.0) / (uBakeSamples + 2.0 * uBorderTexels) : 1.0;
-  float elevationRaw = sampleHeight(textureUv);
+  float elevationRaw = isPatch ? morphedHeight(textureUv) : sampleHeight(textureUv);
 
   if (vIsTopSurface > 0.5) {
     // Central-difference gradient, the same technique fragment.glsl (the
@@ -110,10 +139,11 @@ void main() {
     // The chunk's tangents: u runs along x and v along z, each spanning
     // uPatchWorldSize; raw elevation maps to world height via uMaxHeight, the same
     // conversion chunk.vert.glsl's displacement applies.
-    vec3 localNormal = heightfieldNormal(
-      uHeightMap, textureUv, stepUv * textureScale, uHeightMapGreenChannel,
-      vec3(uPatchWorldSize / textureScale, 0.0, 0.0), vec3(0.0, 0.0, uPatchWorldSize / textureScale), vec3(0.0, 1.0, 0.0), uMaxHeight
-    );
+    vec3 dPdu = vec3(uPatchWorldSize / textureScale, 0.0, 0.0);
+    vec3 dPdv = vec3(0.0, 0.0, uPatchWorldSize / textureScale);
+    vec3 localNormal = isPatch
+      ? morphedFieldNormal(textureUv, stepUv * textureScale, dPdu, dPdv, uMaxHeight)
+      : heightfieldNormal(uHeightMap, textureUv, stepUv * textureScale, uHeightMapGreenChannel, dPdu, dPdv, vec3(0.0, 1.0, 0.0), uMaxHeight);
     normal = normalize(mat3(modelMatrix) * localNormal); // world space, as in chunk.vert.glsl
   }
 

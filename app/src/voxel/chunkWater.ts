@@ -27,8 +27,7 @@ export interface ChunkWater {
   dispose: () => void;
 }
 
-const WATER_SHEET_SEGMENTS = 512; // enough vertices to lift the sheet onto lakes. Inferred, TUNABLE
-const RIPPLE_TILE_SHARE = 0.08; // a ripple tile's size over the view's distance. Inferred, TUNABLE
+export const WATER_SHEET_SEGMENTS = 512; // enough vertices to lift the sheet onto lakes. Inferred, TUNABLE
 const WALL_TOP_SHARE = 2; // the walls' box top, as a share of maxHeight: above any lake. Inferred, TUNABLE
 
 export function createChunkWater(): ChunkWater {
@@ -47,8 +46,6 @@ export function createChunkWater(): ChunkWater {
       uLakeEbb: { value: 0 },
       uRippleMap: { value: getRippleMap() },
       uRippleOn: { value: 0 },
-      uRippleTile: { value: 1 },
-      uRippleBlend: { value: 0 },
       uMaxHeight: { value: 1 },
       uHeightMapGreenChannel: { value: 1 },
       uChunkSize: { value: 1 },
@@ -149,12 +146,6 @@ export function updateChunkWaterFrame(water: ChunkWater, cameraPosition: THREE.V
   (uniforms.uCameraPosition.value as THREE.Vector3).copy(cameraPosition);
   uniforms.uSeaTime.value += deltaSeconds * windTimeScale(uniforms.uSeaWind.value as number);
   uniforms.uSeaClock.value += deltaSeconds;
-  // Ripple size as a ratio of the distance to the nearest point of the chunk, snapped to doublings and blended between them.
-  const half = (uniforms.uChunkSize.value as number) / 2;
-  const toChunk = Math.hypot(Math.max(0, Math.abs(cameraPosition.x) - half), cameraPosition.y - water.mesh.position.y, Math.max(0, Math.abs(cameraPosition.z) - half));
-  const sizeLevel = Math.log2(Math.max(toChunk * RIPPLE_TILE_SHARE, 1e-3));
-  uniforms.uRippleTile.value = 2 ** Math.floor(sizeLevel);
-  uniforms.uRippleBlend.value = sizeLevel - Math.floor(sizeLevel);
   uniforms.uRippleOn.value = isRippleMapReady() ? 1 : 0;
   if (water.tide.height > 0) {
     water.tide.phase = (water.tide.phase + deltaSeconds / TIDE_PERIOD_SECONDS) % 1;

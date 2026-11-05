@@ -138,7 +138,11 @@ export function keepAboveFlatGround(
   const half = chunkSize / 2;
   const outside = Math.hypot(Math.max(Math.abs(x) - half, 0), Math.max(y - maxGroundHeight, -y, 0), Math.max(Math.abs(z) - half, 0));
   // Over the chunk, a share of the height above the ground: low enough that a nearby slope isn't cut. Inferred, TUNABLE.
-  const near = Math.max(Math.min(DEFAULT_NEAR, altitude * 0.25), outside * 0.5, altitude * NEAR_SHARE_OF_ALTITUDE);
+  // Beside it there is no ground below, so that height is from zero and set the near plane past the chunk's own edge,
+  // slicing the land open (measured 5.5 km with the edge 4.6 km away, 2026-11-05): there only the bounds count.
+  const overChunk = Math.abs(x) <= half && Math.abs(z) <= half;
+  const nearFromHeight = overChunk ? altitude * NEAR_SHARE_OF_ALTITUDE : 0;
+  const near = Math.max(Math.min(DEFAULT_NEAR, altitude * 0.25), outside * 0.5, nearFromHeight);
   if (perspectiveCamera.near !== near) {
     perspectiveCamera.near = near;
     perspectiveCamera.updateProjectionMatrix();

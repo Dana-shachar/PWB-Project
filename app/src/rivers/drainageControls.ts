@@ -35,6 +35,7 @@ export function useDrainage(sceneHandleRef: RefObject<SceneCanvasHandle | null>,
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
   const readyRef = useRef(false); // a full run finished, so Erosion can build on it
+  const firstRunRef = useRef(true); // the first run after load starts at once; later changes wait out a drag
   const erosionRef = useRef({ passes: erosionPasses, strength: erosionStrength });
   const usedRef = useRef(erosionRef.current); // what the last run was asked for
   const seaLevelRef = useRef(seaLevel);
@@ -124,7 +125,8 @@ export function useDrainage(sceneHandleRef: RefObject<SceneCanvasHandle | null>,
         const { data, width, height } = elevation;
         workerRef.current?.postMessage({ type: 'fill', heights: data, width, height, seaLevel, requestId }, [data.buffer]);
       });
-    }, DRAINAGE_DEBOUNCE_MS);
+    }, firstRunRef.current ? 0 : DRAINAGE_DEBOUNCE_MS);
+    firstRunRef.current = false;
     return () => window.clearTimeout(timer);
   }, [sceneHandleRef, enabled, seaLevel, terrainVersion]);
 

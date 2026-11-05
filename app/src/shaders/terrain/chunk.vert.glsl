@@ -42,6 +42,29 @@ uniform float uHeightMapGreenChannel;
 // A patch's bake size and border; 0 samples (the voxel mesh) reads uv as is.
 uniform float uBakeSamples;
 uniform float uBorderTexels;
+// The distance range over which a patch blends into its next-coarser level (voxel/chunkPatches.ts morphRange): 0 at
+// uMorphStart, 1 at uMorphEnd, so where it meets a coarser neighbor it already has that neighbor's surface.
+uniform float uMorphStart;
+uniform float uMorphEnd;
+varying float vMorph; // the blend, for chunk.frag.glsl's shading
+
+const float MESH_CELLS = 64.0; // PATCH_GRID in planet/patch.ts
+
+vec2 patchTextureUv(vec2 patchUv) {
+  return (vec2(uBorderTexels + 0.5) + patchUv * (uBakeSamples - 1.0)) / (uBakeSamples + 2.0 * uBorderTexels);
+}
+
+// The next-coarser level's surface at this vertex (blue): its own height where the two grids share a vertex, the
+// average of the coarse vertices around an in-between one, so a fully blended patch matches the coarse mesh's shape
+// (Asirvatham and Hoppe, GPU Gems 2 ch. 2: zc averages the coarse edge's two samples; CDLOD's morph does the same).
+float coarserSurface(vec2 patchUv) {
+  vec2 odd = mod(floor(patchUv * MESH_CELLS + 0.5), 2.0);
+  vec2 low = patchUv - odd / MESH_CELLS;
+  vec2 high = patchUv + odd / MESH_CELLS;
+  return 0.25 * (
+    texture2D(uHeightMap, patchTextureUv(low)).b + texture2D(uHeightMap, patchTextureUv(vec2(high.x, low.y))).b +
+    texture2D(uHeightMap, patchTextureUv(vec2(low.x, high.y))).b + texture2D(uHeightMap, patchTextureUv(high)).b);
+}
 
 void main() {
   // World space, to match the sun and view directions ([B61], fixed 2026-10-27; normalMatrix gave view space).
@@ -51,6 +74,7 @@ void main() {
   vIsTopSurface = isTopSurface;
 
   vec3 displacedPosition = position;
+  vMorph = 0.0;
   if (displace > 0.5) {
     // Clamped at 0 (not just scaled), matching smoothMesh.ts's old CPU
     // formula exactly — the skirt walls below assume the top surface never
@@ -60,6 +84,14 @@ void main() {
       : uv;
     vec4 heightTexel = texture2D(uHeightMap, textureUv);
     float elevationRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
+    if (uBakeSamples > 0.5 && uMorphEnd > uMorphStart) {
+      // Blended by this vertex's own distance to the eye, measured at the coarse surface's height so both sides of a
+      // shared edge measure the same point (CDLOD: the distance function must agree across neighbors).
+      float coarse = coarserSurface(uv);
+      vec3 coarsePoint = (modelMatrix * vec4(position.x, max(0.0, coarse + uHeightBase) * uMaxHeight, position.z, 1.0)).xyz;
+      vMorph = clamp((distance(cameraPosition, coarsePoint) - uMorphStart) / (uMorphEnd - uMorphStart), 0.0, 1.0);
+      elevationRaw = mix(elevationRaw, coarse, vMorph);
+    }
     float heightNormalized = max(0.0, elevationRaw + uHeightBase);
     displacedPosition.y = heightNormalized * uMaxHeight;
   }

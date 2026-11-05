@@ -173,5 +173,23 @@ export function selectChunkPatches(root: TerrainPatch, cameraPosition: THREE.Vec
     collectLeaves(root, context, leaves);
     if (leaves.length * 2 * PATCH_GRID ** 2 <= CHUNK_MAX_TRIANGLES) break;
   }
+  lastThreshold = context.threshold;
   return balance(leaves, frame);
+}
+
+// The error threshold the last selection settled on (the triangle budget can raise it), for morphRange.
+let lastThreshold = 8;
+export function chunkSelectionThreshold(): number {
+  return lastThreshold;
+}
+
+// A patch blends into its next-coarser level over the last share of its distance range, as CDLOD does (Strugar 2009:
+// "the last 15%-30% of every LOD range"). The range ends where the parent's own error reaches the threshold, the distance
+// at which the parent alone would have been chosen; a coarser neighbor is never closer than that, so a shared edge is
+// fully blended on the fine side. Distances in world units, from the eye to each vertex (chunk.vert.glsl).
+const MORPH_SHARE = 0.3; // of the range, CDLOD's upper bound. TUNABLE
+export function morphRange(root: TerrainPatch, patch: TerrainPatch, detail: ChunkDetail, threshold: number): [number, number] {
+  const parentCellSize = (2 * chunkPatchWorldSize(root, patch, detail.chunkSize)) / PATCH_GRID;
+  const end = (parentCellSize * detail.viewHeightPixels) / (2 * Math.tan(detail.fieldOfViewRadians / 2) * threshold);
+  return [end * (1 - MORPH_SHARE), end];
 }

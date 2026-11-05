@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildLeafIndex, computeStitchFlags, coveringLeaves, patchKey, type EdgeStitchFlags } from '../planet/planetPatches';
 import { bakeSamplesCap, bakeSamplesForPixelWidth, createPatchTarget, PATCH_BAKE_SAMPLES_MIN, PATCH_BORDER_TEXELS, type TerrainPatch } from '../planet/patch';
-import { chunkFrame, chunkPatchBox, chunkPatchInView,chunkPatchPixelWidth, chunkPatchWorldSize, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
+import { chunkFrame, chunkPatchBox, chunkPatchInView,chunkPatchPixelWidth, chunkPatchWorldSize, chunkSelectionThreshold, morphRange, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
 import { buildChunkBaseGeometry, buildFlatPatchGeometry } from './chunkPatchMesh';
 
 // Bakes one patch's heightmap into a target; false if the planet view isn't ready.
@@ -23,6 +23,10 @@ interface ChunkPatchEntry {
   bakeSamples: number;
   flags: EdgeStitchFlags | undefined;
   stale: boolean; // its terrain changed: it re-bakes through the per-frame budget, keeping its old bake until then
+  // A CPU copy of the bake's heights for sampleHeight, read once without stalling; a re-bake drops it (bakeCount).
+  heights: { data: Float32Array; parent: Float32Array; size: number } | null; // green and blue (the coarser level)
+  heightsRequested: boolean;
+  bakeCount: number;
 }
 
 function flagsEqual(a: EdgeStitchFlags | undefined, b: EdgeStitchFlags | undefined): boolean {
@@ -45,6 +49,7 @@ export class ChunkPatchRenderer {
   private baseDepth = 0;
   private baseMesh: THREE.Mesh | null = null;
   private lastCameraPosition = new THREE.Vector3(Infinity, 0, 0);
+  private eye = new THREE.Vector3(); // this frame's camera, for sampleHeight's blend (chunk.vert.glsl's cameraPosition)
   private lastCameraQuaternion = new THREE.Quaternion();
   private lastErrorPixels = 0;
   private lastGroundData: Float32Array | undefined; // a new ground reading reselects the patches
@@ -93,9 +98,25 @@ export class ChunkPatchRenderer {
       this.boundsMaxHeight = detail.maxHeight;
       for (const entry of this.entries.values()) this.fitBounds(entry.mesh.geometry, entry.patch, detail);
     }
+    this.buildDone = true;
     this.build(camera, detail, bake, maxTextureSize, advanceBase);
     this.swap();
+    // Each patch's blend range into its coarser level, from this frame's view (chunkPatches.ts morphRange).
+    this.eye.copy(camera.position);
+    const threshold = chunkSelectionThreshold();
+    for (const key of this.shown) {
+      const entry = this.entries.get(key);
+      if (!entry) continue;
+      const [start, end] = morphRange(root, entry.patch, detail, threshold);
+      entry.material.uniforms.uMorphStart.value = start;
+      entry.material.uniforms.uMorphEnd.value = end;
+    }
+    this.settled = this.buildDone && this.wanted.every((patch) => this.shown.has(patchKey(patch)));
   }
+
+  // Every wanted patch is built at its size and shown: the walk map's fade waits for this after a jump.
+  settled = false;
+  private buildDone = true;
 
   private wantedSamples(patch: TerrainPatch, camera: THREE.PerspectiveCamera, detail: ChunkDetail, cap: number): number {
     if (!chunkPatchInView(this.root!, patch, detail)) return PATCH_BAKE_SAMPLES_MIN;
@@ -118,7 +139,10 @@ export class ChunkPatchRenderer {
     if (base.switched) this.markAllStale();
     let texels = base.texels;
     for (const patch of this.wanted) {
-      if (builds >= MAX_BUILDS_PER_FRAME || texels >= MAX_BAKE_TEXELS_PER_FRAME) break;
+      if (builds >= MAX_BUILDS_PER_FRAME || texels >= MAX_BAKE_TEXELS_PER_FRAME) {
+        this.buildDone = false; // more to build next frame
+        break;
+      }
       const key = patchKey(patch);
       const flags = this.stitchFlags.get(key);
       const entry = this.entries.get(key);
@@ -138,8 +162,14 @@ export class ChunkPatchRenderer {
             entry.target = createPatchTarget(samples);
             entry.bakeSamples = samples;
           }
-          if (!bake(patch, entry.target, root)) return;
+          if (!bake(patch, entry.target, root)) {
+            this.buildDone = false;
+            return;
+          }
           entry.stale = false;
+          entry.bakeCount++;
+          entry.heights = null;
+          entry.heightsRequested = false;
           this.setTextureUniforms(entry.material, entry.target, entry.bakeSamples);
           builds++;
           texels += entry.bakeSamples * entry.bakeSamples;
@@ -148,6 +178,7 @@ export class ChunkPatchRenderer {
       }
       const target = createPatchTarget(samples);
       if (!bake(patch, target, root)) {
+        this.buildDone = false;
         target.dispose();
         return;
       }
@@ -156,7 +187,7 @@ export class ChunkPatchRenderer {
       this.fitBounds(mesh.geometry, patch, detail);
       mesh.visible = false;
       this.group.add(mesh);
-      this.entries.set(key, { patch, mesh, material, target, bakeSamples: samples, flags, stale: false });
+      this.entries.set(key, { patch, mesh, material, target, bakeSamples: samples, flags, stale: false, heights: null, heightsRequested: false, bakeCount: 0 });
       builds++;
       texels += samples * samples;
     }
@@ -189,13 +220,56 @@ export class ChunkPatchRenderer {
     const texelY = texelAt(chunkV, fractions.minV, fractions.maxV);
     const x0 = Math.min(Math.floor(texelX), size - 2);
     const y0 = Math.min(Math.floor(texelY), size - 2);
-    renderer.readRenderTargetPixels(best.target, x0, y0, 2, 2, this.readBuffer);
     const blendX = texelX - x0;
     const blendY = texelY - y0;
-    const bottom = this.readBuffer[1] * (1 - blendX) + this.readBuffer[5] * blendX;
-    const top = this.readBuffer[9] * (1 - blendX) + this.readBuffer[13] * blendX;
-    const raw = bottom * (1 - blendY) + top * blendY;
+    // From the patch's CPU copy when it has one; the direct read (which stalls the frame on the GPU, 22 ms for
+    // walk mode's 5 reads, measured 2026-11-04) only until that copy arrives.
+    // Fine (green) and coarser-level (blue) corners.
+    let corners: [number, number, number, number];
+    let parents: [number, number, number, number];
+    const copy = best.heights;
+    if (copy && copy.size === size) {
+      const at = (values: Float32Array, col: number, row: number) => values[row * size + col];
+      corners = [at(copy.data, x0, y0), at(copy.data, x0 + 1, y0), at(copy.data, x0, y0 + 1), at(copy.data, x0 + 1, y0 + 1)];
+      parents = [at(copy.parent, x0, y0), at(copy.parent, x0 + 1, y0), at(copy.parent, x0, y0 + 1), at(copy.parent, x0 + 1, y0 + 1)];
+    } else {
+      this.requestHeights(renderer, best, size);
+      renderer.readRenderTargetPixels(best.target, x0, y0, 2, 2, this.readBuffer);
+      corners = [this.readBuffer[1], this.readBuffer[5], this.readBuffer[9], this.readBuffer[13]];
+      parents = [this.readBuffer[2], this.readBuffer[6], this.readBuffer[10], this.readBuffer[14]];
+    }
+    const bilinear = (values: [number, number, number, number]) =>
+      (values[0] * (1 - blendX) + values[1] * blendX) * (1 - blendY) + (values[2] * (1 - blendX) + values[3] * blendX) * blendY;
+    const fine = bilinear(corners);
+    const coarse = bilinear(parents);
+    // The same blend chunk.vert.glsl draws, by the distance from the eye to the coarse surface here.
+    const { uMorphStart, uMorphEnd } = best.material.uniforms;
+    let raw = fine;
+    if (uMorphEnd.value > uMorphStart.value) {
+      const distance = Math.hypot(x - this.eye.x, Math.max(0, coarse + heightBase) * maxHeight - this.eye.y, z - this.eye.z);
+      const morph = Math.min(1, Math.max(0, (distance - uMorphStart.value) / (uMorphEnd.value - uMorphStart.value)));
+      raw = fine + (coarse - fine) * morph;
+    }
     return Math.max(0, raw + heightBase) * maxHeight;
+  }
+
+  // Reads a patch's whole bake back without stalling (this repo's rule for GPU reads) and keeps its heights (green).
+  private requestHeights(renderer: THREE.WebGLRenderer, entry: ChunkPatchEntry, size: number): void {
+    if (entry.heightsRequested) return;
+    entry.heightsRequested = true;
+    const bakeCount = entry.bakeCount;
+    const target = entry.target;
+    const pixels = new Float32Array(size * size * 4);
+    void renderer.readRenderTargetPixelsAsync(target, 0, 0, size, size, pixels).then(() => {
+      if (entry.bakeCount !== bakeCount || entry.target !== target) return; // re-baked meanwhile: a later call asks again
+      const data = new Float32Array(size * size);
+      const parent = new Float32Array(size * size);
+      for (let i = 0; i < data.length; i++) {
+        data[i] = pixels[i * 4 + 1];
+        parent[i] = pixels[i * 4 + 2];
+      }
+      entry.heights = { data, parent, size };
+    });
   }
 
   private swap(): void {
@@ -261,6 +335,8 @@ export class ChunkPatchRenderer {
         uPatchWorldSize: { value: patchWorldSize },
         uPatchUvMin: { value: new THREE.Vector2(fractions.minU, fractions.minV) },
         uPatchUvMax: { value: new THREE.Vector2(fractions.maxU, fractions.maxV) },
+        uMorphStart: { value: 0 },
+        uMorphEnd: { value: 0 },
       },
     });
     this.setTextureUniforms(material, target, samples);

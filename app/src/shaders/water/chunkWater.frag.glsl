@@ -15,6 +15,7 @@ uniform float uWaterRampPositions[MAX_COLOR_STOPS];
 uniform float uWaterRampCount;
 uniform float uWaterClarity;
 uniform float uFoamWidth;
+uniform sampler2D uChunkLakeLevels; // voxel/chunkLakes.ts: B is the spill height the sea must reach
 uniform float uWaveScale; // multiplies Seascape's wavelengths
 uniform float uResolution; // the view's width in pixels, for Seascape's distance smoothing
 uniform vec3 uSkyColor;
@@ -34,11 +35,13 @@ const float SHORE_FOAM_REST = 0.6; // the foam that stays at the shore between w
 const float SURF_SLOPE_UV_STEP = 0.002;
 
 const float SHORE_FOAM_REACH_METERS = 30.0; // how far foam reaches from the waterline at the Foam slider's default. Inferred, TUNABLE.
+const float FOAM_MIN_PIXELS = 9.0; // the shore band's narrowest width on screen; foam shows in about its inner third. Inferred, TUNABLE
+const float LAKE_FOAM_STRENGTH = 0.6; // lakes foam like the sea's beaches, weaker (Dana). Inferred, TUNABLE
+const float LAKE_FOAM_PIXELS = 4.0; // the lake's shore line, in pixels at any distance. Inferred, TUNABLE
 
 uniform sampler2D uRippleMap; // planet/rippleMap.ts
 uniform float uRippleOn;
-uniform float uRippleTile; // the smaller ripple size, world units (updateChunkWaterFrame)
-uniform float uRippleBlend; // how far toward the size twice as large
+const float RIPPLE_TILE_SHARE = 0.08; // a ripple tile's size over the pixel's distance. Inferred, TUNABLE
 const float LAKE_RIPPLE_STRENGTH = 0.6; // strong enough to read at a distance (Dana). Inferred, TUNABLE
 
 // The planet's two ripple layers, scrolling across each other (planetPatch.frag.glsl).
@@ -55,10 +58,14 @@ void main() {
   // On a lake the sheet's own height is the surface, so the fine ground cuts the shore. Elsewhere, the sea.
   float waterSurface = vLake > 0.0 ? vWorldPosition.y / max(uMaxHeight, 0.0001) - uHeightBase : uSeaLevel;
   if (groundRaw >= waterSurface) discard;
+  // The sea shows only where it can reach, never in a dip below it with no way in (B, the spill height).
+  if (vLake <= 0.0 && texture2D(uChunkLakeLevels, chunkUv).b > uSeaLevel) discard;
   float depthShare = (waterSurface - groundRaw) / max(0.0001, uSeaLevel - uWaterDeepest);
-  // Inland water deepens away from the sea, as on the planet.
-  if (waterSurface > uSeaLevel) depthShare = max(depthShare, min(INLAND_MIN_DEPTH, (waterSurface - uSeaLevel) * INLAND_DEPTH_RAMP));
-  vec3 seaBase = terrainRampColor(waterRampPosition(depthShare, uWaterClarity), uWaterRampColors, uWaterRampPositions, int(uWaterRampCount));
+  // Inland water deepens away from the sea, as on the planet, so a lake reads as water. Only shore foam uses the true
+  // depth, or a lake never reads shallow at its shore and never foams (measured, 2026-11-04).
+  float colorDepth = depthShare;
+  if (waterSurface > uSeaLevel) colorDepth = max(depthShare, min(INLAND_MIN_DEPTH, (waterSurface - uSeaLevel) * INLAND_DEPTH_RAMP));
+  vec3 seaBase = terrainRampColor(waterRampPosition(colorDepth, uWaterClarity), uWaterRampColors, uWaterRampPositions, int(uWaterRampCount));
   vec3 seaWaterColor = uWaterRampColors[0];
 
   // Seascape on the flat sheet, in meters, its waves stretched by Wave size.
@@ -67,7 +74,7 @@ void main() {
   vec2 meters = vWorldPosition.xz * METERS_PER_UNIT / uWaveScale;
   float footprint = length(fwidth(meters));
   gSeaFootprint = footprint * SEA_FREQ; // the pixel footprint for band-limiting (Quilez)
-  float fetch = seaFetchScale(depthShare);
+  float fetch = seaFetchScale(colorDepth);
   // Open water rougher than enclosed water; calm wind flattens the sea (stronger wind lengthens it, via uWaveScale).
   gSeaAmplitude = fetch * min(1.0, seaWindScale());
   float waveHeight = -sea_height(vec3(meters.x, 0.0, meters.y));
@@ -84,7 +91,11 @@ void main() {
   // Lakes always ripple, even where the meter-sized waves are too small to see: the planet's scrolling ripple layers, sized
   // as a ratio of the view, with two sizes blended so zooming never pops.
   if (vLake > 0.0 && uRippleOn > 0.5) {
-    vec2 tilt = mix(lakeRipple(vWorldPosition.xz / uRippleTile), lakeRipple(vWorldPosition.xz / (uRippleTile * 2.0)), uRippleBlend);
+    // Sized by this pixel's own distance, not the chunk's nearest point: in walk mode that was the eye height, so the
+    // ripples shrank to centimeters and blurred flat across the lake (2026-11-04).
+    float sizeLevel = log2(max(length(toPoint) * RIPPLE_TILE_SHARE, 1e-4));
+    float rippleTile = exp2(floor(sizeLevel));
+    vec2 tilt = mix(lakeRipple(vWorldPosition.xz / rippleTile), lakeRipple(vWorldPosition.xz / (rippleTile * 2.0)), fract(sizeLevel));
     normal = normalize(normal + vec3(tilt.x, 0.0, tilt.y) * LAKE_RIPPLE_STRENGTH);
   }
   // Surf rolling toward the shore, lit as a wave and leaving foam behind its crest.
@@ -99,7 +110,7 @@ void main() {
   float groundDeltaZ = mix(texelZp.r - texelZm.r, texelZp.g - texelZm.g, uHeightMapGreenChannel) * 0.5;
   float seaUnitsPerStep = SURF_SLOPE_UV_STEP * uChunkSize * METERS_PER_UNIT / uWaveScale;
   vec2 depthGradient = -vec2(groundDeltaX, groundDeltaZ) / max(0.0001, uSeaLevel - uWaterDeepest) / seaUnitsPerStep;
-  vec3 surf = surfWave(depthShare, meters, 0.0, depthGradient, footprint) * (1.0 - far);
+  vec3 surf = surfWave(colorDepth, meters, 0.0, depthGradient, footprint) * (1.0 - far);
   normal = normalize(normal + vec3(-surf.x, 0.0, -surf.y) * CHUNK_SURF_TILT);
   vec3 eye = normalize(toPoint);
   vec3 light = normalize(uLightDirection);
@@ -111,12 +122,20 @@ void main() {
   // Foam by distance from the shore, not depth alone (the shore-wave source's own measure): depth over the seabed's
   // slope, a first-order estimate, so a gentle beach keeps a narrow band instead of a wide sheet ([B83]).
   float shoreMeters = depthShare / max(length(depthGradient), 1e-4) * uWaveScale;
-  float shoreReach = max(SHORE_FOAM_REACH_METERS * uFoamWidth / 0.05, 0.001); // the Foam slider sets the band's width
+  // Lake bottoms are bumpy, so the slope estimate fails there: distance to the waterline in pixels from how fast the
+  // depth changes on screen instead (value over its screen derivative, the outline trick), in meters.
+  float lakeShorePixels = depthShare / max(fwidth(depthShare), 1e-6);
+  if (vLake > 0.0) shoreMeters = lakeShorePixels * footprint * uWaveScale;
+  // The band is a few pixels wide at any distance (relative to the view, Dana), or its real width up close; the Foam
+  // slider scales both. footprint is a pixel's size in the waves' units.
+  float shoreReach = max(max(SHORE_FOAM_REACH_METERS, FOAM_MIN_PIXELS * footprint * uWaveScale) * uFoamWidth / 0.05, 0.001);
   // Saturation ends at the reach: depth alone let shore foam cover every shallow flat (measured, [B83]).
   float shoreFade = 1.0 - smoothstep(shoreReach, 2.0 * shoreReach, shoreMeters);
   float saturation = max(SHORE_FOAM_REST * clamp(1.0 - shoreMeters / (2.0 * shoreReach), 0.0, 1.0), gSurfTrail * (1.0 - far) * shoreFade);
   float shore = clamp((saturation - foamMask(meters, footprint)) * FOAM_FADE_GAIN, 0.0, 1.0) * foamTexture(meters, footprint);
-  float foam = max(shore, crest) * foamAmount * FOAM_OPACITY;
+  // A lake's beach foam, read from afar too: a soft line a few pixels wide along the waterline, textured up close.
+  if (vLake > 0.0) shore = max(shore, (1.0 - smoothstep(0.0, LAKE_FOAM_PIXELS, lakeShorePixels)) * foamTexture(meters, footprint));
+  float foam = max(shore, crest) * foamAmount * FOAM_OPACITY * (vLake > 0.0 ? LAKE_FOAM_STRENGTH : 1.0);
   // Foam adds to the water as in Parberry et al. (screen, so it never clips), taking the sky at a slant, so shine stays.
   vec3 foamColor = mix(FOAM_COLOR * (uAmbient + seaDiffuse(normal, light, 1.0)) * uLightIntensity, uSkyColor, waterFresnel(normal, -eye));
   color = 1.0 - (1.0 - clamp(color, 0.0, 1.0)) * (1.0 - clamp(foamColor, 0.0, 1.0) * foam);
@@ -125,6 +144,6 @@ void main() {
 
   // See-through in the shallows, so the shore blends into the ground instead of meeting it at a hard edge. Only the
   // light the surface doesn't reflect passes (Schlick: reflect F, transmit 1 - F), so low views read as water.
-  float opacity = max(1.0 - (1.0 - waterFresnel(normal, -eye)) * waterTransmittance(depthShare, uWaterClarity), foam);
+  float opacity = max(1.0 - (1.0 - waterFresnel(normal, -eye)) * waterTransmittance(colorDepth, uWaterClarity), foam);
   gl_FragColor = vec4(color, opacity);
 }

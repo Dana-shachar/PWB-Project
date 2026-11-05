@@ -11,7 +11,7 @@ const EDGE_EPSILON = 1e-9;
 
 // The slab under the chunk's lowest ground, as a share of its Size: the ground is lifted by it (heightBase in
 // landChunk.ts), so the base rests on the grid at 0 instead of below it (Dana, 2026-11-03).
-export const CHUNK_SLAB_SHARE = 0.05;
+export const CHUNK_SLAB_SHARE = 0.01; // 0.05 made the walls too tall (Dana, 2026-11-05). TUNABLE
 export function chunkBaseDepth(_chunkSize: number): number {
   return 0;
 }

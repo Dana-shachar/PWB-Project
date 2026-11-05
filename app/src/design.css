@@ -38,6 +38,7 @@
   --divider-weight: 0.5px;
   --color-btn-bg: #0c0c0d;
   --color-btn-hover-bg: #1a1a1a;
+  --color-system-gray: rgb(142 142 147); /* Apple's system gray (Dana, 2026-11-04) */
   --color-axis-x: #ff4444;
   --color-axis-y: #44ff88;
   --color-axis-z: #4488ff;
@@ -981,11 +982,59 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   background: var(--color-btn-hover-bg);
 }
 /* The View select and the walk mode button share one row. */
+/* The sliders, with the walk icon beside them while walking, and the walk map under them (Dana, 2026-11-04). */
+.gumball-walk-layout {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  width: var(--gumball-control-width);
+}
+.gumball-walk-layout--walking {
+  /* A frame so the walk controls read on bright ground (Dana, 2026-11-04). */
+  box-sizing: border-box;
+  padding: var(--gap-sm);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-system-gray) 60%, transparent);
+  pointer-events: auto;
+}
+.gumball-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  flex: 1;
+  min-width: 0;
+}
+.gumball-sliders .gumball-zoom-row {
+  width: 100%;
+}
+.gumball-sliders .gumball-zoom-input {
+  min-width: 0; /* a range input keeps its built-in width otherwise, and overflowed beside the walk icon */
+}
+.gumball-walk-map {
+  display: block;
+  width: var(--gumball-control-width);
+  aspect-ratio: 1;
+  box-sizing: border-box;
+  border: 1px solid var(--color-track);
+  border-radius: 4px;
+  cursor: crosshair;
+  pointer-events: auto;
+}
+.gumball-walk-map:hover {
+  border-color: var(--color-input-stroke);
+}
 .gumball-view-row {
   display: flex;
   gap: var(--gap-sm);
   width: var(--gumball-control-width);
   height: var(--gumball-row-height);
+}
+.gumball-view-row .gumball-btn--in-row {
+  flex: 1;
+  width: auto;
+  min-width: 0;
+  height: 100%;
+  box-sizing: border-box;
 }
 .gumball-view-row .gumball-view-select {
   flex: 1;

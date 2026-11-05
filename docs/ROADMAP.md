@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-04`
+`Last updated: 2026-11-05`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -17,9 +17,9 @@
 > **Direction.** About 3 weeks to the final: a vertical slice of 3 to 5 distinct planets (❓ Dana to confirm: pink desert, water world, lava world, methane ice, forest if trees fit). Rivers, plants and animals are chunk detail by real size (`[S79]`).
 >
 > **Next, in order.**
-> 1. 🔴 `[B134]` water walls too high, and 🔴 `[B133]` side walls and top disagree at the coast: diagnose on New Planet 04's current square. The tide's 8% swing is the lead for `[B134]`.
-> 2. ⚪ Walk lag: `sampleHeight` stalls on a GPU read every frame (17.6 of 20.7 ms measured); read from a CPU copy instead. Approved in principle.
-> 3. ⚪ Rivers on the chunk: plan approved (flow per GRASS `r.stream.extract` on the chunk's ground in `rivers/chunkLakes.worker.ts`, width in meters from flow, painted in `chunk.frag.glsl` when wider than a pixel). Not started.
+> 1. ✅ `[B133]`, `[B134]` and the walk mode round `[B135]` to `[B143]` (2026-11-05): see `ISSUES.md`. Open from it: 🔴 `[B144]` (unreproduced 74 km probe jumps), close ground coarser since `[B143]` (per-pixel band-limited grain, Quilez, is the planned fix), ❓ the tide's size, ❓ whether the chunk draws taller than the planet ("crawling" feeling). The slab under the chunk is now 1% of its width (`CHUNK_SLAB_SHARE`).
+> 2. ✅ Walk lag: fixed (`[B135]`).
+> 3. 🟡 Rivers on the chunk (next, Dana's go 2026-11-05): plan approved (flow per GRASS `r.stream.extract` on the chunk's ground in `rivers/chunkLakes.worker.ts`, width in meters from flow, painted in `chunk.frag.glsl` when wider than a pixel). Not started.
 > 4. ⚪ Layered haze (after Dana looks at the haze fix), then vegetation (`ROADMAP` item 5 below), then per-pixel grain `[B122]`.
 > 5. ⚪ Walk mode jitter on a fresh planet, if it still shows after `[B129]`.
 >

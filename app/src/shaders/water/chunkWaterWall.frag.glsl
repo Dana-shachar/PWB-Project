@@ -26,7 +26,9 @@ void main() {
   vec2 chunkUv = clamp(vWorldPosition.xz / uChunkSize + 0.5, 0.0, 1.0);
   vec4 heightTexel = texture2D(uChunkHeightMap, chunkUv);
   float groundRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
-  float waterSurface = max(uSeaLevel, texture2D(uChunkLakeLevels, chunkUv).r);
+  vec4 lakeTexel = texture2D(uChunkLakeLevels, chunkUv);
+  // The sea only where it can reach (B, the spill height); the lake's level (R) elsewhere.
+  float waterSurface = max(lakeTexel.b <= uSeaLevel ? uSeaLevel : -1000.0, lakeTexel.r);
   // A little below the ground, so the land wall's top (from its own mesh) never leaves a gap under the water.
   if (groundRaw >= waterSurface || raw > waterSurface || raw < groundRaw - WALL_GROUND_OVERLAP) discard;
   // Colored by depth below the surface, as the sheet measures it, so the side matches the water seen from above.

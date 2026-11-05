@@ -29,17 +29,22 @@
 - **Lakes, walking and haze (`[B126]` to `[B128]`):** the chunk shows the planet's large lakes (1.8% to 79% of one square), lakes ripple at every zoom, walking stops at lake shores, and haze reaches the horizon.
 - **Walk mode and walls (`[B129]` to `[B132]`, `[S80]`):** no more stripes or getting stuck on bumps, an Eye height setting on the Zoom slider, cameras stay above water, and the side walls show the true cross-section with the seabed under the water.
 - **Saving and defaults (`[S74]`, `[S78]`):** the Erosion switch saves; a new planet starts bare with closed panels.
+- **Water that stands only where it can (`[B133]`, `[B134]`):** planet lakes stop at their spill height instead of standing as cliffs beside lower ground (480 cliff edges to 0), lakes no longer follow the tide, and the sea shows only where it can reach.
+- **Walk mode, fixed and measured (`[B135]` to `[B141]`):** 40 to 60 fps, no black holes in the sky, no walls streaking through far hills, no walking under lake edges, the camera never inside the ground, and a walk map: click a spot and glide there.
+- **Seamless ground detail (`[B139]`, `[B142]`, `[B143]`):** the ground near the walker now loads at full detail, and patches of different detail blend into each other (geometry clipmaps' transition regions, timed as CDLOD), closing cracks of up to 3.5 m to 0.01 m.
+- **Water look:** ripples sized per pixel so lakes ripple in walk mode, and a soft shore line on lakes.
 - **Direction:** a concept and research question in the README, and a vertical slice of 3 to 5 distinct planets for the final, with rivers, plants and animals as chunk detail by real size (`[S79]`).
 
 ### 🤖 How AI was used
 - Claude drove the app through Chrome and measured each cause before a fix, comparing old and new behavior in the same session. Dana reproduced problems, set priorities and corrected wrong theories.
-- What Claude got wrong: one plan rested on an overstated measurement, and one fix was real but not the cause of the reported slowness. Both came out in before and after tests.
+- What Claude got wrong: one plan rested on an overstated measurement, and one fix was real but not the cause of the reported slowness. Both came out in before and after tests. Later in the week Claude built changes without Dana's go, blamed the square's size for problems it hadn't measured, and one crack fix flattened the eroded land until a second fix; Dana caught each of these.
 
 ### ❌ What didn't work
 - Gully walls of 85 to 88 degrees remain (`[B121]`), capped for now by limiting Gully Size. A grain line and soft close-ups remain (`[B122]`).
+- A fade over map jumps hid the loading but read as a black screen, and was removed for a glide. Fine shading per patch showed borders between patches and was reverted; close ground is coarser than before (`[B143]`).
 
 ### ➡️ Next
-- Lakes on the chunk, erosion units in real units, then rivers.
+- Rivers on the chunk, then the vertical slice's planets.
 
 ---
 

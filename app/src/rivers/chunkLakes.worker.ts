@@ -5,9 +5,10 @@ import { NodeHeap } from './pitFill';
 import { waterBudget, type RiverClimate } from './riverClimate';
 
 export const NO_CHUNK_LAKE = -1000;
+export const SEA_NEVER_REACHES = 1000; // the spill height of a cell no tide reaches (no sea on the square)
 // A lake's tide is the sea's times its width over the planet's radius (Lake Superior: about 0.09, so about 4 cm, within
-// NOAA's "less than five centimeters"), raised so large lakes show a subtle shift. Inferred, TUNABLE.
-const LAKE_TIDE_BOOST = 4;
+// NOAA's "less than five centimeters"). 0: lakes don't follow the tide (Dana, 2026-11-04; it moved a big lake 30 units).
+const LAKE_TIDE_BOOST = 0;
 
 export interface ChunkLakesRequest {
   ground: Float32Array;
@@ -40,14 +41,38 @@ function squareNeighbors(size: number): { neighborStarts: Int32Array; neighborLi
   return { neighborStarts, neighborList };
 }
 
+// The highest water each cell can hold before spilling to the sea: Priority-Flood (Barnes et al. 2014) from the sea cells.
+// The cut sides aren't outlets here, since a planet lake's rim may lie past the cut.
+function spillHeights(ground: Float32Array, seaLevel: number, neighborStarts: Int32Array, neighborList: Int32Array, heap: NodeHeap): Float32Array {
+  const spill = new Float32Array(ground.length).fill(Infinity);
+  heap.size = 0;
+  for (let cell = 0; cell < ground.length; cell++) {
+    if (ground[cell] < seaLevel) {
+      spill[cell] = seaLevel;
+      heap.push(cell, seaLevel);
+    }
+  }
+  while (heap.size > 0) {
+    const cell = heap.pop();
+    for (let k = neighborStarts[cell]; k < neighborStarts[cell + 1]; k++) {
+      const next = neighborList[k];
+      if (spill[next] !== Infinity) continue;
+      spill[next] = Math.max(ground[next], spill[cell]);
+      heap.push(next, spill[next]);
+    }
+  }
+  return spill;
+}
+
 // The planet's lakes on the chunk's own ground: from the planet's outline, water at its level spreads to every neighbor
-// whose ground is below it, so a lake always ends against rising ground or at the cut, never in the air (a flood fill).
-function floodPlanetLakes(ground: Float32Array, planetLakes: Float32Array, size: number, seaLevel: number): Float32Array {
+// whose ground is below it (a flood fill), capped at each cell's spill height so it never stands as a cliff ([B134]).
+function floodPlanetLakes(ground: Float32Array, planetLakes: Float32Array, spill: Float32Array, size: number, seaLevel: number): Float32Array {
   const level = new Float32Array(size * size).fill(NO_CHUNK_LAKE);
   const queue: number[] = [];
   for (let cell = 0; cell < level.length; cell++) {
-    if (planetLakes[cell] > ground[cell] && ground[cell] >= seaLevel) {
-      level[cell] = planetLakes[cell];
+    const capped = Math.min(planetLakes[cell], spill[cell]);
+    if (capped > ground[cell] && ground[cell] >= seaLevel) {
+      level[cell] = capped;
       queue.push(cell);
     }
   }
@@ -59,8 +84,9 @@ function floodPlanetLakes(ground: Float32Array, planetLakes: Float32Array, size:
       if (nextRow < 0 || nextCol < 0 || nextRow >= size || nextCol >= size) continue;
       const next = nextRow * size + nextCol;
       // The sea stops it, as it stops the chunk's own lakes: a lake never spreads over the sea floor.
-      if (ground[next] < level[cell] && ground[next] >= seaLevel && level[next] < level[cell]) {
-        level[next] = level[cell];
+      const capped = Math.min(level[cell], spill[next]);
+      if (ground[next] < capped && ground[next] >= seaLevel && level[next] < capped) {
+        level[next] = capped;
         queue.push(next);
       }
     }
@@ -114,17 +140,20 @@ self.onmessage = (event: MessageEvent<ChunkLakesRequest>) => {
   const hierarchy = buildDepressionHierarchy(ground, isOcean, neighborStarts, neighborList, heap);
   const lakes = fillSpillMerge(hierarchy, ground, neighborStarts, neighborList, waterBudget(climate).lakeShare, heap);
   // Each cell takes the higher of its own lake and the planet's lake flooded over this ground.
-  const level = floodPlanetLakes(ground, planetLakes, size, seaLevel);
+  const spill = spillHeights(ground, seaLevel, neighborStarts, neighborList, heap);
+  const level = floodPlanetLakes(ground, planetLakes, spill, size, seaLevel);
   for (let cell = 0; cell < cells; cell++) {
     const lake = lakes.lakeOf[cell];
     if (lake >= 0 && lakes.lakeLevel[lake] > level[cell]) level[cell] = lakes.lakeLevel[lake];
   }
-  // Pairs per cell: the level, and how much of the sea's tide the lake takes (its width from its area on the chunk).
-  const levels = new Float32Array(cells * 2);
+  // Four per cell: the level, the lake's share of the sea's tide (its width from its area on the chunk), and the spill
+  // height: the sea shows only where the tide stands at or above it, so it never floods a dip it can't reach.
+  const levels = new Float32Array(cells * 4);
   const area = lakeAreas(level, size);
   for (let cell = 0; cell < cells; cell++) {
-    levels[cell * 2] = level[cell];
-    if (level[cell] > NO_CHUNK_LAKE) levels[cell * 2 + 1] = Math.min(1, (LAKE_TIDE_BOOST * Math.sqrt(area[cell]) * (chunkKm / size)) / radiusKm);
+    levels[cell * 4] = level[cell];
+    if (level[cell] > NO_CHUNK_LAKE) levels[cell * 4 + 1] = Math.min(1, (LAKE_TIDE_BOOST * Math.sqrt(area[cell]) * (chunkKm / size)) / radiusKm);
+    levels[cell * 4 + 2] = Math.min(spill[cell], SEA_NEVER_REACHES);
   }
   self.postMessage({ levels, requestId, lakeCount: lakes.lakeCount, ms: Math.round(performance.now() - start) }, { transfer: [levels.buffer] });
 };
