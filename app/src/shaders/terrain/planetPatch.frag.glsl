@@ -28,6 +28,11 @@ uniform float uColorByElevation;
 uniform vec3 uRampColors[MAX_COLOR_STOPS];
 uniform float uRampPositions[MAX_COLOR_STOPS];
 uniform float uRampCount;
+uniform vec3 uRockColors[MAX_COLOR_STOPS]; // the rock ramp by height (Color > Rock)
+uniform float uRockPositions[MAX_COLOR_STOPS];
+uniform float uRockCount;
+uniform float uRockSlope; // steepness where rock starts, 1 - cos of the slope angle
+uniform float uRockSoftness;
 uniform float uElevationMin;
 uniform float uElevationMax;
 uniform sampler2D uHeightMap;
@@ -157,7 +162,8 @@ void main() {
   if (uColorByElevation > 0.5) {
     float elevationFraction = (elevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
-    surfaceColor = ramp;
+    vec3 rockColor = uRockCount > 0.5 ? terrainRampColor(elevationFraction, uRockColors, uRockPositions, int(uRockCount)) : ramp;
+    surfaceColor = landSurfaceColor(ramp, rockColor, normal, mat3(modelMatrix) * localNormal, uRockSlope, uRockSoftness);
   }
 
   vec3 litColor = surfaceColor * (fill + diffuse) + specular;

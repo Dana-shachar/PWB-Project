@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-05`
+`Last updated: 2026-11-08`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,20 +8,43 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-04, eighteenth handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Newer than the blocks below.*
+> **Start from here (2026-11-08, handover):** *read `.claude/CLAUDE.md`, then this block, then "Direction" and "Dana's requests" just below, then `docs/CODE-INDEX.md`.*
 >
-> **State.** `main` holds everything through the walk mode and wall fixes (`[B126]` to `[B132]`, `[S78]` to `[S80]`), not pushed. Uncommitted on purpose: `README.md` (Dana's concept and research question, edited at her request this session; ask whether to commit it), `.obsidian/workspace.json` (never), the old handover file and its screenshots (Dana's call to delete).
+> **State.** `main` = `c39f118` (pushed). Everything since is uncommitted on `main`; the river work is on branch `rivers-fork` (`893a1ef`, `[B145]` to `[B155]`). Never commit `.obsidian/workspace.json`. Types check and all 17 shaders compile.
+> - Built 2026-11-08, uncommitted: settings undo (`projectSettings/settingsHistory.ts`, new); one-sweep drainage (`accumulateDrainage` in `rivers/drainage.worker.ts`, `[B155]` fixed, its side effect kept); erosion's own fixed base level (`erosion/erosionControls.ts`); detail no longer faded at the sea (`heightmap.frag.glsl`); water sheet 1023 with one-cell reach (`chunkWater.ts`, `chunkWater.vert.glsl`); lake rims lifted to the water (`lakeRim` in `chunk.vert.glsl`); selective breaching (`selectiveBreach` in `rivers/chunkLakes.worker.ts`, unrequested, limits 50 m and 20 cells, Dana never decided to keep it); Water panel = Sea, Lakes, Color, each with its own look; sea and lake ripples (`waterRipple`), far foam veil removed, shore foam filtered (`chunkWater.frag.glsl`, `seaLookOverride.glsl` new); lake color by absorption; slope rock (`landSurfaceColor` in `landLayers.glsl`, `RockSettings`), now reading the landform's slope (`ROCK_SLOPE_STEP_UV`); rule-based palettes (`randomRockPalette`, `randomAtmosphereColors`); layered haze (`uHazeLayers`, Layers slider; Haze max 12); Climate its own section above Atmosphere; Rainfall max 26 times typical.
+> - 📌 Remove before the commit: the `TEMP diagnose` probe in `voxel/LandChunkCanvas.tsx` (`window.__probe`).
+> - 📌 Older handover blocks (seventeenth and earlier) are still stacked below this one on `main`; fold anything live into the standing sections and delete them in the commit's docs pass (single rotating handover rule).
+> - 📌 Docs pass at the commit: `ISSUES.md` is logged (`[B155]` to `[B163]`); still to do: `CODE-INDEX.md` (new names: `settingsHistory.ts`, `seaLookOverride.glsl`, `accumulateDrainage`, `selectiveBreach`, `lakeRim`, `waterRipple`, `landSurfaceColor`, `createRockUniforms`, `randomRockPalette`, `randomAtmosphereColors`, `uHazeLayers`, `withLogDepth` in `scene/logDepth.ts`), `REFERENCES.md` (Lindsay 2016 breaching, Firewatch gradient fog, Unreal and Unity water bodies, Roystan toon water, Gaea Lakes, World Machine Create Water), `SPEC.md` (Water panel = Sea, Lakes, Color; Climate its own section), the weekly push entry with screenshot and diagram.
 >
-> **How Dana wants work run.** Diagnose first, confirm with a measurement, then fix only the confirmed cause (memory `diagnose-before-proposing`). A clear "fix it" is the go. Keep tokens down. Chrome pauses a tab that's behind another, so measurements need the test tab in front; ask Dana to bring it forward. Two tabs on one planet can overwrite each other's autosave. Measure against the sea's base level (`uShoreSeaLevel`), never `uSeaLevel`, which includes the tide.
+> **Open bugs, in order (Dana: bugs first).** Details and measurements in `ISSUES.md`, `[B156]` to `[B163]`.
+> 1. 🟡 `[B157]` walk mode depth precision: logarithmic depth buffer built (`scene/logDepth.ts`, `withLogDepth` on every scene material; walk far = chunk diagonal). Dana to test the flicker. Still to check: walk fps 36 on a 4,000 km chunk; compare with log depth off on the same view.
+> 2. 🔴 `[B156]` washboard ridges: not reproduced; test Voronoi Jitter 1, Erosion off, layers hidden in turn.
+> 3. 🟡 `[B163]` rock smears: fixed by the landform slope, Dana to confirm.
+> 4. 🔴 `[B164]` the flat tan plane filling the lower view in walk mode: a real surface, not depth; not identified yet.
 >
-> **Direction.** About 3 weeks to the final: a vertical slice of 3 to 5 distinct planets (❓ Dana to confirm: pink desert, water world, lava world, methane ice, forest if trees fit). Rivers, plants and animals are chunk detail by real size (`[S79]`).
+> **How to test without disturbing Dana.** Use the `TEMP diagnose` probe and override uniforms in memory (`Object.defineProperty` on a uniform's `value`), never move her sliders; find any control by its label, never by position (2026-11-08: a position-based script moved the wrong slider while she used the tab). Cmd+Z now undoes settings, so a test change can be undone.
+>
+> **Direction (Dana, 2026-11-08).** General development stops. The final (Dec 2) shows a vertical slice: 3 planets built on the land chunk, each a procedural, stylized alien environment with one process that evolves on the World Clock. Rocks are shared by all three. Rivers are paused on branch `rivers-fork` (`[B145]` to `[B155]`).
+> - **Living chunk (priority):** moss and algae as a ground color by wetness and slope; one plant family whose shape is a set of numeric genes, grown in small steps over the World Clock and mutated per planet (Karl Sims, *Panspermia*: a continuous growth model with evolved parameters). Evolution: flora growing and changing. Flora stages apply to any livable planet; the slice shows them on one chunk.
+> - **Lava:** volcano cones added to the height, a lava shader (glowing cracks in a cooling crust). Evolution: lava cooling, cones building.
+> - **Ice:** an ice shader, icebergs at sea level. Evolution: ice spreading or thawing.
+> - ❌ Cut: desert canyons and sandstorms (too hard procedurally), water world (needs a new set of elements).
 >
 > **Next, in order.**
-> 1. ✅ `[B133]`, `[B134]` and the walk mode round `[B135]` to `[B143]` (2026-11-05): see `ISSUES.md`. Open from it: 🔴 `[B144]` (unreproduced 74 km probe jumps), close ground coarser since `[B143]` (per-pixel band-limited grain, Quilez, is the planned fix), ❓ the tide's size, ❓ whether the chunk draws taller than the planet ("crawling" feeling). The slab under the chunk is now 1% of its width (`CHUNK_SLAB_SHARE`).
-> 2. ✅ Walk lag: fixed (`[B135]`).
-> 3. 🟡 Rivers on the chunk (next, Dana's go 2026-11-05): plan approved (flow per GRASS `r.stream.extract` on the chunk's ground in `rivers/chunkLakes.worker.ts`, width in meters from flow, painted in `chunk.frag.glsl` when wider than a pixel). Not started.
-> 4. ⚪ Layered haze (after Dana looks at the haze fix), then vegetation (`ROADMAP` item 5 below), then per-pixel grain `[B122]`.
-> 5. ⚪ Walk mode jitter on a fresh planet, if it still shows after `[B129]`.
+> 1. ✅ **Water on the chunk** (built 2026-11-08, `[B158]` to `[B161]`): no floating water, lakes with their own look and ramp, sea level no longer reshapes the land, moving water and shore foam. Left from it: `[B157]` and `[B164]` (walk mode), and Dana's call on keeping the unrequested breaching (`selectiveBreach`).
+> 2. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock.
+> 3. ⚪ **Rocks:** procedural rocks scattered by slope and biome; height-field formations (mesas, terraces, spires) with them. Arches and overhangs are a stretch (Peytavie et al. 2009).
+> 4. ✅ **Stylized shading** (built 2026-11-08): slope rock (`[B163]`), rule-based palettes for land, water, rock and sky, layered haze. Next for the look is in Dana's requests below (shadows, color grade).
+> 5. ⚪ **Lava planet.**
+> 6. ⚪ **Ice planet** (depends on water the most).
+>
+> **Dana's requests, 2026-11-08 (in this order).**
+> 1. 🔴 **Bugs first:** see "Open bugs" above: `[B156]` washboard ridges, `[B157]` distant flicker (fix built, to test), `[B164]` the flat plane in walk mode, `[B163]` rock smears (to confirm).
+> 2. ⚪ **Flora planet:** Planet 1's colors; terrain toned down so it reads as walkable ground: plains with some mountains, not mountains everywhere.
+> 3. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
+> 4. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll): the setting that makes a planet read as one strong hue (No Man's Sky's painted look).
+> 5. ⚪ **Props with the shadows:** rocks and silhouettes (planned rocks, step 3 above).
+> - ✅ Done this round: settings undo (Cmd+Z), sea and lake ripples, shore foam, lake color and look, rule-based palettes for land, water, rock and sky, slope rock, layered haze (Layers in Atmosphere; Haze max 12).
 >
 > **Open decisions for Dana (ask, don't assume).**
 > - ❓ The vertical slice's planet list and her real deadline.
@@ -90,7 +113,7 @@
 > **How the water works now** (one chain, each step recomputing only what changed)
 > 1. A terrain or sea level change (`useDrainage` in `rivers/drainageControls.ts`, keyed on the heights' content, not the object) reads the globe heights at 2048 × 1024 (`renderRiverHeights`), about 18 km a cell.
 > 2. `drainage.worker.ts` fills the pits (Priority-Flood + ε, `pitFill.ts`): about 0.4 s.
-> 3. `planetDrainage.ts` runs Schott's pass on the GPU, 4 passes a frame: 350 passes of drainage with erosion off (saved), then the erosion passes on top. About 1 to 3 s with the progress bar. Duration and Strength continue from the save or restart from it.
+> 3. `drainage.worker.ts` also computes the settled drainage in one sweep (`accumulateDrainage`, `[B155]`); `planetDrainage.ts` seeds the GPU state with it (saved), then runs the erosion passes on top, 4 a frame. About 2.3 s at 632 passes. Duration and Strength continue from the save or restart from it.
 > 4. The worker builds the ground (terrain plus carving), lakes by Fill-Spill-Merge with `waterBudget` (`depressions.ts`), the river network (`extractRiverNodes`, unused while drawing is off), the valley spacing, and the water map: R carving, G drainage in cells, B ground, A lake level; rows **south first**, the river grid's rows after them. 0.1 to 0.7 s. A climate change reruns only this step.
 > 5. `setPlanetWaterMap` uploads it; the bake (`heightmap.frag.glsl`) adds the carving, runs the erosion filter (`erodedSurface`, `erosionFilter3d.glsl`) in Rune's demo proportions (valley spacing to his hill spacing, relief to his relief), and draws lakes per point where A stands above B and above the ground. Shape sliders only re-bake patches.
 >
@@ -125,7 +148,7 @@
 > 3. **Cleanup** when rivers settle: every `[TEMP water]` log (`drainageControls.ts`, `drainage.worker.ts`, `SceneCanvas.tsx`, `PlanetPatchRenderer.ts`), and `probeWaterMap` in `map/heightmap.ts`, which bakes 18 regions per change and slows slider drags.
 > 4. **Later:** liquids eroding differently (research after the water system); the chunk's water from the virtual-pipes engine (phase 2: Šťava sources and sinks, Jákó rain and evaporation, water under 0.1 m hidden); Stage 08 of this roadmap rewritten; the concept draft revised with Dana.
 >
-> **Open, Dana's to decide:** none pending. Inferred and tunable values to revisit: `HILLSLOPE_SHARE` 0.05, `DRAINAGE_PASSES` 350, `PLANET_PASSES_AT_MAX_DURATION` 1,500, the demo-proportion mapping in `erodedSurface`, `engineRainfall`'s scaling, `RIVER_MIN_CELLS` 300.
+> **Open, Dana's to decide:** none pending. Inferred and tunable values to revisit: `HILLSLOPE_SHARE` 0.05, `PLANET_PASSES_AT_MAX_DURATION` 1,500, the demo-proportion mapping in `erodedSurface`, `engineRainfall`'s scaling, `RIVER_MIN_CELLS` 300.
 >
 > **Dana's directions from this round, all in force** (also in memory and `.claude/CLAUDE.md`)
 > - Diagnose (logs need no approval) and research on my own initiative before proposing; existing implementations and course papers first, via the summaries; give Dana the links when a fetch fails.

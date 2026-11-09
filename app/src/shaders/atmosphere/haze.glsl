@@ -9,6 +9,7 @@ uniform float uHazeStart; // distance from the camera where haze begins: the orb
 // any chunk size or lift; a fixed 1.2 km scale left it at e^-249 at walking height (Dana: keep it a ratio).
 uniform float uHazeFloor;
 uniform float uHazeScaleHeight;
+uniform float uHazeLayers; // 0 a smooth fade; 2 or more splits it into that many soft bands (Atmosphere > Layers)
 // The sky's own sun halo color (skyDome.frag.glsl), so the haze glows toward the sun as the sky does.
 const vec3 HAZE_SUN_COLOR = vec3(1.0, 0.96, 0.88);
 // Grain strength, as a share of the haze amount. Inferred, TUNABLE.
@@ -33,8 +34,21 @@ vec3 applyHaze(vec3 color, vec3 worldPosition, vec3 cameraPosition, vec3 sunDire
   float haze = 1.0 - exp(-amount);
   haze = clamp(haze + (interleavedGradientNoise(gl_FragCoord.xy) - 0.5) * HAZE_GRAIN * haze, 0.0, 1.0);
 
+  // Layered haze (Firewatch, Jane Ng, GDC 2015: the fog's color from a gradient by distance; true distance here, not
+  // depth, so it never slides as the camera turns): near ridges a deeper value of the horizon's hue, then the horizon,
+  // then the sky, so far ridges melt into it. With Layers the fade steps into soft bands, the stacked silhouettes of
+  // Sable and Gris (the banding is inferred from their look, TUNABLE).
+  if (uHazeLayers > 1.5) {
+    float bands = floor(uHazeLayers + 0.5);
+    float scaled = haze * bands;
+    haze = (floor(scaled) + smoothstep(0.1, 0.9, fract(scaled))) / bands; // wide, soft steps between bands
+  }
+  vec3 nearColor = uHazeColor * 0.7;
+  // Far ridges end halfway to the sky's color, so the last band doesn't jump to a hard blue (Dana, 2026-11-08).
+  vec3 farColor = mix(uHazeColor, uHazeSkyColor, 0.5);
+  vec3 gradient = mix(mix(nearColor, uHazeColor, smoothstep(0.0, 0.5, haze)), farColor, smoothstep(0.5, 1.0, haze));
   float skyShare = 1.0 - exp(-max(worldPosition.y - uHazeFloor, 0.0) * hazeFalloff);
-  vec3 hazeColor = mix(uHazeColor, uHazeSkyColor, skyShare * 0.5);
+  vec3 hazeColor = mix(gradient, uHazeSkyColor, skyShare * 0.5);
   float sunAmount = max(dot(rayDirection, normalize(sunDirection)), 0.0);
   hazeColor = mix(hazeColor, HAZE_SUN_COLOR, pow(sunAmount, 8.0));
   return mix(color, hazeColor, haze);

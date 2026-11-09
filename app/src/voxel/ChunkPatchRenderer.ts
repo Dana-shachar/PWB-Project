@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { buildLeafIndex, computeStitchFlags, coveringLeaves, patchKey, type EdgeStitchFlags } from '../planet/planetPatches';
-import { bakeSamplesCap, bakeSamplesForPixelWidth, createPatchTarget, PATCH_BAKE_SAMPLES_MIN, PATCH_BORDER_TEXELS, type TerrainPatch } from '../planet/patch';
-import { chunkFrame, chunkPatchBox, chunkPatchInView,chunkPatchPixelWidth, chunkPatchWorldSize, chunkSelectionThreshold, morphRange, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
+import { bakeSamplesCap, bakeSamplesForPixelWidth, createPatchTarget, PATCH_BORDER_TEXELS, type TerrainPatch } from '../planet/patch';
+import { chunkFrame, chunkPatchBox, chunkPatchPixelWidth, chunkPatchWorldSize, chunkSelectionThreshold, morphRange, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
 import { buildChunkBaseGeometry, buildFlatPatchGeometry } from './chunkPatchMesh';
 
 // Bakes one patch's heightmap into a target; false if the planet view isn't ready.
@@ -54,6 +54,7 @@ export class ChunkPatchRenderer {
   private lastErrorPixels = 0;
   private lastGroundData: Float32Array | undefined; // a new ground reading reselects the patches
   private boundsMaxHeight = 0;
+  private boundsGround: Float32Array | undefined;
   private readBuffer = new Float32Array(16); // a 2x2 block of RGBA floats for sampleHeight
 
   private template: THREE.ShaderMaterial;
@@ -94,8 +95,9 @@ export class ChunkPatchRenderer {
       this.wanted = selectChunkPatches(root, camera.position, detail, this.wanted.length ? this.wanted : undefined);
       this.stitchFlags = computeStitchFlags(this.wanted, chunkFrame(root));
     }
-    if (this.boundsMaxHeight !== detail.maxHeight) {
+    if (this.boundsMaxHeight !== detail.maxHeight || this.boundsGround !== detail.ground?.data) {
       this.boundsMaxHeight = detail.maxHeight;
+      this.boundsGround = detail.ground?.data; // the boxes follow each patch's own ground
       for (const entry of this.entries.values()) this.fitBounds(entry.mesh.geometry, entry.patch, detail);
     }
     this.buildDone = true;
@@ -118,8 +120,8 @@ export class ChunkPatchRenderer {
   settled = false;
   private buildDone = true;
 
+  // By distance only, like the split (chunkPatches.ts shouldSplit), so a patch turning into view needs no re-bake.
   private wantedSamples(patch: TerrainPatch, camera: THREE.PerspectiveCamera, detail: ChunkDetail, cap: number): number {
-    if (!chunkPatchInView(this.root!, patch, detail)) return PATCH_BAKE_SAMPLES_MIN;
     return bakeSamplesForPixelWidth(chunkPatchPixelWidth(this.root!, patch, camera.position, detail), cap);
   }
 

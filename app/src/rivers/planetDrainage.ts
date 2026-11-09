@@ -18,7 +18,6 @@ const SCHOTT_DT = 50;
 const SCHOTT_AREA_EXPONENT = 0.8;
 const SCHOTT_SLOPE_EXPONENT = 2;
 const SCHOTT_FLOW_EXPONENT = 1;
-const DRAINAGE_PASSES = 350; // half the 540 measured at twice the size, plus a margin. Inferred, TUNABLE
 const PASSES_PER_FRAME = 4; // about a quarter of the larger map's cost each, so frames stay short. Inferred, TUNABLE
 
 export interface DrainageResult {
@@ -62,7 +61,7 @@ export class PlanetDrainage {
   constructor() {
     const material = (fragmentShader: string, uniforms: Record<string, { value: unknown }>) =>
       new THREE.ShaderMaterial({ vertexShader: quadVertexGlsl, fragmentShader, uniforms, depthTest: false, depthWrite: false });
-    this.seedMaterial = material(seedGlsl, { uHeights: { value: null }, uSeaLevel: { value: 0 }, uMetersPerUnit: { value: 1 } });
+    this.seedMaterial = material(seedGlsl, { uHeights: { value: null }, uSeaLevel: { value: 0 }, uMetersPerUnit: { value: 1 }, uDrainage: { value: null }, uRadiusMeters: { value: 1 } });
     this.passMaterial = material(streamPowerGlsl, {
       uState: { value: null },
       uSize: { value: new THREE.Vector2(1, 1) },
@@ -135,8 +134,8 @@ export class PlanetDrainage {
     return this.readResult(renderer, generation);
   }
 
-  // From pit-filled heights (the globe map's units, rows as given): drainage, saved, then erosionPasses on top.
-  async run(renderer: THREE.WebGLRenderer, filled: Float32Array, width: number, height: number, seaLevel: number, metersPerUnit: number, radiusMeters: number, erosionPasses: number, strength: number, onProgress: (share: number) => void): Promise<DrainageResult | null> {
+  // From pit-filled heights (the globe map's units, rows as given) and their settled drainage: saved, then erosionPasses on top.
+  async run(renderer: THREE.WebGLRenderer, filled: Float32Array, drainage: Float32Array, width: number, height: number, seaLevel: number, metersPerUnit: number, radiusMeters: number, erosionPasses: number, strength: number, onProgress: (share: number) => void): Promise<DrainageResult | null> {
     const generation = ++this.generation;
     this.strength = strength;
     this.metersPerUnit = metersPerUnit;
@@ -152,20 +151,24 @@ export class PlanetDrainage {
     this.seedMaterial.uniforms.uHeights.value = heights;
     this.seedMaterial.uniforms.uSeaLevel.value = seaLevel;
     this.seedMaterial.uniforms.uMetersPerUnit.value = metersPerUnit;
+    const settled = new THREE.DataTexture(drainage, width, height, THREE.RedFormat, THREE.FloatType);
+    settled.needsUpdate = true;
+    this.seedMaterial.uniforms.uDrainage.value = settled;
+    this.seedMaterial.uniforms.uRadiusMeters.value = radiusMeters;
     (this.passMaterial.uniforms.uSize.value as THREE.Vector2).set(width, height);
     (this.passMaterial.uniforms.uCellSize.value as THREE.Vector2).set((2 * Math.PI * radiusMeters) / width, (Math.PI * radiusMeters) / height);
     this.current = 0;
     this.render(renderer, this.seedMaterial, this.targets[0]);
     heights.dispose();
+    settled.dispose();
 
-    const total = DRAINAGE_PASSES + erosionPasses;
+    // The seed already holds the settled drainage (rivers/drainage.worker.ts, accumulateDrainage), saved as the checkpoint.
     this.passMaterial.uniforms.uK.value = 0;
     this.passMaterial.uniforms.uDiffusion.value = 0;
-    if (!(await this.runPasses(renderer, DRAINAGE_PASSES, generation, (done) => onProgress(done / total)))) return null;
     this.copy(renderer, this.targets[this.current], this.checkpoint!);
     this.checkpointReady = true;
     this.erosionPassesDone = 0;
-    return this.erode(renderer, erosionPasses, generation, (done) => onProgress((DRAINAGE_PASSES + done) / total));
+    return this.erode(renderer, erosionPasses, generation, (done) => onProgress(done / Math.max(erosionPasses, 1)));
   }
 
   // Duration or Strength moved: continue from where the land is, or restart from the drainage-only state when Duration

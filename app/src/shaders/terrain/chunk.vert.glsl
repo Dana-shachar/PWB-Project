@@ -46,6 +46,27 @@ uniform float uBorderTexels;
 // uMorphStart, 1 at uMorphEnd, so where it meets a coarser neighbor it already has that neighbor's surface.
 uniform float uMorphStart;
 uniform float uMorphEnd;
+uniform sampler2D uChunkLakeLevels; // voxel/chunkLakes.ts: R is the lake level per cell, -1000 off every lake
+uniform float uLakeCells; // the lake map's width in cells
+uniform float uChunkSize; // world units the whole chunk spans
+
+// A lake's shore never stands below its water: the ground beside a lake is lifted to just above the level, as Unreal's
+// lake bodies shape the landscape to meet the water. The lakes are solved on a coarser map, so the finer drawn ground
+// could otherwise dip below a rim and let the water stand in the air (measured up to 101 m).
+float lakeRim(vec2 worldXZ, float elevationRaw) {
+  if (uLakeCells < 2.0) return elevationRaw;
+  vec2 cell = floor((worldXZ / uChunkSize + 0.5) * (uLakeCells - 1.0) + 0.5);
+  float own = texture2D(uChunkLakeLevels, (cell + 0.5) / uLakeCells).r;
+  if (own > -999.0) return elevationRaw;
+  float rim = elevationRaw;
+  float lift = 0.5 / max(uMaxHeight * 1000.0, 1e-6); // half a meter above the water, so the two never z-fight
+  for (int k = 0; k < 4; k++) {
+    vec2 offset = k == 0 ? vec2(1.0, 0.0) : k == 1 ? vec2(-1.0, 0.0) : k == 2 ? vec2(0.0, 1.0) : vec2(0.0, -1.0);
+    float level = texture2D(uChunkLakeLevels, (cell + offset + 0.5) / uLakeCells).r;
+    if (level > -999.0) rim = max(rim, level + lift);
+  }
+  return rim;
+}
 varying float vMorph; // the blend, for chunk.frag.glsl's shading
 
 const float MESH_CELLS = 64.0; // PATCH_GRID in planet/patch.ts
@@ -92,6 +113,7 @@ void main() {
       vMorph = clamp((distance(cameraPosition, coarsePoint) - uMorphStart) / (uMorphEnd - uMorphStart), 0.0, 1.0);
       elevationRaw = mix(elevationRaw, coarse, vMorph);
     }
+    elevationRaw = lakeRim((modelMatrix * vec4(position, 1.0)).xz, elevationRaw);
     float heightNormalized = max(0.0, elevationRaw + uHeightBase);
     displacedPosition.y = heightNormalized * uMaxHeight;
   }

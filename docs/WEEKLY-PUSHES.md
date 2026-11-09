@@ -34,6 +34,7 @@
 - **Seamless ground detail (`[B139]`, `[B142]`, `[B143]`):** the ground near the walker now loads at full detail, and patches of different detail blend into each other (geometry clipmaps' transition regions, timed as CDLOD), closing cracks of up to 3.5 m to 0.01 m.
 - **Water look:** ripples sized per pixel so lakes ripple in walk mode, and a soft shore line on lakes.
 - **Direction:** a concept and research question in the README, and a vertical slice of 3 to 5 distinct planets for the final, with rivers, plants and animals as chunk detail by real size (`[S79]`).
+- **Walk mode diagnosis (`[B164]` to `[B168]`):** measured every walk-mode problem Dana reported before fixing it. The eye inside the ground came from walk mode reading heights the drawn triangles skip (24 m off on coarse ground), and coarse ground underfoot came from patch boxes that ignored the slab's lift (244 m a sample to 31 m after the fix). The tan plane is the tide rising over the land.
 
 ### 🤖 How AI was used
 - Claude drove the app through Chrome and measured each cause before a fix, comparing old and new behavior in the same session. Dana reproduced problems, set priorities and corrected wrong theories.
@@ -42,9 +43,10 @@
 ### ❌ What didn't work
 - Gully walls of 85 to 88 degrees remain (`[B121]`), capped for now by limiting Gully Size. A grain line and soft close-ups remain (`[B122]`).
 - A fade over map jumps hid the loading but read as a black screen, and was removed for a glide. Fine shading per patch showed borders between patches and was reverted; close ground is coarser than before (`[B143]`).
+- A logarithmic depth buffer for distant flicker (`[B157]`) was built on an unmeasured theory and made walking about twice as slow; it was removed.
 
 ### ➡️ Next
-- Rivers on the chunk, then the vertical slice's planets.
+- Walk mode: load the ground nearest the walker first (`[B166]`), a tide safe zone and Tide slider (`[B164]`), the walk map's stall (`[B168]`). Then the vertical slice's planets.
 
 ---
 

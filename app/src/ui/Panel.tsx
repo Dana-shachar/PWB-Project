@@ -8,7 +8,7 @@ import type { ProjectSummary } from '../firebase/storage';
 import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
 import { ColorRampEditor } from './panels/ColorRampEditor';
 import type { ColorStop } from '../planet/colorRamp';
-import type { WaterSettings } from '../planet/planetControls';
+import type { RockSettings, WaterSettings } from '../planet/planetControls';
 import { colorLockProps, randomAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { depthToRampPosition, landRampFloor, landShareAt, rampPositionToDepth, type HeightDistribution } from '../planet/seaLevel';
 import { MAX_MAX_ERROR_PIXELS, maxErrorPixelsToResolution, MIN_MAX_ERROR_PIXELS, resolutionToMaxErrorPixels } from '../planet/patch';
@@ -74,6 +74,8 @@ interface PanelProps {
   onColorByElevationChange: (value: boolean) => void;
   colorStops: ColorStop[];
   onColorStopsChange: (stops: ColorStop[]) => void;
+  rock: RockSettings;
+  onRockChange: (changes: Partial<RockSettings>) => void;
   onRandomizeColors: () => void;
   // Heightmap self-shadowing — a lighting feature, stays with Scene/Lighting.
   shadowsEnabled: boolean;
@@ -240,6 +242,8 @@ export function Panel({
   onColorByElevationChange,
   colorStops,
   onColorStopsChange,
+  rock,
+  onRockChange,
   onRandomizeColors,
   shadowsEnabled,
   onShadowsEnabledChange,
@@ -632,18 +636,54 @@ export function Panel({
               elevationRange={landRampRange}
               elevationScaleMeters={(heightScale / 100) * (activeViewContext === 'landChunk' ? chunkSize : radiusKm) * 1000}
             />
+            {/* Rock on steep ground: its own ramp by height, where it starts and how softly (landLayers.glsl, 2026-11-08). */}
+            <div className="panel-section-divider" />
+            <span className="panel-section-title">Rock</span>
+            <Slider
+              label="Slope"
+              value={Math.round((Math.acos(1 - rock.slope) * 180) / Math.PI)}
+              onChange={(degrees) => onRockChange({ slope: 1 - Math.cos((degrees * Math.PI) / 180) })}
+              min={0}
+              max={90}
+              step={1}
+              precision={0}
+              unit="°"
+              disabled={!colorByElevation}
+              description="How steep the ground must be before it shows rock: 0 is all rock, 90 only sheer walls."
+            />
+            <Slider
+              label="Softness"
+              value={rock.softness}
+              onChange={(softness) => onRockChange({ softness })}
+              min={0.01}
+              max={0.5}
+              step={0.01}
+              precision={2}
+              disabled={!colorByElevation}
+              description="How gradually the land turns to rock as it steepens: low is a crisp edge, high a wide blend."
+            />
+            <ColorRampEditor
+              baseColor={rock.stops[0]?.color ?? '#ffffff'}
+              onBaseColorChange={() => {}}
+              stops={rock.stops}
+              onStopsChange={(stops) => onRockChange({ stops })}
+              rampActive={colorByElevation}
+              elevationRange={landRampRange}
+              elevationScaleMeters={(heightScale / 100) * (activeViewContext === 'landChunk' ? chunkSize : radiusKm) * 1000}
+            />
           </Accordion>
         </div>
 
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          {/* The sea: its level and its look (Dana, 2026-10-27; named Ocean 2026-11-03). */}
+          {/* Water: the sea and the lakes, each with its own look (Dana, 2026-10-27; Ocean 2026-11-03; Water with Sea and Lakes 2026-11-08). */}
           <Accordion
-            title="Ocean"
-            description="Fills everything below sea level with water, on the planet and in the land chunk."
-            headerSwitch={{ value: water.enabled, onChange: (enabled) => onWaterChange({ enabled }), label: 'Ocean on or off' }}
+            title="Water"
+            description="The sea, which fills everything below sea level on the planet and in the land chunk, and the lakes."
+            headerSwitch={{ value: water.enabled, onChange: (enabled) => onWaterChange({ enabled }), label: 'Water on or off' }}
           >
+            <Accordion title="Sea" nested>
             {/* Sea level is stored as a raw height so both views share one coastline; shown in planet meters. */}
             <Slider
               label={heightDistribution ? `Sea level · ${Math.round(landShareAt(heightDistribution, water.seaLevel) * 100)}% land` : 'Sea level'}
@@ -703,6 +743,28 @@ export function Panel({
               disabled={!water.enabled}
               description="How large the waves are: 1 is about 40 m long, as in the original sea. The planet shows the same waves, which appear as you zoom in."
             />
+              <Slider
+                label="Ripple speed"
+                value={water.rippleSpeed}
+                onChange={(rippleSpeed) => onWaterChange({ rippleSpeed })}
+                min={0}
+                max={1}
+                step={0.01}
+                precision={2}
+                disabled={!water.enabled}
+                description="How fast the sea's ripples move, on the wind's clock. 0 holds them still."
+              />
+              <Slider
+                label="Ripple strength"
+                value={water.rippleStrength}
+                onChange={(rippleStrength) => onWaterChange({ rippleStrength })}
+                min={0}
+                max={2}
+                step={0.01}
+                precision={2}
+                disabled={!water.enabled}
+                description="How strongly the ripples tilt the sea's surface, so how much they show. 0 turns them off."
+              />
             <Slider
               label="Shine"
               value={water.shine}
@@ -725,20 +787,170 @@ export function Panel({
               disabled={!water.enabled}
               description="How strongly the water reflects the sky, mostly when seen at a slant. 1 is the original sea, 0 turns it off."
             />
-            <div className="panel-section-divider" />
-            <span className="panel-section-title">Color</span>
-            {/* The land's ramp editor, by depth: the first stop is the shore, the last the deepest water. */}
-            <ColorRampEditor
-              baseColor={water.colorStops[0]?.color ?? '#ffffff'}
-              onBaseColorChange={() => {}}
-              stops={water.colorStops}
-              onStopsChange={(colorStops) => onWaterChange({ colorStops })}
-              rampActive
-              elevationRange={{ min: 0, max: waterDepthRange }}
-              elevationScaleMeters={planetMetersPerHeight}
-              positionLabel="Depth (m)"
-              positionToMeters={(position) => rampPositionToDepth(position, waterClarityShare) * waterDepthRange * planetMetersPerHeight}
-              metersToPosition={(meters) => depthToRampPosition(meters / Math.max(waterDepthRange * planetMetersPerHeight, 0.0001), waterClarityShare)}
+            </Accordion>
+            <Accordion title="Lakes" nested>
+              <Slider
+                label="Clarity"
+                value={water.lakeClarityMeters}
+                onChange={(lakeClarityMeters) => onWaterChange({ lakeClarityMeters })}
+                min={1}
+                max={200}
+                step={1}
+                precision={0}
+                unit="m"
+                scale="log"
+                disabled={!water.enabled}
+                description="The depth in meters where a lake has absorbed about two thirds of the light, measured from its own surface. Higher shows more of the lake bed."
+              />
+              <Slider
+                label="Foam"
+                value={water.lakeFoamWidth}
+                onChange={(lakeFoamWidth) => onWaterChange({ lakeFoamWidth })}
+                min={0}
+                max={0.2}
+                step={0.005}
+                precision={3}
+                disabled={!water.enabled}
+                description="How much foam on the lakes: along the shore, on wave crests and in scattered whitecaps. 0 turns it off."
+              />
+              <Slider
+                label="Wave detail"
+                value={water.lakeWaveDetail}
+                onChange={(lakeWaveDetail) => onWaterChange({ lakeWaveDetail })}
+                min={1}
+                max={5}
+                step={1}
+                precision={0}
+                disabled={!water.enabled}
+                description="How many layers of waves the lakes show: 1 is simple and graphic, 5 is the original detailed sea."
+              />
+              <Slider
+                label="Wave size"
+                value={water.lakeWaveScale}
+                onChange={(lakeWaveScale) => onWaterChange({ lakeWaveScale })}
+                min={1}
+                max={30}
+                step={0.5}
+                precision={1}
+                disabled={!water.enabled}
+                description="How large the lakes' waves are: 1 is about 40 m long, as in the original sea."
+              />
+              <Slider
+                label="Ripple speed"
+                value={water.lakeRippleSpeed}
+                onChange={(lakeRippleSpeed) => onWaterChange({ lakeRippleSpeed })}
+                min={0}
+                max={1}
+                step={0.01}
+                precision={2}
+                disabled={!water.enabled}
+                description="How fast the lakes' ripples move, on the wind's clock. 0 holds them still."
+              />
+              <Slider
+                label="Ripple strength"
+                value={water.lakeRippleStrength}
+                onChange={(lakeRippleStrength) => onWaterChange({ lakeRippleStrength })}
+                min={0}
+                max={2}
+                step={0.01}
+                precision={2}
+                disabled={!water.enabled}
+                description="How strongly the ripples tilt the lakes' surface, so how much they show. 0 turns them off."
+              />
+              <Slider
+                label="Shine"
+                value={water.lakeShine}
+                onChange={(lakeShine) => onWaterChange({ lakeShine })}
+                min={0}
+                max={1}
+                step={0.01}
+                precision={2}
+                disabled={!water.enabled}
+                description="How bright the sun's highlight on the lakes is. 1 is the original sea's glare, 0 turns it off."
+              />
+              <Slider
+                label="Reflection"
+                value={water.lakeReflection}
+                onChange={(lakeReflection) => onWaterChange({ lakeReflection })}
+                min={0}
+                max={2}
+                step={0.01}
+                precision={2}
+                disabled={!water.enabled}
+                description="How strongly the lakes reflect the sky, mostly when seen at a slant. 1 is the original sea, 0 turns it off."
+              />
+            </Accordion>
+            <Accordion title="Color" nested>
+              <span className="panel-section-title">Sea</span>
+              {/* The land's ramp editor, by depth: the first stop is the shore, the last the deepest water. */}
+              <ColorRampEditor
+                baseColor={water.colorStops[0]?.color ?? '#ffffff'}
+                onBaseColorChange={() => {}}
+                stops={water.colorStops}
+                onStopsChange={(colorStops) => onWaterChange({ colorStops })}
+                rampActive
+                elevationRange={{ min: 0, max: waterDepthRange }}
+                elevationScaleMeters={planetMetersPerHeight}
+                positionLabel="Depth (m)"
+                positionToMeters={(position) => rampPositionToDepth(position, waterClarityShare) * waterDepthRange * planetMetersPerHeight}
+                metersToPosition={(meters) => depthToRampPosition(meters / Math.max(waterDepthRange * planetMetersPerHeight, 0.0001), waterClarityShare)}
+              />
+              <div className="panel-section-divider" />
+              <span className="panel-section-title">Lakes</span>
+              {/* By real depth through absorption: position = 1 - exp(-depth / Clarity), so 0 is the shore and 1 deep water. */}
+              <ColorRampEditor
+                baseColor={water.lakeColorStops[0]?.color ?? '#ffffff'}
+                onBaseColorChange={() => {}}
+                stops={water.lakeColorStops}
+                onStopsChange={(lakeColorStops) => onWaterChange({ lakeColorStops })}
+                rampActive
+                elevationRange={{ min: 0, max: 1 }}
+                elevationScaleMeters={1}
+                positionLabel="Depth (m)"
+                positionToMeters={(position) => -water.lakeClarityMeters * Math.log(1 - Math.min(position, 0.999))}
+                metersToPosition={(meters) => 1 - Math.exp(-Math.max(meters, 0) / Math.max(water.lakeClarityMeters, 0.01))}
+              />
+            </Accordion>
+          </Accordion>
+        </div>
+
+        <div className="panel-section-divider" />
+
+        <div className="panel-section">
+          {/* Climate: how much of the liquid there is, which sets the lakes, rivers and erosion (Dana, 2026-11-08). */}
+          <Accordion
+            title="Climate"
+            description="The rain, heat and liquid that decide how much water the planet has: its lakes, rivers and erosion."
+          >
+            <Select
+              label="Liquid"
+              value={atmosphere.liquid}
+              onChange={(liquid) => onAtmosphereChange({ liquid, rainfall: liquidNamed(liquid).typicalRainfall, temperature: referenceTemperature(liquidNamed(liquid)) })}
+              options={LIQUIDS.map(({ name }) => ({ value: name, label: name }))}
+              description="What falls as rain and runs in the rivers and lakes. Dry has none, and cold water freezes."
+            />
+            <Slider
+              label="Rainfall"
+              value={atmosphere.rainfall}
+              onChange={(rainfall) => onAtmosphereChange({ rainfall })}
+              min={1}
+              max={rainfallMax(liquidNamed(atmosphere.liquid))}
+              step={1}
+              precision={0}
+              unit="mm"
+              scale="log"
+              description="How much of the liquid falls in a year. More fills lakes and swells rivers."
+            />
+            <Slider
+              label="Temperature"
+              value={atmosphere.temperature}
+              onChange={(temperature) => onAtmosphereChange({ temperature })}
+              min={liquidNamed(atmosphere.liquid).minC}
+              max={liquidNamed(atmosphere.liquid).maxC}
+              step={1}
+              precision={0}
+              unit="°C"
+              description="Runs across the range this liquid stays liquid. Hotter evaporates more, so lakes shrink and rivers fade."
             />
           </Accordion>
         </div>
@@ -746,88 +958,66 @@ export function Panel({
         <div className="panel-section-divider" />
 
         <div className="panel-section">
-          {/* The planet's atmosphere: its general controls here; wind, clouds and the moon on the right (Dana, 2026-10-27). */}
+          {/* The planet's air: its general controls here; wind, clouds and the moon on the right (Dana, 2026-10-27). */}
           <Accordion
-            title="Climate System"
+            title="Atmosphere"
             onHeaderClick={() => onStageChange('atmosphere')}
             active={activeStage === 'atmosphere'}
-            description="The planet's air and its climate: sky, haze, clouds and glow, and the rain, heat and liquid that shape its water."
+            headerSwitch={{ value: atmosphere.enabled, onChange: (enabled) => onAtmosphereChange({ enabled }), label: 'Atmosphere on or off' }}
+            description="The planet's air: sky, haze, clouds and glow."
           >
             <div className="panel-btn-row">
               <button type="button" className="noise-add-layer-btn" onClick={() => onAtmosphereChange(randomAtmosphere(atmosphere))} disabled={!atmosphere.enabled}>
                 <DiceIcon /> Randomize
               </button>
             </div>
-            <Accordion title="Atmosphere" nested headerSwitch={{ value: atmosphere.enabled, onChange: (enabled) => onAtmosphereChange({ enabled }), label: 'Atmosphere on or off' }}>
-              <Slider
-                label="Haze"
-                value={atmosphere.haze}
-                onChange={(haze) => onAtmosphereChange({ haze })}
-                min={0}
-                max={6}
-                step={0.01}
-                precision={2}
-                disabled={!atmosphere.enabled}
-                description="How thick the air is: distant ground fades into the horizon color. 0 is clear."
-              />
-              <Slider
-                label="Glow"
-                value={atmosphere.glow}
-                onChange={(glow) => onAtmosphereChange({ glow })}
-                min={0}
-                max={6}
-                step={0.01}
-                precision={2}
-                disabled={!atmosphere.enabled}
-                description="How strongly the planet's edge glows from space, in the sky color."
-              />
-              <div className="panel-section-divider" />
-              <span className="panel-section-title">Color</span>
-              <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} {...colorLockProps(atmosphere, 'horizonColor', onAtmosphereChange)} />
-              <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} {...colorLockProps(atmosphere, 'zenithColor', onAtmosphereChange)} />
-              <HueSlider
-                label="Shadow hue"
-                value={atmosphere.shadowHue}
-                onChange={(shadowHue) => onAtmosphereChange({ shadowHue })}
-                trackBackground={hueTrackGradient(atmosphere.zenithColor)}
-                swatchColor={displayColorFor(fillColorFor(true, atmosphere.zenithColor, atmosphere.shadowHue)).getStyle()}
-                {...colorLockProps(atmosphere, 'shadowHue', onAtmosphereChange)}
-                disabled={!atmosphere.enabled}
-                description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
-              />
-            </Accordion>
-            <Accordion title="Climate" nested>
-              <Select
-                label="Liquid"
-                value={atmosphere.liquid}
-                onChange={(liquid) => onAtmosphereChange({ liquid, rainfall: liquidNamed(liquid).typicalRainfall, temperature: referenceTemperature(liquidNamed(liquid)) })}
-                options={LIQUIDS.map(({ name }) => ({ value: name, label: name }))}
-                description="What falls as rain and runs in the rivers and lakes. Dry has none, and cold water freezes."
-              />
-              <Slider
-                label="Rainfall"
-                value={atmosphere.rainfall}
-                onChange={(rainfall) => onAtmosphereChange({ rainfall })}
-                min={1}
-                max={rainfallMax(liquidNamed(atmosphere.liquid))}
-                step={1}
-                precision={0}
-                unit="mm"
-                scale="log"
-                description="How much of the liquid falls in a year. More fills lakes and swells rivers."
-              />
-              <Slider
-                label="Temperature"
-                value={atmosphere.temperature}
-                onChange={(temperature) => onAtmosphereChange({ temperature })}
-                min={liquidNamed(atmosphere.liquid).minC}
-                max={liquidNamed(atmosphere.liquid).maxC}
-                step={1}
-                precision={0}
-                unit="°C"
-                description="Runs across the range this liquid stays liquid. Hotter evaporates more, so lakes shrink and rivers fade."
-              />
-            </Accordion>
+            <Slider
+              label="Haze"
+              value={atmosphere.haze}
+              onChange={(haze) => onAtmosphereChange({ haze })}
+              min={0}
+              max={12}
+              step={0.01}
+              precision={2}
+              disabled={!atmosphere.enabled}
+              description="How thick the air is: distant ground fades into the horizon color. 0 is clear."
+            />
+            <Slider
+              label="Layers"
+              value={atmosphere.hazeLayers}
+              onChange={(hazeLayers) => onAtmosphereChange({ hazeLayers })}
+              min={0}
+              max={6}
+              step={1}
+              precision={0}
+              disabled={!atmosphere.enabled}
+              description="Splits the haze into soft bands, so ridges at each distance read as their own flat layer. 0 is a smooth fade."
+            />
+            <Slider
+              label="Glow"
+              value={atmosphere.glow}
+              onChange={(glow) => onAtmosphereChange({ glow })}
+              min={0}
+              max={6}
+              step={0.01}
+              precision={2}
+              disabled={!atmosphere.enabled}
+              description="How strongly the planet's edge glows from space, in the sky color."
+            />
+            <div className="panel-section-divider" />
+            <span className="panel-section-title">Color</span>
+            <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} {...colorLockProps(atmosphere, 'horizonColor', onAtmosphereChange)} />
+            <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} {...colorLockProps(atmosphere, 'zenithColor', onAtmosphereChange)} />
+            <HueSlider
+              label="Shadow hue"
+              value={atmosphere.shadowHue}
+              onChange={(shadowHue) => onAtmosphereChange({ shadowHue })}
+              trackBackground={hueTrackGradient(atmosphere.zenithColor)}
+              swatchColor={displayColorFor(fillColorFor(true, atmosphere.zenithColor, atmosphere.shadowHue)).getStyle()}
+              {...colorLockProps(atmosphere, 'shadowHue', onAtmosphereChange)}
+              disabled={!atmosphere.enabled}
+              description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
+            />
           </Accordion>
         </div>
 

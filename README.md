@@ -31,6 +31,8 @@ This will eventually grow into the fuller README the course's final deliverable 
 >
 > 🐛 **[`ISSUES.md`](docs/ISSUES.md)**, what is broken, what was broken and why.
 >
+> 🏞️ **[`RIVER-PLAN.md`](docs/RIVER-PLAN.md)**, how the land chunk's rivers get built into its terrain, stage by stage, with the source behind each step.
+>
 > 📅 **[`WEEKLY-PUSHES.md`](docs/WEEKLY-PUSHES.md)**, the syllabus's graded weekly report, chronological.
 >
 > 🧭 **[`CODE-INDEX.md`](docs/CODE-INDEX.md)**, where every part of the code lives, by file and function name.

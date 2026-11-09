@@ -9,7 +9,7 @@ uniform float uHeightBase;
 varying vec3 vWorldPosition;
 varying float vLake; // above 0 on a lake
 
-const float SHEET_CELL_UV = 1.0 / 512.0; // WATER_SHEET_SEGMENTS
+const float SHEET_CELL_UV = 1.0 / 1023.0; // WATER_SHEET_SEGMENTS: one vertex per lake cell, reaching one cell
 
 void main() {
   vec2 uv = position.xz + 0.5;

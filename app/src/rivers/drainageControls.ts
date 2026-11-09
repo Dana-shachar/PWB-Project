@@ -82,10 +82,10 @@ export function useDrainage(sceneHandleRef: RefObject<SceneCanvasHandle | null>,
       if (message.requestId !== requestIdRef.current) return;
       if (message.type === 'filled') {
         fillMsRef.current = message.ms;
-        const { filled, width, height } = message as { filled: Float32Array; width: number; height: number };
+        const { filled, drainage, width, height } = message as { filled: Float32Array; drainage: Float32Array; width: number; height: number };
         usedRef.current = erosionRef.current;
         startMsRef.current = performance.now();
-        void sceneHandleRef.current?.runPlanetDrainage(filled, width, height, seaLevelRef.current, usedRef.current.passes, usedRef.current.strength, carving).then((result) => handleResult(result, message.requestId));
+        void sceneHandleRef.current?.runPlanetDrainage(filled, drainage, width, height, seaLevelRef.current, usedRef.current.passes, usedRef.current.strength, carving).then((result) => handleResult(result, message.requestId));
         return;
       }
       if (message.type === 'analyzed') {

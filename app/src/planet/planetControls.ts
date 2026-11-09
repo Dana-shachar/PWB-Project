@@ -1,4 +1,4 @@
-import { DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
+import { randomAtmosphereColors, DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { DEFAULT_SPIN, type SpinSettings } from '../scene/planetSpin';
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
@@ -68,6 +68,17 @@ function randomWaterPalette(landBaseHue: number, landHighHue: number): ColorStop
   });
 }
 
+// The rock ramp by the land's rules: the land's base and top hues, darker and far less saturated than the land, as bare
+// rock reads against soil and plants. Ranges inferred, TUNABLE.
+function randomRockPalette(landBaseHue: number, landHighHue: number): ColorStop[] {
+  const low = new THREE.Color().setHSL(landBaseHue / 360, 0.1 + Math.random() * 0.15, 0.22 + Math.random() * 0.12);
+  const high = new THREE.Color().setHSL(landHighHue / 360, 0.05 + Math.random() * 0.12, 0.5 + Math.random() * 0.2);
+  return [
+    { position: 0, color: `#${low.getHexString()}` },
+    { position: 1, color: `#${high.getHexString()}` },
+  ];
+}
+
 // TODO(DS): arbitrary placeholder conversion — the UI shows/accepts a
 // narrative-scale planet radius in km (the tool's premise, per Dana), mapped
 // down to the small render-space units the scene actually uses. 1 scene
@@ -95,6 +106,21 @@ export interface WaterSettings {
   shine: number;
   // How strongly the sky is reflected at a slant (Fresnel), as a share of Seascape's own (1).
   reflection: number;
+  // The sea's visible waves at chunk scale: panning ripple layers (chunkWater.frag.glsl, waterRipple).
+  rippleSpeed: number; // ripple tiles per second of the wind's clock
+  rippleStrength: number;
+  // Lakes' own look, the same controls as the sea's. The ramp runs from the shore (0) to deep water (1) by real depth
+  // through absorption (Beer-Lambert): position = 1 - exp(-depth / lakeClarityMeters).
+  lakeColorStops: ColorStop[];
+  lakeClarityMeters: number;
+  lakeFoamWidth: number;
+  lakeWaveDetail: number;
+  lakeWaveScale: number;
+  lakeShine: number;
+  lakeReflection: number;
+  // The lakes' visible waves at chunk scale: panning ripple layers (chunkWater.frag.glsl, lakeRipple).
+  lakeRippleSpeed: number; // ripple tiles per second of the wind's clock
+  lakeRippleStrength: number;
 }
 
 export const DEFAULT_WATER_SETTINGS: WaterSettings = {
@@ -113,6 +139,23 @@ export const DEFAULT_WATER_SETTINGS: WaterSettings = {
   waveScale: 4, // inferred, TUNABLE
   shine: 0.3, // hand-set, TUNABLE (Dana, 2026-10-27: Seascape's own glare was far too strong)
   reflection: 1,
+  rippleSpeed: 0.1, // inferred, TUNABLE, as the lakes'
+  rippleStrength: 0.6, // inferred, TUNABLE, as the lakes'
+  // Lakes start with the sea's look.
+  lakeColorStops: [
+    { position: 0, color: '#8ff0e0' },
+    { position: 0.15, color: '#3fc9cf' },
+    { position: 0.45, color: '#2286c0' },
+    { position: 1, color: '#1d5a9e' },
+  ],
+  lakeClarityMeters: 20,
+  lakeFoamWidth: 0.05,
+  lakeWaveDetail: 3,
+  lakeWaveScale: 4,
+  lakeShine: 0.3,
+  lakeReflection: 1,
+  lakeRippleSpeed: 0.1, // inferred, TUNABLE: the old fixed 0.02 read as still
+  lakeRippleStrength: 0.6, // the old fixed strength (Dana: strong enough to read at a distance)
 };
 
 // What the water reflects at a slant, until the atmosphere step sets a real sky. inferred, TUNABLE.
@@ -122,9 +165,9 @@ export const WATER_SHININESS = 200;
 
 // Saves from before the water ramp stored a shallow and a deep color; they become a two-stop ramp.
 // Saves from before Clarity was in meters held a share of the deepest water, which has no meters to convert to.
-function migrateWater(saved: (Partial<WaterSettings> & { shallowColor?: string; deepColor?: string; clarity?: number }) | undefined): WaterSettings {
+function migrateWater(saved: (Partial<WaterSettings> & { shallowColor?: string; deepColor?: string; clarity?: number; lakeColor?: string }) | undefined): WaterSettings {
   if (!saved) return DEFAULT_WATER_SETTINGS;
-  const { shallowColor, deepColor, clarity: _oldClarity, ...rest } = saved;
+  const { shallowColor, deepColor, clarity: _oldClarity, lakeColor: _oldLakeColor, ...rest } = saved;
   const colorStops =
     rest.colorStops ??
     (shallowColor && deepColor
@@ -133,7 +176,18 @@ function migrateWater(saved: (Partial<WaterSettings> & { shallowColor?: string; 
           { position: 1, color: deepColor },
         ]
       : DEFAULT_WATER_SETTINGS.colorStops);
-  return { ...DEFAULT_WATER_SETTINGS, ...rest, colorStops };
+  // Saves from before lakes had their own look start with the sea's.
+  const sea = { ...DEFAULT_WATER_SETTINGS, ...rest, colorStops };
+  return {
+    ...sea,
+    lakeColorStops: rest.lakeColorStops ?? colorStops,
+    lakeClarityMeters: rest.lakeClarityMeters ?? sea.clarityMeters,
+    lakeFoamWidth: rest.lakeFoamWidth ?? sea.foamWidth,
+    lakeWaveDetail: rest.lakeWaveDetail ?? sea.waveDetail,
+    lakeWaveScale: rest.lakeWaveScale ?? sea.waveScale,
+    lakeShine: rest.lakeShine ?? sea.shine,
+    lakeReflection: rest.lakeReflection ?? sea.reflection,
+  };
 }
 
 // Every field this hook owns that's meant to be per-project, not global app
@@ -175,7 +229,25 @@ export interface PlanetSettings {
   atmosphere?: AtmosphereSettings;
   // How the planet turns when left alone. Absent in older saves, which load with the default spin.
   spin?: SpinSettings;
+  // Rock on steep ground. Absent in older saves, which load with the default rock.
+  rock?: RockSettings;
 }
+
+// Rock on steep ground (shaders/terrain/landLayers.glsl, landSurfaceColor): its own ramp by height, where it starts and how
+// softly. slope is the steepness 1 - cos(angle): 0.25 is about 41 degrees.
+export interface RockSettings {
+  stops: ColorStop[];
+  slope: number;
+  softness: number;
+}
+export const DEFAULT_ROCK_SETTINGS: RockSettings = {
+  stops: [
+    { position: 0, color: '#6f6862' },
+    { position: 1, color: '#a49b93' },
+  ], // inferred, TUNABLE
+  slope: 0.25, // inferred, TUNABLE
+  softness: 0.1, // inferred, TUNABLE
+};
 
 export const DEFAULT_PLANET_SETTINGS: PlanetSettings = {
   radiusKm: 6000,
@@ -246,6 +318,7 @@ export function usePlanetControls() {
   // "the base color should just serve as the low elevation color").
   const [colorByElevation, setColorByElevation] = useState(DEFAULT_PLANET_SETTINGS.colorByElevation);
   const [colorStops, setColorStops] = useState<ColorStop[]>(DEFAULT_PLANET_SETTINGS.colorStops);
+  const [rock, setRock] = useState<RockSettings>(DEFAULT_ROCK_SETTINGS);
   // Heightmap self-shadowing — land chunk only for now, see shaders/
   // terrain.glsl for why the planet's curved surface is a separate step.
   const [shadowsEnabled, setShadowsEnabled] = useState(DEFAULT_PLANET_SETTINGS.shadowsEnabled);
@@ -287,13 +360,17 @@ export function usePlanetControls() {
       { position: 0.5, color: palette.mid },
       { position: 1.0, color: palette.high },
     ]);
-    updateWater({ colorStops: randomWaterPalette(palette.baseHue, palette.highHue) });
+    // One roll sets every color from the land's hue (Dana, 2026-11-08): the sea and lakes in the hues the land left
+    // unused, the rock from the land's own, and the sky turned from it by a color rule.
+    updateWater({ colorStops: randomWaterPalette(palette.baseHue, palette.highHue), lakeColorStops: randomWaterPalette(palette.baseHue, palette.highHue) });
+    setRock((previous) => ({ ...previous, stops: randomRockPalette(palette.baseHue, palette.highHue) }));
+    setAtmosphere((previous) => randomAtmosphereColors(previous, palette.baseHue / 360));
   }
 
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -307,6 +384,7 @@ export function usePlanetControls() {
     setMaxErrorPixels(migrateResolution(settings));
     setColorByElevation(settings.colorByElevation);
     setColorStops(migrateColorStops(settings));
+    setRock({ ...DEFAULT_ROCK_SETTINGS, ...settings.rock });
     setShadowsEnabled(settings.shadowsEnabled);
     setDetailAmount(settings.detailAmount ?? DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
     setAutoDetail(settings.autoDetail ?? true);
@@ -342,6 +420,8 @@ export function usePlanetControls() {
     setColorByElevation,
     colorStops,
     setColorStops,
+    rock,
+    updateRock: (changes: Partial<RockSettings>) => setRock((previous) => ({ ...previous, ...changes })),
     shadowsEnabled,
     setShadowsEnabled,
     detailAmount,

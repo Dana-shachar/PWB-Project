@@ -23,7 +23,8 @@ import { liquidNamed, viscosityAt } from '../rivers/riverClimate';
 import { createChunkMap } from './chunkMap';
 import { createChunkWater, setChunkWaterLight, setChunkWaterSky, setChunkWaterTide, updateChunkWater, updateChunkWaterFrame, WATER_SHEET_SEGMENTS, type ChunkWater } from './chunkWater';
 import { tideHeight } from '../atmosphere/tides';
-import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
+import { WATER_SKY_COLOR, type RockSettings, type WaterSettings } from '../planet/planetControls';
+import { applyRockUniforms, createRockUniforms } from '../planet/planetPatchMesh';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { fillColorFor } from '../scene/fillLight';
 import { createSkyDome, setSkyDomeLight, setSkyDomeMoonTexture, updateSkyDome, updateSkyDomeFrame, type SkyDome } from '../atmosphere/skyDome';
@@ -78,6 +79,7 @@ interface LandChunkCanvasProps {
   heightBase: number; // drawn height = (raw + heightBase) * maxHeight: the chunk's lowest ground sits at 0
   colorByElevation: boolean;
   colorStops: ColorStop[];
+  rock: RockSettings;
   // This patch's own real low and high, in raw elevation units — the color
   // ramp spans this range, not a guessed or fixed-anchor one. See
   // voxel/landChunk.ts and shaders/terrain/terrain.glsl.
@@ -158,6 +160,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     heightBase,
     colorByElevation,
     colorStops,
+    rock,
     elevationMin,
     elevationMax,
     shadowsEnabled,
@@ -322,6 +325,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       const lakeHeight = lake === null ? null : Math.max(0, lake + heightBase) * Math.max(0, maxHeight);
       return sea === null ? lakeHeight : lakeHeight === null ? sea : Math.max(sea, lakeHeight);
     }
+    (window as unknown as { __probe: unknown }).__probe = { get chunkLakes() { return chunkLakes; }, get water() { return water; }, get camera() { return perspectiveCamera; }, get patchRenderer() { return patchRenderer; }, settings: patchSettingsRef, drawn: (x: number, z: number) => { const renderer = sharedRendererRef.current.renderer; return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight), patchSettingsRef.current.heightBase) : null; } }; // TEMP diagnose
     const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
       const renderer = sharedRendererRef.current.renderer;
       return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight), patchSettingsRef.current.heightBase) : null;
@@ -447,10 +451,12 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uHazeStart: { value: 0 },
         uHazeFloor: { value: 0 },
         uHazeScaleHeight: { value: 1 },
+        uHazeLayers: { value: 0 },
         uHeightMap: { value: heightMap },
         uHeightMapTexelSize: { value: 1 / Math.max(1, heightMapResolution) },
         uChunkHeightMap: { value: heightMap },
         uChunkLakeLevels: { value: null },
+        uLakeCells: { value: 0 },
         uChunkSize: { value: chunkSize },
         uPatchWorldSize: { value: chunkSize },
         uPatchUvMin: { value: new THREE.Vector2(0, 0) },
@@ -468,6 +474,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uRampColors: { value: initialRamp.colors },
         uRampPositions: { value: initialRamp.positions },
         uRampCount: { value: initialRamp.count },
+        ...createRockUniforms(rock),
         uElevationMin: { value: elevationMin },
         uElevationMax: { value: elevationMax },
         uShadowsEnabled: { value: shadowsEnabled ? 1 : 0 },
@@ -594,7 +601,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       }
       const preview = settings.chunkPreview();
       const lakeRenderer = sharedRendererRef.current.renderer;
-      if (preview && lakeRenderer) chunkLakes.update(lakeRenderer, preview, water.tide.baseSeaLevel, settings.atmosphere, squareSizeKm(settings.patch, settings.radiusKm), settings.radiusKm, settings.lakesOn);
+      if (preview && lakeRenderer) chunkLakes.update(lakeRenderer, preview, water.tide.baseSeaLevel, settings.atmosphere, squareSizeKm(settings.patch, settings.radiusKm), settings.radiusKm, settings.lakesOn, Math.max(settings.maxHeight, 0) * 1000);
+      material.uniforms.uLakeCells.value = chunkLakes.texture.image.width;
     }
     sharedRenderer.registerView('landChunk', { scene, camera: perspectiveCamera, elementRef: viewportRef, onFrame });
 
@@ -694,6 +702,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
     (material.uniforms.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
     material.uniforms.uRampCount.value = ramp.count;
+    applyRockUniforms(material.uniforms, rock);
     // With water on, the land ramp starts at the depth light reaches, as on the planet.
     material.uniforms.uElevationMin.value = water.enabled
       ? Math.max(elevationMin, landRampFloor(water.seaLevel, waterDeepest))
@@ -710,6 +719,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     colorByElevation,
     baseColor,
     colorStops,
+    rock,
     elevationMin,
     elevationMax,
     shadowsEnabled,
@@ -738,8 +748,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       (material.uniforms.uHazeColor.value as THREE.Color).set(atmosphere.horizonColor);
       (material.uniforms.uHazeSkyColor.value as THREE.Color).set(atmosphere.zenithColor);
       material.uniforms.uHazeDensity.value = hazeDensity;
+      material.uniforms.uHazeLayers.value = atmosphere.hazeLayers;
     }
-    if (waterRef.current) setChunkWaterSky(waterRef.current, atmosphere.enabled ? atmosphere.horizonColor : WATER_SKY_COLOR, atmosphere.horizonColor, atmosphere.zenithColor, hazeDensity);
+    if (waterRef.current) setChunkWaterSky(waterRef.current, atmosphere.enabled ? atmosphere.horizonColor : WATER_SKY_COLOR, atmosphere.horizonColor, atmosphere.zenithColor, hazeDensity, atmosphere.hazeLayers);
   }, [atmosphere, chunkSize]);
 
   // Tides: the moon's size sets how far the water rises and falls (atmosphere/tides.ts). Walk mode reads the water's

@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-11-05`
+`Last updated: 2026-11-08`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -181,11 +181,11 @@
 
 **rivers/planetDrainage.ts**
 - What it is: Schott's stream power pass in batches per frame: drainage first with erosion off, saved, then erosion on top, continued or restarted from the save.
-- Key names: `PlanetDrainage` (`run`, `setErosionPasses`, `runPasses`, `readResult`), `DrainageResult`, `DRAINAGE_PASSES`, `HILLSLOPE_SHARE`, `SCHOTT_K`.
+- Key names: `PlanetDrainage` (`run`, `setErosionPasses`, `runPasses`, `readResult`), `DrainageResult`, `HILLSLOPE_SHARE`, `SCHOTT_K`. `run` takes the settled drainage from the worker and seeds it (`streamPowerSeed.frag.glsl`).
 
 **rivers/drainage.worker.ts**
 - What it is: the CPU half off the main thread: the pit fill, lakes by Fill-Spill-Merge on the eroded ground, the river network and its grid, the checks, the valley spacing, and the bake's water map (rows south first, river grid rows after). [TEMP] logs lakes, rivers, carving and valley spacing.
-- Key names: `buildWaterMap`, `extractRiverNodes`, `gridNeighbors`, `valleySpacingMeters`, `RIVER_MIN_CELLS`, `RIVER_HALF_WIDTH_AT_THRESHOLD`.
+- Key names: `buildWaterMap`, `extractRiverNodes`, `gridNeighbors`, `valleySpacingMeters`, `accumulateDrainage` (the settled drainage in one sweep, sent with `'filled'`), `RIVER_MIN_CELLS`, `RIVER_HALF_WIDTH_AT_THRESHOLD`.
 
 **rivers/pitFill.ts**
 - What it is: Priority-Flood + ε on the globe grid, and the heap it and the lakes share.

@@ -68,6 +68,13 @@ export function useErosion(
   const [filterRevision, setFilterRevision] = useState(0); // steps when the filter changes, so the land chunk re-bakes
   // While carving is pending, the filter waits and lands with the carved map (rivers/drainageControls.ts).
   const filterHoldRef = useRef(false);
+  // Erosion's own base level, fixed once set (taken from the sea the first time), so moving the sea only moves water and
+  // never re-carves the land, as in Gaea and World Machine. Saved with the project.
+  const [baseLevelSet, setBaseLevel] = useState<number | null>(null);
+  useEffect(() => {
+    if (baseLevelSet === null) setBaseLevel(seaLevel);
+  }, [baseLevelSet, seaLevel]);
+  const baseLevel = baseLevelSet ?? seaLevel;
   useEffect(() => {
     const timer = window.setTimeout(() => {
       if (filterHoldRef.current) return;
@@ -121,12 +128,12 @@ export function useErosion(
   }
 
   function run(patch: TerrainPatch) {
-    runWithSettings(patch, currentRates(), durationYears, gridResolution, seaLevel);
+    runWithSettings(patch, currentRates(), durationYears, gridResolution, baseLevel);
   }
 
   // What a project saves: the panel's settings, which exist whether or not this run has a result.
   function savedSettings() {
-    return { rates: currentRates(), durationYears, gridResolution, seaLevel, filterShape, enabled };
+    return { rates: currentRates(), durationYears, gridResolution, seaLevel: baseLevel, baseLevel, filterShape, enabled };
   }
 
   // Restores the saved settings on project load. useErosionAutoRun reruns the simulation if the style draws it.
@@ -137,6 +144,7 @@ export function useErosion(
     setGridResolution(saved.gridResolution);
     setFilterShape(saved.filterShape ?? DEFAULT_EROSION_FILTER_SHAPE);
     setEnabled(saved.enabled ?? false);
+    setBaseLevel(saved.baseLevel ?? saved.seaLevel ?? null);
   }
 
   // Back to the uneroded terrain, so a run can be compared against what it
@@ -169,6 +177,8 @@ export function useErosion(
   }
 
   return {
+    baseLevel,
+    setBaseLevel,
     rates,
     updateRates,
     durationYears,

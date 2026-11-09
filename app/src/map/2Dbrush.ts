@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useRef, useState, type RefObject } from 'react';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
 import type { StrokeRecord } from './heightmap';
 
@@ -67,20 +67,7 @@ export function useBrush(sceneHandleRef: RefObject<SceneCanvasHandle | null>) {
     setPaintVersion((version) => version + 1);
   }
 
-  // Cmd+Z / Ctrl+Z for undo, Cmd+Shift+Z / Ctrl+Shift+Z for redo — same
-  // shortcut across platforms, matching this app's existing convention
-  // rather than the Windows-only Ctrl+Y.
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== 'z') return;
-      event.preventDefault();
-      if (event.shiftKey) redo();
-      else undo();
-    }
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- undo()/redo() read current state via the refs above, never stale
-  }, []);
+  // Cmd+Z lives in projectSettings/settingsHistory.ts, one timeline for strokes and settings together.
 
   return {
     brushRadiusPx,

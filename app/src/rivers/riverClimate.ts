@@ -10,7 +10,7 @@ const REACH_NODES = 200; // how far a water-thin liquid gets at a cooling rate o
 const SULFUR_THICKEST_C = 187; // its viscosity peaks here and is low either side (McEwen and Soderblom 1983, Wijns)
 const SULFUR_THICKENING = 7; // times water's, added at the peak. Inferred, TUNABLE
 const SULFUR_PEAK_WIDTH_C = 40;
-const RAINFALL_MAX_SHARE = 6; // the slider's top, over a liquid's typical rainfall. Inferred, TUNABLE
+const RAINFALL_MAX_SHARE = 26; // the slider's top, over a liquid's typical rainfall: Water's 11,700 mm is about Earth's wettest place (Mawsynram, about 11,800 mm a year). TUNABLE
 
 export interface RiverClimate {
   rainfall: number; // mm a year

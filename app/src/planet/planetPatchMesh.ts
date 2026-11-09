@@ -8,7 +8,7 @@ import oceanWavesGlsl from '../shaders/water/oceanWaves.glsl?raw';
 import airGroundGlsl from '../shaders/atmosphere/airGround.glsl?raw';
 import planetAirGlsl from '../shaders/atmosphere/planetAir.glsl?raw';
 import { planetAirUniforms } from '../atmosphere/planetAir';
-import { KM_PER_SCENE_UNIT } from './planetControls';
+import { KM_PER_SCENE_UNIT , type RockSettings } from './planetControls';
 import { getRippleMap } from './rippleMap';
 import { landRampFloor } from './seaLevel';
 import { beaufortWindSpeed, windLengthScale } from './oceanSpectrum';
@@ -282,6 +282,7 @@ export interface PlanetSharedUniforms {
   // The ramp's stops — see
   // planet/colorRamp.ts. Generalizes the old fixed colorMid/colorHigh pair.
   colorStops: ColorStop[];
+  rock: RockSettings; // rock on steep ground (landLayers.glsl, landSurfaceColor)
   elevationMin: number;
   elevationMax: number;
   // The true lowest and highest heights, unclipped: what the atmosphere and the camera must clear ([B76]).
@@ -357,6 +358,7 @@ export function createPatchMaterial(
       uRampColors: { value: ramp.colors },
       uRampPositions: { value: ramp.positions },
       uRampCount: { value: ramp.count },
+      ...createRockUniforms(shared.rock),
       uElevationMin: { value: landRampMin(shared) },
       uElevationMax: { value: shared.elevationMax },
       uHeightMap: { value: heightMap },
@@ -402,6 +404,27 @@ export function createPatchMaterial(
 // position, elevation range) changes, mirroring the single-mesh path's own
 // `material.uniforms.X.value = Y` call sites in SceneCanvas.tsx.
 // Both ramps as shader arrays, built once per change and shared by every patch (not once per patch per frame).
+// The rock uniforms (landLayers.glsl, landSurfaceColor), shared by the planet's patches and the land chunk.
+export function createRockUniforms(rock: RockSettings): Record<string, { value: unknown }> {
+  const ramp = buildRampUniformArrays(rock.stops);
+  return {
+    uRockColors: { value: ramp.colors },
+    uRockPositions: { value: ramp.positions },
+    uRockCount: { value: ramp.count },
+    uRockSlope: { value: rock.slope },
+    uRockSoftness: { value: rock.softness },
+  };
+}
+export function applyRockUniforms(uniforms: Record<string, THREE.IUniform>, rock: RockSettings): void {
+  const ramp = buildRampUniformArrays(rock.stops);
+  const colors = uniforms.uRockColors.value as THREE.Color[];
+  for (let i = 0; i < MAX_COLOR_STOPS; i++) colors[i].copy(ramp.colors[i]);
+  (uniforms.uRockPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
+  uniforms.uRockCount.value = ramp.count;
+  uniforms.uRockSlope.value = rock.slope;
+  uniforms.uRockSoftness.value = rock.softness;
+}
+
 export interface PatchRampArrays {
   land: ReturnType<typeof buildRampUniformArrays>;
   water: ReturnType<typeof buildRampUniformArrays>;
@@ -437,6 +460,7 @@ export function applySharedUniforms(material: THREE.ShaderMaterial, shared: Plan
   for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
   (u.uRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
   u.uRampCount.value = ramp.count;
+  applyRockUniforms(u, shared.rock);
   u.uElevationMin.value = landRampMin(shared);
   u.uElevationMax.value = shared.elevationMax;
   u.uDisplacementAmplitude.value = shared.displacementAmplitude;

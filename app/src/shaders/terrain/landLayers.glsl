@@ -5,3 +5,11 @@
 vec3 fillLight(vec3 normal, vec3 up, vec3 fillColor, float ambient) {
   return fillColor * ambient * clamp(0.5 + 0.5 * dot(normal, up), 0.0, 1.0);
 }
+
+// Rock on steep ground, the standard slope-based terrain texturing: steepness 1 - dot(normal, up) (0 flat, 1 a wall) past
+// Slope, eased over Softness, takes the rock ramp's color at this height (rockColor) instead of the land ramp's.
+vec3 landSurfaceColor(vec3 rampColor, vec3 rockColor, vec3 normal, vec3 up, float slopeStart, float softness) {
+  float steepness = 1.0 - clamp(dot(normalize(normal), normalize(up)), 0.0, 1.0);
+  float rock = smoothstep(slopeStart, slopeStart + max(softness, 1e-3), steepness);
+  return mix(rampColor, rockColor, rock);
+}

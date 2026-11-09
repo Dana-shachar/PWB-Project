@@ -32,6 +32,12 @@ uniform float uColorByElevation;
 uniform vec3 uRampColors[MAX_COLOR_STOPS];
 uniform float uRampPositions[MAX_COLOR_STOPS];
 uniform float uRampCount;
+uniform vec3 uRockColors[MAX_COLOR_STOPS]; // the rock ramp by height (Color > Rock)
+uniform float uRockPositions[MAX_COLOR_STOPS];
+uniform float uRockCount;
+uniform float uRockSlope; // steepness where rock starts, 1 - cos of the slope angle
+uniform float uRockSoftness;
+const float ROCK_SLOPE_STEP_UV = 8.0 / 4096.0; // the landform scale rock reads its slope at: 8 texels of the chunk's map. Inferred, TUNABLE
 // This patch's own real low and high — see fragment.glsl's matching uniforms.
 uniform float uElevationMin;
 uniform float uElevationMax;
@@ -122,6 +128,7 @@ void main() {
   }
   // Renormalized because interpolating across a triangle shortens it.
   vec3 normal = normalize(vNormal);
+  vec3 rockNormal = normal; // the landform's normal, for the rock (set on the top surface below)
   bool isPatch = uBakeSamples > 0.5;
   vec2 textureUv = isPatch ? borderedTextureUv(vUv, uBakeSamples, uBorderTexels) : vUv;
   float textureScale = isPatch ? (uBakeSamples - 1.0) / (uBakeSamples + 2.0 * uBorderTexels) : 1.0;
@@ -145,6 +152,10 @@ void main() {
       ? morphedFieldNormal(textureUv, stepUv * textureScale, dPdu, dPdv, uMaxHeight)
       : heightfieldNormal(uHeightMap, textureUv, stepUv * textureScale, uHeightMapGreenChannel, dPdu, dPdv, vec3(0.0, 1.0, 0.0), uMaxHeight);
     normal = normalize(mat3(modelMatrix) * localNormal); // world space, as in chunk.vert.glsl
+    // Rock follows the landform's slope, not every fine bump: per-pixel slope flecked the rock across all detail, which
+    // smeared into stripes (measured 2026-11-08: the blotches vanish with rock off). Read from the whole chunk's map.
+    vec2 rockUv = vWorldPosition.xz / uChunkSize + 0.5;
+    rockNormal = normalize(mat3(modelMatrix) * heightfieldNormal(uChunkHeightMap, rockUv, ROCK_SLOPE_STEP_UV, uHeightMapGreenChannel, vec3(uChunkSize, 0.0, 0.0), vec3(0.0, 0.0, uChunkSize), vec3(0.0, 1.0, 0.0), uMaxHeight));
   }
 
   vec3 lightDir = normalize(uLightDirection);
@@ -185,7 +196,9 @@ void main() {
     float effectiveElevationRaw = vIsTopSurface > 0.5 ? elevationRaw : sideElevationRaw;
     float elevationFraction = (effectiveElevationRaw - uElevationMin) / max(0.0001, uElevationMax - uElevationMin);
     vec3 ramp = terrainRampColor(elevationFraction, uRampColors, uRampPositions, int(uRampCount));
-    surfaceColor = ramp;
+    vec3 rockColor = uRockCount > 0.5 ? terrainRampColor(elevationFraction, uRockColors, uRockPositions, int(uRockCount)) : ramp;
+    // Only the top surface: the walls keep the land ramp.
+    surfaceColor = vIsTopSurface > 0.5 ? landSurfaceColor(ramp, rockColor, rockNormal, mat3(modelMatrix) * vec3(0.0, 1.0, 0.0), uRockSlope, uRockSoftness) : ramp;
   }
   // The land's wall always runs from the base up to the ground; water sits on top of it (chunkWaterWall.frag.glsl).
 

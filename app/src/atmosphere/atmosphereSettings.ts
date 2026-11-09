@@ -14,6 +14,7 @@ export interface AtmosphereSettings {
   shadowHue: number;
   // How thick the haze is, 0 (clear) to 1 (distant ground fades into the horizon color quickly).
   haze: number;
+  hazeLayers: number; // 0 a smooth fade, 2 to 6 soft bands (shaders/atmosphere/haze.glsl)
   // How strong and wide the planet's rim glow is, seen from space.
   glow: number;
   // Clouds: how much of the sky they cover (0 to 1), their color, and how soft their edges are (0 to 1).
@@ -68,6 +69,7 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   zenithColor: '#8fb4d9',
   shadowHue: 0,
   haze: 0.3,
+  hazeLayers: 0,
   glow: 0.5,
   cloudCoverage: 0.4,
   clouds: true,
@@ -192,6 +194,25 @@ export function randomClimate(): Pick<AtmosphereSettings, 'liquid' | 'temperatur
     temperature: Math.round(follow(Math.random(), [flowingMinC(liquid), liquid.maxC])),
     rainfall: Math.max(1, Math.round(follow(Math.random(), [liquid.typicalRainfall * 0.3, liquid.typicalRainfall * 3]))),
   };
+}
+
+// Randomize colors (Planet Terrain > Color): only the sky, horizon, cloud and shadow colors, from the land's base hue turned
+// by one of the color rules, so a planet keeps one strong hue (Dana's No Man's Sky direction). Locked colors stay and
+// anchor the rest, as in Randomize. landHue is 0 to 1.
+export function randomAtmosphereColors(settings: AtmosphereSettings, landHue: number): AtmosphereSettings {
+  const isLocked = (key: AtmosphereColorKey) => settings.lockedColors.includes(key);
+  const anchor = (['zenithColor', 'horizonColor', 'cloudColor', 'cloudColor2'] as const).find(isLocked);
+  const hsl = { h: 0, s: 0, l: 0 };
+  const baseHue = anchor ? new THREE.Color(settings[anchor]).getHSL(hsl).h : landHue + ruleTurn();
+  const neighbor = () => baseHue + (Math.random() * 2 - 1) * NEIGHBOR_TURN;
+  const skySaturation: Range = [0.48, 0.55]; // the middle of Randomize's range, since the air is left as it is
+  const next: AtmosphereSettings = { ...settings };
+  if (!isLocked('zenithColor')) next.zenithColor = hslHex(anchor ? neighbor() : baseHue, skySaturation, SKY_LIGHTNESS);
+  if (!isLocked('horizonColor')) next.horizonColor = hslHex(neighbor(), skySaturation, HORIZON_LIGHTNESS);
+  if (!isLocked('cloudColor')) next.cloudColor = hslHex(baseHue + ruleTurn(), CLOUD_SATURATION, CLOUD_LIGHTNESS);
+  if (!isLocked('cloudColor2')) next.cloudColor2 = hslHex(baseHue + ruleTurn(), CLOUD_SATURATION, CLOUD_LIGHTNESS);
+  if (!isLocked('shadowHue')) next.shadowHue = Math.round((((ruleTurn() * 360 + 540) % 360) - 180));
+  return next;
 }
 
 export function randomAtmosphere(settings: AtmosphereSettings): AtmosphereSettings {

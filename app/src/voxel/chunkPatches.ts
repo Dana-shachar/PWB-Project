@@ -50,12 +50,19 @@ export function chunkPatchWorldSize(root: TerrainPatch, patch: TerrainPatch, chu
   return ((patch.max.x - patch.min.x) / (root.max.x - root.min.x)) * chunkSize;
 }
 
-// The patch's column of ground as a box, centered on the chunk's origin.
+// The patch's column of ground as a box, centered on the chunk's origin, from its own ground's low and high with the
+// slab's lift: CDLOD bounds each node by the min and max height of its area (Strugar 2009), for both culling and detail.
+// 0 to maxHeight left lifted ground above its box, so the patch underfoot read as out of view (measured 2026-11-09).
 export function chunkPatchBox(root: TerrainPatch, patch: TerrainPatch, detail: ChunkDetail, out: THREE.Box3): THREE.Box3 {
   const fractions = rootFractions(root, patch);
   const size = detail.chunkSize;
   out.min.set((fractions.minU - 0.5) * size, detail.minHeight, (fractions.minV - 0.5) * size);
   out.max.set((fractions.maxU - 0.5) * size, detail.maxHeight, (fractions.maxV - 0.5) * size);
+  if (detail.ground) {
+    const [low, high] = patchGroundRange(root, patch, detail.ground);
+    out.min.y = Math.max(0, low + detail.ground.heightBase) * detail.maxHeight;
+    out.max.y = Math.max(0, high + detail.ground.heightBase) * detail.maxHeight;
+  }
   return out;
 }
 
@@ -134,13 +141,13 @@ function wasSplit(patch: TerrainPatch, context: ChunkContext): boolean {
   return coveringLeaves(context.previousIndex, patch, context.frame).some((leaf) => leaf.depth > patch.depth);
 }
 
-// Same rule as the planet's shouldSplit: mesh cell spacing in pixels against
-// the threshold, with merge hysteresis and no splitting outside the view.
+// Mesh cell spacing in pixels against the threshold, with merge hysteresis. Detail comes from distance only, as in CDLOD
+// (Strugar 2009): the view decides what is drawn, not how detailed, so turning on the spot never swaps patches (50 of 298
+// frames swapped during a 3 s pan, read as flicker; 0 with distance only, measured 2026-11-09).
 function shouldSplit(patch: TerrainPatch, context: ChunkContext): boolean {
   if (patch.depth >= context.maxDepth) return false;
   const split = wasSplit(patch, context);
   const worldSize = chunkPatchWorldSize(context.root, patch, context.detail.chunkSize);
-  if (!chunkPatchInView(context.root, patch, context.detail, split ? worldSize * 0.25 : 0)) return false;
   const error = (worldSize / PATCH_GRID) * pixelsPerWorldUnit(distanceToPatch(context.root, patch, context.cameraPosition, context.detail), context.detail);
   return error > (split ? context.threshold * MERGE_SSE_RATIO : context.threshold);
 }

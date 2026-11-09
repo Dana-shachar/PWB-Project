@@ -737,7 +737,8 @@ void main() {
     float fineElevation = baseElevation;
     float parentElevation = baseElevation;
     if (uDetailAmount > 0.0) {
-      float baseShoreFade = uShoreEnabled > 0.5 ? clamp((baseElevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
+      // Detail never depends on sea level, so moving the sea never reshapes the land (as in Gaea and World Machine).
+      float baseShoreFade = 1.0;
       float meshSpacing = (uRegionMax.x - uRegionMin.x) / CHUNK_MESH_CELLS / length(cubePoint);
       float coveredSpacing = uChunkBaseSpacing / length(cubePoint);
       fineElevation += uDetailAmount * baseShoreFade * planetDetail(basePosition, meshSpacing, coveredSpacing);
@@ -886,9 +887,8 @@ void main() {
   // read by the planet's displacement and the land chunk instead of R).
   // See map/heightmap.ts, ISSUES.md, 2026-09-24.
   if (sampleSpacing > 0.0 && uDetailAmount > 0.0) {
-    // None below sea level, then linear over twice the detail's largest swing (its octaves sum below 2), so a dip
-    // never reaches the sea and the coastline never moves (Dana: no rough patches where there's water).
-    float shoreFade = uShoreEnabled > 0.5 ? clamp((elevation - uShoreSeaLevel) / (2.0 * uDetailAmount), 0.0, 1.0) : 1.0;
+    // Detail never depends on sea level, so moving the sea never reshapes the land (as in Gaea and World Machine).
+    float shoreFade = 1.0;
     elevation += uDetailAmount * shoreFade * (1.0 - erosionMix) * planetDetail(basePosition, sampleSpacing, 0.0);
   }
 #ifndef CHUNK_PATCH_PASS

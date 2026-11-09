@@ -19,6 +19,8 @@ import { MapView } from './map/MapView';
 import { useBrush } from './map/2Dbrush';
 import { useCurrentUser } from './firebase/currentUser';
 import { useSaveProject } from './projectSettings/saveProject';
+import { useSettingsHistory } from './projectSettings/settingsHistory';
+import type { SavedErosionRun } from './firebase/storage';
 import { engineRainfall, planetErosionPasses, useErosion, useErosionAutoRun } from './erosion/erosionControls';
 import { randomClimate } from './atmosphere/atmosphereSettings';
 import { ErosionTimeline } from './erosion/ErosionTimeline';
@@ -73,9 +75,9 @@ function App() {
     planetControls.shoreSeaLevel,
     planetControls.radiusKm,
   );
-  const { progress: waterProgress, revision: waterRevision, carvingPending } = useDrainage(sceneHandleRef, liquidNamed(planetControls.atmosphere.liquid).flows, planetControls.water.seaLevel, erosion.enabled ? planetErosionPasses(erosion.durationYears) : 0, erosion.strength, planetControls.atmosphere, planetControls.heightDistribution, { strength: erosion.enabled ? erosion.strength : 0, shape: erosion.filterShape });
+  const { progress: waterProgress, revision: waterRevision, carvingPending } = useDrainage(sceneHandleRef, liquidNamed(planetControls.atmosphere.liquid).flows, erosion.baseLevel, erosion.enabled ? planetErosionPasses(erosion.durationYears) : 0, erosion.strength, planetControls.atmosphere, planetControls.heightDistribution, { strength: erosion.enabled ? erosion.strength : 0, shape: erosion.filterShape });
   erosion.filterHoldRef.current = carvingPending;
-  useErosionAutoRun(erosion, landChunk.patch, planetControls.water.seaLevel, chunkRainfall, noiseLayers.layers, brush.paintVersion, planetControls.displayMode);
+  useErosionAutoRun(erosion, landChunk.patch, erosion.baseLevel, chunkRainfall, noiseLayers.layers, brush.paintVersion, planetControls.displayMode);
   // Selection mode: drag a square on the planet to choose the land chunk's area (voxel/areaSelect.ts).
   const areaSelect = useAreaSelect(sceneHandleRef, landChunk, planetControls.radiusKm);
   // The chunk's patches bake through the planet view's heightmap pipeline.
@@ -96,6 +98,19 @@ function App() {
     erosion,
     landChunk,
     planetControls,
+  });
+  // One undo timeline for settings and paint strokes (projectSettings/settingsHistory.ts).
+  useSettingsHistory({
+    layers: noiseLayers.layers,
+    setLayers: noiseLayers.setLayers,
+    planetSettings: planetControls.currentSettings(),
+    applyPlanetSettings: planetControls.applySettings,
+    erosionSettings: erosion.savedSettings(),
+    applyErosionSettings: (settings) => erosion.loadSavedRun(settings as SavedErosionRun),
+    planetId: project.currentPlanetId,
+    strokeCount: brush.strokeHistory.length,
+    undoStroke: brush.undo,
+    redoStroke: brush.redo,
   });
   const sharedGumball = useSharedGumball(sceneHandleRef, landChunkHandleRef, landChunk.viewMode);
   // One real renderer for both panes, reusing sharedGumball's own mountRef
@@ -197,6 +212,8 @@ function App() {
         onColorByElevationChange={planetControls.setColorByElevation}
         colorStops={planetControls.colorStops}
         onColorStopsChange={planetControls.setColorStops}
+        rock={planetControls.rock}
+        onRockChange={planetControls.updateRock}
         onRandomizeColors={planetControls.randomizeColors}
         shadowsEnabled={planetControls.shadowsEnabled}
         onShadowsEnabledChange={planetControls.setShadowsEnabled}
@@ -312,6 +329,7 @@ function App() {
                 detailAmount={planetControls.detailAmount}
                 colorByElevation={planetControls.colorByElevation}
                 colorStops={planetControls.colorStops}
+                rock={planetControls.rock}
                 onElevationRangeChange={planetControls.setElevationRange}
                 onHeightDistributionChange={planetControls.setHeightDistribution}
                 water={planetControls.water}
@@ -319,7 +337,7 @@ function App() {
                 spin={planetControls.spin}
                 atmosphere={planetControls.atmosphere}
                 lightFollowsCamera={sceneControls.lightFollowsCamera}
-                shoreSeaLevel={planetControls.shoreSeaLevel}
+                shoreSeaLevel={planetControls.water.enabled ? erosion.baseLevel : null}
               />
             </div>
             {landChunk.viewMode === 'split' && <div className="viewport-divider" onMouseDown={landChunk.startResize} />}
@@ -358,6 +376,7 @@ function App() {
                 heightBase={landChunk.heightBase}
                 colorByElevation={planetControls.colorByElevation}
                 colorStops={planetControls.colorStops}
+                rock={planetControls.rock}
                 elevationMin={landChunk.elevationMin}
                 elevationMax={landChunk.elevationMax}
                 shadowsEnabled={planetControls.shadowsEnabled}

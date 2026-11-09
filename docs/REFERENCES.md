@@ -324,6 +324,7 @@
 **CDLOD, per-vertex morphing between LOD levels** · Strugar (2009) · `referenced, not yet matched`
 - each vertex morphs individually based on its own distance from the camera, so neighboring tiles at different LOD levels never show a visible seam, a quadtree picks which tiles are active
 - an alternative/complementary technique to geometry clipmaps for the same [B28] problem, worth knowing both exist rather than just one
+- Read 2026-11-09 (the paper's text): every quadtree node stores the minimum and maximum height of the heightmap area it covers, and its bounding box from those drives both the range test for detail and frustum culling. Taken for the chunk's patch boxes (`[B167]`).
 - *[CDLOD terrain reference implementation](https://github.com/tschie/terrain-cdlod). Verified 2026-10-14.*
 
 **Async GPU→CPU readback via a Pixel Buffer Object** · WebGL2 `PIXEL_PACK_BUFFER` · `referenced, not yet matched`
@@ -869,6 +870,10 @@
 - Summary, read 2026-11-03: base level is the part of the domain held at a fixed height (sec. 1); K "depends on lithology and mean precipitation"; local minima are either left as closed (endorheic) basins or drained over their sill, and "sills [are] efficiently eroded away as they receive the discharge" (sec. 6).
 - the stack order, the linear solve for `n = 1`, lakes draining over their sill. `erodeTerrain` adapts this to a fixed tree, in one pass (inferred).
 - *PDF in the course folder · doi 10.1016/j.geomorph.2012.10.008*
+- Also `used 2026-11-08`: its idea of visiting each cell after every cell draining into it, as the order for `accumulateDrainage` (`[B155]`).
+
+**Flow accumulation (O'Callaghan and Mark 1984) with multiple flow (Freeman 1991)** · `used 2026-11-08, from recall of the standard method`
+- each cell's drainage is its own area plus the shares its higher neighbours pass down, Freeman's split by slope to a power; computed in one sweep in `accumulateDrainage`, matching the planet's GPU pass exactly (measured: 10 of 2,097,152 cells change by over 1% in 20 further passes).
 
 **The Budyko framework (Greve et al. 2016)** · `used 2026-11-01, from a search summary`
 - runoff from the ratio of evaporation demand to rainfall, with Budyko's curve at omega 2.6 in Fu's form. Fu's formula itself was written from memory.

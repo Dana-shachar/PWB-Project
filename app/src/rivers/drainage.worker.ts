@@ -170,7 +170,8 @@ self.onmessage = (event: MessageEvent) => {
     hierarchy = null;
     lastRun = null;
     const copy = filled.slice();
-    self.postMessage({ type: 'filled', filled: copy, width: message.width, height: message.height, ms: Math.round(performance.now() - start), requestId: message.requestId }, { transfer: [copy.buffer] });
+    const settled = accumulateDrainage(filled, message.width, message.height, message.seaLevel);
+    self.postMessage({ type: 'filled', filled: copy, drainage: settled, width: message.width, height: message.height, ms: Math.round(performance.now() - start), requestId: message.requestId }, { transfer: [copy.buffer, settled.buffer] });
     return;
   }
   if (message.type === 'climate') {
@@ -270,4 +271,73 @@ function buildWaterMap(requestId: number): void {
   }
   const valleySpacing = valleySpacingMeters(kind, width, height, cellDiagonal / Math.SQRT2);
   self.postMessage({ type: 'analyzed', requestId, waterMap, valleySpacing, width, height, totalRows, riverCells, deadEnds, lakeCells, lakesTouchingOcean, ms: Math.round(performance.now() - start) }, { transfer: [waterMap.buffer] });
+}
+
+// The settled drainage of the planet's stream power pass (shaders/erosion/streamPowerPlanet.frag.glsl) in one sweep
+// instead of hundreds of GPU passes: flow accumulation (O'Callaghan and Mark 1984) with the pass's own multiple-flow split
+// (Freeman 1991, slope to the power SCHOTT_FLOW_EXPONENT), each cell visited only after every cell draining into it (a
+// topological order, as Braun and Willett 2013's stack). Same geometry as the pass: the map wraps east to west, east-west
+// distances shrink with latitude (measured at the receiving cell), cells below the base level are ocean and pass nothing
+// on. Planet radius 1: drainage grows linearly with cell size, so the seed scales it by the radius.
+const SCHOTT_FLOW_EXPONENT = 1; // rivers/planetDrainage.ts
+const NEIGHBOR_DX = [0, 1, 1, 1, 0, -1, -1, -1];
+const NEIGHBOR_DY = [1, 1, 0, -1, -1, -1, 0, 1];
+export function accumulateDrainage(heights: Float32Array, width: number, height: number, baseLevel: number): Float32Array {
+  const cells = width * height;
+  const cellX = (2 * Math.PI) / width;
+  const cellY = Math.PI / height;
+  const cosLat = new Float32Array(height);
+  for (let y = 0; y < height; y++) cosLat[y] = Math.max(Math.cos(((y + 0.5) / height - 0.5) * Math.PI), 1e-3);
+  const isOcean = (cell: number) => heights[cell] < baseLevel;
+  const shares = new Float32Array(8);
+  const targets = new Int32Array(8);
+  // The water split from one land cell to its lower neighbours, as flowCoeff; returns how many receive.
+  function split(cell: number): number {
+    const x = cell % width;
+    const y = (cell - x) / width;
+    let count = 0;
+    let sum = 0;
+    for (let i = 0; i < 8; i++) {
+      const ny = y + NEIGHBOR_DY[i];
+      if (ny < 0 || ny >= height) continue;
+      const nx = (x + NEIGHBOR_DX[i] + width) % width;
+      const next = ny * width + nx;
+      const distance = Math.hypot(NEIGHBOR_DX[i] * cellX * cosLat[ny], NEIGHBOR_DY[i] * cellY);
+      const slope = (heights[cell] - heights[next]) / distance;
+      if (slope <= 0) continue;
+      const weight = SCHOTT_FLOW_EXPONENT === 1 ? slope : Math.pow(slope, SCHOTT_FLOW_EXPONENT);
+      shares[count] = weight;
+      targets[count] = next;
+      sum += weight;
+      count++;
+    }
+    for (let k = 0; k < count; k++) shares[k] /= sum;
+    return count;
+  }
+  const donors = new Uint8Array(cells);
+  for (let cell = 0; cell < cells; cell++) {
+    if (isOcean(cell)) continue;
+    const count = split(cell);
+    for (let k = 0; k < count; k++) donors[targets[k]]++;
+  }
+  const drainage = new Float32Array(cells);
+  for (let cell = 0; cell < cells; cell++) {
+    if (isOcean(cell)) continue;
+    const y = Math.floor(cell / width);
+    drainage[cell] = Math.hypot(cellX * cosLat[y], cellY); // the pass's cellArea
+  }
+  const queue = new Int32Array(cells);
+  let tail = 0;
+  for (let cell = 0; cell < cells; cell++) if (donors[cell] === 0) queue[tail++] = cell;
+  for (let head = 0; head < tail; head++) {
+    const cell = queue[head];
+    if (isOcean(cell)) continue; // the ocean passes no water on
+    const count = split(cell);
+    for (let k = 0; k < count; k++) {
+      const next = targets[k];
+      drainage[next] += drainage[cell] * shares[k];
+      if (--donors[next] === 0) queue[tail++] = next;
+    }
+  }
+  return drainage;
 }

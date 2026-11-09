@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-11-04`
+`Last updated: 2026-11-08`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -11,11 +11,11 @@
 > Bugs only. Architecture and the decisions behind it are in `SPEC.md`. Status by stage is in `ROADMAP.md`.
 
 ```
-🔴 Open      13
-🟡 Partial   24
-❓ Decision   1
+🔴 Open      17
+🟡 Partial   25
+❓ Decision   2
 📋 Tracked    4
-✅ Fixed     48
+✅ Fixed     51
 ```
 
 <details>
@@ -1264,6 +1264,198 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 ### [B01] Grid duplicated on resolution change · `minor`
 **✅ Fixed:** 2026-09-09 · A StrictMode-related leak.
+
+---
+
+## 🏞️ Chunk rivers
+
+*The land chunk's rivers (2026-11-06 to 11-07). The plan that replaces the failed attempts is `RIVER-PLAN.md`. Each entry keeps what was tried and what it measured, so nothing is retried.*
+
+### [B145] Rivers look stamped in: no valleys under them · `blocks work`
+**🔴 Open** · **Found:** 2026-11-07 · **Where:** the chunk's ground (`map/heightmap.ts`), `riverCarve` in `shaders/water/riverNetwork.glsl`
+
+**What happens**
+- Dana: the riverbed looks forcefully carved, not created by erosion; dark one-sided walls along the rivers.
+
+**Cause**
+- Measured: the chunk's land is the planet's shape (erosion on about 18 km cells) plus fine noise, so at 172 m it has no valleys. The ground 0.2 to 0.5 km beside a river sits 11 to 21 m *below* the river: rivers run along hillsides, and the trench cut into a slope leaves one high wall.
+- The root cause is the build order: terrain finished first, rivers added after at a scale it never had.
+
+**Tried, did not work**
+- Stream power on the chunk (Schott et al. 2023, the planet's shader on a square grid, edges as outlets), no uplift: lowered every river 1.5 to 8 km and flattened the relief instead of cutting valleys; 24,000 to 140,000 pits without hillslope smoothing. Drainage takes about 1,400 passes to settle, 3.3 ms each.
+- The same with Schott's uplift (his source: per-cell factor 0.4 to 10 from a map, times 0.03; k 0.0005, k_h 200, dt 50), the factor from the chunk's own ground: the ground moved 2.8 to 7.5 km on average, 1,700 to 2,400 pits, river cells fell from 6,829 to 3 to 57. Ruled out.
+- A channel stamped from the river's level with Rosgen's flood-prone bank blend: produced the notches in `[B146]`.
+
+**Fix (planned)**
+- Rivers first, valleys built around them (Génevaux et al. 2013): `RIVER-PLAN.md`, stages 1 to 6.
+
+### [B146] Notches and slashes along the river banks · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-07 · **Where:** `riverAt` and `riverCarve` in `shaders/water/riverNetwork.glsl`
+
+**What happens**
+- Dana: dark and light slashes across the banks, the channel edge toothed.
+
+**Cause**
+- Measured: at bank points 1.5 and 2.5 half widths out, the carve's level jumps 15 to 29 m (6 and 13 times per 192 samples). A brute-force search over every river piece gives exactly the same jumps, so the lookup is not at fault.
+- At almost every jump the nearest point flips between pieces of the same river 4 to 6 cells apart (about 20 to 29 m apart in level): the course zigzags every few 172 m cells while the banks reach about 16 cells out.
+
+**Tried, did not work**
+- A Gaussian smoothing of the course over the river's width: reverted before testing, since it treats the symptom (Dana, 2026-11-07).
+
+**Fix (planned)**
+- Courses as real splines whose bends are wider than the valley (`RIVER-PLAN.md` stage 3), with the valley replacing the bank blend (stage 5).
+
+### [B147] Rivers drawn as stepped flat slabs · `blocks work`
+**✅ Fixed 2026-11-07** · **Where:** new `voxel/riverMesh.ts`, `shaders/water/riverRibbon.vert.glsl`, `chunkWater.vert.glsl`
+- Cause: rivers were drawn on the lakes' water sheet, points 344 m apart, each lifted to the highest river level near it. On rivers dropping about 26 m per 172 m cell, its flat triangles stood at different heights.
+- Tried before, did not work: lifting the sheet to the nearest river level, then to the highest of 9 neighbors (measured −7.5 to +3.7 m off the river).
+- Fixed: rivers have their own mesh along their course, the way Unreal builds river water bodies; the sheet carries lakes and the sea only.
+
+### [B148] River mouths stood above lakes and the sea as square slabs · `wrong but workable`
+**✅ Fixed 2026-11-07** · **Where:** `buildRivers` in `rivers/chunkRivers.ts`, `chunkLakes.worker.ts`, `riverPiece` in `riverNetwork.glsl`
+- Cause: a river's level ended at its last cell's ground height, and its last piece ran half a cell into the water at that same level.
+- Fixed: the receiving lake's or sea's surface is the fixed downstream end of the level filter, and the last piece ends at that level (base level). 29 mouths measured.
+
+### [B149] Rivers stop short of the lakes they flow into · `wrong but workable`
+**🟡 Partial** · **Found:** 2026-11-07 · **Where:** `buildRivers` in `rivers/chunkRivers.ts`
+- Cause found, measured: a river that ran into a small lake on its way never started again below it. The trace skipped lake cells, and multiple flow spread the lake's outflow below Start size.
+- Fixed: a lake carrying a river's flow continues it from its pour point. Measured afterward: 29 of 29 river ends reach water, 0 end on dry land.
+- Dana still sees a river stopping before a lake. Not found yet; possibly a drawing gap (`[B151]`) rather than the course.
+
+### [B150] Blocks of water beside rivers, and the sea cut short of river mouths · `wrong but workable`
+**✅ Fixed 2026-11-07** · **Where:** `chunkWater.frag.glsl`
+- Cause: every pixel of a sheet triangle touching a lifted river point used the sheet's interpolated height as its surface, a plane sloping to the chunk's floor; ground below it showed blue in 344 m blocks.
+- Fixed: the sheet's height is a surface only on a lake, then rivers moved to their own mesh (`[B147]`).
+
+### [B151] Gaps and creases in the river water · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-07 · **Where:** `voxel/riverMesh.ts`, the `RIVER_RIBBON` part of `chunkWater.frag.glsl`
+- Seen in Dana's and my screenshots: short stretches with no water, thin lines and folds inside wide bends, straight-cut edges near lakes. Not measured yet.
+- ⚠️ Two unverified edits are in the code (2026-11-07) and must be measured or reverted: the river mesh writes depth with a strict test (meant to stop double-drawn overlaps), and it steps aside only where a lake actually draws (meant to stop straight edges along the 172 m lake grid).
+
+### [B152] Changing sea level shows a dark speckle over part of the chunk · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-07 · **Where:** not measured
+- Dana's screenshot: after a sea level change, a dark mottled pattern covers part of the chunk.
+- Not reproduced yet. Possibly from the 2026-11-07 water changes (`[B150]`, `[B151]`); unproven.
+
+### [B153] Rivers drop about 15%, too steep to meander · `wrong but workable`
+**❓ Decision** · **Found:** 2026-11-07 · **Where:** the chunk's drawn height
+- Measured: the median river drops 26 m per 172 m cell. The chunk draws much taller than the planet, so its slopes are steep everywhere (median ground slope 16%).
+- By Peytavie et al. 2019 and Rosgen 1994, rivers this steep run straight in V valleys. Calm, snaking rivers need the chunk drawn less tall. Dana's to decide (`RIVER-PLAN.md`, open decision).
+
+### [B154] River round of 2026-11-07, paused: what was built and measured · `blocks work`
+**🔴 Open** · **Found:** 2026-11-07 · **Where:** branch `rivers-fork` (the whole river system, kept as it stood)
+
+**What was built (all on `rivers-fork`, none on `main`)**
+- Stage 1 of `RIVER-PLAN.md`: the solver reads its own 1024 map baked without the planet's fine detail (`withoutDetail` in `RegionParams`, `getChunkSolverMap` in `map/heightmap.ts`). Measured: about 6 times smoother at the cell scale (mean local roughness 1.8e-5 against 1.09e-4), shape kept (largest difference 0.032 raw units).
+- A bank level for the carve (`markBankLevels` in `rivers/chunkRivers.ts`, `riverCellLevel` and `bankLevel` in `shaders/water/riverNetwork.glsl`): an inverse-distance blend of nearby river levels, after Plate-Local River Generation's `riverFields`. A close view showed the bank notches of `[B146]` gone.
+
+**What was measured (corrects the plan's premise)**
+- Ground above the river at 172 m, 344 m, 688 m, 1.4 km and 2.7 km: median 11, 20, 46, 108 and 256 m. Only 19, 16, 13, 13 and 11% of banks sit below the river. The coarse ground already slopes up on both sides of almost every river, so the plan's "11 to 21 m below" describes a minority of one-sided banks, not the typical case.
+- Still true: the channel is never part of the terrain's own shape, so it reads as stamped.
+
+**Tried, did not work**
+- Removing the `min` in `riverCarve` so low banks are raised as well as cut (the replace operator's two-way blend): the banks became flat pale shelves stepping down the slope, with stepped edges. Reverted on the fork.
+
+**Not measured**
+- The rivers look paler and thinner after the bank blend; unproven whether the blend or the climate re-solving after load causes it (the solver ran twice, 9,442 then 4,335 river cells).
+
+**Why paused**
+- Dana, 2026-11-07: reverted to the last commit before rivers (`c39f118`) after the result looked worse and erosion loaded very slowly. The fork keeps every river change as it stood.
+
+### [B155] Erosion took long to load · `wrong but workable`
+**✅ Fixed 2026-11-08** · **Found:** 2026-11-07 · **Where:** `rivers/planetDrainage.ts`, `rivers/drainage.worker.ts`
+
+- Dana: erosion took forever to load.
+- Measured on `main` (no river code): from the terrain being ready, the pit fill took 0.35 s, the GPU stage 3.5 to 4.1 s, lakes and rivers 0.75 s, the chunk's full map 0.67 s. The GPU stage ran 350 drainage passes plus the erosion passes (632 at that Duration), 4 a frame.
+- Cause: the drainage passes move water one cell per pass, so they never settled: at pass 340, 8,640 of 2,097,152 cells still changed by over 1% per 20 passes. Fewer passes would leave it less settled; more passes per frame adds no speed, since 4 passes already fill a frame.
+- Fix: the settled drainage is computed once in the worker (`accumulateDrainage`): flow accumulation (O'Callaghan and Mark 1984) with the pass's own multiple-flow split (Freeman 1991), each cell after all cells draining into it (Braun and Willett 2013's linear-time order). The seed starts from it and the 350 passes are gone.
+- Measured after: 10 cells change by over 1% in 20 drainage passes (exactly settled), the worker takes 0.23 s more, the GPU stage 2.3 s, terrain ready to done 3.7 s instead of 4.7 to 5.3 s. The erosion passes still grow with Duration by design.
+- Side effect, measured and kept (Dana, 2026-11-08): erosion now starts with the rivers carrying their full water, so they cut harder from the first pass. On New Planet's chunk one lake of 221,249 cells lost its rim and drained (lake cells 235,927 before, 40,770 after, same rainfall); restoring the old start brought it back exactly. The old lake came from the unsettled warm-up. Less Duration keeps more rims; Rainfall only fills the basins that remain.
+
+---
+
+## 💧 Water, walk mode and look (2026-11-08 round)
+
+*Bugs found and fixed while preparing the vertical slice, with their measurements. All uncommitted on `main` until the next commit.*
+
+### [B156] Regular washboard ridges on bumpy ground · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-08 · **Where:** the ground's shape, likely a noise layer setting
+- Dana: evenly spaced ridges across slopes up close and in walk mode (her screenshots of 2026-11-08, 21:31). She thinks it's a noise setting.
+- Measured: not `[B66]`'s precision: 0 identical neighbouring heights at depth 11 on a 4,000 km chunk. Not the color: the ground shader colors by height and slope only.
+- Leads to test: the Voronoi layer (Jitter 0 is a perfectly regular grid; try 1), the erosion filter's gullies (Erosion off), each noise layer hidden in turn.
+
+### [B157] In walk mode distant ground flickers · `blocks work`
+**🔴 Open** · **Found:** 2026-11-08 · **Where:** unknown, in walk mode on the land chunk
+- Dana: shading in the distance flickers while panning, and the walk felt jumpy.
+- ❌ Tried and removed 2026-11-09: a logarithmic depth buffer, built on a calculated depth-precision theory that was never measured. It made walking much slower: 150 ms of GPU time a frame with it, 65 ms without, on the same view, twice. Writing depth from the shader turns off the GPU's early depth test, so ground hidden behind hills is shaded too.
+- The water band Dana saw was the tide (`[B164]`), not depth.
+- Leads, unmeasured: the walk map's redraw (`[B168]`); far shading noise. Next: record frames while panning, with and without a depth change in memory, before any fix.
+
+### [B164] A flat tan plane fills the lower view near water in walk mode · `blocks work`
+**🔴 Open, cause measured** · **Found:** 2026-11-08 · **Where:** the tide in `voxel/chunkWater.ts` (`applyTide`) and walk mode's floor in `scene/walkMode.ts` (`floorAt`)
+- Cause: the tide moves the whole sea sheet, on Dana 01 between about 186 and 239 world units (over 50 km). At high tide the sea stands above the land the walker is on, and walk mode lifts the eye above the water, so the water's surface fills the view edge-on.
+- Fix (Dana, 2026-11-09): a safe zone, the walk stops at the highest tide line instead of the current waterline; and a Tide slider to tone it down.
+
+### [B158] Water floated past lake rims and showed sawtooth shores · `wrong but workable`
+**✅ Fixed 2026-11-08** · **Where:** `voxel/chunkWater.ts`, `chunkWater.vert.glsl`, `chunk.vert.glsl`
+- Measured: the 512 water sheet lifted each vertex to the highest lake level two lake cells around (90 vertices up to 351 m above ground); 7% of lake rims on the drawn ground sat below the water (solved on a coarser map).
+- Fix: the sheet matches the 1,024 lake map with one-cell reach (0 floating vertices modeled on the real data; 120 fps orbit, 93 fps walk); the ground beside a lake is lifted half a meter above it (`lakeRim`, Unreal's lake bodies shape their shores).
+
+### [B159] Columns of water and filmy lakes below sea level · `wrong but workable`
+**✅ Fixed 2026-11-08** · **Where:** `chunkWater.frag.glsl`, `WaterSettings`
+- Columns: with the sea above most of a chunk's ground but unable to reach it, 87,097 of 93,664 lake cells sat 2.4 to 6.9 km below sea level and the sheet's dry vertices stood at sea level, drawing walls up to it. Gone with the sheet change above.
+- Filmy: lakes colored by depth as a share of the sea's 360 km range (median 0.0035) drew as clear shallows. Lakes now have their own look in Water > Lakes (clarity, foam, waves, ripples) and their own ramp in Water > Color, colored by real depth through absorption (Unreal and Unity water bodies).
+
+### [B160] Sea level reshaped the land · `wrong but workable`
+**✅ Fixed 2026-11-08** · **Where:** `heightmap.frag.glsl`, `erosion/erosionControls.ts`
+- Measured two causes: fine detail faded toward the live sea level, and erosion used the live sea as its base level (the land rose 0.379 to 0.412 raw over a sweep). Detail no longer depends on the sea; erosion keeps its own saved base level. Measured after: identical land from the minimum to 80% of the maximum.
+- The transient speckle (`[B152]`) came from the chunk recomputing on every sea change, which no longer happens.
+
+### [B161] Still water, foam veil, no shore foam, Shine and Wave detail doing nothing · `wrong but workable`
+**✅ Fixed 2026-11-08** · **Where:** `chunkWater.frag.glsl`, `oceanWaves.glsl`
+- Measured: at chunk scale Seascape's waves are smaller than a pixel (Wave detail changed pixels by about 1 of 765); the far foam average lay over the whole sea and lakes as a still veil (about 45); the shore foam's mask averaged to 0.5 and cut the band to 0.
+- Fix: the visible waves are panning ripple layers (Roystan's toon water, Unreal's panning normals) driven by Wave size, Wave detail, Ripple speed and Ripple strength, for the sea and the lakes; the far foam veil removed; the shore foam filtered as coverage once its mask is smaller than a pixel (up to 0.3 at the shore). Shine still shows only toward the sun, by design.
+
+### [B162] Cmd+Z didn't undo settings · `wrong but workable`
+**✅ Fixed 2026-11-08** · **Where:** new `projectSettings/settingsHistory.ts`
+- Undo only covered paint strokes. One timeline now covers layers, planet settings, erosion and strokes; a drag is one step; loading a planet starts a fresh history. Tested: Haze and a noise Frequency, undo and redo.
+
+### [B163] Slope rock flecked every bump and smeared into stripes · `wrong but workable`
+**🟡 Built 2026-11-08, Dana to confirm** · **Where:** `chunk.frag.glsl`
+- Measured: the dark blotches and smears vanished with the rock off. Rock now reads the landform's slope from the chunk's whole map (8 texels, `ROCK_SLOPE_STEP_UV`, tunable), not the per-pixel normal.
+
+### [B165] Walking after a jump puts the eye inside the ground · `blocks work`
+**🔴 Open, cause measured** · **Where:** `voxel/ChunkPatchRenderer.ts` (`sampleHeight`)
+- Measured: in 25 of 119 frames after quick map jumps, ground covered the eye (a render looking straight up from the eye). The drawn triangles stood 24.0 m above the eye (rebuilt from the bake, 23.7 m measured) while walk mode's height read put the ground 2.1 m below it.
+- Cause: the mesh puts a vertex on every other bake texel, but walk mode read every texel, so on a coarse patch the two surfaces differ by tens of meters.
+- ❌ Tried 2026-11-09 and reverted: reading the drawn triangle under the walker. Built together with `[B167]`'s fix and never checked in the browser; Dana still ended up under the ground and saw more flicker, so both were reverted.
+
+### [B166] Coarse ground under the walker for 1.5 s after a jump · `wrong but workable`
+**🔴 Open, cause measured** · **Where:** `voxel/ChunkPatchRenderer.ts` (`build`, `swap`)
+- Measured: after a jump the walker landed at 3.2 s and stood on a level-4 patch (about 250 km, a sample every 4 km) until 4.7 s, when 358 patches showed at once.
+- Cause: patches bake in selection order at 4 a frame, not nearest first, and an old patch leaves only once all its replacements are built (about 100 under the walker after a jump).
+- Next: research how Cesium and CDLOD order loading (nearest first, parent until its own children are ready) before a plan.
+
+### [B167] The ground under the walker stayed coarse even when loaded · `blocks work`
+**🟡 Built 2026-11-09, Dana to test** · **Where:** `voxel/chunkPatches.ts` (`chunkPatchBox`)
+- Measured: the patch under the walker was level 9 at the minimum bake (244 m a sample) while patches 12 km away were finer. The view test said it was out of view: its box spanned 0 to 330, but the ground there is drawn at 342.6, since the slab lift (`heightBase`, 0.51) raises it up to 470.
+- ❌ Tried 2026-11-09 and reverted: boxes from each patch's own ground. The patch underfoot went to level 11 (31 m a sample), but shipped with `[B165]`'s change, Dana saw more shader flicker and was still under the ground.
+- Rebuilt alone 2026-11-09, tested in memory then on the real code at the brown spot: level 8 (488 m a sample) to 10 or 11 (61 or 31 m), 0 frames with ground over the eye while walking, no added flicker (sharp pixel change on a 0.05° turn 0% off, 0.03% then 0% on), GPU time unchanged (23 ms). The box is CDLOD's per-node min and max height (Strugar 2009). ⚠️ The range comes from the preview ground map, so fine Roughness can stand slightly above it.
+- Left: nothing in the data is finer than about 30 m, so close ground still reads flat from 2 m; that is the close-up limit (`[B122]`), not this bug.
+
+### [B168] The walk map's redraw stalls walk mode every 2 s · `wrong but workable`
+**🔴 Open, measured** · **Where:** the walk map in `voxel/LandChunkCanvas.tsx` (`createChunkMap`, `WALK_MAP_REDRAW_MS`)
+- Measured: a second render of 296 ms GPU time about every 2 s while walking, with 250 to 310 ms long tasks, felt as a jump.
+- Also measured: walk mode at 17 fps on one view and about 40 on another after `[B157]`'s removal; the terrain is most of the frame. Not yet compared with the last commit.
+
+### [B169] Ground flickered while panning in walk mode · `blocks work`
+**🟡 Built 2026-11-09, Dana confirmed in memory** · **Where:** `voxel/chunkPatches.ts` (`shouldSplit`), `voxel/ChunkPatchRenderer.ts` (`wantedSamples`)
+- Measured: during a 3 s pan on the spot, 50 of 298 frames swapped patches (157 added, 133 removed): detail depended on whether a patch was on screen, so turning rebuilt patches at new levels and their shading jumped. Not the rock, haze, shine or texture sampling (each switched off, flicker unchanged).
+- Fix: detail by distance only, as in CDLOD (Strugar 2009: the view decides what is drawn, not how detailed). Measured after, on the real code: 1 swap frame in 243, GPU 9.9 ms with 289 patches. Dana saw the flicker gone with the in-memory version.
+
+### [B170] Dotted, dashed and dripping marks on hillsides · `wrong but workable`
+**🔴 Open, cause measured** · **Where:** the slope rock in `chunk.frag.glsl` (`landSurfaceColor`, `rockNormal`)
+- Measured on Dana's view: the dark dots, dashes and lines vanish with the rock off. Not the texture's filtering (linear, float filtering supported) or the lake rim (inactive there). On a smooth hill the rock edge shows no dots, so the grid pattern likely comes from the ground's own shape (see `[B156]`). Unmeasured.
 
 ---
 

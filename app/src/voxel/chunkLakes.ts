@@ -33,8 +33,8 @@ export class ChunkLakes {
     };
   }
 
-  update(renderer: THREE.WebGLRenderer, preview: { target: THREE.WebGLRenderTarget; revision: number }, seaLevel: number, climate: RiverClimate, chunkKm: number, radiusKm: number, enabled: boolean): void {
-    const key = [preview.revision, seaLevel, enabled, climate.rainfall, climate.temperature, climate.liquid, chunkKm, radiusKm].join(',');
+  update(renderer: THREE.WebGLRenderer, preview: { target: THREE.WebGLRenderTarget; revision: number }, seaLevel: number, climate: RiverClimate, chunkKm: number, radiusKm: number, enabled: boolean, metersPerRaw: number): void {
+    const key = [preview.revision, seaLevel, enabled, climate.rainfall, climate.temperature, climate.liquid, chunkKm, radiusKm, metersPerRaw].join(',');
     if (key === this.lastKey) return;
     this.lastKey = key;
     const requestId = ++this.requestId;
@@ -59,7 +59,7 @@ export class ChunkLakes {
       }
       this.ground = { data: flipped, size };
       if (!enabled) return;
-      this.pending = { ground, planetLakes, size, seaLevel, climate: { rainfall: climate.rainfall, temperature: climate.temperature, liquid: climate.liquid }, chunkKm, radiusKm, requestId };
+      this.pending = { ground, planetLakes, size, seaLevel, climate: { rainfall: climate.rainfall, temperature: climate.temperature, liquid: climate.liquid }, chunkKm, radiusKm, metersPerRaw, requestId };
       this.sendPending();
     });
   }

@@ -21,6 +21,7 @@ export interface SavedErosionRun {
   patch: SerializedPatch;
   filterShape?: ErosionFilterShape; // absent in saves from before the gully sliders were saved
   enabled?: boolean; // absent in saves from before the switch was saved: off
+  baseLevel?: number; // erosion's own base level; absent in older saves, which used seaLevel
 }
 
 // Each user's saved planets live in a subcollection, not one fixed document

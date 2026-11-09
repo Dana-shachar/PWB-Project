@@ -5,11 +5,12 @@ import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
 import waterGlsl from '../shaders/water/water.glsl?raw';
 import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw';
 import oceanWavesGlsl from '../shaders/water/oceanWaves.glsl?raw';
+import seaLookOverrideGlsl from '../shaders/water/seaLookOverride.glsl?raw';
 import wallVertexGlsl from '../shaders/water/chunkWaterWall.vert.glsl?raw';
 import wallFragmentBody from '../shaders/water/chunkWaterWall.frag.glsl?raw';
 import { chunkBaseDepth } from './chunkPatchMesh';
 import { buildRampUniformArrays, MAX_COLOR_STOPS } from '../planet/colorRamp';
-import { WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
+import { DEFAULT_WATER_SETTINGS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
 import { TIDE_PERIOD_SECONDS } from '../atmosphere/tides';
 import { getRippleMap, isRippleMapReady } from '../planet/rippleMap';
 import { applyWaveSet, buildWaveSet, createWaveUniforms, surfZoneShare, windLengthScale, windTimeScale } from '../planet/oceanSpectrum';
@@ -27,16 +28,18 @@ export interface ChunkWater {
   dispose: () => void;
 }
 
-export const WATER_SHEET_SEGMENTS = 512; // enough vertices to lift the sheet onto lakes. Inferred, TUNABLE
+export const WATER_SHEET_SEGMENTS = 1023; // enough vertices to lift the sheet onto lakes. Inferred, TUNABLE
 const WALL_TOP_SHARE = 2; // the walls' box top, as a share of maxHeight: above any lake. Inferred, TUNABLE
 
 export function createChunkWater(): ChunkWater {
   const geometry = new THREE.PlaneGeometry(1, 1, WATER_SHEET_SEGMENTS, WATER_SHEET_SEGMENTS);
   geometry.rotateX(-Math.PI / 2);
   const ramp = buildRampUniformArrays([{ position: 0, color: '#ffffff' }]);
+  const lakeRamp = buildRampUniformArrays([{ position: 0, color: '#ffffff' }]);
   const material = new THREE.ShaderMaterial({
     vertexShader: waterVertexGlsl,
-    fragmentShader: terrainGlsl + waterGlsl + oceanWavesGlsl + hazeGlsl + waterFragmentBody,
+    // The sea and the lakes each draw with their own wave look (oceanWaves.glsl's SEA_LOOK_OVERRIDE).
+    fragmentShader: seaLookOverrideGlsl + terrainGlsl + waterGlsl + oceanWavesGlsl + hazeGlsl + waterFragmentBody,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
@@ -56,6 +59,20 @@ export function createChunkWater(): ChunkWater {
       uWaterRampPositions: { value: ramp.positions },
       uWaterRampCount: { value: ramp.count },
       uWaterClarity: { value: 0.4 },
+      uLakeRampColors: { value: lakeRamp.colors },
+      uLakeRampPositions: { value: lakeRamp.positions },
+      uLakeRampCount: { value: lakeRamp.count },
+      uLakeClarity: { value: DEFAULT_WATER_SETTINGS.lakeClarityMeters },
+      uLakeFoamWidth: { value: 0 },
+      uLakeIterations: { value: 3 },
+      uLakeWaveScale: { value: 4 },
+      uLakeSeaWaveScale: { value: 4 },
+      uLakeShine: { value: 0.3 },
+      uLakeReflection: { value: 1 },
+      uLakeRippleSpeed: { value: DEFAULT_WATER_SETTINGS.lakeRippleSpeed },
+      uRippleSpeed: { value: DEFAULT_WATER_SETTINGS.rippleSpeed },
+      uRippleStrength: { value: DEFAULT_WATER_SETTINGS.rippleStrength },
+      uLakeRippleStrength: { value: DEFAULT_WATER_SETTINGS.lakeRippleStrength },
       uFoamWidth: { value: 0 },
       uSkyColor: { value: new THREE.Color(WATER_SKY_COLOR) },
       uLightDirection: { value: new THREE.Vector3(1, 1, 1) },
@@ -71,6 +88,7 @@ export function createChunkWater(): ChunkWater {
       uHazeStart: { value: 0 },
       uHazeFloor: { value: 0 },
       uHazeScaleHeight: { value: 1 },
+      uHazeLayers: { value: 0 },
       uResolution: { value: 1000 },
     },
   });
@@ -154,12 +172,13 @@ export function updateChunkWaterFrame(water: ChunkWater, cameraPosition: THREE.V
 }
 
 // The atmosphere: the sky the water reflects, and the haze it fades into with distance (as the land does).
-export function setChunkWaterSky(water: ChunkWater, skyColor: string, hazeColor: string, hazeSkyColor: string, hazeDensity: number): void {
+export function setChunkWaterSky(water: ChunkWater, skyColor: string, hazeColor: string, hazeSkyColor: string, hazeDensity: number, hazeLayers: number): void {
   const uniforms = water.mesh.material.uniforms;
   (uniforms.uSkyColor.value as THREE.Color).set(skyColor);
   (uniforms.uHazeColor.value as THREE.Color).set(hazeColor);
   (uniforms.uHazeSkyColor.value as THREE.Color).set(hazeSkyColor);
   uniforms.uHazeDensity.value = hazeDensity;
+  uniforms.uHazeLayers.value = hazeLayers;
 }
 
 // The sun and light follow the Scene lighting, as the land's do.
@@ -199,6 +218,15 @@ export function updateChunkWater(
   applyTide(water);
   uniforms.uWaterDeepest.value = waterDeepest;
   uniforms.uWaterClarity.value = clarityShare;
+  uniforms.uLakeClarity.value = settings.lakeClarityMeters;
+  uniforms.uLakeFoamWidth.value = settings.lakeFoamWidth;
+  uniforms.uLakeIterations.value = settings.lakeWaveDetail;
+  uniforms.uLakeShine.value = settings.lakeShine;
+  uniforms.uLakeReflection.value = settings.lakeReflection;
+  uniforms.uLakeRippleSpeed.value = settings.lakeRippleSpeed;
+  uniforms.uRippleSpeed.value = settings.rippleSpeed;
+  uniforms.uRippleStrength.value = settings.rippleStrength;
+  uniforms.uLakeRippleStrength.value = settings.lakeRippleStrength;
   uniforms.uFoamWidth.value = settings.foamWidth;
   uniforms.uSeaIterations.value = settings.waveDetail;
   // Wind lengthens Seascape's waves (windLengthScale); the variance waves already have the wind's lengths, so their
@@ -206,6 +234,8 @@ export function updateChunkWater(
   const lengthScale = windLengthScale(wind);
   uniforms.uWaveScale.value = settings.waveScale * lengthScale;
   uniforms.uSeaWaveScale.value = settings.waveScale * lengthScale;
+  uniforms.uLakeWaveScale.value = settings.lakeWaveScale * lengthScale;
+  uniforms.uLakeSeaWaveScale.value = settings.lakeWaveScale * lengthScale;
   const depthRangeMeters = Math.max(0, settings.seaLevel - waterDeepest) * maxHeight * 1000;
   uniforms.uSurfZone.value = surfZoneShare(wind, depthRangeMeters);
   uniforms.uSeaShine.value = settings.shine;
@@ -220,4 +250,9 @@ export function updateChunkWater(
   for (let i = 0; i < MAX_COLOR_STOPS; i++) rampColors[i].copy(ramp.colors[i]);
   (uniforms.uWaterRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
   uniforms.uWaterRampCount.value = ramp.count;
+  const lakeRamp = buildRampUniformArrays(settings.lakeColorStops);
+  const lakeColors = uniforms.uLakeRampColors.value as THREE.Color[];
+  for (let i = 0; i < MAX_COLOR_STOPS; i++) lakeColors[i].copy(lakeRamp.colors[i]);
+  (uniforms.uLakeRampPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...lakeRamp.positions);
+  uniforms.uLakeRampCount.value = lakeRamp.count;
 }

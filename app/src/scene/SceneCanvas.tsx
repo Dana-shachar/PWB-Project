@@ -22,7 +22,7 @@ import { createPlanetSpin, type SpinSettings } from './planetSpin';
 import { AREA_OUTLINE_LIFT, AreaOutline } from './areaOutline';
 
 import { isRippleMapReady } from '../planet/rippleMap';
-import { KM_PER_SCENE_UNIT, WATER_SHININESS, WATER_SKY_COLOR, type WaterSettings } from '../planet/planetControls';
+import { DEFAULT_ROCK_SETTINGS, KM_PER_SCENE_UNIT, WATER_SHININESS, WATER_SKY_COLOR, type RockSettings, type WaterSettings } from '../planet/planetControls';
 import type { ElevationData } from '../voxel/chunkGrid';
 import { clampPatchSamples, clampPatchTextureResolution, faceIndex, PATCH_BORDER_TEXELS, type TerrainPatch } from '../planet/patch';
 import { PlanetPatchRenderer } from '../planet/PlanetPatchRenderer';
@@ -73,7 +73,7 @@ export interface SceneCanvasHandle {
   // The whole-globe heights at the drainage's own size, read back without stalling (rivers/planetDrainage.ts).
   getGlobeElevationAsync(): Promise<ElevationData | null>;
   // Stream power on pit-filled globe heights (rivers/planetDrainage.ts): drainage, then erosionPasses on top.
-  runPlanetDrainage(filled: Float32Array, width: number, height: number, seaLevel: number, erosionPasses: number, strength: number, onProgress: (share: number) => void): Promise<DrainageResult | null>;
+  runPlanetDrainage(filled: Float32Array, drainage: Float32Array, width: number, height: number, seaLevel: number, erosionPasses: number, strength: number, onProgress: (share: number) => void): Promise<DrainageResult | null>;
   // Erosion moved: continues from the last run, or restarts from its drainage-only state.
   setPlanetErosionPasses(passes: number, strength: number, onProgress: (share: number) => void): Promise<DrainageResult | null>;
   // The finished water map (rivers/drainage.worker.ts) and its valley spacing in meters: re-bakes the shown patches.
@@ -215,6 +215,7 @@ interface SceneCanvasProps {
   diffuseWrap: number;
   colorByElevation: boolean;
   colorStops: ColorStop[];
+  rock: RockSettings;
   displayMode: string; // 'shaded' | 'wireframe' | 'voxel'
   gridSpacing: number; // minor grid cell size, in world units
   gridVisible: boolean;
@@ -267,6 +268,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     diffuseWrap,
     colorByElevation,
     colorStops,
+    rock,
     displayMode,
     gridSpacing,
     gridVisible,
@@ -323,6 +325,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     cameraPosition: new THREE.Vector3(),
     colorByElevation: 0,
     colorStops: DEFAULT_COLOR_STOPS,
+    rock: DEFAULT_ROCK_SETTINGS,
     elevationMin: -0.5,
     elevationMax: 0.5,
     terrainBottom: -0.5,
@@ -496,13 +499,13 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
         heightmapPipeline.releaseRiverTarget();
         return elevation;
       },
-      runPlanetDrainage(filled, width, height, seaLevel, erosionPasses, strength, onProgress) {
+      runPlanetDrainage(filled, drainage, width, height, seaLevel, erosionPasses, strength, onProgress) {
         const webglRenderer = webglRendererRef.current;
         if (!webglRenderer) return Promise.resolve(null);
         planetDrainageRef.current ??= new PlanetDrainage();
         const shared = sharedUniformsRef.current;
         const metersPerUnit = shared.displacementAmplitude * KM_PER_SCENE_UNIT * 1000;
-        return planetDrainageRef.current.run(webglRenderer, filled, width, height, seaLevel, metersPerUnit, shared.radius * KM_PER_SCENE_UNIT * 1000, erosionPasses, strength, onProgress);
+        return planetDrainageRef.current.run(webglRenderer, filled, drainage, width, height, seaLevel, metersPerUnit, shared.radius * KM_PER_SCENE_UNIT * 1000, erosionPasses, strength, onProgress);
       },
       setErosionFilter(strength, shape) {
         const webglRenderer = webglRendererRef.current;
@@ -1067,6 +1070,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     shared.displacementAmplitude = (heightScale / 100) * radius;
     shared.colorByElevation = colorByElevation ? 1 : 0;
     shared.colorStops = colorStops;
+    shared.rock = rock;
     planetPatchRendererRef.current?.applyShared(shared);
   }, [
     baseColor,
@@ -1082,6 +1086,7 @@ export const SceneCanvas = forwardRef<SceneCanvasHandle, SceneCanvasProps>(funct
     radius,
     colorByElevation,
     colorStops,
+    rock,
   ]);
 
   // The sky fill's color, from the sky and Shadow hue.

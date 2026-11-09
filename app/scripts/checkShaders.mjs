@@ -44,7 +44,7 @@ const MATERIALS = [
   { name: 'planet patch (planet/planetPatchMesh.ts)', vertex: ['terrain/vertex.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/landLayers.glsl', 'water/water.glsl', 'water/oceanWaves.glsl', 'atmosphere/airGround.glsl', 'atmosphere/planetAir.glsl', 'terrain/planetPatch.frag.glsl'] },
   { name: 'planet mesh (planet/mesh.ts)', vertex: ['terrain/vertex.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/fragment.glsl'] },
   { name: 'land chunk (voxel/LandChunkCanvas.tsx)', vertex: ['terrain/chunk.vert.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/landLayers.glsl', 'atmosphere/haze.glsl', 'terrain/chunk.frag.glsl'] },
-  { name: 'chunk water (voxel/chunkWater.ts)', vertex: ['water/chunkWater.vert.glsl'], fragment: ['terrain/terrain.glsl', 'water/water.glsl', 'water/oceanWaves.glsl', 'atmosphere/haze.glsl', 'water/chunkWater.frag.glsl'] },
+  { name: 'chunk water (voxel/chunkWater.ts)', vertex: ['water/chunkWater.vert.glsl'], fragment: ['water/seaLookOverride.glsl', 'terrain/terrain.glsl', 'water/water.glsl', 'water/oceanWaves.glsl', 'atmosphere/haze.glsl', 'water/chunkWater.frag.glsl'] },
   { name: 'chunk water walls (voxel/chunkWater.ts)', vertex: ['water/chunkWaterWall.vert.glsl'], fragment: ['terrain/terrain.glsl', 'water/water.glsl', 'atmosphere/haze.glsl', 'water/chunkWaterWall.frag.glsl'] },
   { name: 'planet haze (atmosphere/planetHaze.ts)', vertex: ['atmosphere/planetHaze.vert.glsl'], fragment: ['atmosphere/airGround.glsl', 'atmosphere/planetAir.glsl', 'atmosphere/planetHaze.frag.glsl'] },
   { name: 'planet glow (atmosphere/planetGlow.ts)', vertex: ['atmosphere/planetGlow.vert.glsl'], fragment: ['atmosphere/airGround.glsl', 'atmosphere/planetGlow.frag.glsl'] },

@@ -17,6 +17,13 @@
 
 uniform float uSeaTime; // seconds
 uniform float uSeaIterations; // 1 to ITER_FRAGMENT
+#ifndef SEA_LOOK_OVERRIDE
+// A shader drawing two kinds of water (the chunk's sea and lakes) defines these to per-pixel values instead.
+#define SEA_ITERATIONS uSeaIterations
+#define SEA_SHINE uSeaShine
+#define SEA_REFLECTION uSeaReflection
+#define SEA_WAVE_SCALE uSeaWaveScale
+#endif
 uniform float uSeaShine; // scales the sun highlight, 1 is Seascape's own
 uniform float uSeaReflection; // scales the sky reflection, 1 is Seascape's own
 uniform float uSeaWind; // Beaufort force, 0 (mirror) to 12 (sea completely white)
@@ -97,7 +104,7 @@ float sea_octaves(vec2 xz, int firstOctave, int lastOctave) {
   float footprint = gSeaFootprint * (1.0 + SEA_WARP);
   vec2 drift = vec2(1.0); // port: was the same SEA_TIME diagonal for every octave
   for(int i = 0; i < ITER_FRAGMENT; i++) {
-    if (float(i) >= uSeaIterations || i >= lastOctave) break; // port: the Wave detail setting
+    if (float(i) >= SEA_ITERATIONS || i >= lastOctave) break; // port: the Wave detail setting
     float band = smoothstep(PI, 0.5 * PI, footprint);
     if (band <= 0.0) break;
     if (i >= firstOctave) {
@@ -167,7 +174,7 @@ float seaSlopeVariance(float fetch) {
 // and blends into the Cox and Munk glint where the waves are too small to see (far), Bruneton et al. 2010's idea.
 vec3 seaColor(vec3 p, vec3 n, vec3 l, vec3 eye, vec3 dist, vec3 seaBase, vec3 seaWaterColor, vec3 skyTint, float far, float slopeVariance) {
   float fresnel = clamp(1.0 - dot(n,-eye), 0.0, 1.0);
-  fresnel = clamp(pow(fresnel,3.0) * 0.65 * uSeaReflection, 0.0, 1.0);
+  fresnel = clamp(pow(fresnel,3.0) * 0.65 * SEA_REFLECTION, 0.0, 1.0);
   vec3 reflected = getSkyColor(reflect(eye,n)) * skyTint;
   vec3 refracted = seaBase + seaDiffuse(n,l,80.0) * seaWaterColor * 0.12;
   vec3 color = mix(refracted,reflected,fresnel);
@@ -176,7 +183,7 @@ vec3 seaColor(vec3 p, vec3 n, vec3 l, vec3 eye, vec3 dist, vec3 seaBase, vec3 se
   // The sun's glitter path: up close each wave facet mirrors the sun only when almost exactly aligned, so sparkles sit
   // on the ripples and gather under the sun; far away, where facets are too small to see, Cox and Munk's slope
   // statistics draw the same path as a smooth column.
-  color += vec3(mix(seaSpecular(n,l,eye,SEA_SPARKLE_EXPONENT), seaGlint(n,l,-eye,slopeVariance), far)) * uSeaShine;
+  color += vec3(mix(seaSpecular(n,l,eye,SEA_SPARKLE_EXPONENT), seaGlint(n,l,-eye,slopeVariance), far)) * SEA_SHINE;
   return color;
 }
 
@@ -437,7 +444,7 @@ vec3 waterVariance(vec2 xz, float footprint, float strength) {
     float band = 1.0 - smoothstep(0.25, 0.5, footprint / wavelength);
     if (band <= 0.0) continue;
     float k = 2.0 * PI / wavelength;
-    float omega = sqrt(9.8 * k / max(uSeaWaveScale, 0.0001));
+    float omega = sqrt(9.8 * k / max(SEA_WAVE_SCALE, 0.0001));
     vec2 dir = uWaveDirections[i];
     float phase = k * dot(dir, xz) - omega * uSeaClock;
     float waveSlope = uWaveAmplitudes[i] * k * band * strength;
