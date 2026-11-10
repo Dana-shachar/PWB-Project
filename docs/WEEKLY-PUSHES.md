@@ -1,6 +1,6 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-11-04`
+`Last updated: 2026-11-09`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
 
@@ -13,7 +13,7 @@
 
 `Covers 2026-11-04 to 2026-11-11 · Due: start of class, 10:10 am`
 
-*Made the land chunk trustworthy: found why drawn squares broke its patches, removed the overload behind the lag, stopped the water flicker, and made erosion and saving behave.*
+*Made the land chunk trustworthy and walkable: fixed its patches, lag, water and walk mode, gave it a stylized look, and set the direction for the final: three alien planets built on the chunk.*
 
 ![Before the fix: smooth sheets cutting through rough ground, from patches left behind on a drawn square.](screenshots/2026-11-03-chunk-leftover-patches.jpg)
 
@@ -35,19 +35,24 @@
 - **Water look:** ripples sized per pixel so lakes ripple in walk mode, and a soft shore line on lakes.
 - **Direction:** a concept and research question in the README, and a vertical slice of 3 to 5 distinct planets for the final, with rivers, plants and animals as chunk detail by real size (`[S79]`).
 - **Walk mode diagnosis (`[B164]` to `[B168]`):** measured every walk-mode problem Dana reported before fixing it. The eye inside the ground came from walk mode reading heights the drawn triangles skip (24 m off on coarse ground), and coarse ground underfoot came from patch boxes that ignored the slab's lift (244 m a sample to 31 m after the fix). The tan plane is the tide rising over the land.
-- **Drips on hillsides (`[B171]`):** measured two causes. Far skirts showed through the ground because the depth buffer ran out of precision (1,660 pixels at one view, 0 after a reversed depth buffer), and coarse patches left their shared edges with finer ones (up to 1.66 km far away, now matched).
+- **Water and look on the chunk (`[B158]` to `[B161]`, `[B163]`):** no floating water, lakes with their own look, sea level no longer reshapes the land, moving water and shore foam; slope rock, rule-based palettes for land, water, rock and sky, layered haze, and settings undo (Cmd+Z).
+- **Vertical slice (Dana, 2026-11-08):** general development stops; the final shows three planets (living, lava, ice) built on the land chunk, each with one process that evolves on the World Clock.
+- **Drips on hillsides (`[B171]`):** measured two causes. Far skirts showed through the ground because the depth buffer ran out of precision (1,660 pixels at one view, 0 after a reversed depth buffer), and coarse patches left their shared edges with finer ones (up to 1.66 km far away, now matched). The same depth fix ended the distant flicker (`[B157]`).
+- **Walk speed and eye height:** walking speeds up with eye height, as Cesium's camera does (speed proportional to height), and the eye starts at 8 m, since walk mode's height read and the drawn ground still differ by up to 7 m (`[B165]`).
 
 ### 🤖 How AI was used
 - Claude drove the app through Chrome and measured each cause before a fix, comparing old and new behavior in the same session. Dana reproduced problems, set priorities and corrected wrong theories.
 - What Claude got wrong: one plan rested on an overstated measurement, and one fix was real but not the cause of the reported slowness. Both came out in before and after tests. Later in the week Claude built changes without Dana's go, blamed the square's size for problems it hadn't measured, and one crack fix flattened the eroded land until a second fix; Dana caught each of these.
+- For the drips, Claude first treated an inference ("skirts show through gaps") as proven and built a gap fix that barely changed the count; tracing which edges the visible skirts hung from found the real cause, depth precision. Research came from the sources' own code: the CDLOD paper, Geometry Clipmaps, Cesium's terrain loader and camera tutorial.
 
 ### ❌ What didn't work
 - Gully walls of 85 to 88 degrees remain (`[B121]`), capped for now by limiting Gully Size. A grain line and soft close-ups remain (`[B122]`).
 - A fade over map jumps hid the loading but read as a black screen, and was removed for a glide. Fine shading per patch showed borders between patches and was reverted; close ground is coarser than before (`[B143]`).
 - A logarithmic depth buffer for distant flicker (`[B157]`) was built on an unmeasured theory and made walking about twice as slow; it was removed.
+- A gap-only fix for the drips moved the visible skirts from 1,666 to 1,660 pixels: the gaps were real but not what showed. A walk height read from the drawn triangles was tried and reverted; the 8 m eye works around it for now.
 
 ### ➡️ Next
-- Walk mode: load the ground nearest the walker first (`[B166]`), a tide safe zone and Tide slider (`[B164]`), the walk map's stall (`[B168]`). Then the vertical slice's planets.
+- The vertical slice, starting with the Flora planet: Planet 1's colors and walkable terrain (plains with some mountains). Walk bugs not seen since the drips fix (`[B164]`, `[B166]`, `[B168]`, `[B170]`, `[B156]`) are pending and reopen only if they return.
 
 ---
 
