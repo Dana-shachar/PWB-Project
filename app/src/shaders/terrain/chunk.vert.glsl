@@ -87,6 +87,37 @@ float coarserSurface(vec2 patchUv) {
     texture2D(uHeightMap, patchTextureUv(vec2(low.x, high.y))).b + texture2D(uHeightMap, patchTextureUv(high)).b);
 }
 
+// Edges facing a finer neighbor (u = 0, u = 1, v = 0, v = 1), and the patch's world width for finding edge neighbors.
+uniform vec4 uEdgeFiner;
+uniform float uPatchWorldSize;
+const float EDGE_FADE_CELLS = 6.4; // Losasso and Hoppe 2004, 6.2: the blend ramps over n/10 grid units (n = 64)
+
+// Toward an edge facing a finer neighbor the blend fades to 0, so this patch shows its own shape there, the one the
+// finer side copies: both sides use identical edge points (Strugar 2009, CDLOD; [B171]).
+float finerEdgeFade(vec2 patchUv) {
+  vec4 cellsFromEdge = vec4(patchUv.x, 1.0 - patchUv.x, patchUv.y, 1.0 - patchUv.y) * MESH_CELLS;
+  vec4 fade = mix(vec4(1.0), clamp(cellsFromEdge / EDGE_FADE_CELLS, 0.0, 1.0), uEdgeFiner);
+  return min(min(fade.x, fade.y), min(fade.z, fade.w));
+}
+
+// The drawn raw elevation at a patch point: its bake, blended into the coarser level by distance to the eye.
+float drawnElevation(vec2 patchUv, vec3 localPosition, out float morph) {
+  vec2 textureUv = uBakeSamples > 0.5 ? patchTextureUv(patchUv) : patchUv;
+  vec4 heightTexel = texture2D(uHeightMap, textureUv);
+  float elevationRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
+  morph = 0.0;
+  if (uBakeSamples > 0.5 && uMorphEnd > uMorphStart) {
+    // Blended by this vertex's own distance to the eye, measured at the coarse surface's height so both sides of a
+    // shared edge measure the same point (CDLOD: the distance function must agree across neighbors).
+    float coarse = coarserSurface(patchUv);
+    vec3 coarsePoint = (modelMatrix * vec4(localPosition.x, max(0.0, coarse + uHeightBase) * uMaxHeight, localPosition.z, 1.0)).xyz;
+    morph = clamp((distance(cameraPosition, coarsePoint) - uMorphStart) / (uMorphEnd - uMorphStart), 0.0, 1.0);
+    morph *= finerEdgeFade(patchUv);
+    elevationRaw = mix(elevationRaw, coarse, morph);
+  }
+  return elevationRaw;
+}
+
 void main() {
   // World space, to match the sun and view directions ([B61], fixed 2026-10-27; normalMatrix gave view space).
   vNormal = mat3(modelMatrix) * normal;
@@ -100,18 +131,18 @@ void main() {
     // Clamped at 0 (not just scaled), matching smoothMesh.ts's old CPU
     // formula exactly — the skirt walls below assume the top surface never
     // dips below the slab's own base.
-    vec2 textureUv = uBakeSamples > 0.5
-      ? (vec2(uBorderTexels + 0.5) + uv * (uBakeSamples - 1.0)) / (uBakeSamples + 2.0 * uBorderTexels)
-      : uv;
-    vec4 heightTexel = texture2D(uHeightMap, textureUv);
-    float elevationRaw = mix(heightTexel.r, heightTexel.g, uHeightMapGreenChannel);
-    if (uBakeSamples > 0.5 && uMorphEnd > uMorphStart) {
-      // Blended by this vertex's own distance to the eye, measured at the coarse surface's height so both sides of a
-      // shared edge measure the same point (CDLOD: the distance function must agree across neighbors).
-      float coarse = coarserSurface(uv);
-      vec3 coarsePoint = (modelMatrix * vec4(position.x, max(0.0, coarse + uHeightBase) * uMaxHeight, position.z, 1.0)).xyz;
-      vMorph = clamp((distance(cameraPosition, coarsePoint) - uMorphStart) / (uMorphEnd - uMorphStart), 0.0, 1.0);
-      elevationRaw = mix(elevationRaw, coarse, vMorph);
+    float elevationRaw = drawnElevation(uv, position, vMorph);
+    // A stitch point (an extra edge point matching a finer neighbor's) lies on the line between its two neighbors,
+    // the T-junction rule (Losasso and Hoppe 2004, 6.2); its own bake holds detail the finer side never shows.
+    bool edgeU = uv.x < 1e-5 || uv.x > 1.0 - 1e-5;
+    bool edgeV = uv.y < 1e-5 || uv.y > 1.0 - 1e-5;
+    float along = edgeV ? uv.x : uv.y;
+    if (uBakeSamples > 0.5 && (edgeU || edgeV) && abs(fract(along * MESH_CELLS) - 0.5) < 0.25) {
+      vec2 stepUv = edgeV ? vec2(0.5 / MESH_CELLS, 0.0) : vec2(0.0, 0.5 / MESH_CELLS);
+      vec3 stepPosition = vec3(stepUv.x, 0.0, stepUv.y) * uPatchWorldSize;
+      float neighborMorph;
+      elevationRaw = 0.5 * (drawnElevation(uv - stepUv, position - stepPosition, neighborMorph) +
+        drawnElevation(uv + stepUv, position + stepPosition, neighborMorph));
     }
     elevationRaw = lakeRim((modelMatrix * vec4(position, 1.0)).xz, elevationRaw);
     float heightNormalized = max(0.0, elevationRaw + uHeightBase);

@@ -465,6 +465,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uBakeSamples: { value: 0 },
         uMorphStart: { value: 0 }, // per patch (ChunkPatchRenderer); 0 here leaves the voxel mesh unblended
         uMorphEnd: { value: 0 },
+        uEdgeFiner: { value: new THREE.Vector4(0, 0, 0, 0) }, // per patch (ChunkPatchRenderer); edges facing a finer neighbor
         uBorderTexels: { value: 0 },
         uMaxHeight: { value: maxHeight },
         uHeightBase: { value: heightBase },

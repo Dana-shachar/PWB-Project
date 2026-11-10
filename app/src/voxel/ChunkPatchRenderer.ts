@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { buildLeafIndex, computeStitchFlags, coveringLeaves, patchKey, type EdgeStitchFlags } from '../planet/planetPatches';
-import { bakeSamplesCap, bakeSamplesForPixelWidth, createPatchTarget, PATCH_BORDER_TEXELS, type TerrainPatch } from '../planet/patch';
+import { bakeSamplesCap, bakeSamplesForPixelWidth, createPatchTarget, PATCH_BORDER_TEXELS, PATCH_GRID, type TerrainPatch } from '../planet/patch';
 import { chunkFrame, chunkPatchBox, chunkPatchPixelWidth, chunkPatchWorldSize, chunkSelectionThreshold, morphRange, rootFractions, selectChunkPatches, type ChunkDetail } from './chunkPatches';
 import { buildChunkBaseGeometry, buildFlatPatchGeometry } from './chunkPatchMesh';
 
@@ -27,6 +27,19 @@ interface ChunkPatchEntry {
   heights: { data: Float32Array; parent: Float32Array; size: number } | null; // green and blue (the coarser level)
   heightsRequested: boolean;
   bakeCount: number;
+}
+
+// Which local edges (u = 0, u = 1, v = 0, v = 1) face a finer neighbor, for chunk.vert.glsl's uEdgeFiner.
+function edgeFinerVector(flags: EdgeStitchFlags | undefined, target = new THREE.Vector4()): THREE.Vector4 {
+  return target.set(flags?.left ? 1 : 0, flags?.right ? 1 : 0, flags?.top ? 1 : 0, flags?.bottom ? 1 : 0);
+}
+
+const EDGE_FADE_CELLS = 6.4; // chunk.vert.glsl's: n/10 of the 64-cell grid (Losasso and Hoppe 2004, 6.2)
+
+// chunk.vert.glsl's finerEdgeFade: the blend fades to 0 toward an edge facing a finer neighbor ([B171]).
+function finerEdgeFade(localU: number, localV: number, flags: EdgeStitchFlags | undefined): number {
+  const fadeAt = (on: boolean | undefined, share: number) => (on ? Math.min(1, Math.max(0, (share * PATCH_GRID) / EDGE_FADE_CELLS)) : 1);
+  return Math.min(fadeAt(flags?.left, localU), fadeAt(flags?.right, 1 - localU), fadeAt(flags?.top, localV), fadeAt(flags?.bottom, 1 - localV));
 }
 
 function flagsEqual(a: EdgeStitchFlags | undefined, b: EdgeStitchFlags | undefined): boolean {
@@ -155,6 +168,7 @@ export class ChunkPatchRenderer {
           entry.mesh.geometry = buildFlatPatchGeometry(root, patch, this.chunkSize, this.baseDepth, flags);
           this.fitBounds(entry.mesh.geometry, patch, detail);
           entry.flags = flags;
+          edgeFinerVector(flags, entry.material.uniforms.uEdgeFiner.value);
         }
         // A patch grown on screen gets a bigger bake; one that shrank keeps its own size, re-baked if stale.
         // A stale patch keeps its old image until the full map is ready, so a change bakes it once, not twice.
@@ -184,7 +198,7 @@ export class ChunkPatchRenderer {
         target.dispose();
         return;
       }
-      const material = this.createMaterial(patch, target, samples);
+      const material = this.createMaterial(patch, target, samples, flags);
       const mesh = new THREE.Mesh(buildFlatPatchGeometry(root, patch, this.chunkSize, this.baseDepth, flags), material);
       this.fitBounds(mesh.geometry, patch, detail);
       mesh.visible = false;
@@ -249,7 +263,9 @@ export class ChunkPatchRenderer {
     let raw = fine;
     if (uMorphEnd.value > uMorphStart.value) {
       const distance = Math.hypot(x - this.eye.x, Math.max(0, coarse + heightBase) * maxHeight - this.eye.y, z - this.eye.z);
-      const morph = Math.min(1, Math.max(0, (distance - uMorphStart.value) / (uMorphEnd.value - uMorphStart.value)));
+      const morph =
+        Math.min(1, Math.max(0, (distance - uMorphStart.value) / (uMorphEnd.value - uMorphStart.value))) *
+        finerEdgeFade((chunkU - fractions.minU) / (fractions.maxU - fractions.minU), (chunkV - fractions.minV) / (fractions.maxV - fractions.minV), best.flags);
       raw = fine + (coarse - fine) * morph;
     }
     return Math.max(0, raw + heightBase) * maxHeight;
@@ -321,7 +337,7 @@ export class ChunkPatchRenderer {
     this.shown.delete(key);
   }
 
-  private createMaterial(patch: TerrainPatch, target: THREE.WebGLRenderTarget, samples: number): THREE.ShaderMaterial {
+  private createMaterial(patch: TerrainPatch, target: THREE.WebGLRenderTarget, samples: number, flags: EdgeStitchFlags | undefined): THREE.ShaderMaterial {
     const fractions = rootFractions(this.root!, patch);
     const patchWorldSize = chunkPatchWorldSize(this.root!, patch, this.chunkSize);
     const material = new THREE.ShaderMaterial({
@@ -339,6 +355,7 @@ export class ChunkPatchRenderer {
         uPatchUvMax: { value: new THREE.Vector2(fractions.maxU, fractions.maxV) },
         uMorphStart: { value: 0 },
         uMorphEnd: { value: 0 },
+        uEdgeFiner: { value: edgeFinerVector(flags) },
       },
     });
     this.setTextureUniforms(material, target, samples);

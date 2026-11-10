@@ -1385,8 +1385,9 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Leads to test: the Voronoi layer (Jitter 0 is a perfectly regular grid; try 1), the erosion filter's gullies (Erosion off), each noise layer hidden in turn.
 
 ### [B157] In walk mode distant ground flickers · `blocks work`
-**🔴 Open** · **Found:** 2026-11-08 · **Where:** unknown, in walk mode on the land chunk
+**🟡 Likely fixed by `[B171]`'s reversed depth, not yet confirmed** · **Found:** 2026-11-08 · **Where:** in walk mode on the land chunk
 - Dana: shading in the distance flickers while panning, and the walk felt jumpy.
+- Measured 2026-11-09 for `[B171]`: depth precision is real at walk mode's near plane (skirts showed through ground at 40 to 70 km). The reversed depth buffer built for it should also stop far flicker; check while panning.
 - ❌ Tried and removed 2026-11-09: a logarithmic depth buffer, built on a calculated depth-precision theory that was never measured. It made walking much slower: 150 ms of GPU time a frame with it, 65 ms without, on the same view, twice. Writing depth from the shader turns off the GPU's early depth test, so ground hidden behind hills is shaded too.
 - The water band Dana saw was the tide (`[B164]`), not depth.
 - Leads, unmeasured: the walk map's redraw (`[B168]`); far shading noise. Next: record frames while panning, with and without a depth change in memory, before any fix.
@@ -1458,11 +1459,12 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Measured on Dana's view: the dark dots, dashes and lines on rocky slopes vanish with the rock off. Not the texture's filtering (linear) or the lake rim (inactive there). Separate from the drips (`[B171]`): with the rock off the drips stay.
 
 ### [B171] Vertical "drips" on hillsides at walking height · `blocks work`
-**🔴 Open, cause measured, fix planned** · **Where:** the patch seams: `chunk.vert.glsl` (blend into the coarser level), the stitched edges from `planet/planetPatchMesh.ts` (`buildPatchGeometry`), `voxel/ChunkPatchRenderer.ts`
-- What they are (measured 2026-11-09): skirts, the strips hanging from each patch edge, showing through gaps where two patches of different detail don't meet. At a drip view 6,128 skirt pixels showed (1.3% of the view); a bare-geometry view and a per-patch tint put every drip on a patch border, hanging from the patch above it.
-- Not new geometry: the last commit (`c39f118`) shows the same seam lines at the same view. This round's look (darker layered haze, rock, contrast) most likely made the skirts visible (inferred). They vanish at a high eye height, where skirts are seen from above (the known grazing-angle failure of skirts).
-- Ruled out by test: the rock (rock off, drips stay); 32-cell patches (gap count barely changed, reverted); a stitch-edge shader change (no visible effect at one drip view, not verified to compile, page reloaded). A seam-gap count from 2026-11-09 morning used the wrong border (2, real 4) and is void.
-- The full investigation, what was ruled out, the sources and the fix plan: `SKIRTS-BUG.md`.
+**✅ Fixed 2026-11-09, Dana confirmed** · **Where:** `scene/renderer.ts` (reversed depth), `shaders/terrain/chunk.vert.glsl` and `voxel/ChunkPatchRenderer.ts` (patch seams)
+- What they were: skirts, the strips hanging from each patch edge, showing through the ground at 40 to 70 km in walk mode. The depth buffer could not tell a skirt from the ground in front of it: with walk mode's 0.4 m near plane, its steps are hundreds of meters deep that far out.
+- Measured at one view: 1,660 skirt pixels beyond 5 km with the 0.4 m near plane, 12 at 2 m, 0 at 5 m; most hung from edges between same-size patches, which have no gap. Fix: a reversed depth buffer (three.js `reversedDepthBuffer`, `EXT_clip_control`), which keeps far precision with no per-pixel cost. After: 0 skirt pixels, 24 ms a frame (about 41 fps).
+- Also fixed, measured as a real but smaller cause: gaps where a coarse patch meets a finer one (median 4 m, up to 1.66 km far away). The coarse side left the shared line: its extra stitch points read detail from its own bake, and it blended toward its own coarser level. Now its stitch points lie on the line between their neighbors and its blend fades to 0 toward a finer neighbor (Losasso and Hoppe 2004, 6.2; Strugar 2009). The fine side already matched.
+- Reversed depth needed three follow-ups: the sky dome writes depth 0 under it (`skyDome.vert.glsl`), the histogram pass uses an orthographic camera (`heightmap.ts`), and the walk map clears its image first (`chunkMap.ts`), since the shared renderer does not clear by itself.
+- The full investigation and sources: `SKIRTS-BUG.md`.
 
 ---
 

@@ -35,6 +35,7 @@
 - **Water look:** ripples sized per pixel so lakes ripple in walk mode, and a soft shore line on lakes.
 - **Direction:** a concept and research question in the README, and a vertical slice of 3 to 5 distinct planets for the final, with rivers, plants and animals as chunk detail by real size (`[S79]`).
 - **Walk mode diagnosis (`[B164]` to `[B168]`):** measured every walk-mode problem Dana reported before fixing it. The eye inside the ground came from walk mode reading heights the drawn triangles skip (24 m off on coarse ground), and coarse ground underfoot came from patch boxes that ignored the slab's lift (244 m a sample to 31 m after the fix). The tan plane is the tide rising over the land.
+- **Drips on hillsides (`[B171]`):** measured two causes. Far skirts showed through the ground because the depth buffer ran out of precision (1,660 pixels at one view, 0 after a reversed depth buffer), and coarse patches left their shared edges with finer ones (up to 1.66 km far away, now matched).
 
 ### 🤖 How AI was used
 - Claude drove the app through Chrome and measured each cause before a fix, comparing old and new behavior in the same session. Dana reproduced problems, set priorities and corrected wrong theories.

@@ -822,11 +822,9 @@ export class HeightmapPipeline {
     histogramGeometry.setAttribute('aSampleUV', new THREE.BufferAttribute(histogramSampleUVs, 2));
 
     this.histogramScene = new THREE.Scene();
-    // No projection/view matrices are read by elevationHistogram.vert.glsl
-    // (it writes gl_Position directly from the bin index), so a plain,
-    // untouched THREE.Camera is enough, Three.js still needs some camera
-    // object to call render() with.
-    this.histogramCamera = new THREE.Camera();
+    // elevationHistogram.vert.glsl reads no matrices (it writes gl_Position from the bin index); an orthographic camera
+    // because the reversed depth buffer calls updateProjectionMatrix on every camera, which a plain THREE.Camera lacks.
+    this.histogramCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.histogramMaterial = new THREE.ShaderMaterial({
       vertexShader: elevationHistogramVertexGlsl,
       fragmentShader: elevationHistogramFragmentGlsl,

@@ -1,6 +1,6 @@
 # 🧵 Skirts bug: the "drips" on hillsides
 
-*Vertical streaks hanging down hillsides at walking height. Bug `[B171]` in `ISSUES.md`. Investigated 2026-11-08 and 11-09; cause found, fix planned, not built.*
+*Vertical streaks hanging down hillsides at walking height. Bug `[B171]` in `ISSUES.md`. Investigated 2026-11-08 and 11-09; fixed 2026-11-09, Dana confirmed.*
 
 ---
 
@@ -8,10 +8,26 @@
 
 *Where this stands in one look.*
 
-- ✅ **Cause found:** skirts showing through gaps where two patches of different detail don't meet.
-- ✅ **Rule for the fix found:** both patches must use identical edge points (every source agrees).
-- ⚪ **Fix:** planned below, not built.
-- ⏸️ **Open first step:** a read-only check at a drip view, to see which side of a seam leaves the shared edge line.
+- ✅ **Main cause:** depth precision. Far from the eye, the depth buffer could not tell skirts from the ground in front of them. Fixed with a reversed depth buffer.
+- ✅ **Second cause:** gaps at fine-to-coarse seams, all on the coarse side. Fixed with the shared edge rule.
+- 🧭 The earlier "skirts through gaps" reading was an inference: the skirt detector counts skirts that show, not why they show. See "What fixed it" below.
+
+---
+
+## ✅ What fixed it
+
+*The measurements that settled each cause, 2026-11-09.*
+
+**Which side leaves the edge line (fix plan step 1)**
+- Read both sides' drawn heights along every fine-to-coarse edge in view, after checking the reading on same-size edges (they agreed within 0.7 m).
+- The fine side was always fully blended into the coarser shape at its edge. The coarse side left the line two ways: its stitch points read real detail from its own bake (median 6 m, up to 1.66 km), and it blended toward its own coarser level (up to 390 m).
+
+**Depth precision**
+- With the seam fix built, skirt pixels barely moved (1,666 to 1,660), and most hung from edges between same-size patches, which have no gap.
+- Changing only the near plane, skirt pixels beyond 5 km went from 1,660 (0.4 m) to 12 (2 m) to 0 (5 m). Fix: three.js's reversed depth buffer. After: 0.
+
+> [!NOTE]
+> 🧭 Before building a fix for showing skirts, check which edges the visible skirts hang from: a gap fix only helps on edges that have a gap.
 
 ---
 
@@ -136,7 +152,7 @@
 
 ## 🛠️ Fix plan
 
-*One step per test, each tried in memory in Claude's tab before any file changes.*
+*The plan as made before the fix; step 1 found the fine-side half unnecessary, and step 2 was built for the coarse side only.*
 
 1. **Read-only check at a drip view.** Read both patches' heights along a gapped edge (border 4, after the patches settle): which side leaves the shared edge line, and by how much. Decides which part of step 2 does the work.
 2. **Shared edge rule** in `app/src/shaders/terrain/chunk.vert.glsl`:

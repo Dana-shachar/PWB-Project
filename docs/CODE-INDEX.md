@@ -313,7 +313,7 @@
 
 **voxel/ChunkPatchRenderer.ts**
 - What it is: bakes, builds and swaps the chunk's patches; each patch material shares the chunk material's uniforms.
-- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`, `fitBounds`, `sampleHeight`: the drawn ground height from the deepest shown patch, blended as `chunk.vert.glsl` draws it, from a CPU copy read once without stalling (`requestHeights`), `settled`: every wanted patch built and shown; per-patch `uMorphStart`/`uMorphEnd`), `BakeChunkPatch` (patch, target, root).
+- Key names: `ChunkPatchRenderer` (`configure`, `update`, `rebakeAll`, `clear`, `fitBounds`, `sampleHeight`: the drawn ground height from the deepest shown patch, blended as `chunk.vert.glsl` draws it, from a CPU copy read once without stalling (`requestHeights`), `settled`: every wanted patch built and shown; per-patch `uMorphStart`/`uMorphEnd`, `uEdgeFiner` from `edgeFinerVector`; `finerEdgeFade` mirrors the shader's), `EDGE_FADE_CELLS`, `BakeChunkPatch` (patch, target, root).
 - Talks to: `bakePatchInto` on `SceneCanvasHandle`, `chunkPatchMesh.ts`.
 
 **voxel/chunkPatchMesh.ts**
@@ -335,7 +335,7 @@
 
 **voxel/chunkMap.ts**
 - What it is: the walk map, the chunk drawn from above with the scene's own materials into a 256-pixel image every 2 s while walking; the gumball shows it with the walker's dot and turns a click into a `teleport`.
-- Key names: `createChunkMap`, `WALK_MAP_REDRAW_MS` in `LandChunkCanvas.tsx`, `walkMap`/`teleport` on `GumballTarget`, `drawWalkMap` and `handleMapClick` in `scene/Gumball.tsx`.
+- Key names: `createChunkMap` (clears its target first: the shared renderer has `autoClear` off), `WALK_MAP_REDRAW_MS` in `LandChunkCanvas.tsx`, `walkMap`/`teleport` on `GumballTarget`, `drawWalkMap` and `handleMapClick` in `scene/Gumball.tsx`.
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.
@@ -411,7 +411,7 @@
 
 **terrain/** (`terrain.glsl`, `landLayers.glsl`, `planetPatch.frag.glsl`, `chunk.frag.glsl`, `chunk.vert.glsl`, `vertex.glsl`, `fragment.glsl`)
 - What it is: the land surfaces (planet patches, chunk, old globe) and the pieces they share. Lighting is in world space; `heightfieldNormal` always faces outward (`faceforward`).
-- Key names: `fillLight` (`landLayers.glsl`, the sky fill both land shaders use in place of a flat ambient), `terrainRampColor`, `borderedTextureUv`, `texelStepUv`, `heightfieldNormal`, `softDiffuse`, `heightmapShadow`; the chunk's haze `uHazeColor`, `uHazeDensity`, `uHazeStart`; the planet ocean block in `planetPatch.frag.glsl` (triplanar waves, `wavesVisible`, `dayLight`).
+- Key names: in `chunk.vert.glsl`: `drawnElevation`, `coarserSurface`, `finerEdgeFade`, `EDGE_FADE_CELLS`, stitch points averaged onto their edge line (`[B171]`); `fillLight` (`landLayers.glsl`, the sky fill both land shaders use in place of a flat ambient), `terrainRampColor`, `borderedTextureUv`, `texelStepUv`, `heightfieldNormal`, `softDiffuse`, `heightmapShadow`; the chunk's haze `uHazeColor`, `uHazeDensity`, `uHazeStart`; the planet ocean block in `planetPatch.frag.glsl` (triplanar waves, `wavesVisible`, `dayLight`).
 
 **water/oceanWaves.glsl** (CC BY-NC-SA 3.0, TDM's Seascape, with additions)
 - What it is: the sea for both views: Seascape's waves and color, plus the project's additions.

@@ -10,7 +10,7 @@
 > [!IMPORTANT]
 > **Start from here (2026-11-09, handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/SKIRTS-BUG.md` (the next job), then `docs/CODE-INDEX.md`.*
 >
-> **State.** Branch `wip-2026-11-09` (`93b17e2`) holds all work of 11-08 and 11-09, committed so code can be compared; `main` is still `c39f118`. Since `93b17e2`, only docs changed (uncommitted). Merge the branch into `main` after the drips are fixed and the docs pass. Never commit `.obsidian/workspace.json`. Rivers stay on branch `rivers-fork`.
+> **State.** Branch `wip-2026-11-09` (`93b17e2`) holds all work of 11-08 and 11-09, committed so code can be compared; `main` is still `c39f118`. The drips are fixed (`[B171]`, committed on the branch); merge the branch into `main` after the remaining docs owed below. Never commit `.obsidian/workspace.json`. Rivers stay on branch `rivers-fork`.
 > - In the code since `c39f118`: everything listed for 11-08 (settings undo, one-sweep drainage, erosion's fixed base level, water look, slope rock, palettes, layered haze), plus 11-09: patch boxes from each patch's own ground (`chunkPatchBox`, `[B167]`), detail by distance only (`shouldSplit`, `wantedSamples`, `[B169]`, Dana confirmed the panning flicker gone).
 > - Removed on 11-09: the logarithmic depth buffer (`[B157]`, it halved the frame rate), the triangle collider (`[B165]`), CDLOD range selection (froze the tab), 32-cell patches (no effect).
 > - 📌 `voxel/chunkLodRanges.ts` (CDLOD ranges, Stage 1) exists but nothing uses it: keep for the loading work or delete; Dana's call.
@@ -18,7 +18,7 @@
 > - 📌 Older handover blocks (seventeenth and earlier) are still stacked below; fold anything live into the standing sections and delete them in the merge's docs pass.
 > - 📌 Docs still owed at the merge: `CODE-INDEX.md` (new names from 11-08 and 11-09), `SPEC.md` (Water panel, Climate section), the weekly push screenshot and diagram (Session 12 due Wed 2026-11-11 10:10 am).
 >
-> **Next job: fix the drips (`[B171]`).** Everything is in `SKIRTS-BUG.md`: what was checked, what was learned, the sources, and the 4-step fix plan. Start with its step 1 (read-only check at a drip view). Dana must be at a drip spot and say "there"; do not reload her tab while a test runs.
+> **Done: the drips (`[B171]`, Dana confirmed 2026-11-09).** Main cause depth precision, fixed with a reversed depth buffer; seam gaps fixed too. Check `[B157]`'s far flicker while panning; it may be gone with it. Next job: `[B166]`.
 >
 > **Then, in order** (see "Dana's requests" below): load the nearest patches first (`[B166]`), the tide safe zone and slider (`[B164]`), walk speed scaling with eye height, then `[B170]`, `[B168]`, `[B157]`, `[B156]`.
 >
@@ -44,7 +44,7 @@
 >
 > **Dana's requests, 2026-11-08 (in this order).**
 > 1. 🔴 **Bugs first**, in this order (details in `ISSUES.md`):
->    1. `[B171]` the drips: patch seams. Investigation and fix plan: `SKIRTS-BUG.md`.
+>    1. ✅ `[B171]` the drips: depth precision and patch seams, fixed 2026-11-09 (`SKIRTS-BUG.md`).
 >    2. `[B166]` coarse ground after a jump: load the nearest patches first (research first).
 >    3. `[B164]` tide: a safe zone at the highest tide line, and a Tide slider (Dana, 2026-11-09).
 >    4. `[B170]` dark dashes on rocky slopes; `[B168]` the walk map's 2 s stall; `[B157]` distant flicker (cause unmeasured); `[B156]` washboard ridges.

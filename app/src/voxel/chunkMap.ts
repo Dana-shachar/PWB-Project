@@ -41,6 +41,7 @@ export function createChunkMap(): ChunkMap {
       const restore = overrideView(camera.position);
       const previous = renderer.getRenderTarget();
       renderer.setRenderTarget(target);
+      renderer.clear(); // the shared renderer doesn't auto-clear; an uncleared depth reads as "nearest" in reversed depth
       renderer.render(scene, camera);
       renderer.setRenderTarget(previous);
       restore();
