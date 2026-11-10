@@ -8,18 +8,17 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-09, handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/SKIRTS-BUG.md` (the next job), then `docs/CODE-INDEX.md`.*
+> **Start from here (2026-11-09, evening handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`.*
 >
-> **State.** Branch `wip-2026-11-09` (`93b17e2`) holds all work of 11-08 and 11-09, committed so code can be compared; `main` is still `c39f118`. The drips are fixed (`[B171]`, committed on the branch); merge the branch into `main` after the remaining docs owed below. Never commit `.obsidian/workspace.json`. Rivers stay on branch `rivers-fork`.
-> - In the code since `c39f118`: everything listed for 11-08 (settings undo, one-sweep drainage, erosion's fixed base level, water look, slope rock, palettes, layered haze), plus 11-09: patch boxes from each patch's own ground (`chunkPatchBox`, `[B167]`), detail by distance only (`shouldSplit`, `wantedSamples`, `[B169]`, Dana confirmed the panning flicker gone).
-> - Removed on 11-09: the logarithmic depth buffer (`[B157]`, it halved the frame rate), the triangle collider (`[B165]`), CDLOD range selection (froze the tab), 32-cell patches (no effect).
-> - 📌 `voxel/chunkLodRanges.ts` (CDLOD ranges, Stage 1) exists but nothing uses it: keep for the loading work or delete; Dana's call.
-> - 📌 Older handover blocks (seventeenth and earlier) are still stacked below; fold anything live into the standing sections and delete them in the merge's docs pass.
-> - 📌 Docs still owed at the merge: `CODE-INDEX.md` (new names from 11-08 and 11-09), `SPEC.md` (Water panel, Climate section), the weekly push screenshot and diagram (Session 12 due Wed 2026-11-11 10:10 am).
+> **State.** `main` is at `9e7dba0`, merged from `wip-2026-11-09` (all work of 11-08 and 11-09), local only, not pushed. Never commit `.obsidian/workspace.json`. Rivers stay on branch `rivers-fork`.
+> - Done 11-09: the drips (`[B171]`, depth precision fixed with a reversed depth buffer, plus coarse patch edges matched to finer ones) and with them the far flicker (`[B157]`), both confirmed by Dana. Walk speed scales with eye height (Cesium's rule); the default eye is 8 m, a workaround for walk mode's height read (`[B165]`).
+> - ⏸️ Pending, not seen after the drips fix, reopen if they return: `[B156]`, `[B164]`, `[B165]` (real fix noted), `[B166]` (fix researched, Cesium's load order), `[B168]`, `[B170]`.
+> - Reversed depth applies to the whole app: a pass rendering into its own target must clear it first (the shared renderer has `autoClear` off), a shader forcing depth to the far plane writes 0 under `USE_REVERSED_DEPTH_BUFFER`, and every render camera needs `updateProjectionMatrix` (no plain `THREE.Camera`).
+> - The `window.__probe` debug hook is removed. To reach the patch renderer from the browser, hook `ChunkPatchRenderer.prototype.update` (module URL from `performance.getEntriesByType('resource')`); for the walk camera, a one-frame hook on `renderer.render`. Chrome window size changes button positions: screenshot before clicking.
+> - 📌 `voxel/chunkLodRanges.ts` (CDLOD ranges) exists but nothing uses it: keep for `[B166]` or delete; Dana's call.
+> - 📌 Owed before Wednesday's push (Session 12, due Wed 2026-11-11 10:10 am): the weekly screenshot and architecture diagram, `CODE-INDEX.md` names from 11-08, `SPEC.md` (Water panel, Climate section), and folding the older handover blocks below into the standing sections, then deleting them.
 >
-> **Done: the drips (`[B171]`, Dana confirmed 2026-11-09).** Main cause depth precision, fixed with a reversed depth buffer; seam gaps fixed too. Check `[B157]`'s far flicker while panning; it may be gone with it. The other walk bugs (`[B166]`, `[B164]`, `[B168]`, `[B170]`, `[B156]`) were not seen after it; pending, reopen if they return. Back to the development plan.
->
-> **Then, in order** (see "Dana's requests" below): the development plan, Flora planet first.
+> **Next job: the Flora planet** (Dana's requests item 2 below): Planet 1's colors, and terrain toned down so it reads as walkable ground, plains with some mountains. Research how established tools shape walkable terrain before a plan.
 >
 > **How to work this round (Dana's corrections, 2026-11-09; also saved as memories):**
 > - Look up the established method and read the real source before deciding any rule or number. Measure the cause before building; one change per test; test in memory first, then the files; compare before and after at Dana's exact view.
@@ -42,7 +41,7 @@
 > 6. ⚪ **Ice planet** (depends on water the most).
 >
 > **Dana's requests, 2026-11-08 (in this order).**
-> 1. 🔴 **Bugs first**, in this order (details in `ISSUES.md`):
+> 1. ✅ **Bugs first** (details in `ISSUES.md`):
 >    1. ✅ `[B171]` the drips: depth precision and patch seams, fixed 2026-11-09 (`SKIRTS-BUG.md`).
 >    2. ⏸️ `[B166]` coarse ground after a jump: pending, fix researched (Cesium's load order, `REFERENCES.md`).
 >    3. ⏸️ `[B164]` tide: pending; if it returns, a safe zone at the highest tide line and a Tide slider (Dana, 2026-11-09).
