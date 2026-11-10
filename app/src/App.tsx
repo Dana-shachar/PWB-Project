@@ -2,7 +2,7 @@ import { liquidNamed } from './rivers/riverClimate';
 import { useDrainage } from './rivers/drainageControls';
 import type * as THREE from 'three';
 import type { TerrainPatch } from './planet/patch';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { useSceneControls } from './scene/sceneControls';
 import { useSharedGumball } from './scene/sharedGumball';
@@ -119,6 +119,8 @@ function App() {
   // usable directly by the land chunk's own material again — see
   // scene/sharedViewportRenderer.ts and ISSUES.md, [B32].
   const sharedViewportRenderer = useSharedViewportRenderer(sharedGumball.mountRef);
+  const { setColorGrade } = sharedViewportRenderer;
+  useEffect(() => setColorGrade(planetControls.colorGrade), [planetControls.colorGrade]); // eslint-disable-line react-hooks/exhaustive-deps
   // Drives the shared Radius/Size slider (ui/Panel.tsx) — whichever pane is
   // singly in view/selected, or null (disabled) when both are selected in
   // Split, since that slider is view-specific, not a joint control.
@@ -214,6 +216,8 @@ function App() {
         onColorStopsChange={planetControls.setColorStops}
         rock={planetControls.rock}
         onRockChange={planetControls.updateRock}
+        colorGrade={planetControls.colorGrade}
+        onColorGradeChange={planetControls.updateColorGrade}
         onRandomizeColors={planetControls.randomizeColors}
         shadowsEnabled={planetControls.shadowsEnabled}
         onShadowsEnabledChange={planetControls.setShadowsEnabled}
@@ -228,6 +232,11 @@ function App() {
         currentPlanetName={project.currentPlanetName}
         onSelectProject={project.handleSelectProject}
         onNewProject={project.handleNewProject}
+        onRenameById={project.handleRenameById}
+        editingTemplate={project.editingTemplate}
+        onEditTemplate={project.handleEditTemplate}
+        onCreateTemplate={project.handleCreateTemplate}
+        onNewFromTemplate={project.handleNewFromTemplate}
         onSaveProject={project.handleSave}
         onRenameProject={project.handleRenameInline}
         onDeleteProject={project.handleDeleteProject}

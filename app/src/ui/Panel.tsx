@@ -1,6 +1,7 @@
 import { LIQUIDS, liquidNamed, rainfallMax, referenceTemperature } from '../rivers/riverClimate';
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, SectionTitle, Dial } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, DualHueSlider, SectionTitle, Dial } from './UIElements';
+import { splitHueTrackGradient, splitSwatch, type ColorGradeSettings } from '../scene/colorGrade';
 import type { SpinSettings } from '../scene/planetSpin';
 import { AREA_SIZE_MAX_KM, AREA_SIZE_MIN_KM } from '../voxel/areaSelect';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
@@ -76,6 +77,8 @@ interface PanelProps {
   onColorStopsChange: (stops: ColorStop[]) => void;
   rock: RockSettings;
   onRockChange: (changes: Partial<RockSettings>) => void;
+  colorGrade: ColorGradeSettings;
+  onColorGradeChange: (changes: Partial<ColorGradeSettings>) => void;
   onRandomizeColors: () => void;
   // Heightmap self-shadowing — a lighting feature, stays with Scene/Lighting.
   shadowsEnabled: boolean;
@@ -98,6 +101,11 @@ interface PanelProps {
   currentPlanetName: string | null;
   onSelectProject: (id: string) => void;
   onNewProject: () => void;
+  onRenameById: (id: string, name: string) => void;
+  editingTemplate: boolean;
+  onEditTemplate: (id: string) => void;
+  onCreateTemplate: () => void;
+  onNewFromTemplate: (templateId: string) => void;
   onSaveProject: () => void;
   onRenameProject: (name: string) => void;
   onDeleteProject: (id: string) => void;
@@ -244,6 +252,8 @@ export function Panel({
   onColorStopsChange,
   rock,
   onRockChange,
+  colorGrade,
+  onColorGradeChange,
   onRandomizeColors,
   shadowsEnabled,
   onShadowsEnabledChange,
@@ -258,6 +268,11 @@ export function Panel({
   currentPlanetName,
   onSelectProject,
   onNewProject,
+  onRenameById,
+  editingTemplate,
+  onEditTemplate,
+  onCreateTemplate,
+  onNewFromTemplate,
   onSaveProject,
   onRenameProject,
   onDeleteProject,
@@ -325,13 +340,15 @@ export function Panel({
                 two read as equal-weight siblings without it). Same row style
                 as the Layers list (ui/NoisePanel.tsx), click a row to load it. */}
             <Accordion title="My Projects" nested>
-              {projects.map((project) => (
+              {projects.filter((project) => !project.template).map((project) => (
                 <div
                   key={project.id}
-                  className={'noise-layer-row' + (project.id === currentPlanetId ? ' noise-layer-row--selected' : '')}
+                  className={'noise-layer-row' + (project.id === currentPlanetId && !editingTemplate ? ' noise-layer-row--selected' : '')}
                   onClick={() => onSelectProject(project.id)}
                 >
-                  <span className="noise-layer-row-label">{project.name}</span>
+                  <span onDoubleClick={(event) => event.stopPropagation()}>
+                    <EditableText className="noise-layer-row-label" activateOn="doubleClick" value={project.name} onCommit={(name) => onRenameById(project.id, name)} />
+                  </span>
                   {/* Deleting the last remaining planet is allowed, unlike the
                       Layers list's delete — handleDeleteProject() auto-creates
                       a fresh blank one, so there's no "zero planets" state to
@@ -350,12 +367,50 @@ export function Panel({
               ))}
               {/* An action on the projects list, not a peer of it — belongs
                   inside "My Projects" (Dana, 2026-09-23). */}
-              <button type="button" className="panel-text-btn" onClick={onNewProject}>
-                + New Project
+              <button type="button" className="panel-text-btn panel-text-btn--start" onClick={onNewProject}>
+                + Empty Project
+              </button>
+              {/* A new project copied from a template; picking one creates it, the template stays untouched. */}
+              <Select
+                label="+ Project from"
+                value=""
+                onChange={(templateId) => templateId && onNewFromTemplate(templateId)}
+                options={[{ value: '', label: 'template' }, ...projects.filter((project) => project.template).map((project) => ({ value: project.id, label: project.name }))]}
+                description="Creates a new project copied from a template and opens it. The template itself doesn't change."
+              />
+            </Accordion>
+            {/* Templates: planets kept as starting points (Dana, 2026-11-10). Editing one turns autosave off. */}
+            <Accordion title="Templates" nested>
+              {editingTemplate && (
+                <p className="ui-note">Editing template: {currentPlanetName}. Autosave is off; press Save Template to keep changes.</p>
+              )}
+              {projects.filter((project) => project.template).map((project) => (
+                <div
+                  key={project.id}
+                  className={'noise-layer-row' + (project.id === currentPlanetId && editingTemplate ? ' noise-layer-row--selected' : '')}
+                  onClick={() => onEditTemplate(project.id)}
+                >
+                  <span onDoubleClick={(event) => event.stopPropagation()}>
+                    <EditableText className="noise-layer-row-label" activateOn={project.id === currentPlanetId && editingTemplate ? 'click' : 'doubleClick'} value={project.name} onCommit={(name) => onRenameById(project.id, name)} />
+                  </span>
+                  <button
+                    type="button"
+                    className="panel-text-btn panel-text-btn--delete"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onDeleteProject(project.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <button type="button" className="panel-text-btn panel-text-btn--start" onClick={onCreateTemplate}>
+                + Template from Open Planet
               </button>
             </Accordion>
             <button type="button" className="noise-add-layer-btn panel-btn-hug" onClick={onSaveProject}>
-              Save
+              {editingTemplate ? 'Save Template' : 'Save'}
             </button>
           </Accordion>
         </div>
@@ -384,8 +439,8 @@ export function Panel({
 
         <div className="panel-section">
           <Accordion title="Scene">
-            {/* Grouped by a bold title and a hairline divider, the design system's rule for parts inside one accordion. */}
-            <span className="panel-section-title">Light</span>
+            {/* Each part of Scene is its own nested accordion (Dana, 2026-11-10). */}
+            <Accordion title="Light" nested>
             <Slider
               label="Light intensity"
               value={lightIntensity}
@@ -455,8 +510,6 @@ export function Panel({
               onChange={onShadowsEnabledChange}
               description="Terrain blocks the light from reaching terrain behind it, the way real relief does. Land chunk only for now — the planet's curved surface is a separate follow-up."
             />
-            <div className="panel-section-divider" />
-            <span className="panel-section-title">Shadows</span>
             <Slider
               label="Ambient light"
               value={ambientLight}
@@ -466,8 +519,8 @@ export function Panel({
               step={0.01}
               description="The fill light. How bright the unlit side stays. Lower means deeper shadows; 0 makes anything facing away from the light go black."
             />
-            <div className="panel-section-divider" />
-            <span className="panel-section-title">Shine</span>
+            </Accordion>
+            <Accordion title="Shine" nested>
             <Slider
               label="Specular"
               value={specularStrength}
@@ -487,8 +540,48 @@ export function Panel({
               precision={0}
               description="How tight the highlight is. Low values spread it into a soft sheen; high values pull it into a small, sharp glint."
             />
-            <div className="panel-section-divider" />
-            <SectionTitle title="Grid" headerSwitch={{ value: gridVisible, onChange: onGridVisibleChange, label: 'Grid lines on or off' }} />
+            </Accordion>
+            <Accordion title="Shading" nested headerSwitch={{ value: atmosphere.shadeEnabled, onChange: (shadeEnabled) => onAtmosphereChange({ shadeEnabled }), label: 'Toon shading on or off' }}>
+            {/* Toon shading on the land chunk (Unity Toon Shader's model, landLayers.glsl); saved with the planet's atmosphere. */}
+            <HueSlider
+              label="Shadow hue"
+              value={atmosphere.shadowHue}
+              onChange={(shadowHue) => onAtmosphereChange({ shadowHue })}
+              trackBackground={hueTrackGradient(atmosphere.zenithColor)}
+              swatchColor={displayColorFor(fillColorFor(true, atmosphere.zenithColor, atmosphere.shadowHue)).getStyle()}
+              {...colorLockProps(atmosphere, 'shadowHue', onAtmosphereChange)}
+              disabled={!atmosphere.enabled}
+              description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
+            />
+            <Slider label="Shade step" value={atmosphere.shadeStep} onChange={(shadeStep) => onAtmosphereChange({ shadeStep })} min={0} max={1} step={0.01} precision={2} description="Where the land chunk's light turns to shade: higher puts more of the ground in shade. 0 turns toon shading off." />
+            <Slider label="Shade softness" value={atmosphere.shadeFeather} onChange={(shadeFeather) => onAtmosphereChange({ shadeFeather })} min={0} max={1} step={0.01} precision={2} description="How soft the edge between light and shade is: 0 is a hard line." />
+            <Slider label="Shade lift" value={atmosphere.shadeLift} onChange={(shadeLift) => onAtmosphereChange({ shadeLift })} min={0} max={1.5} step={0.01} precision={2} description="How bright the shade stays: 1 is as bright as the ground's own color, 0 black." />
+            <Slider label="Shade tint" value={atmosphere.shadeTint} onChange={(shadeTint) => onAtmosphereChange({ shadeTint })} min={0} max={1} step={0.01} precision={2} description="How strongly the shade takes the Shadow hue's color: 0 keeps the ground's own color." />
+            </Accordion>
+            {/* The planet's color grade, a post pass over the whole frame (scene/colorGrade.ts), saved with the planet. */}
+            <Accordion title="Color Grade" nested headerSwitch={{ value: colorGrade.enabled, onChange: (enabled) => onColorGradeChange({ enabled }), label: 'Color grade on or off' }}>
+            <DualHueSlider
+              label="Split toning"
+              value={colorGrade.split.hue}
+              secondOffset={colorGrade.split.shadowOffset}
+              onChange={(hue) => onColorGradeChange({ split: { ...colorGrade.split, hue } })}
+              onSecondOffsetChange={(shadowOffset) => onColorGradeChange({ split: { ...colorGrade.split, shadowOffset } })}
+              trackBackground={splitHueTrackGradient(colorGrade.split.strength)}
+              swatchColor={splitSwatch(colorGrade.split.hue, colorGrade.split.strength)}
+              secondSwatchColor={splitSwatch(colorGrade.split.hue + colorGrade.split.shadowOffset, colorGrade.split.strength)}
+              description="Tints the bright tones toward the large handle's hue and the dark tones toward the small one's."
+            />
+            <Slider label="Split strength" value={colorGrade.split.strength} onChange={(strength) => onColorGradeChange({ split: { ...colorGrade.split, strength } })} min={0} max={1} step={0.01} precision={2} description="How strong both split tints are: 0 is none." />
+            <Slider label="Balance" value={colorGrade.split.balance} onChange={(balance) => onColorGradeChange({ split: { ...colorGrade.split, balance } })} min={-1} max={1} step={0.01} precision={2} description="Where the dark tones' tint gives way to the bright tones': lower favors the bright tint, higher the dark." />
+            <ColorPicker label="Lift" value={colorGrade.lift.color} onChange={(color) => onColorGradeChange({ lift: { ...colorGrade.lift, color } })} />
+            <Slider label="Lift amount" value={colorGrade.lift.amount} onChange={(amount) => onColorGradeChange({ lift: { ...colorGrade.lift, amount } })} min={-1} max={1} step={0.01} precision={2} description="Raises or lowers the dark tones; the color above tints them." />
+            <ColorPicker label="Gamma" value={colorGrade.gamma.color} onChange={(color) => onColorGradeChange({ gamma: { ...colorGrade.gamma, color } })} />
+            <Slider label="Gamma amount" value={colorGrade.gamma.amount} onChange={(amount) => onColorGradeChange({ gamma: { ...colorGrade.gamma, amount } })} min={-1} max={1} step={0.01} precision={2} description="Brightens or darkens the middle tones; the color above tints them." />
+            <ColorPicker label="Gain" value={colorGrade.gain.color} onChange={(color) => onColorGradeChange({ gain: { ...colorGrade.gain, color } })} />
+            <Slider label="Gain amount" value={colorGrade.gain.amount} onChange={(amount) => onColorGradeChange({ gain: { ...colorGrade.gain, amount } })} min={-1} max={1} step={0.01} precision={2} description="Brightens or darkens the bright tones; the color above tints them." />
+            <Slider label="Saturation" value={colorGrade.saturation} onChange={(saturation) => onColorGradeChange({ saturation })} min={0} max={2} step={0.01} precision={2} description="How colorful the whole frame is: 0 is gray, 1 unchanged." />
+            </Accordion>
+            <Accordion title="Grid" nested headerSwitch={{ value: gridVisible, onChange: onGridVisibleChange, label: 'Grid lines on or off' }}>
             {/* TODO(DS): grid spacing range not borrowed from active-geometry — it has no shader-plane grid */}
             <Slider
               label="Grid spacing"
@@ -499,10 +592,8 @@ export function Panel({
               step={1}
               precision={0}
             />
-            <div className="panel-section-divider" />
-            <span className="panel-section-title">View</span>
-            {/* The planet turning on its own when left alone; dragging pauses it (scene/planetSpin.ts). */}
-            <Dial label="Spin direction" value={spin.direction} onChange={(direction) => onSpinChange({ direction })} description="Which way the spin's axis leans." />
+            </Accordion>
+            <Accordion title="View" nested>
             {/* Walk mode's vertical view angle; 20 to 150 is Unity's documented sample slider range. */}
             <Slider
               label="Walk field of view"
@@ -535,6 +626,7 @@ export function Panel({
                 description="How sharply the planet is drawn. Higher is sharper. It still sharpens as you zoom in; this adds more on top, or less for a low-resolution look up close."
               />
             )}
+            </Accordion>
           </Accordion>
         </div>
 
@@ -591,6 +683,8 @@ export function Panel({
             />
             {activeViewContext !== 'landChunk' && (
               <>
+                {/* The planet turning on its own when left alone; dragging pauses it (scene/planetSpin.ts). */}
+                <Dial label="Spin direction" value={spin.direction} onChange={(direction) => onSpinChange({ direction })} description="Which way the spin's axis leans." />
                 <Slider label="Spin angle" unit="°" value={spin.tilt} onChange={(tilt) => onSpinChange({ tilt })} min={0} max={180} step={1} precision={0} disabled={activeViewContext === null} description="How far the planet's spin axis leans from straight up: 0 is upright, 23 is Earth's tilt, 98 Uranus's, on its side, 180 upside down." />
                 <Slider label="Spin speed" unit="°/s" value={spin.speed} onChange={(speed) => onSpinChange({ speed })} min={0} max={30} step={0.5} precision={1} description="How fast the planet turns on its own when you leave it alone, in degrees per second. 0 stops it. Dragging pauses it; it starts again a few seconds after you let go." />
               </>
@@ -638,7 +732,7 @@ export function Panel({
             />
             {/* Rock on steep ground: its own ramp by height, where it starts and how softly (landLayers.glsl, 2026-11-08). */}
             <div className="panel-section-divider" />
-            <span className="panel-section-title">Rock</span>
+            <SectionTitle title="Rock" headerSwitch={{ value: rock.enabled, onChange: (enabled) => onRockChange({ enabled }), label: 'Slope rock on or off' }} />
             <Slider
               label="Slope"
               value={Math.round((Math.acos(1 - rock.slope) * 180) / Math.PI)}
@@ -1008,16 +1102,6 @@ export function Panel({
             <span className="panel-section-title">Color</span>
             <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} {...colorLockProps(atmosphere, 'horizonColor', onAtmosphereChange)} />
             <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} {...colorLockProps(atmosphere, 'zenithColor', onAtmosphereChange)} />
-            <HueSlider
-              label="Shadow hue"
-              value={atmosphere.shadowHue}
-              onChange={(shadowHue) => onAtmosphereChange({ shadowHue })}
-              trackBackground={hueTrackGradient(atmosphere.zenithColor)}
-              swatchColor={displayColorFor(fillColorFor(true, atmosphere.zenithColor, atmosphere.shadowHue)).getStyle()}
-              {...colorLockProps(atmosphere, 'shadowHue', onAtmosphereChange)}
-              disabled={!atmosphere.enabled}
-              description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
-            />
           </Accordion>
         </div>
 

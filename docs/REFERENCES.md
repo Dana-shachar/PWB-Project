@@ -135,6 +135,23 @@
 
 ## ⚙️ Computational
 
+**Color grading: lift, gamma, gain, split toning, saturation** · Unity URP · `method used`
+- Unity's grade in its own source: split toning (soft light, in gamma space), then `color × gain + lift`, then `^ gamma`, then saturation around luminance; each tint is prepared by `PrepareLiftGammaGain` (scaled, its brightness removed, the amount added back). Copied exactly into the color grade pass.
+- The controls follow the ASC CDL standard, as Unity's docs state; Unreal's Post Process Volume and Godot's Environment adjustments place the grade at scene level too.
+- *[Unity Graphics: LutBuilderLdr.shader, Color.hlsl, ColorUtils.cs](https://github.com/Unity-Technologies/Graphics); [Unity Lift Gamma Gain](https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@14.0/manual/Post-Processing-Lift-Gamma-Gain.html). Read 2026-11-10*
+
+**A post pass with antialiasing kept** · three.js `webgl_multisampled_renderbuffers` · `method used`
+- A multisampled half-float target passed to `EffectComposer` keeps edge smoothing after the scene leaves the canvas. A target only gets a 32-bit float depth buffer from a float `DepthTexture` (`WebGLTextures.js`), which reversed depth needs.
+- 4 samples dropped frames in walk mode; 2 measured as no grade.
+- *[three.js r185 example and source](https://github.com/mrdoob/three.js/tree/r185/examples). Read 2026-11-10*
+
+**Toon shading: base and shade colors by step and feather** · Unity Toon Shader · `method used`
+- Shade mask `saturate(1 − (light − (step − feather)) / feather)` on half-Lambert light, times the cast shadow; the final color blends the base (surface times light, not darkened by angle) toward a shade color of its own. Light from the smooth vertex normal by default.
+- *[UniversalToonBodyDoubleShadeWithFeather.hlsl](https://github.com/Unity-Technologies/com.unity.toonshader); [Shading Step and Feather](https://docs.unity3d.com/Packages/com.unity.toonshader@0.9/manual/ShadingStepAndFeather.html). Read 2026-11-10*
+
+**Hue-shifted shadows** · painting convention · `method used`
+- Shadows shift hue (toward a cool or complementary hue) and lose chroma instead of going toward black; the basis for deriving a shade color from the ground's own color.
+- *[Shading with complementary colors](https://flatfigureart.blogspot.com/2007/06/introduction-to-shading-with.html); [Pixnote, shading](https://pixnote.net/en/learn/shading). Read 2026-11-10*
 *Methods and implementations the tool actually uses.*
 
 ### Noise, used directly in the code

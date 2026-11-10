@@ -439,6 +439,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uLightDirection: { value: new THREE.Vector3(lightDirX, lightDirY, lightDirZ) },
         uAmbient: { value: ambientLight },
         uFillColor: { value: fillColorFor(atmosphere.enabled, atmosphere.zenithColor, shadowHue) },
+        uShadeStep: { value: atmosphere.shadeEnabled ? atmosphere.shadeStep : 0 },
+        uShadeFeather: { value: atmosphere.shadeFeather },
+        uShadeLift: { value: atmosphere.shadeLift },
+        uShadeTint: { value: atmosphere.shadeTint },
         uLightIntensity: { value: lightIntensity },
         uSpecularStrength: { value: specularStrength },
         uShininess: { value: shininess },
@@ -670,6 +674,16 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     if (!material) return;
     (material.uniforms.uFillColor.value as THREE.Color).copy(fillColorFor(atmosphere.enabled, atmosphere.zenithColor, shadowHue));
   }, [atmosphere.enabled, atmosphere.zenithColor, shadowHue]);
+
+  // Toon shading (atmosphere's shade settings).
+  useEffect(() => {
+    const material = materialRef.current;
+    if (!material) return;
+    material.uniforms.uShadeStep.value = atmosphere.shadeEnabled ? atmosphere.shadeStep : 0; // 0 is off in the shader
+    material.uniforms.uShadeFeather.value = atmosphere.shadeFeather;
+    material.uniforms.uShadeLift.value = atmosphere.shadeLift;
+    material.uniforms.uShadeTint.value = atmosphere.shadeTint;
+  }, [atmosphere.shadeEnabled, atmosphere.shadeStep, atmosphere.shadeFeather, atmosphere.shadeLift, atmosphere.shadeTint]);
 
   // Base color — shared with the planet's own ColorPicker, not a separate
   // hardcoded placeholder.

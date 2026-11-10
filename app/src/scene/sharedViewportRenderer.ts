@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import * as THREE from 'three';
 import { renderer as createRenderer } from './renderer';
+import { ColorGrade, DEFAULT_COLOR_GRADE, type ColorGradeSettings } from './colorGrade';
 
 // One real WebGL resource (a texture, a render target) belongs to whichever
 // THREE.WebGLRenderer/context created it and cannot be bound in a different
@@ -37,6 +38,8 @@ export interface SharedViewportRenderer {
   renderer: THREE.WebGLRenderer | null;
   registerView(key: string, view: SharedViewportView): void;
   unregisterView(key: string): void;
+  // The planet's color grade, applied to the whole frame (scene/colorGrade.ts).
+  setColorGrade(settings: ColorGradeSettings): void;
 }
 
 // `containerRef` is the already-existing element both panes sit inside —
@@ -56,6 +59,12 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
   }
   function unregisterView(key: string) {
     viewsRef.current.delete(key);
+  }
+  const gradeRef = useRef<ColorGrade | null>(null);
+  const gradeSettingsRef = useRef<ColorGradeSettings>(DEFAULT_COLOR_GRADE);
+  function setColorGrade(settings: ColorGradeSettings) {
+    gradeSettingsRef.current = settings;
+    gradeRef.current?.update(settings);
   }
 
   useEffect(() => {
@@ -86,12 +95,17 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
     const webglRenderer = createRenderer(canvas);
     webglRenderer.autoClear = false; // this loop clears explicitly once per frame, not once per view
     rendererRef.current = webglRenderer;
+    // Every view draws into the grade's multisampled image, then one pass grades it onto the canvas.
+    const grade = new ColorGrade(webglRenderer);
+    grade.update(gradeSettingsRef.current);
+    gradeRef.current = grade;
     setRenderer(webglRenderer);
 
     function resize() {
       const width = container!.clientWidth;
       const height = container!.clientHeight;
       webglRenderer.setSize(width, height, false);
+      grade.setSize(width, height);
     }
     resize();
     const resizeObserver = new ResizeObserver(resize);
@@ -102,9 +116,7 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
       const containerRect = container!.getBoundingClientRect();
       const containerHeight = containerRect.height;
 
-      webglRenderer.setScissorTest(false);
-      webglRenderer.clear();
-      webglRenderer.setScissorTest(true);
+      grade.begin();
 
       viewsRef.current.forEach((view) => {
         const element = view.elementRef.current;
@@ -126,9 +138,6 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
         const top = rect.top - containerRect.top;
         const bottom = containerHeight - (top + rect.height);
 
-        webglRenderer.setViewport(left, bottom, rect.width, rect.height);
-        webglRenderer.setScissor(left, bottom, rect.width, rect.height);
-
         const aspect = rect.width / rect.height;
         if (view.camera.aspect !== aspect) {
           view.camera.aspect = aspect;
@@ -136,8 +145,9 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
         }
 
         view.onFrame?.();
-        webglRenderer.render(view.scene, view.camera);
+        grade.drawView(view.scene, view.camera, left, bottom, rect.width, rect.height);
       });
+      grade.finish(container!.clientWidth, containerHeight);
 
       animationFrameId = requestAnimationFrame(animate);
     }
@@ -146,6 +156,8 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
     return () => {
       resizeObserver.disconnect();
       cancelAnimationFrame(animationFrameId);
+      grade.dispose();
+      gradeRef.current = null;
       webglRenderer.dispose();
       canvas.remove();
       rendererRef.current = null;
@@ -154,5 +166,5 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- containerRef is a stable ref; views register/unregister themselves into viewsRef without needing this effect to re-run
   }, [containerRef]);
 
-  return { renderer, registerView, unregisterView };
+  return { renderer, registerView, unregisterView, setColorGrade };
 }

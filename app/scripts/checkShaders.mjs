@@ -57,6 +57,8 @@ const MATERIALS = [
   { name: 'min/max reduce (map/heightmap.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['heightmap/minMaxReduce.frag.glsl'] },
   { name: 'elevation histogram (map/heightmap.ts)', vertex: ['heightmap/elevationHistogram.vert.glsl'], fragment: ['heightmap/elevationHistogram.frag.glsl'] },
   { name: 'stream power seed (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerSeed.frag.glsl'] },
+  // The grade's vertex is three.js's CopyShader (inline); the brush vertex stands in, a full-screen pass alike.
+  { name: 'color grade (scene/colorGrade.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['post/colorGrade.frag.glsl'] },
   { name: 'stream power pass (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerPlanet.frag.glsl'] },
 ];
 

@@ -1,4 +1,5 @@
-import { randomAtmosphereColors, DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
+import { DEFAULT_COLOR_GRADE, migrateColorGrade, type ColorGradeSettings } from '../scene/colorGrade';
+import { ruleTurn, randomAtmosphereColors, DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { DEFAULT_SPIN, type SpinSettings } from '../scene/planetSpin';
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
@@ -231,16 +232,35 @@ export interface PlanetSettings {
   spin?: SpinSettings;
   // Rock on steep ground. Absent in older saves, which load with the default rock.
   rock?: RockSettings;
+  // The color grade (scene/colorGrade.ts). Absent in older saves, which load neutral.
+  colorGrade?: ColorGradeSettings;
+}
+
+// The grade by the same color wheel rules as the sky: gain tints toward the land's hue, lift toward a rule partner, and
+// split toning puts the highlights on the land's hue and the shadows on a rule partner. Amounts inferred, TUNABLE.
+function randomColorGrade(previous: ColorGradeSettings, landBaseHue: number): ColorGradeSettings {
+  const tint = (turn: number, saturation: number) => `#${new THREE.Color().setHSL((((landBaseHue / 360 + turn) % 1) + 1) % 1, saturation, 0.5).getHexString()}`;
+  const highlightHue = ((landBaseHue + 180) % 360) - 180;
+  return {
+    ...previous,
+    lift: { color: tint(ruleTurn(), 0.6), amount: (Math.random() * 2 - 1) * 0.015 },
+    gamma: { color: '#ffffff', amount: (Math.random() * 2 - 1) * 0.05 },
+    gain: { color: tint(0, 0.5), amount: (Math.random() * 2 - 1) * 0.05 },
+    saturation: 0.95 + Math.random() * 0.2,
+    split: { hue: highlightHue, shadowOffset: Math.round(ruleTurn() * 360), strength: 0.05 + Math.random() * 0.15, balance: 0 },
+  };
 }
 
 // Rock on steep ground (shaders/terrain/landLayers.glsl, landSurfaceColor): its own ramp by height, where it starts and how
 // softly. slope is the steepness 1 - cos(angle): 0.25 is about 41 degrees.
 export interface RockSettings {
+  enabled: boolean;
   stops: ColorStop[];
   slope: number;
   softness: number;
 }
 export const DEFAULT_ROCK_SETTINGS: RockSettings = {
+  enabled: true,
   stops: [
     { position: 0, color: '#6f6862' },
     { position: 1, color: '#a49b93' },
@@ -319,6 +339,7 @@ export function usePlanetControls() {
   const [colorByElevation, setColorByElevation] = useState(DEFAULT_PLANET_SETTINGS.colorByElevation);
   const [colorStops, setColorStops] = useState<ColorStop[]>(DEFAULT_PLANET_SETTINGS.colorStops);
   const [rock, setRock] = useState<RockSettings>(DEFAULT_ROCK_SETTINGS);
+  const [colorGrade, setColorGrade] = useState<ColorGradeSettings>(DEFAULT_COLOR_GRADE);
   // Heightmap self-shadowing — land chunk only for now, see shaders/
   // terrain.glsl for why the planet's curved surface is a separate step.
   const [shadowsEnabled, setShadowsEnabled] = useState(DEFAULT_PLANET_SETTINGS.shadowsEnabled);
@@ -364,13 +385,14 @@ export function usePlanetControls() {
     // unused, the rock from the land's own, and the sky turned from it by a color rule.
     updateWater({ colorStops: randomWaterPalette(palette.baseHue, palette.highHue), lakeColorStops: randomWaterPalette(palette.baseHue, palette.highHue) });
     setRock((previous) => ({ ...previous, stops: randomRockPalette(palette.baseHue, palette.highHue) }));
+    setColorGrade((previous) => randomColorGrade(previous, palette.baseHue));
     setAtmosphere((previous) => randomAtmosphereColors(previous, palette.baseHue / 360));
   }
 
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock, colorGrade };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -385,6 +407,7 @@ export function usePlanetControls() {
     setColorByElevation(settings.colorByElevation);
     setColorStops(migrateColorStops(settings));
     setRock({ ...DEFAULT_ROCK_SETTINGS, ...settings.rock });
+    setColorGrade(migrateColorGrade(settings.colorGrade));
     setShadowsEnabled(settings.shadowsEnabled);
     setDetailAmount(settings.detailAmount ?? DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
     setAutoDetail(settings.autoDetail ?? true);
@@ -422,6 +445,8 @@ export function usePlanetControls() {
     setColorStops,
     rock,
     updateRock: (changes: Partial<RockSettings>) => setRock((previous) => ({ ...previous, ...changes })),
+    colorGrade,
+    updateColorGrade: (changes: Partial<ColorGradeSettings>) => setColorGrade((previous) => ({ ...previous, ...changes })),
     shadowsEnabled,
     setShadowsEnabled,
     detailAmount,

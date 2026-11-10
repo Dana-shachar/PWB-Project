@@ -12,6 +12,13 @@ export interface AtmosphereSettings {
   zenithColor: string;
   // Turns the shadows' sky fill round the hue wheel (degrees), so shadows can take an unexpected color (scene/fillLight.ts).
   shadowHue: number;
+  // Toon shading on the land chunk, Unity Toon Shader's model (landLayers.glsl toonShadeMask): where light turns to
+  // shade (0 off), how soft that edge is, how bright the shade stays, and how strongly it takes the shadow hue.
+  shadeEnabled: boolean;
+  shadeStep: number;
+  shadeFeather: number;
+  shadeLift: number;
+  shadeTint: number;
   // How thick the haze is, 0 (clear) to 1 (distant ground fades into the horizon color quickly).
   haze: number;
   hazeLayers: number; // 0 a smooth fade, 2 to 6 soft bands (shaders/atmosphere/haze.glsl)
@@ -68,6 +75,11 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   horizonColor: '#f3d9c6',
   zenithColor: '#8fb4d9',
   shadowHue: 0,
+  shadeEnabled: true,
+  shadeStep: 0.5, // Unity Toon Shader's default
+  shadeFeather: 0.15, // softer than Unity's hard 0.0001, for terrain; TUNABLE
+  shadeLift: 0.55, // inferred, TUNABLE
+  shadeTint: 0.6, // inferred, TUNABLE
   haze: 0.3,
   hazeLayers: 0,
   glow: 0.5,
@@ -177,7 +189,7 @@ const NEIGHBOR_TURN = 30 / 360; // how far the sky and horizon may turn from the
 
 const hslHex = (hue: number, saturation: Range, lightness: Range) =>
   `#${new THREE.Color().setHSL(((hue % 1) + 1) % 1, between(saturation), between(lightness)).getHexString()}`;
-const ruleTurn = () => pickOne(COLOR_RULES) + (Math.random() * 2 - 1) * HUE_JITTER;
+export const ruleTurn = () => pickOne(COLOR_RULES) + (Math.random() * 2 - 1) * HUE_JITTER;
 // A slider's value from its driver (0 to 1) along [from, to], with a little wobble, rounded to two decimals.
 const follow = (driver: number, [from, to]: Range) => {
   const value = from + (to - from) * Math.min(1, Math.max(0, driver + (Math.random() * 2 - 1) * JITTER));

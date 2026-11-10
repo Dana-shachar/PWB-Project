@@ -1472,6 +1472,10 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 
 ---
 
+### [B172] Vertical stripes on the chunk's side wall up close · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-10 · **Where:** the chunk's cut side walls, not yet measured
+- Panning close to the chunk's edge shows vertical light stripes running down the side wall under the ground. Seen by Dana with the new toon shading and color grade on; not yet checked whether either causes it.
+
 ## 🏗️ Architecture
 
 *Structural problems, and limits tracked but not scheduled.*

@@ -49,6 +49,8 @@ export interface Project {
   // happens to be in memory. See planet/planetControls.ts.
   planetSettings: PlanetSettings | null;
   updatedAt: number; // Date.now(), used to sort the project list and to auto-load the most recent on sign-in
+  // A template: a planet kept as a starting point, changed only by Save Template (Dana, 2026-11-10). Absent is a project.
+  template?: boolean;
 }
 
 // The lightweight info needed for the project-picker dropdown — a full
@@ -60,6 +62,7 @@ export interface ProjectSummary {
   id: string;
   name: string;
   updatedAt: number;
+  template?: boolean;
 }
 
 export async function listProjects(uid: string): Promise<ProjectSummary[]> {
@@ -69,6 +72,7 @@ export async function listProjects(uid: string): Promise<ProjectSummary[]> {
       id: docSnapshot.id,
       name: (docSnapshot.data().name as string) ?? 'Untitled',
       updatedAt: (docSnapshot.data().updatedAt as number) ?? 0,
+      template: docSnapshot.data().template === true,
     }))
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
@@ -84,6 +88,7 @@ export async function loadProject(uid: string, projectId: string): Promise<Proje
     erosionRun: (data.erosionRun as SavedErosionRun | null) ?? null,
     planetSettings: (data.planetSettings as PlanetSettings | null) ?? null,
     updatedAt: (data.updatedAt as number) ?? 0,
+    template: data.template === true,
   };
 }
 
@@ -96,9 +101,10 @@ export async function saveProject(
     strokeHistory: StrokeRecord[];
     erosionRun: SavedErosionRun | null;
     planetSettings: PlanetSettings;
+    template?: boolean;
   },
 ): Promise<void> {
-  await setDoc(doc(planetsCollection(uid), projectId), { ...data, updatedAt: Date.now() });
+  await setDoc(doc(planetsCollection(uid), projectId), { ...data, template: data.template === true, updatedAt: Date.now() });
 }
 
 export async function renameProject(uid: string, projectId: string, name: string): Promise<void> {

@@ -405,13 +405,15 @@ export function createPatchMaterial(
 // `material.uniforms.X.value = Y` call sites in SceneCanvas.tsx.
 // Both ramps as shader arrays, built once per change and shared by every patch (not once per patch per frame).
 // The rock uniforms (landLayers.glsl, landSurfaceColor), shared by the planet's patches and the land chunk.
+// Off: a start past the steepest ground (steepness tops out at 1), so no rock shows.
+const rockSlopeUniform = (rock: RockSettings) => (rock.enabled ? rock.slope : 2);
 export function createRockUniforms(rock: RockSettings): Record<string, { value: unknown }> {
   const ramp = buildRampUniformArrays(rock.stops);
   return {
     uRockColors: { value: ramp.colors },
     uRockPositions: { value: ramp.positions },
     uRockCount: { value: ramp.count },
-    uRockSlope: { value: rock.slope },
+    uRockSlope: { value: rockSlopeUniform(rock) },
     uRockSoftness: { value: rock.softness },
   };
 }
@@ -421,7 +423,7 @@ export function applyRockUniforms(uniforms: Record<string, THREE.IUniform>, rock
   for (let i = 0; i < MAX_COLOR_STOPS; i++) colors[i].copy(ramp.colors[i]);
   (uniforms.uRockPositions.value as number[]).splice(0, MAX_COLOR_STOPS, ...ramp.positions);
   uniforms.uRockCount.value = ramp.count;
-  uniforms.uRockSlope.value = rock.slope;
+  uniforms.uRockSlope.value = rockSlopeUniform(rock);
   uniforms.uRockSoftness.value = rock.softness;
 }
 

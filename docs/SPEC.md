@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-11-04`
+`Last updated: 2026-11-10`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -519,12 +519,11 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - The Erosion slider blends noise and eroded land; 0 is the plain noise. Whole-globe bakes stay uneroded, so rivers never read their own result and readouts stay exact.
 - With Water or Atmosphere off, nothing erodes, so the terrain is the plain noise.
 
-### [S56] Climate lives with the atmosphere, for the whole planet · `decided`
-**Changed:** 2026-11-03: the section is the Climate System, with Atmosphere and Climate inside; Erosion moved out of Climate (`[S68]`); turning Atmosphere off no longer removes water (`[S69]`)
+### [S56] Climate is one set of values for the whole planet · `decided`
+**Changed:** 2026-11-08: Climate is its own section, placed by `[S81]`. 2026-11-03: turning Atmosphere off no longer removes water (`[S69]`).
 **Decided:** 2026-11-01
 
-- Atmosphere and climate are one section, with a Climate part: Liquid, Rainfall, Temperature, Erosion.
-- These are one value per planet until Stage 09 gives each place its own. Turning Atmosphere off removes rivers, lakes and erosion: no air, no rain.
+- Climate holds Liquid, Rainfall and Temperature, one value per planet until Stage 09 gives each place its own.
 - Both Randomize buttons roll the climate, mostly water worlds.
 
 ### [S57] Worlds can run on other liquids · `decided`
@@ -603,16 +602,18 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Basins are found on the eroded ground, so carved rims let them drain (Braun and Willett: sills erode as water passes).
 - Water is drawn per point where the lake level stands above the ground, so shores follow the terrain (Cordonnier et al. 2016, 6.2).
 
-### [S68] Erosion is part of the Climate System, with one set of settings · `decided`
+### [S68] Erosion has one set of settings for the planet and the chunk · `decided`
+**Changed:** 2026-11-08: the Climate System section is gone; Erosion stays in the Atmosphere stage's right panel.
 **Decided:** 2026-11-03
 
-- Erosion sits in the Climate System's right panel, under the moons: one switch and one set of settings for the planet and the land chunk. Sea level comes from Ocean and rain from Climate, never set twice.
+- Erosion sits in the Atmosphere stage's right panel, under the moons: one switch and one set of settings for the planet and the land chunk. Sea level comes from Water and rain from Climate, never set twice.
 - There is no Run button: a change reruns only what it affects.
 
 ### [S69] Ocean is only the sea · `decided`
+**Changed:** 2026-11-08: Ocean became the Water section, with the sea and lakes as separate parts (`[S81]`); the rule below still holds.
 **Decided:** 2026-11-03
 
-- Lakes and rivers follow the Climate's liquid (Dry has none), not the Ocean switch, as Gaea and World Machine keep the sea apart from lakes.
+- Lakes and rivers follow the Climate's liquid (Dry has none), not the Water switch, as Gaea and World Machine keep the sea apart from lakes.
 
 ### [S70] Time has its own World Clock · `decided`
 **Decided:** 2026-11-03
@@ -671,7 +672,7 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 ### [S78] A new planet starts bare · `decided`
 **Decided:** 2026-11-04
 
-- A new planet starts with every system off (Atmosphere, Ocean, Erosion) and every panel closed. Dana.
+- A new planet starts with every system off (Atmosphere, Water, Erosion) and every panel closed. Dana.
 
 ### [S80] Walk mode's eye height · `decided`
 **Decided:** 2026-11-04
@@ -682,3 +683,27 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 **Decided:** 2026-11-04
 
 - Rivers, plants and animals have real sizes (a river's width from its flow), and a view draws a thing only once it's large enough on screen; smaller things add to the ground's color. So the planet shows only Amazon-scale rivers and forests as color, and the chunk shows the rest. The same rule as the terrain's band-limited detail. Dana.
+
+### [S81] Water holds the sea and the lakes, each with its own look; Climate is its own section · `decided`
+**Decided:** 2026-11-08
+
+- The Water section (once Ocean) has Sea, Lakes and Color parts. Lakes have their own clarity, foam, waves, ripples, shine, reflection and color ramp, so a lake can read apart from the sea. One switch turns all water on or off.
+- Climate (Liquid, Rainfall, Temperature) sits right after Water, since it decides how much water the planet has; Atmosphere follows with the air's own controls, including haze Layers.
+- Randomize colors rolls land, sea, lakes, rock and sky from the land's hue in one go, so a planet keeps one strong hue. Dana.
+
+### [S82] A per-planet color grade, as a post pass · `decided`
+**Decided:** 2026-11-10
+
+- The finished frame is graded once, the way engines do it (Unity's Volume, Unreal's Post Process Volume, Godot's Environment): split toning, lift, gamma, gain and saturation, in Unity's math and order. It lives in Scene with its own switch, is saved with the planet, and Randomize colors rolls it gently by the palette's color rules.
+- The scene draws into a 2-sample multisampled image so edges stay smooth; 4 samples dropped frames in walk mode. Dana.
+
+### [S83] Toon shading on the land chunk · `decided`
+**Decided:** 2026-11-10
+
+- Shade is a color of its own, not the lit color darkened (Monument Valley's look), built on Unity Toon Shader's model: a shade mask by step and feather on half-Lambert light from the smooth landform normal, times the cast shadow. Scene > Shading holds it with its own switch; the chunk first, the planet once the look is approved.
+
+### [S84] Templates: planets kept as starting points · `decided`
+**Decided:** 2026-11-10
+
+- A template changes only by Save Template; while one is being edited, autosave is off. "+ Project from" makes a new project copied from it, leaving it untouched. The vertical slice's planets start as templates (Flora from Dana 01). Dana.
+

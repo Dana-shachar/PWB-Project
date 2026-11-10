@@ -100,6 +100,8 @@ export function useSaveProject({
   const [currentPlanetId, setCurrentPlanetId] = useState<string | null>(null);
   const [currentPlanetName, setCurrentPlanetName] = useState<string | null>(null);
   const [projects, setProjects] = useState<ProjectSummary[]>([]); // for the Project picker dropdown
+  // The open planet is a template being edited: autosave is off, and only Save Template writes it.
+  const [editingTemplate, setEditingTemplate] = useState(false);
 
   // Loads the signed-in user's most recently-edited saved planet, if any.
   // A brand-new user with no saved planets yet gets one created immediately,
@@ -110,7 +112,7 @@ export function useSaveProject({
   useEffect(() => {
     if (!currentUser) return;
     listProjects(currentUser.uid).then(async (summaries) => {
-      const mostRecent = summaries[0];
+      const mostRecent = summaries.find((summary) => !summary.template); // templates open only through Edit
       if (mostRecent) {
         setProjects(summaries);
         const project = await loadProject(currentUser.uid, mostRecent.id);
@@ -161,7 +163,7 @@ export function useSaveProject({
   // window — see ROADMAP.md, Stage 06, for the fixed-interval alternative
   // considered and rejected.
   useEffect(() => {
-    if (!currentUser || !hasLoadedRef.current || currentPlanetId === null) return;
+    if (!currentUser || !hasLoadedRef.current || currentPlanetId === null || editingTemplate) return;
     const timeoutId = setTimeout(() => {
       saveProjectToFirestore(currentUser.uid, currentPlanetId, {
         name: currentPlanetName ?? 'Untitled',
@@ -179,6 +181,7 @@ export function useSaveProject({
     currentUser,
     currentPlanetId,
     currentPlanetName,
+    editingTemplate,
     erosion.result,
     erosion.rates,
     erosion.durationYears,
@@ -199,6 +202,9 @@ export function useSaveProject({
     planetControls.atmosphere,
     planetControls.detailAmount,
     planetControls.autoDetail,
+    planetControls.colorGrade,
+    planetControls.rock,
+    planetControls.spin,
   ]);
 
   // Shared by handleNewProject() and handleReset() — clears the canvas to
@@ -229,6 +235,7 @@ export function useSaveProject({
     const freshLayers = clearCanvas();
     const fresh = await createFreshProject(currentUser.uid, projects.length, freshLayers, setCurrentPlanetId, setCurrentPlanetName);
     setProjects((previous) => [fresh, ...previous]);
+    setEditingTemplate(false);
   }
 
   // Clears the *currently open* planet back to blank without switching
@@ -240,9 +247,15 @@ export function useSaveProject({
   }
 
   async function handleSelectProject(id: string) {
-    if (!currentUser || id === currentPlanetId) return;
+    if (!currentUser || (id === currentPlanetId && !editingTemplate)) return;
+    if (await openSaved(id)) setEditingTemplate(false);
+  }
+
+  // Loads a saved planet (project or template) into the editor. False when it no longer exists.
+  async function openSaved(id: string): Promise<boolean> {
+    if (!currentUser) return false;
     const project = await loadProject(currentUser.uid, id);
-    if (!project) return;
+    if (!project) return false;
     const loadedLayers =
       project.layers.length > 0 ? migrateLegacyLayers(project.layers) : [createDefaultLayer(crypto.randomUUID(), 'Layer 01')];
     sceneHandleRef.current?.loadProject(loadedLayers, project.strokeHistory);
@@ -261,6 +274,47 @@ export function useSaveProject({
       erosion.setEnabled(false);
     }
     planetControls.applySettings(project.planetSettings ?? DEFAULT_PLANET_SETTINGS);
+    return true;
+  }
+
+  // Templates (Dana, 2026-11-10): editing one turns autosave off; a new project copies one and leaves it untouched.
+  async function handleEditTemplate(id: string) {
+    if (id === currentPlanetId && editingTemplate) return; // already open: a click (or a rename's double-click) doesn't reload it
+    if (await openSaved(id)) setEditingTemplate(true);
+  }
+
+  // Saves the open planet as a new template, without leaving it.
+  async function handleCreateTemplate() {
+    if (!currentUser) return;
+    await saveProjectToFirestore(currentUser.uid, newProjectId(), {
+      name: `${currentPlanetName ?? 'Untitled'} Template`,
+      layers,
+      strokeHistory,
+      erosionRun: currentErosionRun(erosion, landChunk.patch),
+      planetSettings: planetControls.currentSettings(),
+      template: true,
+    });
+    setProjects(await listProjects(currentUser.uid));
+  }
+
+  // A new project copied from a template, numbered after it ("Flora 01"), then opened.
+  async function handleNewFromTemplate(templateId: string) {
+    if (!currentUser) return;
+    const template = await loadProject(currentUser.uid, templateId);
+    if (!template) return;
+    const taken = new Set(projects.map((project) => project.name));
+    let number = 1;
+    while (taken.has(`${template.name} ${String(number).padStart(2, '0')}`)) number++;
+    const id = newProjectId();
+    await saveProjectToFirestore(currentUser.uid, id, {
+      name: `${template.name} ${String(number).padStart(2, '0')}`,
+      layers: template.layers,
+      strokeHistory: template.strokeHistory,
+      erosionRun: template.erosionRun,
+      planetSettings: template.planetSettings ?? DEFAULT_PLANET_SETTINGS,
+    });
+    setProjects(await listProjects(currentUser.uid));
+    if (await openSaved(id)) setEditingTemplate(false);
   }
 
   // Manual "just in case" save — the current planet is always already
@@ -274,6 +328,7 @@ export function useSaveProject({
       strokeHistory,
       erosionRun: currentErosionRun(erosion, landChunk.patch),
       planetSettings: planetControls.currentSettings(),
+      template: editingTemplate, // Save Template while editing one
     });
     setProjects(await listProjects(currentUser.uid));
   }
@@ -285,6 +340,14 @@ export function useSaveProject({
     await renameProject(currentUser.uid, currentPlanetId, name);
     setCurrentPlanetName(name);
     setProjects((previous) => previous.map((project) => (project.id === currentPlanetId ? { ...project, name } : project)));
+  }
+
+  // Renames any saved planet or template from its row (double-click, as Layers do).
+  async function handleRenameById(id: string, name: string) {
+    if (!currentUser) return;
+    await renameProject(currentUser.uid, id, name);
+    if (id === currentPlanetId) setCurrentPlanetName(name);
+    setProjects((previous) => previous.map((project) => (project.id === id ? { ...project, name } : project)));
   }
 
   // Deletes a saved planet entirely — not just clearing its content, see
@@ -299,7 +362,7 @@ export function useSaveProject({
     const remaining = await listProjects(currentUser.uid);
     setProjects(remaining);
     if (id !== currentPlanetId) return; // deleted a planet other than the open one
-    const next = remaining[0];
+    const next = remaining.find((project) => !project.template);
     if (next) {
       await handleSelectProject(next.id);
     } else {
@@ -319,5 +382,10 @@ export function useSaveProject({
     handleSave,
     handleRenameInline,
     handleDeleteProject,
+    handleRenameById,
+    editingTemplate,
+    handleEditTemplate,
+    handleCreateTemplate,
+    handleNewFromTemplate,
   };
 }

@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-09`
+`Last updated: 2026-11-10`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,298 +8,100 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-09, evening handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`.*
+> **Start from here (2026-11-10):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Everything still live lives in the standing sections below.*
 >
-> **State.** `main` is at `9e7dba0`, merged from `wip-2026-11-09` (all work of 11-08 and 11-09), local only, not pushed. Never commit `.obsidian/workspace.json`. Rivers stay on branch `rivers-fork`.
-> - Done 11-09: the drips (`[B171]`, depth precision fixed with a reversed depth buffer, plus coarse patch edges matched to finer ones) and with them the far flicker (`[B157]`), both confirmed by Dana. Walk speed scales with eye height (Cesium's rule); the default eye is 8 m, a workaround for walk mode's height read (`[B165]`).
-> - ⏸️ Pending, not seen after the drips fix, reopen if they return: `[B156]`, `[B164]`, `[B165]` (real fix noted), `[B166]` (fix researched, Cesium's load order), `[B168]`, `[B170]`.
-> - Reversed depth applies to the whole app: a pass rendering into its own target must clear it first (the shared renderer has `autoClear` off), a shader forcing depth to the far plane writes 0 under `USE_REVERSED_DEPTH_BUFFER`, and every render camera needs `updateProjectionMatrix` (no plain `THREE.Camera`).
-> - The `window.__probe` debug hook is removed. To reach the patch renderer from the browser, hook `ChunkPatchRenderer.prototype.update` (module URL from `performance.getEntriesByType('resource')`); for the walk camera, a one-frame hook on `renderer.render`. Chrome window size changes button positions: screenshot before clicking.
-> - 📌 `voxel/chunkLodRanges.ts` (CDLOD ranges) exists but nothing uses it: keep for `[B166]` or delete; Dana's call.
-> - 📌 Owed before Wednesday's push (Session 12, due Wed 2026-11-11 10:10 am): the weekly screenshot and architecture diagram, `CODE-INDEX.md` names from 11-08, `SPEC.md` (Water panel, Climate section), and folding the older handover blocks below into the standing sections, then deleting them.
+> **State.** `main` is local only, not pushed. Never commit `.obsidian/workspace.json`. Rivers stay on branch `rivers-fork`.
+> - Built 11-10: the color grade (`[S82]`), toon shading on the chunk (`[S83]`), templates (`[S84]`, Flora made from Dana 01), Scene's parts as accordions, switches for rock, shading and grade.
+> - Hot reload keeps old settings and the old grade object in a tab: after changing a settings shape or the render loop, hard reload before judging a bug.
+> - Reversed depth applies to the whole app: a pass rendering into its own target clears it first (the shared renderer has `autoClear` off), a shader forcing depth to the far plane writes 0 under `USE_REVERSED_DEPTH_BUFFER`, and every render camera needs `updateProjectionMatrix` (no plain `THREE.Camera`).
 >
-> **Next job: the Flora planet** (Dana's requests item 2 below): Planet 1's colors, and terrain toned down so it reads as walkable ground, plains with some mountains. Research how established tools shape walkable terrain before a plan.
->
-> **How to work this round (Dana's corrections, 2026-11-09; also saved as memories):**
-> - Look up the established method and read the real source before deciding any rule or number. Measure the cause before building; one change per test; test in memory first, then the files; compare before and after at Dana's exact view.
-> - A measurement must be checked against a known case before it is trusted (two wrong measures cost hours: a 2-texel border instead of 4, and a steepness count).
-> - Dana tests in Claude's Chrome tab: never move her camera or reload without saying so; editing a file the page loaded reloads it.
-> - A statement of fact from Dana is not a go; ask when unsure.
->
-> **Direction (Dana, 2026-11-08).** General development stops. The final (Dec 2) shows a vertical slice: 3 planets built on the land chunk, each a procedural, stylized alien environment with one process that evolves on the World Clock. Rocks are shared by all three. Rivers are paused on branch `rivers-fork` (`[B145]` to `[B155]`).
-> - **Living chunk (priority):** moss and algae as a ground color by wetness and slope; one plant family whose shape is a set of numeric genes, grown in small steps over the World Clock and mutated per planet (Karl Sims, *Panspermia*: a continuous growth model with evolved parameters). Evolution: flora growing and changing. Flora stages apply to any livable planet; the slice shows them on one chunk.
-> - **Lava:** volcano cones added to the height, a lava shader (glowing cracks in a cooling crust). Evolution: lava cooling, cones building.
-> - **Ice:** an ice shader, icebergs at sea level. Evolution: ice spreading or thawing.
-> - ❌ Cut: desert canyons and sandstorms (too hard procedurally), water world (needs a new set of elements).
->
-> **Next, in order.**
-> 1. ✅ **Water on the chunk** (built 2026-11-08, `[B158]` to `[B161]`): no floating water, lakes with their own look and ramp, sea level no longer reshapes the land, moving water and shore foam. Left from it: `[B157]` and `[B164]` (walk mode), and Dana's call on keeping the unrequested breaching (`selectiveBreach`).
-> 2. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock.
-> 3. ⚪ **Rocks:** procedural rocks scattered by slope and biome; height-field formations (mesas, terraces, spires) with them. Arches and overhangs are a stretch (Peytavie et al. 2009).
-> 4. ✅ **Stylized shading** (built 2026-11-08): slope rock (`[B163]`), rule-based palettes for land, water, rock and sky, layered haze. Next for the look is in Dana's requests below (shadows, color grade).
-> 5. ⚪ **Lava planet.**
-> 6. ⚪ **Ice planet** (depends on water the most).
->
-> **Dana's requests, 2026-11-08 (in this order).**
-> 1. ✅ **Bugs first** (details in `ISSUES.md`):
->    1. ✅ `[B171]` the drips: depth precision and patch seams, fixed 2026-11-09 (`SKIRTS-BUG.md`).
->    2. ⏸️ `[B166]` coarse ground after a jump: pending, fix researched (Cesium's load order, `REFERENCES.md`).
->    3. ⏸️ `[B164]` tide: pending; if it returns, a safe zone at the highest tide line and a Tide slider (Dana, 2026-11-09).
->    4. ⏸️ `[B170]` dark dashes, `[B168]` the walk map's stall, `[B156]` washboard ridges: pending, not seen after `[B171]`. ✅ `[B157]` distant flicker: fixed with `[B171]`.
-> - ✅ **Walk speed scales with eye height** (built 2026-11-09): speed proportional to eye height, Cesium's Camera Tutorial rule (height / 100 a tick); the default eye is now 8 m (`[B165]`).
-> 2. ⚪ **Flora planet:** Planet 1's colors; terrain toned down so it reads as walkable ground: plains with some mountains, not mountains everywhere.
-> 3. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
-> 4. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll): the setting that makes a planet read as one strong hue (No Man's Sky's painted look).
-> 5. ⚪ **Props with the shadows:** rocks and silhouettes (planned rocks, step 3 above).
-> - ✅ Done this round: settings undo (Cmd+Z), sea and lake ripples, shore foam, lake color and look, rule-based palettes for land, water, rock and sky, slope rock, layered haze (Layers in Atmosphere; Haze max 12).
->
-> **Open decisions for Dana (ask, don't assume).**
-> - ❓ The vertical slice's planet list and her real deadline.
-> - ❓ Vegetation stages as build phases only, or grown over time by the world clock (item 5 below).
-> - ❓ Whether to commit `README.md` (concept, research question, future features, walk mode mention).
-> - ❓ Delete the old handover file and its screenshots.
->
-> **Not yet confirmed by Dana's own eye.** Lake ripples at the stronger setting (`LAKE_RIPPLE_STRENGTH` 0.6, `RIPPLE_TILE_SHARE` 0.08), the haze reaching the horizon (`[B128]`), the stripes fix on her own walk (`[B129]`), Eye height's 200 m top, lake tides (`LAKE_TIDE_BOOST` 4, never seen with a moon on). All tunable.
->
-> **How to test in Chrome.**
-> - Test planet: New Planet 04 (land, sea and a big lake square). Erosion must be on for lakes. New Planet 06 was deleted.
-> - Find the app's objects from the browser: walk the React tree from `#root` for `memoizedProps.sharedRenderer.renderer`, the `HeightmapPipeline` (has `ensureChunkBase`), and the chunk's gumball target (has `toggleWalkMode`, `cameraControls`); hook `ChunkPatchRenderer.prototype.update` (import its module URL from `performance.getEntriesByType('resource')`) to get the patch renderer.
-> - For a bug Dana sees but you can't reproduce, install a per-frame recorder in your tab, let her reproduce it there, then read the log; this is how `[B129]` was found. Keep any GPU reads in it rare, or the tab lags.
-> - The walk button's screen position moves with the window size; take a screenshot before clicking.
->
-> **Deadlines.** Session 12's weekly push is due Wed 2026-11-11 at 10:10 am: its entry in `WEEKLY-PUSHES.md` is filled through today; add a screenshot copy in `docs/screenshots/` and that week's architecture diagram (new dated file, `docs/diagrams/build_architecture.py`, local only) for this week's new modules (`rivers/chunkLakes.worker.ts`, `voxel/chunkLakes.ts`).
->
-> **Still open from the seventeenth block below.** `[B121]` ridge (deferred by Dana), erosion units, soft close-ups and freeze `[B124]` (both deferred), the Undo question for gully sliders.
->
-> [!IMPORTANT]
-> **Start from here (2026-11-04, seventeenth handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. This is newer than the block below.*
->
-> **State.**
-> - `main` holds the chunk round and the lakes round (`[S75]` to `[S77]`, `[B123]`, `[B125]`), not pushed.
-> - Uncommitted on purpose: `README.md` (Dana's concept text: **don't change it, grammar fixes only**), `.obsidian/workspace.json` (never commit it), and the temporary handover file with its screenshots (Dana's call whether to delete them).
-> - Run from `app/` with `npx vite` (localhost:5173). After a `.glsl` edit, run `node scripts/checkShaders.mjs`. After adding a new three.js import, restart with `npx vite --force`.
->
-> **How Dana wants this round run** (`.claude/CLAUDE.md` still applies; memory `fix-rounds-necessary-tests`)
-> - Do rounds of fixes and report together, with short status updates. She said: don't get stuck in a test loop; if stuck, log it and move on.
-> - Test in Chrome yourself, only what a fix needs. Reproduce her way first (the water flicker only showed when zooming in gradually). Confirm the cause before fixing, with old against new in the same session.
-> - Keep tokens down: small screenshots, short scripts, no full-size shots per step. Avoid the Chrome tool's `scroll`, which returns a full screenshot each time; dispatch `WheelEvent`s from `javascript_tool`.
->
-> **Next, in order.**
-> 0. 🟡 **Vertical slice (Dana, 2026-11-04):** about 3 weeks left. Make 3 to 5 distinct planets work well instead of the whole system; fix only what they need. Proposed: pink desert, water world, lava world, methane ice world, forest if trees fit. ❓ Dana to confirm the list. Next in order: rivers on the chunk (plan approved, real-size rule `[S79]`, not started), stripes in walk mode (`[B129]`), walk mode jitter on a fresh planet (Planet 06 was deleted), layered haze, then vegetation. ❓ An Eye height slider for walk mode (eye is a correct 1.7 m, but the ground has no human-scale detail).
-> 1. 🟡 **Per-pixel grain for `[B122]`** (Dana approved). The cause is measured; see `ISSUES.md`. Measure the frame cost first. Tinting a patch's fill by meters per sample shows the line.
-> 2. ⏸️ **`[B121]` the ridge that sinks:** Dana will circle back. The fade target is ruled out for the fold tested; ask for a screenshot of her spot.
-> 3. ⚪ **Erosion units** (Dana approved; bring options first). From the code, not yet checked by test: gully width in meters is about `0.45 × Gully Size × valley spacing`, and the height change sums `depth × scale` over octaves divided by `vertical`, so Depth in meters depends on Size. Duration is already in years. Ridge Sharpness and Detail may be true ratios. Strength scales a rate from its default.
-> 4. ⚪ **Rivers** (`[B109]`): not parked; next after the above. Research is in `REFERENCES.md` (GRASS `r.stream.extract` was the lead). The choice between A and B there was never made, and I measured no 8-direction bias in the carving, so recheck that reasoning.
-> 5. ⚪ **Vegetation in three stages** (Dana, 2026-11-04), after layered haze: algae and moss (a color and texture in the ground shader, on wet, low, gentle ground), then grass and low bushes (small instanced shapes near the camera), then trees (2 or 3 EZ-Tree shapes per planet, placed by the `ForestGenerator` rules in `REFERENCES.md`). Where each grows comes from height, slope, water and climate. ❓ Open: stages as build phases only, or grown over time by the world clock (ecological succession, recommended). Check EZ-Tree's license and use before building; measure frame cost.
-> 6. ⏸️ **Soft close-ups:** deferred by Dana. Below the 4096 map's limit (428 m a sample on a 1,753 km square), only Roughness adds detail. The real fix is fine gully detail at patch bake. A finer map on small squares is the cheaper partial option.
-> 6. ⏸️ **Freeze** (`[B124]`): tabled by Dana. Water corners (`[B110]`) await her look.
->
-> **Decisions in force.** Gully Size is capped at 1.5 (`GULLY_SIZE_MAX`, tunable). Erosion starts off on load. The outline stays off until a square is drawn. Wall colors stay as they are. Selection turns off on release, and a new square opens framed.
->
-> ❓ **Open for Dana.** She said the gully sliders should be added "to history". They now save with the project; ask whether she also wants them in Undo and Redo, which cover only paint strokes.
->
-> **Unverified, check only if it comes up.** Esc during an active drag (a simulated drag never registered). Gully sliders reappearing in the panel after a reload (stored correctly; the restore path is shared). Water flicker at very low views over water (near plane is 5% of the height above ground, tunable). Slopes clipping at that near plane. Walk mode with the new near plane.
->
-> **Testing notes.**
-> - Autosave writes to whichever project is open, about 3 s after a change. Use "New Planet 05" for tests that change erosion settings or the square. It's Dana's to delete, and it has no ocean, so it can't test water. "New Planet 04" has land and water, and my tests changed its stored square; put back any setting you change, and note that two open tabs can overwrite each other. Dana02, Dana 01 and New Planet 02 weren't touched.
-> - After an edit, the app loads modules with a `?t=` tag. To hook one from the browser, find its URL in `performance.getEntriesByType('resource')` and `import()` that, or you patch a copy. `ChunkPatchRenderer.prototype.update` and `swap` give the camera, details, bake function and patches. The renderer is in the React tree at `memoizedProps.sharedRenderer.renderer`.
-> - Chrome pauses drawing between tool calls, so a long frame gap between calls isn't a stall. The "message channel closed" and `ERR_BLOCKED_BY_CLIENT` console errors look like extensions, not the app.
->
-> **Measured, so nothing is measured twice.** Filter walls reach 85 degrees at Gully Size 1 and 88 at 2.15; slope settles as detail rises, so they're real walls. Noise alone reaches 75. A slider change takes about 1 s, about 680 ms of it the 4096 map. A selection takes about 720 ms. Toggling Erosion: worst frame 33 ms, 1 GPU read, no long stalls, so planet re-bake and GPU reads need no fix. Roughness reaches close-ups: about 6 m at 81 m spacing with it on, 0.05 m off; it fades out under the sea, so compare on land. The default chunk's Reset View is about 2.5 units per km.
->
-> **Leftovers.** `chunkDepth` and `changeDepth` in `landChunk.ts`, `uWaterDeepest` in the wall shader, `chunkBaseDepth`'s unused parameter. The Height slider's meters in Chunk view still understate what's drawn. The architecture diagram wasn't redrawn; do it with the next weekly push. Patches at most 4 bakes per frame, so a close-up still builds gradually.
+> **Next job: shading fix B** (the shade hue from the terrain's own color by the color wheel rule), after Dana's look at fix A. See Next in order below.
 
-> [!IMPORTANT]
-> **Start from here (2026-11-03, sixteenth handover):** *read `.claude/CLAUDE.md` first, then this block, then `docs/CODE-INDEX.md` (Water and erosion) before searching the code. Paper summaries with key quotes are in `docs/REFERENCES.md`: read those, never the PDFs again. Bugs of this round: `[B106]` to `[B109]` in `docs/ISSUES.md`.*
->
-> **State.**
-> - `main` has the code at `fd29b3a` and this docs pass (SPEC `[S65]` to `[S70]`, the Session 11 weekly push, the 2026-11-04 diagram) in the commit after it; not pushed. `.obsidian/workspace.json` never goes into commits.
-> - Run from `app/` with `npx vite` (localhost:5173). After any shader edit: `node scripts/checkShaders.mjs` (17 materials), and `npx tsc --noEmit -p tsconfig.app.json` (the root `-p .` checks nothing, `[B105]`). Hard reload after shader or worker edits.
-> - The branch `water-network-2026-11-02` keeps the Nov 2 network rework, reference only.
->
-> **How the water works now** (one chain, each step recomputing only what changed)
-> 1. A terrain or sea level change (`useDrainage` in `rivers/drainageControls.ts`, keyed on the heights' content, not the object) reads the globe heights at 2048 × 1024 (`renderRiverHeights`), about 18 km a cell.
-> 2. `drainage.worker.ts` fills the pits (Priority-Flood + ε, `pitFill.ts`): about 0.4 s.
-> 3. `drainage.worker.ts` also computes the settled drainage in one sweep (`accumulateDrainage`, `[B155]`); `planetDrainage.ts` seeds the GPU state with it (saved), then runs the erosion passes on top, 4 a frame. About 2.3 s at 632 passes. Duration and Strength continue from the save or restart from it.
-> 4. The worker builds the ground (terrain plus carving), lakes by Fill-Spill-Merge with `waterBudget` (`depressions.ts`), the river network (`extractRiverNodes`, unused while drawing is off), the valley spacing, and the water map: R carving, G drainage in cells, B ground, A lake level; rows **south first**, the river grid's rows after them. 0.1 to 0.7 s. A climate change reruns only this step.
-> 5. `setPlanetWaterMap` uploads it; the bake (`heightmap.frag.glsl`) adds the carving, runs the erosion filter (`erodedSurface`, `erosionFilter3d.glsl`) in Rune's demo proportions (valley spacing to his hill spacing, relief to his relief), and draws lakes per point where A stands above B and above the ground. Shape sliders only re-bake patches.
->
-> **What exists now**
-> - ✅ Erosion in the Climate System's right panel, under the moons: switch (off on load), Duration (years, maps to up to 1,500 planet passes), Strength (0 to 1 fades from the noise terrain to the eroded one), Shape (Gully Size 0.25 to 4, Gully Depth 0 to 0.5 per Bevy's range, Ridge Sharpness, Detail). One set for planet and chunk; the chunk's virtual-pipes run reruns by itself 0.3 s after a change; its rain comes from Climate, scaled from the liquid's typical rainfall (inferred).
-> - ✅ Lakes by climate: at 450 mm of rain about 5,800 lake cells (lake share 0.058); at 1,100 mm every basin is full. Lakes drain as erosion carves their rims.
-> - ✅ UI: Ocean is the sea only; Climate System holds Atmosphere (its switch, Color inside) and Climate; World Clock holds the timeline dock; sections 12 px bold, sub-sections 12 px regular and indented 8 px; the Progress bar component, all in the `ui-design` skill.
-> - 🔴 Rivers `[B109]`: built and packed, not drawn (`DRAW_RIVERS = false`).
->
-> **🧭 Decisions (Dana, 2026-11-02 to 11-03), with reasons**
-> - Water comes from erosion (every terrain tool takes water from the height map it shows).
-> - The patch system answers every performance limit; only drainage and lakes are global, since a river depends on its whole catchment.
-> - Every change recomputes only its delta, never whole geometry or data.
-> - Erosion belongs to the Climate System; coasts move with erosion; lakes and rivers follow Climate's liquid, Ocean is only the sea (Gaea and World Machine keep sea and lakes separate).
-> - Extreme, fantastical results are fine; bugs are not.
->
-> **Tried and failed this round (don't repeat)**
-> - The water map uploaded north first: every point read its mirror (`[B106]`). Rows must stay south first.
-> - The erosion filter fed the bumpy detailed terrain, with Rune's lowering offset, and with a 109 km scale: chaos, flooding, land wiped out (`[B107]`). Feed it the smooth base only.
-> - Holding coasts at sea level made flat strips; Dana chose moving coasts.
-> - Repurposing the B channel for lake levels flattened the filter's base in basins (cliffs). B is the ground; A is the lake level.
-> - Rivers with a node at every 18 km cell along eight directions: zigzags, straight parallel lines, broken rivers (`[B109]`, the same as `[B95]`).
->
-> **Next, in order**
-> 1. ✅ **The weekly push for Session 11, due Nov 4** (done 2026-11-03, needs a push to GitHub before class): fill the pre-built entry at the end of `docs/WEEKLY-PUSHES.md` and move it above the newest; the diagram `docs/diagrams/architecture-2026-11-04.svg` from `docs/diagrams/build_architecture.py` (local only), with this week's structural changes: added `rivers/drainageControls.ts`, `planetDrainage.ts`, `drainage.worker.ts`, `pitFill.ts`, `depressions.ts`, `riverGrid.ts`, `shaders/erosion/streamPowerPlanet.frag.glsl`, `shaders/heightmap/erosionFilter3d.glsl`; removed the tree, graph, valley map, stream power, view, debug and `useRivers`; Erosion moved into the Climate System; the World Clock added. Screenshot copies go to `docs/screenshots/` (originals in `Cornell/Fall 26/PWB/Screenshots/`). Point the README's diagram at the new file.
-> 2. **Rivers, research first** (Dana: "I don't need anything fancy but it needs to look good from afar"; "we had a river system before switching to erosion, see if it could help, find a way to do both"):
->    - Read the summaries in `REFERENCES.md`: Peytavie (graph nodes only at confluences, splines between; built for 1 to 30 m cells), Cordonnier, Braun and Willett, Derzapf (rivers on a coarse mesh, refined as the view needs), Génevaux, Plate-Local, Williams (sub-texel coverage).
->    - Study the earlier system on commit `1f421af`: `rivers/riverGraph.ts` (Delaunay nodes, no grid lines, `[B95]`) and `riverTree.ts` (Génevaux's priority growth, branching). Its failure was a terrain it never shaped (`[B94]`). The lead to weigh: grow that tree on the eroded ground (B), so rivers branch like the old ones and sit in the eroded valleys.
->    - Decide how a river narrower than a bake texel shows from afar (coverage rather than a forced one-texel channel: the forced width made the blobs).
->    - The drainage splits many ways (Schott, Freeman), so a network following one steepest neighbor stops where that neighbor gets too little: whatever network is chosen must agree with how water is routed.
->    - Bring one plan in numbered steps with files and sources before any code. `riverGrid.ts`, `riverEdgeDistance` and the Génevaux carve are ready to reuse; drop the Catmull-Rom lead-in from a side branch, which made the zigzags.
-> 3. **Cleanup** when rivers settle: every `[TEMP water]` log (`drainageControls.ts`, `drainage.worker.ts`, `SceneCanvas.tsx`, `PlanetPatchRenderer.ts`), and `probeWaterMap` in `map/heightmap.ts`, which bakes 18 regions per change and slows slider drags.
-> 4. **Later:** liquids eroding differently (research after the water system); the chunk's water from the virtual-pipes engine (phase 2: Šťava sources and sinks, Jákó rain and evaporation, water under 0.1 m hidden); Stage 08 of this roadmap rewritten; the concept draft revised with Dana.
->
-> **Open, Dana's to decide:** none pending. Inferred and tunable values to revisit: `HILLSLOPE_SHARE` 0.05, `PLANET_PASSES_AT_MAX_DURATION` 1,500, the demo-proportion mapping in `erodedSurface`, `engineRainfall`'s scaling, `RIVER_MIN_CELLS` 300.
->
-> **Dana's directions from this round, all in force** (also in memory and `.claude/CLAUDE.md`)
-> - Diagnose (logs need no approval) and research on my own initiative before proposing; existing implementations and course papers first, via the summaries; give Dana the links when a fetch fails.
-> - One plan in numbered steps naming files and new names; no code without an explicit yes, except fixing a crash from my own new code.
-> - Short replies, the why only when asked, own mistakes plainly, one plan at a time, end with done, next, open.
-> - Dana tests at visual crossroads; give her a clear before and after to compare; never switch heavy features on at load (Erosion starts off).
-> - Every change recomputes only its delta; the patch system answers performance limits.
-> - Placement of a control follows procedural-tool convention (check Gaea, World Machine, Houdini), and every value has one control in one place.
-> - The design system rules (the `ui-design` skill): Title Case names; sections 12 px bold, sub-sections 12 px regular and indented; a Progress bar wherever the wait can be measured; UI matters less than the system.
-> - Extreme, fantastical results are fine; bugs are not. Nothing fancy for rivers, but they must look good from afar.
+---
 
-> [!NOTE]
-> **Previous handover (2026-11-01, thirteenth):** *a fresh session reads `.claude/CLAUDE.md` (it loads automatically), then this block, then `docs/CODE-INDEX.md` before searching the code. Every doc but the README lives in `docs/`. Search for a name, then read only the range around it.*
->
-> **State.** The whole river, climate and erosion round is committed and pushed. The dev server runs on **localhost:5173**; run it from `app/` with `npx vite`. After shader or engine changes, a **hard reload** (Cmd+Shift+R) is needed. **After any shader edit run `node scripts/checkShaders.mjs` from `app/`** (needs `brew install glslang`) before Dana reloads; add new shader pieces to its list. In new shaders use `texture(...)`, never `texture2D` or `textureCube`, except in `heightmap.frag.glsl`, which is GLSL ES 1.00; search a file for a name before adding a constant.
->
-> **What exists now** (decisions in `[S53]` to `[S59]`, code in `CODE-INDEX.md`, Rivers section):
-> - ✅ The drainage tree, lakes by water budget, Climate in the Atmosphere section (Liquid, Rainfall, Temperature, Erosion, River debug), other liquids, stream power erosion, river and lake water on the planet, per-point water height in the bake's blue channel.
-> - 🟡 The last round is built but unseen by Dana: inland color fading to the sea at mouths, softer banks, tapered tips, four blur passes (`[B90]`, `[B91]`). Start by asking how they look.
-> - ⚠️ Never pass river arrays through React props or state. Use the scene handle (`setRiverSegments`, `setValleyMap`).
-> - ⚠️ Every code edit goes through Dana first, as a plan; a reaction isn't a go. Papers are in the course folder: read those before any web search.
->
-> **Next, in order:**
-> 1. Dana's check of the last round. Tune `RIVER_BASE_WIDTH`, `RIVER_CHANNEL_DEPTH`, `INLAND_DEPTH_RAMP`, and Lava's `channelWidth` (3) if she asks.
-> 2. **River water shader (`[B93]`, Dana, 2026-11-01):** up close at a low angle, rivers read as raised, silvery bands with ocean-scale waves. Inland water needs its own look that accounts for flow direction: ripples and foam move downstream along each river, with no sea waves or sky reflection, and it must sit below its banks. The direction has to reach the shader: the map's four channels are full, so derive it from the slope of the water surface, or find a way to store it. Read the cause before proposing a fix.
-> 3. **Water on the chunk:** `voxel/chunkWater.ts`, `chunkWater.vert.glsl`, `chunkWater.frag.glsl`: the sheet is one flat square; subdivide it and lift it to the water heights. Depth, Clarity and foam measure from the local water height. The tide moves only the sea. The chunk's patch pass has no water channel yet (`CHUNK_PATCH_PASS`, its blue is 0), so the base map must carry it. ⚠️ River water at the chunk's edge meets the water walls, which only know sea level. Then `scene/walkMode.ts` reads the same height.
-> 4. **River controls and cleanup:** `planet/planetControls.ts` adds `rivers` to `WaterSettings` with a `migrateWater` update; `ui/Panel.tsx` adds an on/off switch with Width and Depth (Rainfall replaces Amount). Remove `rivers/riverDebug.ts`, the River debug toggle and the `[TEMP rivers]` logs.
-> 5. **Memory (agreed in principle, not built):** free the JS copy of the map after upload (`onUpdate`, about 134 MB of RAM); half-float map with heights stored relative to sea level (about 67 MB of video memory, may band); reuse the map's arrays in the worker; keep only land nodes (about 350 MB; the worker holds about 500 MB today); re-bake only patches a change touched. Slider steps now include `erodeTerrain`, so measure them on Dana's machine.
-> 6. **Slope rock** (land shader stage 2): the plan below. It colors by slope, and the eroded land now gives it real slopes. Dana noted the height and slope texturing of the Procedural Stochastic Terrain Shader as a reference, and Zucconi's Journey sand for deserts. Moss belongs to the biome stage, using these masks.
-> 7. Then stage 3 (snow) gets its own plan. The bake's blue channel is now taken by water.
->
-> 📌 Later: rerun the tree on eroded land for two or three passes (`[B91]`, adds seconds to a rebuild); sea-filled fjords by letting land near the coast drop below sea level, which moves the coast (Dana's call); chunk branches, since a 9 km cell is more than half the 16 km chunk (`buildChunkTributaries`, Clay John's noise or Nick McDonald's hydrology); stored foam in a decaying buffer (`[B92]`); tidal bores up rivers (Chanson; a bore needs a tide over 4.5 to 6 m and a funnel mouth); river color and surface per liquid (lava's glow, sulfur's yellow).
->
-> **Open decisions for Dana:**
-> - ❓ Whether Lava stays this wide after the taper, and whether wet worlds' river density reads as a mistake (Ethane is the extreme).
-> - ❓ Whether the dark ridgeline curves need the tree rerun (`[B91]`).
-> - ❓ Which memory items to build, and when. The recommendation was the three small ones after the chunk water; none has a go yet.
-> - ❓ Her Atmosphere Randomize report: she said Climate wasn't connected, the code rolled it, and both buttons roll it now. She never said which button she pressed, so confirm it works.
->
-> **Testing without a reload:** build a synthetic globe and compile `riverTree.ts`, `riverClimate.ts`, `streamPower.ts` and `valleyMap.ts` with `tsc` to CommonJS in the scratchpad, then render a hillshade to a PPM and convert it with `sips -s format png`. One image exposed the scaling bug at once. That harness was session-only, so write it again if it's needed, and ask before running new measurements.
->
-> **Also agreed:** the timeline moves to its own section with one world clock, and every system stores its history there (Dana, 2026-11-01). Plan it after rivers.
->
-> **Terrain, parked as good enough (Dana may return to it):** `[TEMP terrain]` still logs each Randomize (`map/noiseLayers.ts`) with its world type. ❓ Canyons: no documented recipe yet (Gaea's Canyon node is "drainage based", no method given; Shane's gorge carves along a path; Quilez's canyon is all rights reserved, ideas only). ❓ Clay John's Eroded Terrain Noise (MIT; slope-aligned stripes with branching, faded near water) would weather any terrain and answer "erode one I already like", but needs a new bake step and adapting to the sphere. Dana: not new systems without a reason. 📌 A "Smooth" control fading fine octaves was offered, not built.
->
-> **Tested and passed by Dana:** the moon work, water walls, the atmosphere ("good enough": lone peaks rise past the air, by design), the spin ("I think everything is working"). Rule: a check Dana skips without comment has passed (memory `silence-means-recs-approved`).
->
-> **Decisions from this round, so they aren't re-argued:**
-> - The planet itself rotates; the camera workaround was removed after it broke the grid, dragging and the poles (`[S51]`). Anything new that measures in world space must turn into the planet's frame (`uPlanetFrame`, `planetGroup.worldToLocal`).
-> - Blend modes don't reach the 3D terrain: elevation is the sum of the layers' Heights (Dana's design, 2026-09-24). A layer carves by a negative Height.
-> - Masks can only be noise patterns (layer-driven masks were removed), so "follow the continents" means a mask with the continents' type, seed and frequency, on an unshifted, unstretched continents layer.
-> - Terraces stay rare and small; Dana dislikes them across wide areas and above about 6 steps (`[S52]`). Her liked plateau roll had frequency 1.6.
-> - Moons: one main hue plus a second handle on a two-handle bar, a Harmony rule, Saturation and Blend (`[S48]`).
-> - Sources are read, not assumed: Lague's planet code, Clay John's erosion and three.js's own files were read directly. Quilez's Shadertoys forbid any use, ideas only.
->
-> **Open threads:**
-> - 🔴 `[B81]` No visible glitter path: Dana wanted the sun's sparkling column; a sun-sharp highlight and the Cox and Munk glint are in, she saw no difference. Unmeasured; check with the sun low and in front.
-> - 🔴 `[B82]` The Cast shadow toggle seems to do nothing. Not checked.
-> - 📌 The foam's lace sizes are first guesses, not tuned (`FOAM_LACE_SCALE`, `FOAM_LACE_WIDTH`); Dana's references are soft lacy swash and breaking waves.
-> - 📌 Water looks too clear in shallows at any Clarity (Dana, 2026-11-01); not addressed.
-> - 💡 `renderer.debug.onShaderError` could show shader errors on screen; `checkShaders` could join the build.
->
-> **Working style (Dana, this round):** worlds can be bizarre as long as they don't read as bugs. Bring only real choices, not obvious ones. A skipped check has passed, don't re-ask. Test only at big points. Short, exact answers. Say which parts are sourced and which are inferred, before building. Never call a workaround safe and the standard way risky without showing why. A bug that shares a root with another gets one holistic plan. `.obsidian/workspace.json` stays out of commits.
->
-> **Stage 2 plan, approved by Dana:**
-> 1. `shaders/terrain/landLayers.glsl`: add `landSurfaceColor(rampColor, normal, up, elevationFraction)`. Rock blends in by `1 − dot(normal, up)` through a `smoothstep`, colored by the rock ramp by height (`terrainRampColor`, reused). Optional height term so flat summits can be rocky.
-> 2. `planetPatch.frag.glsl` and `chunk.frag.glsl`: call it right after the ramp color.
-> 3. `planet/planetControls.ts`: `rockStops`, `slopeStart`, `slopeSoftness` in `PlanetSettings`, plus `migrateRock` for old saves (these are saved, unlike Scene settings).
-> 4. `planet/planetPatchMesh.ts` and `voxel/LandChunkCanvas.tsx`: uniforms `uRockColors`, `uRockPositions`, `uRockCount`, `uSlopeStart`, `uSlopeSoftness`, filled through `buildPatchRampArrays`, set only on change.
-> 5. `ui/Panel.tsx`: a "Rock" part in the Color section, per `[S47]`: a divider and a small "Rock" title, the rock `ColorRampEditor` on its own row, then Slope and Softness sliders.
-> - Test: the chunk on a mountain spot (cliffs turn to rock, Slope moves where it starts); the planet zoomed into a range (less rock than the chunk, since the planet draws coarser shapes).
->
-> **Open questions for later stages:** stage 3 measures first that the height texture's blue channel survives every texture the land reads (planet patches, the chunk's 4096 map, the patch resample), or it is re-planned; stage 4, whether the palette rule gets its own control (a "Rule" select next to Randomize colors) or only works inside Randomize; stage 6, live or baked ambient occlusion (layered haze moved ahead of it to stage 5).
->
-> **Brighter fill, still open:** stage 1's fill is scaled to white's luminance with Ambient light up to 1; Dana liked the colors and wants it brighter.
-> - ⚠️ The luminance scaling can push shadows strongly toward a very saturated sky color (a pure blue sky makes very blue shadows).
-> - Expected, not a bug: steep shaded faces get half the fill of flat ground (Quilez's sky term), so cliffs in shadow read darker.
->
-> **Agreed, queued:**
-> - 📌 Erosion's on/off switch moves to its header when Erosion is un-paused (`[S47]`); Dana is unsure Erosion stays.
-> - 📌 The regular Slider has no visible keyboard focus state (only the hue slider has one); adding it is Dana's call.
-> - 💡 Haze through the depth buffer (`[B74]`), only if mountains look too hazy.
-> - 📌 Water reads as water from walk mode: Fresnel on the chunk water's opacity, sky reflection and sun highlight (`[B67]`, `waterFresnel` exists in `water.glsl`), after the land shader plan.
-> - 📌 Moon look (Dana, 2026-10-28, "good enough" with room to improve): a more intense glow, less halo distance, more inner glow. A plan waits for Dana's go: in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`), `MOON_HALO_STRENGTH` 0.6 to 1.0, `MOON_HALO_MIN_SHARE` 0.17 to 0.10, `MOON_HALO_SHARE_PER_UNIT` 0.33 to 0.20, `MOON_HALO_MIN_ANGLE` 0.03 to 0.02, `MOON_GLOW_SHARE_PER_UNIT` 0.12 to 0.25, `MOON_GLOW_STRENGTH` 0.8 to 1.2; and maybe reword Halo's hover text ("meant to stay subtle").
-> - 💡 From Quilez's rig, not planned: a warm bounce light opposite the sun (brightens steep shaded faces), and colored shadow edges.
->
-> **Interaction notes (Dana, 2026-10-28).** Dana uses a trackpad, no mouse: a two-finger scroll still sends wheel events, which change walk speed (`travelScale`). Keep chat answers short and precise: no repeated questions she already answered, exact token counts (an estimate is labeled as one), and logs are added without asking.
->
-> **Moons, how they stand** (so tuning doesn't restart from zero): the target spec Dana approved, built in `drawMoon` (`shaders/atmosphere/skyDome.frag.glsl`): color clearly visible and never bleached by the glow; texture as gentle tone; a full moon solid to its edge; the shadow (Crescent) dissolving fully into the sky, with no outline; one rounded glow across the edge, lit side only (all round at Crescent 0); Texture 0 translucent, 1 solid, 2 strongest; split toning (Second color the darks by multiply, Color the brights by screen). Change only what Dana approves: tuning by screenshot made colors swing neon and pale.
->
-> **Temporary diagnostics still in the code (remove when their bugs close; the haze and glow ones are already gone):**
-> - `[TEMP terrain]` in `map/noiseLayers.ts`, each Randomize's world type and layers, kept while terrain may be tuned.
-> - `[TEMP water]` logs and the shore-search logs in `scene/walkMode.ts`.
-> - Alt+click on the chunk: the `[TEMP B55]` height row table (`logCliffRow` in `LandChunkCanvas.tsx`, `lastSampleDepth` in `ChunkPatchRenderer.ts`).
->
-> **Open decisions for Dana**
-> - ❓ **A real moon orbiting the planet** (plan given, waiting for a go): a 3D moon sharing the sky moons' texture and look, orbiting slowly (`atmosphere/planetMoon.ts`, `shaders/atmosphere/planetMoon.frag.glsl`); later the chunk's sky moons following the orbit, and tides that follow it.
-> - ❓ **General undo history** for every setting (Dana asked 2026-10-28; undo now covers paint strokes only; undo/redo is paused on the roadmap, so un-pausing it is her call).
-> - ❓ **Endless-looking chunk:** (a) fade its edges into the haze, now; (b) real terrain to the horizon at lower detail, later.
-> - ❓ Swirl as Musgrave's Coriolis twist (researched, waiting).
-> - 📌 The Texture slider's hover text (now under Moons) still says "above 1 the pattern grows stronger"; Texture now scales the contrast from 0. Rewording waits for Dana's yes.
->
-> **Working rules (Dana; most are saved as memories).** A numbered plan and an explicit go before any change (temporary console logs excepted, `console-logs-need-no-permission`); an answer or "ok" to a question is not a go (`strict-confirm-before-acting`; Dana, 2026-10-27: unapproved actions will be blocked). Measure before naming a cause, and say plainly how sure a claim is. Build new visuals on the app's own engines, never hand-rolled or copied (`reuse-app-systems`). Fix structural bugs at the root. Sourced methods only, verified by reading the source; say when only a summary was read. Docs change only in the docs pass that goes with a commit, recording the final result (`docs-only-final`). Check Dana's proposed mechanism against established tools before inventing one, and build only on a measured cause (`.claude/CLAUDE.md`, "How to fix bugs"). No attribution anywhere. No agents without a yes and a cost; page readers are reported with their tokens.
->
-> **Also open:** `[B67]` water barely visible from walk mode; `[B68]` straight shoreline; `[B69]` color line at the shore; `[B55]` a wall seen close to the ground (hypothesis: the old mirrored camera collision, check now that it's fixed); `[B54]` the smooth chunk never shows erosion; `[B64]` timeline panel; `[B59]`; `[B60]`; `[B57]`; `[B58]` stalling.
->
-> **🧭 Direction (Dana, 2026-10-26)**
-> *The story drives the order; infrastructure pauses.*
-> - Anchor reference: Ian Cheng, *Emissaries* (simulations that play themselves). Karl Sims, *Panspermia* (evolved alien plants) is a second.
-> - Erosion (`[B54]`), Terrace (`[B57]`), undo/redo and patch polish are paused. Walk mode stalling (`[B58]`) is fixed only as far as walking needs.
->
-> **Next, in this order**
-> 1. ✅ **Sea level and water** (2026-10-27). Sea level is a raw height so both views share the coastline; the water ramp is spaced by light remaining; Seascape waves on both views.
-> 2. 🟡 **Atmosphere** (replaces the Climate stage): built 2026-10-27, being tested. Left: on/off switch in the header, Randomize, Haze, Glow, then Color (Horizon, Sky, Shadow hue, each lockable). Right panel (select the Atmosphere header): Clouds (with Wind; coverage, softness, scale, detail, feather, banding, latitude distribution, colors) and Moons, each with a header switch. 📌 Still to do: Swirl as Musgrave's Coriolis twist (researched, waiting for Dana's go); rain or snow particles (copy a tested library such as three.quarks, verify first); poles' ice belongs to step 3.
->    - 🟡 Reworked after Dana's tests (2026-10-27): the planet glow is an edge-distance fade sized by Glow; the planet haze thins with height (no rim; since 2026-10-30 a deeper air layer from the visible ground gives a soft rim on purpose, `[S46]`); the chunk haze is Quilez's height fog with sky and sun hues and a fine grain, Haze up to 6 (was 10); Wind up to 40 (waves stop at 12); clouds have a second color. Waiting on Dana's retest of the glow and haze.
-   - ✅ Moons and tides (2026-10-28): one to five randomized moons baked by the noise engine, split-toned, with a crescent dial; the chunk's water rises and falls with their size (`[S44]`).
-   - ✅ Randomize and locks (2026-10-30): one button for the whole atmosphere, by hidden drivers; locked colors anchor the palette (`[S45]`). Moons are added and removed like layers, each with its own Crescent, Texture, Halo and Inner glow.
-   - ✅ Moons and air polish (2026-10-31): moons set behind the sea and fade toward the horizon, with Blend, a two-handle Hue bar, Harmony and Saturation (`[S48]`); the air follows the planet's broad shape and hazes each surface only up to itself (`[S49]`); three stacked cloud shells.
-> 3. **Terrain shading and volcanoes:** rock by slope, snow by height and latitude (poles), glowing lava, cones placed at Voronoi cell centers, rock strata on cliffs (Sable).
->    - 🧭 Art direction (Dana, 2026-10-27): 2.5D, real 3D but flatter: soft wrapped light, little shine, depth from haze layers, limited palettes; between No Man's Sky and Sable, not toon. Images in `docs/references/`, listed under 🎨 Visual in `REFERENCES.md` (No Man's Sky, Sable, Outer Wilds, Gris, Monument Valley).
->    - 🧭 Color direction (Dana, 2026-10-26): No Man's Sky, alien and unexpected, with rules. Monument Valley as a reference for good coloring rules, but less simple.
->    - 🧭 Look (Dana, 2026-10-28): No Man's Sky's one strong hue per planet, softened by the gentle layered landscapes of Gris and Sable, with unexpected shading colors (Monument Valley) set by procedural rules, not a hand-picked palette.
->    - 🟡 **Land shader layers** (plan agreed 2026-10-28), each built, tested by Dana and committed before the next. All live in one shared land-layers shader used by both the planet and the chunk.
->      1. 🟡 Colored shadows (built 2026-10-28): the ambient is a sky fill, brighter on faces turned up to the sky, tinted by the sky's color turned by Shadow hue (Atmosphere > Color, saved per planet since 2026-10-30) and kept at white's brightness. The sun is untouched; Ambient light now reaches 1. ✅ Shadow hue is a hue slider showing its color, in Atmosphere > Color (2026-10-30). 💡 From Quilez, not planned: a warm bounce light opposite the sun, and colored shadow edges. 📚 three.js hemisphere light; Quilez, outdoor lighting.
->      2. ⚪ Slope rock: steep faces blend to a rock ramp of their own, by height (room for Sable's strata later), with Slope and Softness sliders. 📚 Slope by the normal against "up", the standard terrain method.
->      3. ⚪ Large-scale variation: a slow noise from the app's own noise engine, baked into the height texture's free blue channel, shifts hue and lightness. Measure first that the channel survives every texture the land reads.
->      4. ⚪ Rule-based palettes: Quilez's cosine palette plus No Man's Sky style rules (complementary, analogous, split-complementary), each also choosing the shadow hue. Randomize colors sets the land ramp, rock, variation and shadow hue from one rule; a Softness slider lowers contrast toward Gris and Sable. 📚 Quilez, palettes; Kill Screen and Engadget on Grant Duncan's talk.
->         - Since 2026-10-30: Shadow hue lives in the atmosphere with a lock, and the atmosphere's Randomize already turns colors by the same rules (`[S45]`). So this is one palette rule shared by the land, rock and atmosphere colors, respecting every lock, not a land-only rule.
->      5. ⚪ Layered haze (Dana's art direction, "depth from haze layers", `[S42]`): the land up close reads as soft stacked layers, each ridge farther away paler and closer to the sky color, one hue in many values, the way Sable, Gris and Outer Wilds stack their landscapes. The haze takes its colors from the planet's palette and is tuned per planet (Sable's distance fog per biome, which its developers called their biggest single improvement). Examples and quotes: `REFERENCES.md`, "Sable, layered haze", "Gris, gentle layers", "Gris" (red desert), "Outer Wilds, forest planet", "Distance fog as the biggest single improvement". Research the method and plan when reached. Before ambient occlusion (Dana, 2026-10-30).
->      6. ⚪ Ambient occlusion on the fill light only, never the sun. ❓ Computed live or baked with the height map (the performance rules favor baked). 📚 Quilez.
-> 4. **Planet types** (desert, forest, water, volcano, ice, each with variations): a tuned start plus "reroll within this type" (Dana chose option C). 🧭 Moved after terrain shading (Dana, 2026-10-27): profiles save every look setting, so they come once those exist. Profiles: save a planet you like, "Generate" makes variations within ranges around it.
-> 5. **Storms** (dust storms, hurricanes, ash plumes, blizzards); the base clouds are now part of step 2. 📌 Storm spirals (Dana, 2026-10-27): a local swirl of the clouds around each storm's eye; research a sourced method here. 📌 Look at the day-and-night Shadertoy's layered snow and aurora first (under Shadertoy candidates in `REFERENCES.md`).
-> 6. **Evolving plants on the land chunk:** 📚 parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*) and space colonization for coral, genes mutated per Sims 1991. One shared visual style across all plants. EZ-Tree considered for earth-like trees.
-> 7. If time allows: population agents, then cataclysms (more than one, Dana 2026-10-27). A tsunami is one: about 50 cm high and 800 km long in open ocean, seen from orbit only in the sun glint, rising at the coast (📚 NASA MISR, Sri Lanka 2004). Final Review exhibition Dec 2.
->
-> **Open threads for Dana (not code)**
-> - 📌 **Firebase key:** restrict it in Google Cloud Console (console.cloud.google.com/apis/credentials, the "Browser key (auto created by Firebase)": Application restrictions = Websites, add `http://localhost:*/*` and any hosted address).
-> - 📌 **Deploy host,** if there is one: set the six `VITE_FIREBASE_*` values there.
-> - 📌 **Before submitting for class:** add a copy of the user-scoped `ui-design` skill to the repo, placement Dana's call.
-> - ⏸️ **Run instructions** belong in the final README the syllabus requires.
-> - 📌 **README opening** (Dana, 2026-10-28): the README opens with an intro to the project, its concept and its inspiration. A placeholder section waits at the top for it.
-> - 📌 **Doc navigation** (Dana, 2026-10-28): every doc opens with a row of links to the other docs, for easy review.
->
-> **Known risks.** No GLSL compiler on this machine: shader changes are only checked on screen, so a blank view usually means a shader compile error in the console. The planet's cloud shader samples noise up to about 18 times a pixel; lower Detail if it lags. Many atmosphere and water values are inferred and tunable (marked in the code). Planet waves use meter-scale coordinates across the whole planet, so very close up they may show float precision blockiness.
+## 🧭 Direction
+
+*What the final shows, and the references that steer it.*
+
+- **Vertical slice (Dana, 2026-11-08).** General development stops. The final (Dec 2) shows 3 planets built on the land chunk, each a procedural, stylized alien environment with one process that evolves on the World Clock. Rocks are shared by all three.
+  - **Living chunk (priority):** moss and algae as a ground color by wetness and slope; one plant family whose shape is a set of numeric genes, grown in small steps over the World Clock and mutated per planet (Karl Sims, *Panspermia*).
+  - **Lava:** volcano cones added to the height, a lava shader (glowing cracks in a cooling crust). Evolution: lava cooling, cones building.
+  - **Ice:** an ice shader, icebergs at sea level. Evolution: ice spreading or thawing.
+  - ❌ Cut: desert canyons and sandstorms (too hard procedurally), water world (needs a new set of elements). Rivers are paused on `rivers-fork` (`[B145]` to `[B155]`, `RIVER-PLAN.md`).
+- **References.** Ian Cheng, *Emissaries* (simulations that play themselves); Karl Sims, *Panspermia*. Look: No Man's Sky's one strong hue per planet, softened by Gris and Sable's layered landscapes, with Monument Valley's unexpected shading colors set by rules (`[S42]`, images in `docs/references/`).
+- **Settled, don't re-argue.** Gully Size is capped at 1.5 (`GULLY_SIZE_MAX`). Erosion starts off on load. The outline stays off until a square is drawn. Selection turns off on release, and a new square opens framed.
+
+## ➡️ Next in order
+
+*One step at a time; a later step waits for the one before.*
+
+1. ✅ **Water on the chunk** (2026-11-08, `[B158]` to `[B161]`). ❓ Keep the unrequested breaching (`selectiveBreach`)?
+2. ✅ **Stylized shading** (2026-11-08): slope rock (`[B163]`), rule-based palettes, layered haze, settings undo.
+3. ✅ **Bugs first** (Dana's requests of 11-08): `[B171]` drips and `[B157]` flicker fixed; walk speed scales with eye height (`[B165]`).
+4. 🟡 **Color and shading** (Dana, 2026-11-10): ✅ color grade (`[S82]`), ✅ toon shading (`[S83]`), ✅ shading fix A (smooth normal, unmodulated base; awaiting Dana's look). Next:
+   1. ⚪ Shading fix B: shade hue = the ground's own hue turned by a color rule, lower chroma; Shadow hue becomes that turn.
+   2. ⚪ Rock colors from the land ramp at each height (same hue, less chroma, a bit darker), so rock on snow isn't near-black.
+   3. ⚪ If the lit side reads too flat, keep fine bumps in the lit color. A second, darker shade (Unity's 2nd shade) if depth is missing.
+   4. ⚪ The grade per view: only the chunk graded, the planet drawn after the grade (Unity's per-camera post processing; check its docs first).
+5. ⚪ **Flora planet** (template Flora, from Dana 01): more varied terrain with more plains, walkable ground. Research how established tools generate plains first.
+6. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock. Sources to start from: parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*), space colonization, genes mutated per Sims 1991; EZ-Tree considered for earth-like trees (check its license).
+7. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
+8. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll).
+9. ⚪ **Rocks and props:** procedural rocks scattered by slope and biome; height-field formations (mesas, terraces, spires). Arches and overhangs are a stretch (Peytavie et al. 2009).
+10. ⚪ **Lava planet**, then ⚪ **Ice planet** (depends on water the most).
+
+## ❓ Open decisions
+
+*Dana's to decide; ask, don't assume.*
+
+- ❓ The Link menu (a text link opening a list) for "+ Project from": its states were proposed 2026-11-10; Dana to approve before it's built and added to the `ui-design` skill.
+- ❓ The vertical slice's planet list and her real deadline.
+- ❓ Vegetation stages as build phases only, or grown over time by the World Clock (ecological succession, recommended).
+- ❓ Keep `voxel/chunkLodRanges.ts` (CDLOD ranges, unused) for `[B166]`, or delete it.
+- ❓ Whether to commit `README.md` (concept, research question, future features, walk mode mention); delete the old handover file and its screenshots.
+- ❓ A real moon orbiting the planet (plan given, waiting): a 3D moon sharing the sky moons' look, later with the chunk's sky moons and tides following it.
+- ❓ Endless-looking chunk: fade its edges into the haze now, or real terrain to the horizon at lower detail later.
+- ❓ Swirl as Musgrave's Coriolis twist (researched, waiting).
+- ❓ Memory savings (agreed in principle, none has a go): free the JS copy of the map after upload, a half-float map, reuse the worker's arrays, keep only land nodes.
+- ❓ Ambient occlusion on the fill light only: computed live or baked with the height map (the performance rules favor baked).
+
+## ⏸️ Deferred and open bugs
+
+*Details live in `ISSUES.md`; this is the list to pick from.*
+
+- ⏸️ Walk mode, not seen since `[B171]`; reopen if they return: `[B156]`, `[B164]` (if it returns: a safe zone at the highest tide line and a Tide slider), `[B165]` (real fix noted), `[B166]` (fix researched, Cesium's load order), `[B168]`, `[B170]`.
+- ⏸️ Deferred by Dana: `[B121]` gully walls, soft close-ups (fine gully detail at patch bake is the real fix), `[B124]` freeze, `[B110]` water corners (await her look).
+- ⏸️ `[B82]` Cast shadow toggle does nothing in Chunk view: deferred by Dana as unimportant (2026-11-10).
+- 🔴 Open: `[B172]` stripes on the side wall up close, `[B122]` grain line (per-pixel grain approved; measure the frame cost first), `[B54]`, `[B55]`, `[B57]`, `[B58]` stalling, `[B59]`, `[B60]`, `[B64]`, `[B67]`, `[B68]`, `[B81]`.
+- ⏸️ Later: erosion units (Dana approved; bring options first), liquids eroding differently, the chunk's water from the virtual-pipes engine, storms and rain or snow particles, cataclysms (a tsunami), planet-type profiles, large-scale color variation in the land shader.
+
+## 📌 Small todos
+
+*Small, agreed, not urgent.*
+
+- 📌 Leftovers in code: `chunkDepth` and `changeDepth` in `landChunk.ts`, `uWaterDeepest` in the wall shader, `chunkBaseDepth`'s unused parameter. The Height slider's meters in Chunk view understate what's drawn.
+- 📌 Brighter fill light: Dana liked the colors and wants it brighter (⚠️ the luminance scaling can push shadows toward a very saturated sky color).
+- 📌 Moon look (plan waiting for a go): stronger glow, less halo distance, more inner glow, in `drawMoon`; the Texture slider's hover text still describes the old scale.
+- 📌 The regular Slider has no visible keyboard focus state; foam lace sizes are untuned; water reads too clear in shallows at any Clarity.
+- 📌 Firebase key: restrict it in Google Cloud Console (Websites, `http://localhost:*/*` and any hosted address); set the six `VITE_FIREBASE_*` values on any deploy host.
+- 📌 Before submitting for class: a copy of the `ui-design` skill in the repo (placement Dana's call); run instructions in the final README; every doc opens with a row of links to the others.
+- 📌 The grid sits inside the grade; engines draw editor helpers after post processing (needs the depth buffer copied first). Hold unless the per-view grade leaves it tinted.
+- 💡 Not planned: a warm bounce light opposite the sun; `renderer.debug.onShaderError` on screen; `checkShaders` in the build.
+
+## 🧪 How to test
+
+*Running the app and reaching its objects from Chrome.*
+
+- Run from `app/` with `npx vite` (localhost:5173). After a `.glsl` edit, `node scripts/checkShaders.mjs`; type check with `npx tsc --noEmit -p tsconfig.app.json`. After a new three.js import, restart with `npx vite --force`. Hard reload after shader or worker edits.
+- Test planet: New Planet 04 (land, sea and a big lake square); erosion must be on for lakes. New Planet 05 has no ocean, for erosion tests. Autosave writes to the open project about 3 s after a change, so put back any setting you change; two open tabs can overwrite each other.
+- Dana tests in Claude's Chrome tab: never move her camera or reload without saying so; editing a file the page loaded reloads it.
+- From the browser: walk the React tree from `#root` for `memoizedProps.sharedRenderer.renderer`, the `HeightmapPipeline` (has `ensureChunkBase`), and the chunk's gumball target (has `toggleWalkMode`, `cameraControls`). Hook `ChunkPatchRenderer.prototype.update` by importing its module URL (with its `?t=` tag) from `performance.getEntriesByType('resource')`; for the walk camera, a one-frame hook on `renderer.render`.
+- For a bug Dana sees but you can't reproduce, install a per-frame recorder in your tab, let her reproduce it there, then read the log. Keep GPU reads in it rare.
+- The walk button's position moves with the window size: screenshot before clicking. Avoid the Chrome tool's `scroll`; dispatch `WheelEvent`s from `javascript_tool`. Chrome pauses drawing between tool calls, so a long frame gap there isn't a stall.
+- Measured already: a slider change takes about 1 s (680 ms of it the 4096 map); a selection about 720 ms; filter walls reach 85 degrees at Gully Size 1. Not yet seen by Dana's own eye, all tunable: lake ripples at `LAKE_RIPPLE_STRENGTH` 0.6, Eye height's 200 m top, lake tides (`LAKE_TIDE_BOOST` 4).
+- ⚠️ Risks: the planet's cloud shader samples noise up to about 18 times a pixel (lower Detail if it lags); planet waves may show float precision blockiness very close up.
+
+---
 
 **Overall** ▓▓▓▓▓▓░░░░ 62%
 
@@ -534,10 +336,11 @@ Signs, each meaning one thing: ✅ done · 🟡 in progress · ⚪ not started �
 
 #### 06.4 · Undo/Redo · 100%
 
-*Stepping back and forward through paint strokes.*
+*Stepping back and forward through paint strokes and settings changes.*
 
 > **✅ Done**
 > - Cmd+Z and Cmd+Shift+Z plus Edit-panel buttons, rebuilding from the stroke log. Covers paint strokes only (2026-09-22 to 09-23).
+> - One timeline for settings and paint strokes in the order made; a settings change is recorded once a drag settles (2026-11-08).
 
 ---
 
@@ -623,7 +426,7 @@ A detail view into one piece of the planet, shown beside the globe, with a block
 >   3. 🟡 **Bounded heights:** half built 2026-10-30: Randomize sets Height from frequency, a broad base plus masked layers (`[S35]`). Still to do: a smooth soft limit on total elevation, Randomize sets Height from frequency, a broad base layer plus a mask layer, and detail added by zoom depth against a fixed normalization total. Shape shifting a little with zoom is acceptable (Dana).
 >   4. ⚪ **Plateau shaping**, modeled on Gaea's Clamp: Max level, Operation (Clamp or Clip) and Falloff, as a final step in its own Terrain-level section. Flat areas sit at a steady height so water later makes continents.
 >   5. ⚪ **Real height scale:** Height as a percent of radius plus a separate Exaggeration dial, ramp meters use true relief.
->   6. ⚪ **Undo/redo last**, so every control is wired (`[S30]`). It tracks settings and the paint stroke log only, never baked heights or results, the way erosion data is handled.
+>   6. ✅ **Undo/redo for settings** (built 2026-11-08, see 06.4), so every control is wired (`[S30]`). It tracks settings and the paint stroke log only, never baked heights or results, the way erosion data is handled.
 >   7. ⚪ **Planet cast shadows last.**
 > - **⚪ Cast shadows for the planet.** Land chunk side already built (`terrain.glsl`'s `heightmapShadow`, see `[B35]`). 🧭 Planned, not built, last in the build order above: reuse that march per patch, with the light converted into the patch's own flat frame (📚 Snyder and Nowrouzezahrai 2008). ⚠️ Shadows would stop at patch borders and ignore the planet's curvature, which could read as new seams, so judge by eye before considering a horizon map.
 > - **⏸️ Camera auto-framing.** Not a priority, since the gumball's zoom compensates.
@@ -712,14 +515,20 @@ Hydraulic and thermal erosion over time, with a way to scrub its progression. Sy
 ---
 
 ## Stage 11 · Color Texturing
-░░░░░░░░░░ 0%
+▓▓▓▓░░░░░░ 40%
 
 *Terrain color as a shader reading height, climate and biome.*
 
 🧭 Terrain color as a shader reading height, climate and biome, not a flat painted value. Surfaces as a general setting rather than a pipeline row, alongside lighting and planet controls. The planet's flat base color is the placeholder for it.
 
+> **✅ Done**
+> - Color by height (the land ramp) and by slope (rock on steep ground, its own ramp), 2026-11-08.
+> - Rule-based palettes: one roll sets land, sea, lakes, rock and sky from the land's hue (`[S81]`), 2026-11-08.
+> - Colored shadows (the sky fill) and layered haze, 2026-10-28 to 11-08.
+> - A per-planet color grade (`[S82]`) and toon shading on the chunk (`[S83]`), 2026-11-10.
+
 > **📋 To do**
-> - Everything.
+> - Color by climate and biome (moss and algae by wetness and slope come first, see Next in order).
 
 ---
 

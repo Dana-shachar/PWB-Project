@@ -18,6 +18,10 @@ uniform vec3 uBaseColor;
 uniform vec3 uLightDirection;
 uniform float uAmbient;
 uniform vec3 uFillColor; // the sky fill's color (scene/fillLight.ts)
+uniform float uShadeStep; // toon shading (landLayers.glsl toonShadeMask): where light turns to shade, 0 off
+uniform float uShadeFeather;
+uniform float uShadeLift;
+uniform float uShadeTint;
 uniform float uLightIntensity;
 uniform float uSpecularStrength;
 uniform float uShininess;
@@ -164,6 +168,7 @@ void main() {
   // Wrap control means the same in both views. The chunk keeps its own light
   // elevation, since a shared one left it in the dark.
   float diffuse = softDiffuse(normal, lightDir, uDiffuseWrap) * uLightIntensity;
+  float castShadow = 1.0;
 
   vec3 viewDir = normalize(uCameraPosition - vWorldPosition);
   vec3 halfVector = normalize(lightDir + viewDir);
@@ -183,6 +188,7 @@ void main() {
     float shadow = heightmapShadow(uChunkHeightMap, chunkUv, lightDir, chunkElevationRaw, 0.01, uChunkSize, uMaxHeight, uHeightMapGreenChannel);
     diffuse *= shadow;
     specular *= shadow;
+    castShadow = shadow;
   }
 
   vec3 surfaceColor = uBaseColor;
@@ -203,5 +209,14 @@ void main() {
   // The land's wall always runs from the base up to the ground; water sits on top of it (chunkWaterWall.frag.glsl).
 
   vec3 litColor = surfaceColor * (fill + diffuse) + specular;
+  // Unity Toon Shader's blend (UniversalToonBodyDoubleShadeWithFeather.hlsl): the base is the surface times the light,
+  // not darkened by angle, and the shade its own color. Half-Lambert from the smooth landform normal, Unity's default
+  // vertex normal, so fine bumps don't fleck it.
+  if (uShadeStep > 0.0) {
+    float halfLambert = (0.5 * dot(rockNormal, lightDir) + 0.5) * castShadow;
+    float shadeMask = toonShadeMask(halfLambert, uShadeStep, uShadeFeather);
+    vec3 baseColor = surfaceColor * uLightIntensity + specular;
+    litColor = mix(baseColor, shadeColor(surfaceColor, uFillColor, uShadeLift, uShadeTint), shadeMask);
+  }
   gl_FragColor = vec4(applyHaze(litColor, vWorldPosition, uCameraPosition, uLightDirection), 1.0);
 }

@@ -1219,6 +1219,9 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
 }
 /* Matches active-geometry's .ag-eval-link:hover — plain clickable text with
    no background uses an opacity dip for hover feedback, not a color change. */
+.panel-text-btn--start {
+  align-self: flex-start; /* a list's add-links sit at its left edge (Dana, 2026-11-10) */
+}
 .panel-text-btn:hover:not(:disabled) {
   opacity: 0.75;
 }
@@ -1318,6 +1321,12 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   margin-top: calc(var(--gap-lg) - var(--gap-md));
   padding-top: calc(var(--gap-lg) - var(--gap-md));
   border-top: 1px solid var(--color-divider);
+}
+/* None right under the parent's own header: the header already sets it apart (Dana, 2026-11-10). */
+.ui-accordion-content > .ui-accordion--nested:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 /* A header with actions (Accordion's actions): the actions come first, like a layer row's ×, and the header takes the rest. */
