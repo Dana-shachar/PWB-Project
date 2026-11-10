@@ -17,7 +17,7 @@
 
 ![The land chunk this week: lakes and sea standing where they can, slope rock, snow on the peaks and the layered haze sky.](screenshots/2026-11-09-chunk-stylized.jpg)
 
-![The architecture diagram: the chunk's own lakes, walk mode and walk map, settings undo, and the shared renderer's reversed depth.](diagrams/architecture-2026-11-09.svg)
+![The architecture diagram: the chunk's own lakes, walk mode and walk map, settings undo, the color grade pass, and the shared renderer's reversed depth.](diagrams/architecture-2026-11-10.svg)
 
 ### 🛠️ Done
 - **Leftover patches (`[B113]`):** a lookup that assumed a fixed grid left 114 old patches on screen, covering 27.5% of the chunk twice. Now 0.
