@@ -316,6 +316,11 @@
 - the basis for making a patch the single unit of terrain here, with the land chunk being one patch drawn flat rather than its own pipeline
 - *[Cesium rendering pipeline](https://community.cesium.com/t/rendering-pipeline-of-cesium/459) · [heightmap-1.0 tile format](https://github.com/CesiumGS/cesium/wiki/heightmap-1.0)*
 
+**Camera speed proportional to height** · Cesium, Camera Tutorial (Sandcastle) · `method used`
+- Keyboard moves go `cameraHeight / 100.0` a clock tick, so speed is proportional to height above the ground.
+- The rule behind walk speed scaling with eye height; this repo keeps its own walking pace at the default eye and scales from there.
+- *[Camera Tutorial.html, CesiumJS 1.110](https://github.com/CesiumGS/cesium/blob/1.110/Apps/Sandcastle/gallery/Camera%20Tutorial.html). Read 2026-11-09 through a fetch agent*
+
 **Tile load order and refinement while loading** · Cesium, `QuadtreePrimitive.js` · `referenced, not yet matched`
 - Three load queues rebuilt every frame: high (a tile that blocks refinement), medium (a rendered tile), low (ancestors, culled siblings); drained in that order within 5 ms a frame, at least one tile.
 - Traversal is depth-first and near to far (children ordered by the camera's quadrant), so the queue is roughly nearest first.

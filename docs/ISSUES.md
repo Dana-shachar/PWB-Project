@@ -1426,7 +1426,10 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Measured: the dark blotches and smears vanished with the rock off. Rock now reads the landform's slope from the chunk's whole map (8 texels, `ROCK_SLOPE_STEP_UV`, tunable), not the per-pixel normal.
 
 ### [B165] Walking after a jump puts the eye inside the ground · `blocks work`
-**🔴 Open, cause measured** · **Where:** `voxel/ChunkPatchRenderer.ts` (`sampleHeight`)
+**⏸️ Worked around 2026-11-09, real fix pending** · **Where:** `voxel/ChunkPatchRenderer.ts` (`sampleHeight`)
+- Measured again 2026-11-09 at Dana's stripes spot (wide vertical stripes up close, gone at a higher eye, walking felt like crawling): within 300 m of the eye the drawn ground stood 6.2 m below to 6.9 m above walk mode's height read (exact at mesh corners), and the eye sat about 0.1 m below the drawn ground (calculated, not rendered).
+- Workaround (Dana): the starting eye height is 8 m instead of 1.7 m (`EYE_HEIGHT_METERS`); the slider still goes down to 1.7 m. Walk speed scales from it.
+- 💡 Real fix if needed: read the height the way the mesh draws it (mesh-corner samples, same triangle split). Search for the known method first; the attempt below failed for unrecorded reasons.
 - Measured: in 25 of 119 frames after quick map jumps, ground covered the eye (a render looking straight up from the eye). The drawn triangles stood 24.0 m above the eye (rebuilt from the bake, 23.7 m measured) while walk mode's height read put the ground 2.1 m below it.
 - Cause: the mesh puts a vertex on every other bake texel, but walk mode read every texel, so on a coarse patch the two surfaces differ by tens of meters.
 - ❌ Tried 2026-11-09 and reverted: reading the drawn triangle under the walker. Built together with `[B167]`'s fix and never checked in the browser; Dana still ended up under the ground and saw more flicker, so both were reverted.

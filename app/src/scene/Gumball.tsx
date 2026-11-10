@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { defaultCameraPosition, MIN_CAMERA_ALTITUDE } from './camera';
+import { EYE_HEIGHT_METERS } from './walkMode';
 import { PERSON_ICON_SVG } from '../ui/icons';
 
 type ViewPreset = 'top' | 'front' | 'side' | 'perspective';
@@ -137,7 +138,8 @@ export class Gumball {
   private zoomLevel: number;
   private zoomInput: HTMLInputElement | null = null;
   private zoomLabel: HTMLSpanElement | null = null;
-  private eyeLevel = 0; // the Eye height slider's position while walking, 0 to 100
+  // The Eye height slider's position while walking, 0 to 100, starting at walk mode's default eye height.
+  private eyeLevel = (100 * Math.log(EYE_HEIGHT_METERS / EYE_HEIGHT_MIN_METERS)) / Math.log(EYE_HEIGHT_MAX_METERS / EYE_HEIGHT_MIN_METERS);
   private walkSpeedRow: HTMLDivElement | null = null;
   private walkSpeedInput: HTMLInputElement | null = null;
   private walkBtn: HTMLButtonElement | null = null;

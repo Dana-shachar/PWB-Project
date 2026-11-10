@@ -19,7 +19,7 @@
 >
 > **Done: the drips (`[B171]`, Dana confirmed 2026-11-09).** Main cause depth precision, fixed with a reversed depth buffer; seam gaps fixed too. Check `[B157]`'s far flicker while panning; it may be gone with it. The other walk bugs (`[B166]`, `[B164]`, `[B168]`, `[B170]`, `[B156]`) were not seen after it; pending, reopen if they return. Back to the development plan.
 >
-> **Then, in order** (see "Dana's requests" below): walk speed scaling with eye height, then the development plan (Flora planet first).
+> **Then, in order** (see "Dana's requests" below): the development plan, Flora planet first.
 >
 > **How to work this round (Dana's corrections, 2026-11-09; also saved as memories):**
 > - Look up the established method and read the real source before deciding any rule or number. Measure the cause before building; one change per test; test in memory first, then the files; compare before and after at Dana's exact view.
@@ -47,7 +47,7 @@
 >    2. ⏸️ `[B166]` coarse ground after a jump: pending, fix researched (Cesium's load order, `REFERENCES.md`).
 >    3. ⏸️ `[B164]` tide: pending; if it returns, a safe zone at the highest tide line and a Tide slider (Dana, 2026-11-09).
 >    4. ⏸️ `[B170]` dark dashes, `[B168]` the walk map's stall, `[B156]` washboard ridges: pending, not seen after `[B171]`. ✅ `[B157]` distant flicker: fixed with `[B171]`.
-> - ⚪ **Walk speed scales with eye height** (Dana, 2026-11-09): high up, walking felt very slow; scale the speed with height above the ground, as Cesium and Google Earth do (verify their rule before building).
+> - ✅ **Walk speed scales with eye height** (built 2026-11-09): speed proportional to eye height, Cesium's Camera Tutorial rule (height / 100 a tick); the default eye is now 8 m (`[B165]`).
 > 2. ⚪ **Flora planet:** Planet 1's colors; terrain toned down so it reads as walkable ground: plains with some mountains, not mountains everywhere.
 > 3. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
 > 4. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll): the setting that makes a planet read as one strong hue (No Man's Sky's painted look).

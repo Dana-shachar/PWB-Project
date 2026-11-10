@@ -3,7 +3,9 @@ import { groundHeightAt, type ChunkGround } from '../voxel/chunkGround';
 
 // Chunk units are kilometers (Size (km)), so meters convert by 1000.
 export const METERS_PER_UNIT = 1000;
-export const EYE_HEIGHT_METERS = 1.7;
+// The starting eye height: 1.7 m sat inside slopes the drawn ground raises up to 7 m above walk mode's height read
+// ([B165]); 8 m is Dana's pick (2026-11-09). TUNABLE
+export const EYE_HEIGHT_METERS = 8;
 // About a typical adult's walking pace; the run factor is inferred from Unity's
 // Starter Assets sprint-to-move ratio (5.335 / 2.0). Both TUNABLE.
 export const WALK_SPEED_MPS = 1.4;
@@ -321,7 +323,10 @@ export class WalkMode {
     }
     if (this.pressStart && !this.holding && !this.dragged && performance.now() - this.pressTime >= HOLD_TO_WALK_MS) this.holding = true;
     const isRunning = RUN_KEYS.some((code) => this.keys.has(code));
-    const step = ((WALK_SPEED_MPS * this.speedMultiplier) / METERS_PER_UNIT) * this.travelScale * (isRunning ? RUN_MULTIPLIER : 1) * deltaSeconds;
+    // Speed proportional to height above the ground, as Cesium's Camera Tutorial moves by height / 100 a tick; unchanged at
+    // the default eye height.
+    const heightScale = this.eyeHeightMeters / EYE_HEIGHT_METERS;
+    const step = ((WALK_SPEED_MPS * this.speedMultiplier) / METERS_PER_UNIT) * this.travelScale * heightScale * (isRunning ? RUN_MULTIPLIER : 1) * deltaSeconds;
 
     this.euler.setFromQuaternion(this.camera.quaternion, 'YXZ');
     const turn = Number(TURN_LEFT_KEYS.some((code) => this.keys.has(code))) - Number(TURN_RIGHT_KEYS.some((code) => this.keys.has(code)));
