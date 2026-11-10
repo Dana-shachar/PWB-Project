@@ -47,7 +47,7 @@ This will eventually grow into the fuller README the course's final deliverable 
 
 You move a control in the interface. `App.tsx` passes it to that feature's own hook, which holds the new value. The planet view then recomputes the terrain on the graphics card, and the views redraw. The yellow path traces one example, a noise slider, all the way to the 3D planet.
 
-![Architecture: the interface, the wiring in App.tsx, one hook per feature, the planet view that owns the heavy work, and the views on screen.](docs/diagrams/architecture-2026-11-04.svg)
+![Architecture: the interface, the wiring in App.tsx, one hook per feature, the planet view that owns the heavy work, and the views on screen.](docs/diagrams/architecture-2026-11-09.svg)
 
 For every function and the chains between files, open [`CODE-INDEX.md`](docs/CODE-INDEX.md).
 

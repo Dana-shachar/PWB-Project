@@ -17,6 +17,8 @@
 
 ![Before the fix: smooth sheets cutting through rough ground, from patches left behind on a drawn square.](screenshots/2026-11-03-chunk-leftover-patches.jpg)
 
+![The architecture diagram: the chunk's own lakes, walk mode and walk map, settings undo, and the shared renderer's reversed depth.](diagrams/architecture-2026-11-09.svg)
+
 ### 🛠️ Done
 - **Leftover patches (`[B113]`):** a lookup that assumed a fixed grid left 114 old patches on screen, covering 27.5% of the chunk twice. Now 0.
 - **Lag (`[B114]`, `[B115]`, `[B117]`):** removed an unused run that blocked the page for up to 1.8 s, halved re-bakes per slider change, and cut patches by 31%.
