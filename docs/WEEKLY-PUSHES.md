@@ -15,7 +15,7 @@
 
 *Made the land chunk trustworthy and walkable: fixed its patches, lag, water and walk mode, gave it a stylized look, and set the direction for the final: three alien planets built on the chunk.*
 
-![Before the fix: smooth sheets cutting through rough ground, from patches left behind on a drawn square.](screenshots/2026-11-03-chunk-leftover-patches.jpg)
+![The land chunk this week: lakes and sea standing where they can, slope rock, snow on the peaks and the layered haze sky.](screenshots/2026-11-09-chunk-stylized.jpg)
 
 ![The architecture diagram: the chunk's own lakes, walk mode and walk map, settings undo, and the shared renderer's reversed depth.](diagrams/architecture-2026-11-09.svg)
 
