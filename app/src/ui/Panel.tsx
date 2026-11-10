@@ -1,6 +1,6 @@
 import { LIQUIDS, liquidNamed, rainfallMax, referenceTemperature } from '../rivers/riverClimate';
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, DualHueSlider, SectionTitle, Dial } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, DualHueSlider, SectionTitle, Dial, LinkMenu } from './UIElements';
 import { splitHueTrackGradient, splitSwatch, type ColorGradeSettings } from '../scene/colorGrade';
 import type { SpinSettings } from '../scene/planetSpin';
 import { AREA_SIZE_MAX_KM, AREA_SIZE_MIN_KM } from '../voxel/areaSelect';
@@ -13,7 +13,7 @@ import type { RockSettings, WaterSettings } from '../planet/planetControls';
 import { colorLockProps, randomAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { depthToRampPosition, landRampFloor, landShareAt, rampPositionToDepth, type HeightDistribution } from '../planet/seaLevel';
 import { MAX_MAX_ERROR_PIXELS, maxErrorPixelsToResolution, MIN_MAX_ERROR_PIXELS, resolutionToMaxErrorPixels } from '../planet/patch';
-import { displayColorFor, fillColorFor, hueTrackGradient } from '../scene/fillLight';
+import { shadeColorFor, shadeHueTrackGradient } from '../scene/fillLight';
 
 // 'voxel' only affects the land-chunk view for now — a display style, not a
 // chunk-only feature (Dana, 2026-09-23), but the planet doesn't render
@@ -371,12 +371,12 @@ export function Panel({
                 + Empty Project
               </button>
               {/* A new project copied from a template; picking one creates it, the template stays untouched. */}
-              <Select
-                label="+ Project from"
-                value=""
-                onChange={(templateId) => templateId && onNewFromTemplate(templateId)}
-                options={[{ value: '', label: 'template' }, ...projects.filter((project) => project.template).map((project) => ({ value: project.id, label: project.name }))]}
+              <LinkMenu
+                label="+ Project from template"
+                options={projects.filter((project) => project.template).map((project) => ({ value: project.id, label: project.name }))}
+                onPick={onNewFromTemplate}
                 description="Creates a new project copied from a template and opens it. The template itself doesn't change."
+                emptyNote="No templates yet: make one in Templates below."
               />
             </Accordion>
             {/* Templates: planets kept as starting points (Dana, 2026-11-10). Editing one turns autosave off. */}
@@ -547,16 +547,15 @@ export function Panel({
               label="Shadow hue"
               value={atmosphere.shadowHue}
               onChange={(shadowHue) => onAtmosphereChange({ shadowHue })}
-              trackBackground={hueTrackGradient(atmosphere.zenithColor)}
-              swatchColor={displayColorFor(fillColorFor(true, atmosphere.zenithColor, atmosphere.shadowHue)).getStyle()}
+              trackBackground={shadeHueTrackGradient(colorStops[Math.floor(colorStops.length / 2)]?.color ?? '#808080', atmosphere.shadeChroma)}
+              swatchColor={shadeColorFor(colorStops[Math.floor(colorStops.length / 2)]?.color ?? '#808080', atmosphere.shadowHue, atmosphere.shadeChroma, atmosphere.shadeLift).getStyle()}
               {...colorLockProps(atmosphere, 'shadowHue', onAtmosphereChange)}
-              disabled={!atmosphere.enabled}
-              description="The shadows' color: the sky's color at 0, turned round the color wheel by this many degrees. The track shows each color it can take; white shadows when the atmosphere is off."
+              description="Turns the shade's hue away from each ground's own color, by this many degrees round the color wheel (the swatch and track show it on the land's middle color). It also tints the sky fill."
             />
             <Slider label="Shade step" value={atmosphere.shadeStep} onChange={(shadeStep) => onAtmosphereChange({ shadeStep })} min={0} max={1} step={0.01} precision={2} description="Where the land chunk's light turns to shade: higher puts more of the ground in shade. 0 turns toon shading off." />
             <Slider label="Shade softness" value={atmosphere.shadeFeather} onChange={(shadeFeather) => onAtmosphereChange({ shadeFeather })} min={0} max={1} step={0.01} precision={2} description="How soft the edge between light and shade is: 0 is a hard line." />
             <Slider label="Shade lift" value={atmosphere.shadeLift} onChange={(shadeLift) => onAtmosphereChange({ shadeLift })} min={0} max={1.5} step={0.01} precision={2} description="How bright the shade stays: 1 is as bright as the ground's own color, 0 black." />
-            <Slider label="Shade tint" value={atmosphere.shadeTint} onChange={(shadeTint) => onAtmosphereChange({ shadeTint })} min={0} max={1} step={0.01} precision={2} description="How strongly the shade takes the Shadow hue's color: 0 keeps the ground's own color." />
+            <Slider label="Shade chroma" value={atmosphere.shadeChroma} onChange={(shadeChroma) => onAtmosphereChange({ shadeChroma })} min={0} max={1.5} step={0.01} precision={2} description="How much color the shade keeps: 0 is gray, 1 the ground's own strength. Its hue is the ground's, turned by Shadow hue." />
             </Accordion>
             {/* The planet's color grade, a post pass over the whole frame (scene/colorGrade.ts), saved with the planet. */}
             <Accordion title="Color Grade" nested headerSwitch={{ value: colorGrade.enabled, onChange: (enabled) => onColorGradeChange({ enabled }), label: 'Color grade on or off' }}>

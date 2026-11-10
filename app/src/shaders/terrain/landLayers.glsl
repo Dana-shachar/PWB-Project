@@ -13,10 +13,26 @@ float toonShadeMask(float light, float step, float feather) {
   return clamp(1.0 - (light - (step - feather)) / feather, 0.0, 1.0);
 }
 
-// The shade's own color, not the lit color darkened: the surface turned toward the shadow hue's tint (fillColor) and
-// kept at lift of its brightness, the painters' hue-shifted shadow. Inferred from that convention, TUNABLE.
-vec3 shadeColor(vec3 surfaceColor, vec3 fillColor, float lift, float tint) {
-  return mix(surfaceColor, surfaceColor * fillColor, tint) * lift;
+// Unity's Color.hlsl RgbToHsv and HsvToRgb.
+vec3 rgbToHsv(vec3 c) {
+  const vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+  vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+  vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+  float d = q.x - min(q.w, q.y);
+  const float e = 1.0e-4;
+  return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+}
+vec3 hsvToRgb(vec3 c) {
+  const vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+  vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+  return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+
+// The shade's own color from the ground's: its hue turned by the shadow hue (a color-rule turn), chroma scaled, value at
+// lift; the painters' hue-shifted shadow that loses chroma. hueTurn is a share of the wheel. Amounts TUNABLE.
+vec3 shadeColor(vec3 surfaceColor, float hueTurn, float lift, float chroma) {
+  vec3 hsv = rgbToHsv(max(surfaceColor, 0.0));
+  return hsvToRgb(vec3(fract(hsv.x + hueTurn), clamp(hsv.y * chroma, 0.0, 1.0), hsv.z * lift));
 }
 
 // Rock on steep ground, the standard slope-based terrain texturing: steepness 1 - dot(normal, up) (0 flat, 1 a wall) past

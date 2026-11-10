@@ -21,7 +21,8 @@ uniform vec3 uFillColor; // the sky fill's color (scene/fillLight.ts)
 uniform float uShadeStep; // toon shading (landLayers.glsl toonShadeMask): where light turns to shade, 0 off
 uniform float uShadeFeather;
 uniform float uShadeLift;
-uniform float uShadeTint;
+uniform float uShadeChroma;
+uniform float uShadeHueTurn; // Shadow hue as a share of the wheel
 uniform float uLightIntensity;
 uniform float uSpecularStrength;
 uniform float uShininess;
@@ -216,7 +217,7 @@ void main() {
     float halfLambert = (0.5 * dot(rockNormal, lightDir) + 0.5) * castShadow;
     float shadeMask = toonShadeMask(halfLambert, uShadeStep, uShadeFeather);
     vec3 baseColor = surfaceColor * uLightIntensity + specular;
-    litColor = mix(baseColor, shadeColor(surfaceColor, uFillColor, uShadeLift, uShadeTint), shadeMask);
+    litColor = mix(baseColor, shadeColor(surfaceColor, uShadeHueTurn, uShadeLift, uShadeChroma), shadeMask);
   }
   gl_FragColor = vec4(applyHaze(litColor, vWorldPosition, uCameraPosition, uLightDirection), 1.0);
 }

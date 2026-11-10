@@ -69,15 +69,15 @@ function randomWaterPalette(landBaseHue: number, landHighHue: number): ColorStop
   });
 }
 
-// The rock ramp by the land's rules: the land's base and top hues, darker and far less saturated than the land, as bare
-// rock reads against soil and plants. Ranges inferred, TUNABLE.
-function randomRockPalette(landBaseHue: number, landHighHue: number): ColorStop[] {
-  const low = new THREE.Color().setHSL(landBaseHue / 360, 0.1 + Math.random() * 0.15, 0.22 + Math.random() * 0.12);
-  const high = new THREE.Color().setHSL(landHighHue / 360, 0.05 + Math.random() * 0.12, 0.5 + Math.random() * 0.2);
-  return [
-    { position: 0, color: `#${low.getHexString()}` },
-    { position: 1, color: `#${high.getHexString()}` },
-  ];
+// The rock ramp from the land ramp at the same heights: the land's hue, less saturated and a little darker, as bare rock
+// reads against soil and plants, so rock on snow is a light gray, not near-black.
+const ROCK_SATURATION_SHARE = 0.5; // inferred, TUNABLE
+const ROCK_LIGHTNESS_SHARE = 0.8; // inferred, TUNABLE
+function randomRockPalette(land: { low: string; mid: string; high: string }): ColorStop[] {
+  return ([[0, land.low], [0.5, land.mid], [1, land.high]] as const).map(([position, hex]) => {
+    const hsl = new THREE.Color(hex).getHSL({ h: 0, s: 0, l: 0 });
+    return { position, color: `#${new THREE.Color().setHSL(hsl.h, hsl.s * ROCK_SATURATION_SHARE, hsl.l * ROCK_LIGHTNESS_SHARE).getHexString()}` };
+  });
 }
 
 // TODO(DS): arbitrary placeholder conversion — the UI shows/accepts a
@@ -384,7 +384,7 @@ export function usePlanetControls() {
     // One roll sets every color from the land's hue (Dana, 2026-11-08): the sea and lakes in the hues the land left
     // unused, the rock from the land's own, and the sky turned from it by a color rule.
     updateWater({ colorStops: randomWaterPalette(palette.baseHue, palette.highHue), lakeColorStops: randomWaterPalette(palette.baseHue, palette.highHue) });
-    setRock((previous) => ({ ...previous, stops: randomRockPalette(palette.baseHue, palette.highHue) }));
+    setRock((previous) => ({ ...previous, stops: randomRockPalette(palette) }));
     setColorGrade((previous) => randomColorGrade(previous, palette.baseHue));
     setAtmosphere((previous) => randomAtmosphereColors(previous, palette.baseHue / 360));
   }

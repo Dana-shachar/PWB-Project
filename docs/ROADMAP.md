@@ -8,15 +8,17 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-10):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Everything still live lives in the standing sections below.*
+> **Start from here (2026-11-10, evening):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Everything else live is in the standing sections below.*
 >
-> **State.** `main` is local only, not pushed. Never commit `.obsidian/workspace.json`. Rivers stay on branch `rivers-fork`.
-> - Built 11-10: the color grade (`[S82]`), toon shading on the chunk (`[S83]`), templates (`[S84]`, Flora made from Dana 01), Scene's parts as accordions, switches for rock, shading and grade.
-> - Hot reload keeps old settings and the old grade object in a tab: after changing a settings shape or the render loop, hard reload before judging a bug.
-> - Reversed depth applies to the whole app: a pass rendering into its own target clears it first (the shared renderer has `autoClear` off), a shader forcing depth to the far plane writes 0 under `USE_REVERSED_DEPTH_BUFFER`, and every render camera needs `updateProjectionMatrix` (no plain `THREE.Camera`).
+> **State.** `main` is pushed at `7822204` (the color grade, toon shading, templates, the 2026-11-10 diagram). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Built and approved 11-10: shading fix B (the shade is the ground's hue turned by Shadow hue; Shade chroma), the Shadow hue preview, rock colors from the land ramp, the Link menu, and the Flora template's terrain (plains, hills and mountain regions by layer masks, edited in the app).
+> - Shading fix A (smooth landform normal, base not darkened by angle) is committed but Dana hasn't judged it yet; she may find the lit side too flat (Next in order 4.3).
+> - Hot reload keeps old settings and the old grade object: after changing a settings shape or the render loop, hard reload (Cmd+Shift+R) before judging a bug.
+> - Reversed depth applies to the whole app: a pass rendering into its own target clears it first (the shared renderer has `autoClear` off), and a render target needs a float `DepthTexture` for 32-bit depth.
 >
-> **Next job: shading fix B** (the shade hue from the terrain's own color by the color wheel rule), after Dana's look at fix A. See Next in order below.
-
+> **How to work (Dana, 2026-11-10).** Dana tests visual results herself; don't drive her test in Claude's tab unless asked. Clear instructions are a go: don't ask small questions, pick and say so. Keep tokens low: read narrowly, no rereads.
+>
+> **Next job: plan biome evolution** (Next in order 6).
 ---
 
 ## 🧭 Direction
@@ -39,11 +41,12 @@
 2. ✅ **Stylized shading** (2026-11-08): slope rock (`[B163]`), rule-based palettes, layered haze, settings undo.
 3. ✅ **Bugs first** (Dana's requests of 11-08): `[B171]` drips and `[B157]` flicker fixed; walk speed scales with eye height (`[B165]`).
 4. 🟡 **Color and shading** (Dana, 2026-11-10): ✅ color grade (`[S82]`), ✅ toon shading (`[S83]`), ✅ shading fix A (smooth normal, unmodulated base; awaiting Dana's look). Next:
-   1. ⚪ Shading fix B: shade hue = the ground's own hue turned by a color rule, lower chroma; Shadow hue becomes that turn.
-   2. ⚪ Rock colors from the land ramp at each height (same hue, less chroma, a bit darker), so rock on snow isn't near-black.
+   1. ✅ Shading fix B: the shade is the ground's own hue turned by Shadow hue, with less chroma.
+   2. ✅ Rock colors from the land ramp at each height.
    3. ⚪ If the lit side reads too flat, keep fine bumps in the lit color. A second, darker shade (Unity's 2nd shade) if depth is missing.
    4. ⚪ The grade per view: only the chunk graded, the planet drawn after the grade (Unity's per-camera post processing; check its docs first).
-5. ⚪ **Flora planet** (template Flora, from Dana 01): more varied terrain with more plains, walkable ground. Research how established tools generate plains first.
+5. ✅ **Flora planet terrain** (template Flora): plains, hills and mountain regions by layer masks, sea level set by Dana.
+6. ⚪ **Biome evolution** (Dana, 2026-11-10): plan next.
 6. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock. Sources to start from: parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*), space colonization, genes mutated per Sims 1991; EZ-Tree considered for earth-like trees (check its license).
 7. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
 8. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll).
@@ -54,7 +57,6 @@
 
 *Dana's to decide; ask, don't assume.*
 
-- ❓ The Link menu (a text link opening a list) for "+ Project from": its states were proposed 2026-11-10; Dana to approve before it's built and added to the `ui-design` skill.
 - ❓ The vertical slice's planet list and her real deadline.
 - ❓ Vegetation stages as build phases only, or grown over time by the World Clock (ecological succession, recommended).
 - ❓ Keep `voxel/chunkLodRanges.ts` (CDLOD ranges, unused) for `[B166]`, or delete it.

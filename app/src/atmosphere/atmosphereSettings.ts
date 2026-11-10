@@ -13,12 +13,13 @@ export interface AtmosphereSettings {
   // Turns the shadows' sky fill round the hue wheel (degrees), so shadows can take an unexpected color (scene/fillLight.ts).
   shadowHue: number;
   // Toon shading on the land chunk, Unity Toon Shader's model (landLayers.glsl toonShadeMask): where light turns to
-  // shade (0 off), how soft that edge is, how bright the shade stays, and how strongly it takes the shadow hue.
+  // shade (0 off), how soft that edge is, how bright the shade stays, and how much color it keeps; its hue is the
+  // ground's own turned by shadowHue.
   shadeEnabled: boolean;
   shadeStep: number;
   shadeFeather: number;
   shadeLift: number;
-  shadeTint: number;
+  shadeChroma: number;
   // How thick the haze is, 0 (clear) to 1 (distant ground fades into the horizon color quickly).
   haze: number;
   hazeLayers: number; // 0 a smooth fade, 2 to 6 soft bands (shaders/atmosphere/haze.glsl)
@@ -79,7 +80,7 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   shadeStep: 0.5, // Unity Toon Shader's default
   shadeFeather: 0.15, // softer than Unity's hard 0.0001, for terrain; TUNABLE
   shadeLift: 0.55, // inferred, TUNABLE
-  shadeTint: 0.6, // inferred, TUNABLE
+  shadeChroma: 0.8, // shadows lose some chroma (painting convention); TUNABLE
   haze: 0.3,
   hazeLayers: 0,
   glow: 0.5,

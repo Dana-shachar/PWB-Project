@@ -1219,6 +1219,38 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
 }
 /* Matches active-geometry's .ag-eval-link:hover — plain clickable text with
    no background uses an opacity dip for hover feedback, not a color change. */
+.ui-link-menu {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.ui-link-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+.ui-link-menu-trigger:focus-visible,
+.ui-link-menu-item:focus-visible {
+  outline: 1px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.ui-link-menu-list {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  margin-top: 4px;
+  padding-left: var(--gap-sm);
+}
+.ui-link-menu-item {
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-align: left;
+}
+.ui-link-menu-item:hover {
+  background: var(--color-input-fill);
+  opacity: 1;
+}
 .panel-text-btn--start {
   align-self: flex-start; /* a list's add-links sit at its left edge (Dana, 2026-11-10) */
 }

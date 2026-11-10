@@ -551,6 +551,65 @@ interface SelectProps {
 
 // Plain <select>, styled to match the panel's other controls — the React
 // equivalent of the gumball's vanilla-DOM view-preset dropdown.
+// A text link that opens a list of text links under it (Dana, 2026-11-10): "+ Project from template". Picking one runs it
+// and closes the list; Esc or a click outside closes it. Disabled with no options, its tooltip saying why.
+interface LinkMenuProps {
+  label: string;
+  options: { value: string; label: string }[];
+  onPick: (value: string) => void;
+  description?: string;
+  emptyNote?: string;
+}
+
+export function LinkMenu({ label, options, onPick, description, emptyNote }: LinkMenuProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!isOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false);
+    };
+    document.addEventListener('pointerdown', closeOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen]);
+  const disabled = options.length === 0;
+  const tooltip = disabled ? emptyNote : description;
+  return (
+    <div ref={rootRef} className="ui-link-menu ui-tooltip-anchor">
+      {tooltip && <span className="ui-tooltip">{tooltip}</span>}
+      <button type="button" className="panel-text-btn ui-link-menu-trigger" aria-haspopup="menu" aria-expanded={isOpen} disabled={disabled} onClick={() => setIsOpen((open) => !open)}>
+        {label}
+        <span className={'ui-accordion-chevron' + (isOpen ? ' ui-accordion-chevron--open' : '')}>▾</span>
+      </button>
+      {isOpen && (
+        <div className="ui-link-menu-list" role="menu">
+          {options.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="menuitem"
+              className="panel-text-btn ui-link-menu-item"
+              onClick={() => {
+                setIsOpen(false);
+                onPick(option.value);
+              }}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Select({ label, value, onChange, options, description, disabled = false }: SelectProps) {
   return (
     <div className="ui-select-row ui-tooltip-anchor">

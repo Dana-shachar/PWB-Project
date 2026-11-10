@@ -34,11 +34,11 @@
 | Change Randomize colors (one roll for land, water, rock and sky) | `randomizeColors`, `randomTerrainPalette`, `randomWaterPalette`, `randomRockPalette` in `planet/planetControls.ts`, `randomAtmosphereColors` in `atmosphere/atmosphereSettings.ts` |
 | Change rock on steep ground | `RockSettings` in `planet/planetControls.ts`, `createRockUniforms` and `applyRockUniforms` in `planet/planetPatchMesh.ts`, `landSurfaceColor` in `shaders/terrain/landLayers.glsl`, `uRockSlope` in `planetPatch.frag.glsl` and `chunk.frag.glsl` |
 | Change the color grade | `scene/colorGrade.ts` (`ColorGrade`, `prepareLiftGammaGain`, `SAMPLES`), `shaders/post/colorGrade.frag.glsl`, `scene/sharedViewportRenderer.ts`, `randomColorGrade` in `planet/planetControls.ts` |
-| Change the chunk's toon shading | `toonShadeMask` and `shadeColor` in `shaders/terrain/landLayers.glsl`, the shade block in `chunk.frag.glsl`, `shade*` in `atmosphere/atmosphereSettings.ts`, `uShade*` in `voxel/LandChunkCanvas.tsx` |
+| Change the chunk's toon shading | `toonShadeMask` and `shadeColor` in `shaders/terrain/landLayers.glsl`, `shadeColorFor` and `shadeHueTrackGradient` (the Shadow hue preview) in `scene/fillLight.ts`, the shade block in `chunk.frag.glsl`, `shade*` in `atmosphere/atmosphereSettings.ts`, `uShade*` in `voxel/LandChunkCanvas.tsx` |
 | Change templates or the project list | `handleCreateTemplate`, `handleEditTemplate`, `handleNewFromTemplate`, `handleRenameById`, `editingTemplate` in `projectSettings/saveProject.ts`; `template` in `firebase/storage.ts`; Project Settings in `ui/Panel.tsx` |
 | Change settings undo (Cmd+Z) | `useSettingsHistory` in `projectSettings/settingsHistory.ts` |
 | Add a saved planet setting | `planet/planetControls.ts` (`PlanetSettings`, `applySettings`), `projectSettings/saveProject.ts` |
-| Add a design-system component | `ui/UIElements.tsx`, `design.css`, `ui/icons.tsx` |
+| Add a design-system component | `ui/UIElements.tsx` (incl. `LinkMenu`), `design.css`, `ui/icons.tsx` |
 | Add a panel control | `ui/Panel.tsx` (left) or `ui/NoisePanel.tsx` (right), then `App.tsx` for wiring |
 | Change erosion | `erosion/erosionEngine.ts`, `shaders/erosion/`, `ui/panels/ErosionPanel.tsx` |
 | Change the land chunk | `voxel/landChunk.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`, `shaders/chunk.vert.glsl`, `shaders/terrain/chunk.frag.glsl` |
@@ -150,7 +150,7 @@
 
 **planet/planetControls.ts**
 - What it is: the planet's settings state and their migrations.
-- Key names: `PlanetSettings` (incl. `maxErrorPixels`, `detailAmount`, `autoDetail`, `water`, `atmosphere`), `WaterSettings` (incl. `shine`, `reflection`), `DEFAULT_WATER_SETTINGS`, `updateAtmosphere`, `WATER_SKY_COLOR`, `WATER_SHININESS`, `migrateWater`, `shoreSeaLevel` (debounced), `effectiveMaxErrorPixels`, `DEFAULT_PLANET_SETTINGS`, `usePlanetControls`, `applySettings`, `currentSettings`, `migrateColorStops`; `RockSettings` (`enabled`, `stops`, `slope`, `softness`), `DEFAULT_ROCK_SETTINGS`; `colorGrade`, `updateColorGrade`, `randomColorGrade`; `randomizeColors` (one roll sets land, sea, lakes, rock, sky and the grade from the land's hue: `randomTerrainPalette`, `randomWaterPalette`, `randomRockPalette`).
+- Key names: `PlanetSettings` (incl. `maxErrorPixels`, `detailAmount`, `autoDetail`, `water`, `atmosphere`), `WaterSettings` (incl. `shine`, `reflection`), `DEFAULT_WATER_SETTINGS`, `updateAtmosphere`, `WATER_SKY_COLOR`, `WATER_SHININESS`, `migrateWater`, `shoreSeaLevel` (debounced), `effectiveMaxErrorPixels`, `DEFAULT_PLANET_SETTINGS`, `usePlanetControls`, `applySettings`, `currentSettings`, `migrateColorStops`; `RockSettings` (`enabled`, `stops`, `slope`, `softness`), `DEFAULT_ROCK_SETTINGS`; `colorGrade`, `updateColorGrade`, `randomColorGrade`, `randomRockPalette` (from the land ramp, `ROCK_SATURATION_SHARE`, `ROCK_LIGHTNESS_SHARE`); `randomizeColors` (one roll sets land, sea, lakes, rock, sky and the grade from the land's hue: `randomTerrainPalette`, `randomWaterPalette`, `randomRockPalette`).
 
 **planet/seaLevel.ts**
 - What it is: the planet's area-weighted height distribution, the "% land" readout, and the water ramp's spacing by light remaining.
@@ -421,7 +421,7 @@
 
 **terrain/** (`terrain.glsl`, `landLayers.glsl`, `planetPatch.frag.glsl`, `chunk.frag.glsl`, `chunk.vert.glsl`, `vertex.glsl`, `fragment.glsl`)
 - What it is: the land surfaces (planet patches, chunk, old globe) and the pieces they share. Lighting is in world space; `heightfieldNormal` always faces outward (`faceforward`).
-- Key names: in `chunk.vert.glsl`: `drawnElevation`, `coarserSurface`, `finerEdgeFade`, `EDGE_FADE_CELLS`, stitch points averaged onto their edge line (`[B171]`); `fillLight` (`landLayers.glsl`, the sky fill both land shaders use in place of a flat ambient), `terrainRampColor`, `borderedTextureUv`, `texelStepUv`, `heightfieldNormal`, `softDiffuse`, `heightmapShadow`, `landSurfaceColor` (`landLayers.glsl`, rock on steep ground: `uRockColors`, `uRockSlope`, `uRockSoftness`; off sets the slope past 2), `toonShadeMask` and `shadeColor` (`landLayers.glsl`, Unity Toon Shader's mask; `uShadeStep` 0 is off); the chunk's haze `uHazeColor`, `uHazeDensity`, `uHazeStart`; the planet ocean block in `planetPatch.frag.glsl` (triplanar waves, `wavesVisible`, `dayLight`).
+- Key names: in `chunk.vert.glsl`: `drawnElevation`, `coarserSurface`, `finerEdgeFade`, `EDGE_FADE_CELLS`, stitch points averaged onto their edge line (`[B171]`); `fillLight` (`landLayers.glsl`, the sky fill both land shaders use in place of a flat ambient), `terrainRampColor`, `borderedTextureUv`, `texelStepUv`, `heightfieldNormal`, `softDiffuse`, `heightmapShadow`, `landSurfaceColor` (`landLayers.glsl`, rock on steep ground: `uRockColors`, `uRockSlope`, `uRockSoftness`; off sets the slope past 2), `toonShadeMask` and `shadeColor` (`landLayers.glsl`, Unity Toon Shader's mask; the shade is the ground's hue turned by `uShadeHueTurn`, with Unity's `rgbToHsv`/`hsvToRgb`; `uShadeStep` 0 is off); the chunk's haze `uHazeColor`, `uHazeDensity`, `uHazeStart`; the planet ocean block in `planetPatch.frag.glsl` (triplanar waves, `wavesVisible`, `dayLight`).
 
 **water/oceanWaves.glsl** (CC BY-NC-SA 3.0, TDM's Seascape, with additions)
 - What it is: the sea for both views: Seascape's waves and color, plus the project's additions.
