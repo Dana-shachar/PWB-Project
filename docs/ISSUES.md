@@ -1379,13 +1379,13 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 *Bugs found and fixed while preparing the vertical slice, with their measurements. All uncommitted on `main` until the next commit.*
 
 ### [B156] Regular washboard ridges on bumpy ground · `wrong but workable`
-**🔴 Open** · **Found:** 2026-11-08 · **Where:** the ground's shape, likely a noise layer setting
+**⏸️ Pending, not seen after `[B171]`'s fix (Dana, 2026-11-09); reopen if it returns** · **Found:** 2026-11-08 · **Where:** the ground's shape, likely a noise layer setting
 - Dana: evenly spaced ridges across slopes up close and in walk mode (her screenshots of 2026-11-08, 21:31). She thinks it's a noise setting.
 - Measured: not `[B66]`'s precision: 0 identical neighbouring heights at depth 11 on a 4,000 km chunk. Not the color: the ground shader colors by height and slope only.
 - Leads to test: the Voronoi layer (Jitter 0 is a perfectly regular grid; try 1), the erosion filter's gullies (Erosion off), each noise layer hidden in turn.
 
 ### [B157] In walk mode distant ground flickers · `blocks work`
-**🟡 Likely fixed by `[B171]`'s reversed depth, not yet confirmed** · **Found:** 2026-11-08 · **Where:** in walk mode on the land chunk
+**✅ Fixed 2026-11-09 by `[B171]`'s reversed depth, Dana confirmed** · **Found:** 2026-11-08 · **Where:** in walk mode on the land chunk
 - Dana: shading in the distance flickers while panning, and the walk felt jumpy.
 - Measured 2026-11-09 for `[B171]`: depth precision is real at walk mode's near plane (skirts showed through ground at 40 to 70 km). The reversed depth buffer built for it should also stop far flicker; check while panning.
 - ❌ Tried and removed 2026-11-09: a logarithmic depth buffer, built on a calculated depth-precision theory that was never measured. It made walking much slower: 150 ms of GPU time a frame with it, 65 ms without, on the same view, twice. Writing depth from the shader turns off the GPU's early depth test, so ground hidden behind hills is shaded too.
@@ -1393,7 +1393,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Leads, unmeasured: the walk map's redraw (`[B168]`); far shading noise. Next: record frames while panning, with and without a depth change in memory, before any fix.
 
 ### [B164] A flat tan plane fills the lower view near water in walk mode · `blocks work`
-**🔴 Open, cause measured** · **Found:** 2026-11-08 · **Where:** the tide in `voxel/chunkWater.ts` (`applyTide`) and walk mode's floor in `scene/walkMode.ts` (`floorAt`)
+**⏸️ Pending, not seen after `[B171]`'s fix (Dana, 2026-11-09); reopen if it returns. Her planned fix stands if it does** · **Found:** 2026-11-08 · **Where:** the tide in `voxel/chunkWater.ts` (`applyTide`) and walk mode's floor in `scene/walkMode.ts` (`floorAt`)
 - Cause: the tide moves the whole sea sheet, on Dana 01 between about 186 and 239 world units (over 50 km). At high tide the sea stands above the land the walker is on, and walk mode lifts the eye above the water, so the water's surface fills the view edge-on.
 - Fix (Dana, 2026-11-09): a safe zone, the walk stops at the highest tide line instead of the current waterline; and a Tide slider to tone it down.
 
@@ -1432,10 +1432,11 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - ❌ Tried 2026-11-09 and reverted: reading the drawn triangle under the walker. Built together with `[B167]`'s fix and never checked in the browser; Dana still ended up under the ground and saw more flicker, so both were reverted.
 
 ### [B166] Coarse ground under the walker for 1.5 s after a jump · `wrong but workable`
-**🔴 Open, cause measured** · **Where:** `voxel/ChunkPatchRenderer.ts` (`build`, `swap`)
+**⏸️ Pending: Dana saw jumps fine after `[B171]`'s fix (2026-11-09); reopen if it returns** · **Where:** `voxel/ChunkPatchRenderer.ts` (`build`, `swap`)
 - Measured: after a jump the walker landed at 3.2 s and stood on a level-4 patch (about 250 km, a sample every 4 km) until 4.7 s, when 358 patches showed at once.
 - Cause: patches bake in selection order at 4 a frame, not nearest first, and an old patch leaves only once all its replacements are built (about 100 under the walker after a jump).
-- Next: research how Cesium and CDLOD order loading (nearest first, parent until its own children are ready) before a plan.
+- Not measured: whether the patch under the walker waits on its own ~100 replacements or on most of the 358 (358 at 4 a frame is about 1.5 s, the whole wait). Measure that first; it picks the fix.
+- 💡 Fix if it returns, from Cesium's terrain loader (see `REFERENCES.md`): bake nearest first; if one old patch waits on more than 20 missing replacements, build the next level first so detail arrives level by level.
 
 ### [B167] The ground under the walker stayed coarse even when loaded · `blocks work`
 **🟡 Built 2026-11-09, Dana to test** · **Where:** `voxel/chunkPatches.ts` (`chunkPatchBox`)
@@ -1445,7 +1446,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Left: nothing in the data is finer than about 30 m, so close ground still reads flat from 2 m; that is the close-up limit (`[B122]`), not this bug.
 
 ### [B168] The walk map's redraw stalls walk mode every 2 s · `wrong but workable`
-**🔴 Open, measured** · **Where:** the walk map in `voxel/LandChunkCanvas.tsx` (`createChunkMap`, `WALK_MAP_REDRAW_MS`)
+**⏸️ Pending, not seen after `[B171]`'s fix (Dana, 2026-11-09); reopen if it returns** · **Where:** the walk map in `voxel/LandChunkCanvas.tsx` (`createChunkMap`, `WALK_MAP_REDRAW_MS`)
 - Measured: a second render of 296 ms GPU time about every 2 s while walking, with 250 to 310 ms long tasks, felt as a jump.
 - Also measured: walk mode at 17 fps on one view and about 40 on another after `[B157]`'s removal; the terrain is most of the frame. Not yet compared with the last commit.
 
@@ -1455,7 +1456,7 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Fix: detail by distance only, as in CDLOD (Strugar 2009: the view decides what is drawn, not how detailed). Measured after, on the real code: 1 swap frame in 243, GPU 9.9 ms with 289 patches. Dana saw the flicker gone with the in-memory version.
 
 ### [B170] Dark dashes on rocky slopes · `wrong but workable`
-**🔴 Open, cause measured** · **Where:** the slope rock in `chunk.frag.glsl` (`landSurfaceColor`, `rockNormal`)
+**⏸️ Pending, not seen after `[B171]`'s fix (Dana, 2026-11-09); reopen if it returns** · **Where:** the slope rock in `chunk.frag.glsl` (`landSurfaceColor`, `rockNormal`)
 - Measured on Dana's view: the dark dots, dashes and lines on rocky slopes vanish with the rock off. Not the texture's filtering (linear) or the lake rim (inactive there). Separate from the drips (`[B171]`): with the rock off the drips stay.
 
 ### [B171] Vertical "drips" on hillsides at walking height · `blocks work`

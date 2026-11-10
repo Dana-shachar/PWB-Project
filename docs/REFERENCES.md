@@ -316,6 +316,13 @@
 - the basis for making a patch the single unit of terrain here, with the land chunk being one patch drawn flat rather than its own pipeline
 - *[Cesium rendering pipeline](https://community.cesium.com/t/rendering-pipeline-of-cesium/459) · [heightmap-1.0 tile format](https://github.com/CesiumGS/cesium/wiki/heightmap-1.0)*
 
+**Tile load order and refinement while loading** · Cesium, `QuadtreePrimitive.js` · `referenced, not yet matched`
+- Three load queues rebuilt every frame: high (a tile that blocks refinement), medium (a rendered tile), low (ancestors, culled siblings); drained in that order within 5 ms a frame, at least one tile.
+- Traversal is depth-first and near to far (children ordered by the camera's quadrant), so the queue is roughly nearest first.
+- A parent stays until all its descendants are ready; if more than `loadingDescendantLimit` (20) are missing and none showed last frame, only the parent loads first, so detail arrives level by level.
+- No jump-specific logic. The planned fix for `[B166]` if it returns.
+- *[QuadtreePrimitive.js](https://github.com/CesiumGS/cesium/blob/main/packages/engine/Source/Scene/QuadtreePrimitive.js). Read 2026-11-09 through a fetch agent*
+
 **Geometry clipmaps, nested grids around the viewer** · Losasso & Hoppe (SIGGRAPH 2004) · `referenced, not yet matched`
 - caches terrain as nested regular grids centered on the viewer, stored as vertex buffers and incrementally refilled as the camera moves, so detail is dense nearby and coarser far away without re-tiling the whole surface each frame
 - the established answer for [B28], same family as Cesium's own tiling, worth citing on its own since it's the specific technique real terrain engines use to get LOD without a resolution ceiling from one shared map

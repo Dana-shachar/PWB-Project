@@ -14,13 +14,12 @@
 > - In the code since `c39f118`: everything listed for 11-08 (settings undo, one-sweep drainage, erosion's fixed base level, water look, slope rock, palettes, layered haze), plus 11-09: patch boxes from each patch's own ground (`chunkPatchBox`, `[B167]`), detail by distance only (`shouldSplit`, `wantedSamples`, `[B169]`, Dana confirmed the panning flicker gone).
 > - Removed on 11-09: the logarithmic depth buffer (`[B157]`, it halved the frame rate), the triangle collider (`[B165]`), CDLOD range selection (froze the tab), 32-cell patches (no effect).
 > - 📌 `voxel/chunkLodRanges.ts` (CDLOD ranges, Stage 1) exists but nothing uses it: keep for the loading work or delete; Dana's call.
-> - 📌 Remove before merging: the `TEMP diagnose` probe in `voxel/LandChunkCanvas.tsx` (`window.__probe`).
 > - 📌 Older handover blocks (seventeenth and earlier) are still stacked below; fold anything live into the standing sections and delete them in the merge's docs pass.
 > - 📌 Docs still owed at the merge: `CODE-INDEX.md` (new names from 11-08 and 11-09), `SPEC.md` (Water panel, Climate section), the weekly push screenshot and diagram (Session 12 due Wed 2026-11-11 10:10 am).
 >
-> **Done: the drips (`[B171]`, Dana confirmed 2026-11-09).** Main cause depth precision, fixed with a reversed depth buffer; seam gaps fixed too. Check `[B157]`'s far flicker while panning; it may be gone with it. Next job: `[B166]`.
+> **Done: the drips (`[B171]`, Dana confirmed 2026-11-09).** Main cause depth precision, fixed with a reversed depth buffer; seam gaps fixed too. Check `[B157]`'s far flicker while panning; it may be gone with it. The other walk bugs (`[B166]`, `[B164]`, `[B168]`, `[B170]`, `[B156]`) were not seen after it; pending, reopen if they return. Back to the development plan.
 >
-> **Then, in order** (see "Dana's requests" below): load the nearest patches first (`[B166]`), the tide safe zone and slider (`[B164]`), walk speed scaling with eye height, then `[B170]`, `[B168]`, `[B157]`, `[B156]`.
+> **Then, in order** (see "Dana's requests" below): walk speed scaling with eye height, then the development plan (Flora planet first).
 >
 > **How to work this round (Dana's corrections, 2026-11-09; also saved as memories):**
 > - Look up the established method and read the real source before deciding any rule or number. Measure the cause before building; one change per test; test in memory first, then the files; compare before and after at Dana's exact view.
@@ -45,9 +44,9 @@
 > **Dana's requests, 2026-11-08 (in this order).**
 > 1. 🔴 **Bugs first**, in this order (details in `ISSUES.md`):
 >    1. ✅ `[B171]` the drips: depth precision and patch seams, fixed 2026-11-09 (`SKIRTS-BUG.md`).
->    2. `[B166]` coarse ground after a jump: load the nearest patches first (research first).
->    3. `[B164]` tide: a safe zone at the highest tide line, and a Tide slider (Dana, 2026-11-09).
->    4. `[B170]` dark dashes on rocky slopes; `[B168]` the walk map's 2 s stall; `[B157]` distant flicker (cause unmeasured); `[B156]` washboard ridges.
+>    2. ⏸️ `[B166]` coarse ground after a jump: pending, fix researched (Cesium's load order, `REFERENCES.md`).
+>    3. ⏸️ `[B164]` tide: pending; if it returns, a safe zone at the highest tide line and a Tide slider (Dana, 2026-11-09).
+>    4. ⏸️ `[B170]` dark dashes, `[B168]` the walk map's stall, `[B156]` washboard ridges: pending, not seen after `[B171]`. ✅ `[B157]` distant flicker: fixed with `[B171]`.
 > - ⚪ **Walk speed scales with eye height** (Dana, 2026-11-09): high up, walking felt very slow; scale the speed with height above the ground, as Cesium and Google Earth do (verify their rule before building).
 > 2. ⚪ **Flora planet:** Planet 1's colors; terrain toned down so it reads as walkable ground: plains with some mountains, not mountains everywhere.
 > 3. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.

@@ -325,7 +325,6 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       const lakeHeight = lake === null ? null : Math.max(0, lake + heightBase) * Math.max(0, maxHeight);
       return sea === null ? lakeHeight : lakeHeight === null ? sea : Math.max(sea, lakeHeight);
     }
-    (window as unknown as { __probe: unknown }).__probe = { get chunkLakes() { return chunkLakes; }, get water() { return water; }, get camera() { return perspectiveCamera; }, get patchRenderer() { return patchRenderer; }, settings: patchSettingsRef, drawn: (x: number, z: number) => { const renderer = sharedRendererRef.current.renderer; return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight), patchSettingsRef.current.heightBase) : null; } }; // TEMP diagnose
     const walkMode = new WalkMode(perspectiveCamera, viewportElement, () => currentGround(), (x, z) => {
       const renderer = sharedRendererRef.current.renderer;
       return renderer ? patchRenderer.sampleHeight(renderer, x, z, Math.max(0, patchSettingsRef.current.maxHeight), patchSettingsRef.current.heightBase) : null;
