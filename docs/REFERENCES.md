@@ -319,13 +319,22 @@
 **Geometry clipmaps, nested grids around the viewer** · Losasso & Hoppe (SIGGRAPH 2004) · `referenced, not yet matched`
 - caches terrain as nested regular grids centered on the viewer, stored as vertex buffers and incrementally refilled as the camera moves, so detail is dense nearby and coarser far away without re-tiling the whole surface each frame
 - the established answer for [B28], same family as Cesium's own tiling, worth citing on its own since it's the specific technique real terrain engines use to get LOD without a resolution ceiling from one shared map
+- Read 2026-11-09 (section 6.2, the course folder's PDF): each level blends into the next coarser one near its outer boundary, a weight that "ramps up linearly to reach 1 at the outer perimeter" over n/10 grid units, so the boundary is the coarser shape exactly; T-junction cracks left on the boundary are closed with zero-area triangles (the extra points lie on the coarse edge). Planned for the seams in `[B171]`.
 - *[hhoppe.com/proj/geomclipmap](https://hhoppe.com/proj/geomclipmap/) · [GPU Gems 2, ch. 2](https://developer.nvidia.com/gpugems/gpugems2/part-i-geometric-complexity/chapter-2-terrain-rendering-using-gpu-based-geometry). Verified 2026-10-14.*
 
 **CDLOD, per-vertex morphing between LOD levels** · Strugar (2009) · `referenced, not yet matched`
 - each vertex morphs individually based on its own distance from the camera, so neighboring tiles at different LOD levels never show a visible seam, a quadtree picks which tiles are active
 - an alternative/complementary technique to geometry clipmaps for the same [B28] problem, worth knowing both exist rather than just one
 - Read 2026-11-09 (the paper's text): every quadtree node stores the minimum and maximum height of the heightmap area it covers, and its bounding box from those drives both the range test for detail and frustum culling. Taken for the chunk's patch boxes (`[B167]`).
+- Read 2026-11-09 (its reference code, `CDLODQuadTree.cpp`, `CDLODTerrain.vsh`): LOD ranges are shares of one view distance, each twice the next (`LODLevelDistanceRatio` 2), blends over the last part of each range (`MorphStartRatio`), and `m_visDistTooSmall` flags a node reaching past its parent's blend start. The paper: edge vertices "must remain exactly the same as the ones on the neighbouring nodes", heights sampled "using a consistent filter"; its "Granularity issues" section warns rough terrain needs different settings.
 - *[CDLOD terrain reference implementation](https://github.com/tschie/terrain-cdlod). Verified 2026-10-14.*
+
+**Terrain seams between detail levels: forum threads** · Khronos, Godot, pulsegeek · `background`
+- Khronos "Chunked LOD cracks" (2014, read in full): the cause named is changing "the vertices at one side of the border and not on the other"; the fix rule is shared edge vertices. No confirmed solution in the thread.
+- Godot "Data Aligned CLOD" (2026, read in full): skirts removed because they disturbed the seams' normals; no rule for gaps given.
+- pulsegeek, terrain stitching (2025, read in full): stitch strips that average neighbor heights; vague, no sources cited, its sample builds skirts. Low trust, not used.
+- Confirms skirts fail when seen along the surface (walking height). Read for `[B171]`.
+- *[Khronos](https://community.khronos.org/t/chunked-lod-cracks/72110) · [Godot](https://forum.godotengine.org/t/data-aligned-clod/140289) · [pulsegeek](https://pulsegeek.com/articles/terrain-stitching-and-chunking-seamless-streaming/). Read 2026-11-09*
 
 **Async GPU→CPU readback via a Pixel Buffer Object** · WebGL2 `PIXEL_PACK_BUFFER` · `referenced, not yet matched`
 - a synchronous `readPixels()` stalls the GPU pipeline until it catches up, even for a small read; reading into a PBO and polling a fence instead lets the CPU retrieve the data once it's ready without blocking

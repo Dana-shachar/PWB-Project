@@ -1453,9 +1453,16 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Measured: during a 3 s pan on the spot, 50 of 298 frames swapped patches (157 added, 133 removed): detail depended on whether a patch was on screen, so turning rebuilt patches at new levels and their shading jumped. Not the rock, haze, shine or texture sampling (each switched off, flicker unchanged).
 - Fix: detail by distance only, as in CDLOD (Strugar 2009: the view decides what is drawn, not how detailed). Measured after, on the real code: 1 swap frame in 243, GPU 9.9 ms with 289 patches. Dana saw the flicker gone with the in-memory version.
 
-### [B170] Dotted, dashed and dripping marks on hillsides · `wrong but workable`
+### [B170] Dark dashes on rocky slopes · `wrong but workable`
 **🔴 Open, cause measured** · **Where:** the slope rock in `chunk.frag.glsl` (`landSurfaceColor`, `rockNormal`)
-- Measured on Dana's view: the dark dots, dashes and lines vanish with the rock off. Not the texture's filtering (linear, float filtering supported) or the lake rim (inactive there). On a smooth hill the rock edge shows no dots, so the grid pattern likely comes from the ground's own shape (see `[B156]`). Unmeasured.
+- Measured on Dana's view: the dark dots, dashes and lines on rocky slopes vanish with the rock off. Not the texture's filtering (linear) or the lake rim (inactive there). Separate from the drips (`[B171]`): with the rock off the drips stay.
+
+### [B171] Vertical "drips" on hillsides at walking height · `blocks work`
+**🔴 Open, cause measured, fix planned** · **Where:** the patch seams: `chunk.vert.glsl` (blend into the coarser level), the stitched edges from `planet/planetPatchMesh.ts` (`buildPatchGeometry`), `voxel/ChunkPatchRenderer.ts`
+- What they are (measured 2026-11-09): skirts, the strips hanging from each patch edge, showing through gaps where two patches of different detail don't meet. At a drip view 6,128 skirt pixels showed (1.3% of the view); a bare-geometry view and a per-patch tint put every drip on a patch border, hanging from the patch above it.
+- Not new geometry: the last commit (`c39f118`) shows the same seam lines at the same view. This round's look (darker layered haze, rock, contrast) most likely made the skirts visible (inferred). They vanish at a high eye height, where skirts are seen from above (the known grazing-angle failure of skirts).
+- Ruled out by test: the rock (rock off, drips stay); 32-cell patches (gap count barely changed, reverted); a stitch-edge shader change (no visible effect at one drip view, not verified to compile, page reloaded). A seam-gap count from 2026-11-09 morning used the wrong border (2, real 4) and is void.
+- The full investigation, what was ruled out, the sources and the fix plan: `SKIRTS-BUG.md`.
 
 ---
 

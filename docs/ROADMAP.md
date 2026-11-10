@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-08`
+`Last updated: 2026-11-09`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,21 +8,25 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-08, handover):** *read `.claude/CLAUDE.md`, then this block, then "Direction" and "Dana's requests" just below, then `docs/CODE-INDEX.md`.*
+> **Start from here (2026-11-09, handover):** *read `.claude/CLAUDE.md`, then this block, then `docs/SKIRTS-BUG.md` (the next job), then `docs/CODE-INDEX.md`.*
 >
-> **State.** `main` = `c39f118` (pushed). Everything since is uncommitted on `main`; the river work is on branch `rivers-fork` (`893a1ef`, `[B145]` to `[B155]`). Never commit `.obsidian/workspace.json`. Types check and all 17 shaders compile.
-> - Built 2026-11-08, uncommitted: settings undo (`projectSettings/settingsHistory.ts`, new); one-sweep drainage (`accumulateDrainage` in `rivers/drainage.worker.ts`, `[B155]` fixed, its side effect kept); erosion's own fixed base level (`erosion/erosionControls.ts`); detail no longer faded at the sea (`heightmap.frag.glsl`); water sheet 1023 with one-cell reach (`chunkWater.ts`, `chunkWater.vert.glsl`); lake rims lifted to the water (`lakeRim` in `chunk.vert.glsl`); selective breaching (`selectiveBreach` in `rivers/chunkLakes.worker.ts`, unrequested, limits 50 m and 20 cells, Dana never decided to keep it); Water panel = Sea, Lakes, Color, each with its own look; sea and lake ripples (`waterRipple`), far foam veil removed, shore foam filtered (`chunkWater.frag.glsl`, `seaLookOverride.glsl` new); lake color by absorption; slope rock (`landSurfaceColor` in `landLayers.glsl`, `RockSettings`), now reading the landform's slope (`ROCK_SLOPE_STEP_UV`); rule-based palettes (`randomRockPalette`, `randomAtmosphereColors`); layered haze (`uHazeLayers`, Layers slider; Haze max 12); Climate its own section above Atmosphere; Rainfall max 26 times typical.
-> - 📌 Remove before the commit: the `TEMP diagnose` probe in `voxel/LandChunkCanvas.tsx` (`window.__probe`).
-> - 📌 Older handover blocks (seventeenth and earlier) are still stacked below this one on `main`; fold anything live into the standing sections and delete them in the commit's docs pass (single rotating handover rule).
-> - 📌 Docs pass at the commit: `ISSUES.md` is logged (`[B155]` to `[B163]`); still to do: `CODE-INDEX.md` (new names: `settingsHistory.ts`, `seaLookOverride.glsl`, `accumulateDrainage`, `selectiveBreach`, `lakeRim`, `waterRipple`, `landSurfaceColor`, `createRockUniforms`, `randomRockPalette`, `randomAtmosphereColors`, `uHazeLayers`, `withLogDepth` in `scene/logDepth.ts`), `REFERENCES.md` (Lindsay 2016 breaching, Firewatch gradient fog, Unreal and Unity water bodies, Roystan toon water, Gaea Lakes, World Machine Create Water), `SPEC.md` (Water panel = Sea, Lakes, Color; Climate its own section), the weekly push entry with screenshot and diagram.
+> **State.** Branch `wip-2026-11-09` (`93b17e2`) holds all work of 11-08 and 11-09, committed so code can be compared; `main` is still `c39f118`. Since `93b17e2`, only docs changed (uncommitted). Merge the branch into `main` after the drips are fixed and the docs pass. Never commit `.obsidian/workspace.json`. Rivers stay on branch `rivers-fork`.
+> - In the code since `c39f118`: everything listed for 11-08 (settings undo, one-sweep drainage, erosion's fixed base level, water look, slope rock, palettes, layered haze), plus 11-09: patch boxes from each patch's own ground (`chunkPatchBox`, `[B167]`), detail by distance only (`shouldSplit`, `wantedSamples`, `[B169]`, Dana confirmed the panning flicker gone).
+> - Removed on 11-09: the logarithmic depth buffer (`[B157]`, it halved the frame rate), the triangle collider (`[B165]`), CDLOD range selection (froze the tab), 32-cell patches (no effect).
+> - 📌 `voxel/chunkLodRanges.ts` (CDLOD ranges, Stage 1) exists but nothing uses it: keep for the loading work or delete; Dana's call.
+> - 📌 Remove before merging: the `TEMP diagnose` probe in `voxel/LandChunkCanvas.tsx` (`window.__probe`).
+> - 📌 Older handover blocks (seventeenth and earlier) are still stacked below; fold anything live into the standing sections and delete them in the merge's docs pass.
+> - 📌 Docs still owed at the merge: `CODE-INDEX.md` (new names from 11-08 and 11-09), `SPEC.md` (Water panel, Climate section), the weekly push screenshot and diagram (Session 12 due Wed 2026-11-11 10:10 am).
 >
-> **Open bugs, in order (Dana: bugs first).** Details and measurements in `ISSUES.md`, `[B156]` to `[B163]`.
-> 1. 🟡 `[B157]` walk mode depth precision: logarithmic depth buffer built (`scene/logDepth.ts`, `withLogDepth` on every scene material; walk far = chunk diagonal). Dana to test the flicker. Still to check: walk fps 36 on a 4,000 km chunk; compare with log depth off on the same view.
-> 2. 🔴 `[B156]` washboard ridges: not reproduced; test Voronoi Jitter 1, Erosion off, layers hidden in turn.
-> 3. 🟡 `[B163]` rock smears: fixed by the landform slope, Dana to confirm.
-> 4. 🔴 `[B164]` the flat tan plane filling the lower view in walk mode: a real surface, not depth; not identified yet.
+> **Next job: fix the drips (`[B171]`).** Everything is in `SKIRTS-BUG.md`: what was checked, what was learned, the sources, and the 4-step fix plan. Start with its step 1 (read-only check at a drip view). Dana must be at a drip spot and say "there"; do not reload her tab while a test runs.
 >
-> **How to test without disturbing Dana.** Use the `TEMP diagnose` probe and override uniforms in memory (`Object.defineProperty` on a uniform's `value`), never move her sliders; find any control by its label, never by position (2026-11-08: a position-based script moved the wrong slider while she used the tab). Cmd+Z now undoes settings, so a test change can be undone.
+> **Then, in order** (see "Dana's requests" below): load the nearest patches first (`[B166]`), the tide safe zone and slider (`[B164]`), walk speed scaling with eye height, then `[B170]`, `[B168]`, `[B157]`, `[B156]`.
+>
+> **How to work this round (Dana's corrections, 2026-11-09; also saved as memories):**
+> - Look up the established method and read the real source before deciding any rule or number. Measure the cause before building; one change per test; test in memory first, then the files; compare before and after at Dana's exact view.
+> - A measurement must be checked against a known case before it is trusted (two wrong measures cost hours: a 2-texel border instead of 4, and a steepness count).
+> - Dana tests in Claude's Chrome tab: never move her camera or reload without saying so; editing a file the page loaded reloads it.
+> - A statement of fact from Dana is not a go; ask when unsure.
 >
 > **Direction (Dana, 2026-11-08).** General development stops. The final (Dec 2) shows a vertical slice: 3 planets built on the land chunk, each a procedural, stylized alien environment with one process that evolves on the World Clock. Rocks are shared by all three. Rivers are paused on branch `rivers-fork` (`[B145]` to `[B155]`).
 > - **Living chunk (priority):** moss and algae as a ground color by wetness and slope; one plant family whose shape is a set of numeric genes, grown in small steps over the World Clock and mutated per planet (Karl Sims, *Panspermia*: a continuous growth model with evolved parameters). Evolution: flora growing and changing. Flora stages apply to any livable planet; the slice shows them on one chunk.
@@ -39,7 +43,12 @@
 > 6. ⚪ **Ice planet** (depends on water the most).
 >
 > **Dana's requests, 2026-11-08 (in this order).**
-> 1. 🔴 **Bugs first:** see "Open bugs" above: `[B156]` washboard ridges, `[B157]` distant flicker (fix built, to test), `[B164]` the flat plane in walk mode, `[B163]` rock smears (to confirm).
+> 1. 🔴 **Bugs first**, in this order (details in `ISSUES.md`):
+>    1. `[B171]` the drips: patch seams. Investigation and fix plan: `SKIRTS-BUG.md`.
+>    2. `[B166]` coarse ground after a jump: load the nearest patches first (research first).
+>    3. `[B164]` tide: a safe zone at the highest tide line, and a Tide slider (Dana, 2026-11-09).
+>    4. `[B170]` dark dashes on rocky slopes; `[B168]` the walk map's 2 s stall; `[B157]` distant flicker (cause unmeasured); `[B156]` washboard ridges.
+> - ⚪ **Walk speed scales with eye height** (Dana, 2026-11-09): high up, walking felt very slow; scale the speed with height above the ground, as Cesium and Google Earth do (verify their rule before building).
 > 2. ⚪ **Flora planet:** Planet 1's colors; terrain toned down so it reads as walkable ground: plains with some mountains, not mountains everywhere.
 > 3. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
 > 4. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll): the setting that makes a planet read as one strong hue (No Man's Sky's painted look).
