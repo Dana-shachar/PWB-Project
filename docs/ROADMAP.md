@@ -88,6 +88,7 @@
 - 🔴 Open: `[B172]` stripes on the side wall up close, `[B122]` grain line (per-pixel grain approved; measure the frame cost first), `[B54]`, `[B55]`, `[B57]`, `[B58]` stalling, `[B59]`, `[B60]`, `[B64]`, `[B67]`, `[B68]`, `[B81]`.
 - 🔴 Open: `[B176]` a tear across the chunk after Terrain off and on (check with the Patches debug view, `[S90]`); `[B177]` Terrain off leaves the chunk a sheet with no slab.
 - ⏸️ Later (Dana, 2026-11-11): biome evolution fully on the GPU (totals, winner and mutation in shaders, genes in a small texture, a GPU hash for randomness, Jarzynski and Olano 2020). Removes the era read-back waits, which are most of a regrowth's ~6 s; evolved colors would change. Worth it once grass and trees lengthen runs.
+- ⏸️ Later (possibility, Dana 2026-11-11): cache grown life results by a fingerprint of their inputs and settings (browser storage), so reopening a project skips the regrowth. Not needed while a run takes about 6 s; the main concern is planning every slider and feature for its cost (`.claude/CLAUDE.md`).
 - ⏸️ Later: erosion units (Dana approved; bring options first), liquids eroding differently, the chunk's water from the virtual-pipes engine, storms and rain or snow particles, cataclysms (a tsunami), planet-type profiles, large-scale color variation in the land shader.
 
 ## 📌 Small todos

@@ -71,7 +71,7 @@
 - Algae reads the waterline's wetness alone (aquatic), moss reads rain, hollows and waterline; a high algae Moisture need keeps it to a thin shore band.
 - Color: a tint of the ground (Shane's multiplicative tint): the life's hue, saturation within the land's own (1 to 1.15 times, so it blends), the ground's own lightness, at most 75% cover; its edge follows the ground's own texture (35% of the height blend). No texture or volume of its own.
 - 💡 Volume later: low tufts as geometry near the camera from the moss amount (Horizon Zero Dawn placement), as No Man's Sky and Moss do; and a visible-scale grain inside the tint.
-- Controls per type: Hue, Brightness, Moisture need, Shade need. Everything else fixed.
+- Controls per type: Hue, Brightness, Moisture need (0 to 2, so a type can be pushed past evolution's drift toward drier ground), Shade need; algae also Shore reach. Everything else fixed.
 
 **Not sourced yet, to research or defer**
 - ❓ Terrain-scale inputs (concavity, occlusion from the height map) and how they join the two masks; the Frostbite notes may cover it.
