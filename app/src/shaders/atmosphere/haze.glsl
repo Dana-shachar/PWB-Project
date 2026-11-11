@@ -15,7 +15,7 @@ const vec3 HAZE_SUN_COLOR = vec3(1.0, 0.96, 0.88);
 // Grain strength, as a share of the haze amount. Inferred, TUNABLE.
 const float HAZE_GRAIN = 0.04;
 
-float interleavedGradientNoise(vec2 pixel) {
+float hazeGrainNoise(vec2 pixel) {
   return fract(52.9829189 * fract(dot(pixel, vec2(0.06711056, 0.00583715))));
 }
 
@@ -32,7 +32,7 @@ vec3 applyHaze(vec3 color, vec3 worldPosition, vec3 cameraPosition, vec3 sunDire
   float integral = abs(slope) < 1e-4 ? travel : (1.0 - exp(-travel * slope)) / slope;
   float amount = uHazeDensity * exp(-startHeight * hazeFalloff) * integral;
   float haze = 1.0 - exp(-amount);
-  haze = clamp(haze + (interleavedGradientNoise(gl_FragCoord.xy) - 0.5) * HAZE_GRAIN * haze, 0.0, 1.0);
+  haze = clamp(haze + (hazeGrainNoise(gl_FragCoord.xy) - 0.5) * HAZE_GRAIN * haze, 0.0, 1.0);
 
   // Layered haze (Firewatch, Jane Ng, GDC 2015: the fog's color from a gradient by distance; true distance here, not
   // depth, so it never slides as the camera turns): near ridges a deeper value of the horizon's hue, then the horizon,

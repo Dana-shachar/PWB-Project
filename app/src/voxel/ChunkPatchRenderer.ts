@@ -9,6 +9,17 @@ export type BakeChunkPatch = (patch: TerrainPatch, target: THREE.WebGLRenderTarg
 // Bakes the next rows of the chunk's full base map within a texel budget; switched once it replaces the preview, pending until then.
 export type AdvanceChunkBase = (root: TerrainPatch, texelBudget: number) => { texels: number; switched: boolean; pending: boolean };
 
+// A shown patch as props read it (props/rockScatter.ts): its place on the chunk, its bake and the bake's CPU heights.
+export interface ShownChunkPatch {
+  key: string;
+  fractions: { minU: number; minV: number; maxU: number; maxV: number }; // chunk uv
+  worldSize: number;
+  texture: THREE.Texture; // heights in green, with a border (terrain.glsl borderedTextureUv)
+  samples: number;
+  bakeCount: number;
+  heights: { data: Float32Array; size: number } | null; // null until the read arrives
+}
+
 // Per-frame build limits, so a big change spreads over frames instead of stalling one.
 const MAX_BUILDS_PER_FRAME = 4;
 const MAX_BAKE_TEXELS_PER_FRAME = 1_100_000;
@@ -77,7 +88,6 @@ export class ChunkPatchRenderer {
   private lastGroundData: Float32Array | undefined; // a new ground reading reselects the patches
   private boundsMaxHeight = 0;
   private boundsGround: Float32Array | undefined;
-  private readBuffer = new Float32Array(16); // a 2x2 block of RGBA floats for sampleHeight
 
   private template: THREE.ShaderMaterial;
 
@@ -209,6 +219,7 @@ export class ChunkPatchRenderer {
       }
       const material = this.createMaterial(patch, target, samples, flags);
       const mesh = new THREE.Mesh(buildFlatPatchGeometry(root, patch, this.chunkSize, this.baseDepth, flags), material);
+      mesh.receiveShadow = true; // rocks' shadows (props/rockScatter.ts)
       this.fitBounds(mesh.geometry, patch, detail);
       mesh.visible = false;
       this.group.add(mesh);
@@ -224,6 +235,13 @@ export class ChunkPatchRenderer {
   // patch's bake, as Cesium reads terrain height from the most detailed loaded
   // tile. Null off the chunk or before a patch shows. Same texel mapping as chunk.vert.glsl.
   sampleHeight(renderer: THREE.WebGLRenderer, x: number, z: number, maxHeight: number, heightBase: number): number | null {
+    return this.sampleGround(renderer, x, z, maxHeight, heightBase)?.height ?? null;
+  }
+
+  // The drawn ground at chunk point (x, z): the triangle chunk.vert.glsl draws there, its corners displaced by the same
+  // formula (the bake, the blend into the coarser level, edge stitching, the lake rim), interpolated across it. Engines
+  // read height on drawn LOD terrain this way; the bake itself holds detail the 64-cell mesh doesn't show.
+  sampleGround(renderer: THREE.WebGLRenderer, x: number, z: number, maxHeight: number, heightBase: number): { height: number; normal: THREE.Vector3 } | null {
     const root = this.root;
     if (!root) return null;
     const chunkU = x / this.chunkSize + 0.5;
@@ -237,47 +255,155 @@ export class ChunkPatchRenderer {
       if (!best || entry.patch.depth > best.patch.depth) best = entry;
     }
     if (!best) return null;
-    const fractions = rootFractions(root, best.patch);
     const size = best.bakeSamples + 2 * PATCH_BORDER_TEXELS;
-    const texelAt = (fraction: number, min: number, max: number) =>
-      Math.min(size - 1, Math.max(0, PATCH_BORDER_TEXELS + ((fraction - min) / (max - min)) * (best!.bakeSamples - 1)));
-    const texelX = texelAt(chunkU, fractions.minU, fractions.maxU);
-    const texelY = texelAt(chunkV, fractions.minV, fractions.maxV);
-    const x0 = Math.min(Math.floor(texelX), size - 2);
-    const y0 = Math.min(Math.floor(texelY), size - 2);
-    const blendX = texelX - x0;
-    const blendY = texelY - y0;
-    // From the patch's CPU copy when it has one; the direct read (which stalls the frame on the GPU, 22 ms for
-    // walk mode's 5 reads, measured 2026-11-04) only until that copy arrives.
-    // Fine (green) and coarser-level (blue) corners.
-    let corners: [number, number, number, number];
-    let parents: [number, number, number, number];
-    const copy = best.heights;
-    if (copy && copy.size === size) {
-      const at = (values: Float32Array, col: number, row: number) => values[row * size + col];
-      corners = [at(copy.data, x0, y0), at(copy.data, x0 + 1, y0), at(copy.data, x0, y0 + 1), at(copy.data, x0 + 1, y0 + 1)];
-      parents = [at(copy.parent, x0, y0), at(copy.parent, x0 + 1, y0), at(copy.parent, x0, y0 + 1), at(copy.parent, x0 + 1, y0 + 1)];
-    } else {
+    if (!best.heights || best.heights.size !== size) {
       this.requestHeights(renderer, best, size);
-      renderer.readRenderTargetPixels(best.target, x0, y0, 2, 2, this.readBuffer);
-      corners = [this.readBuffer[1], this.readBuffer[5], this.readBuffer[9], this.readBuffer[13]];
-      parents = [this.readBuffer[2], this.readBuffer[6], this.readBuffer[10], this.readBuffer[14]];
+      return null; // until the CPU copy arrives (a frame or two); callers fall back to the preview ground
     }
-    const bilinear = (values: [number, number, number, number]) =>
-      (values[0] * (1 - blendX) + values[1] * blendX) * (1 - blendY) + (values[2] * (1 - blendX) + values[3] * blendX) * blendY;
-    const fine = bilinear(corners);
-    const coarse = bilinear(parents);
-    // The same blend chunk.vert.glsl draws, by the distance from the eye to the coarse surface here.
-    const { uMorphStart, uMorphEnd } = best.material.uniforms;
-    let raw = fine;
-    if (uMorphEnd.value > uMorphStart.value) {
-      const distance = Math.hypot(x - this.eye.x, Math.max(0, coarse + heightBase) * maxHeight - this.eye.y, z - this.eye.z);
-      const morph =
-        Math.min(1, Math.max(0, (distance - uMorphStart.value) / (uMorphEnd.value - uMorphStart.value))) *
-        finerEdgeFade((chunkU - fractions.minU) / (fractions.maxU - fractions.minU), (chunkV - fractions.minV) / (fractions.maxV - fractions.minV), best.flags);
-      raw = fine + (coarse - fine) * morph;
+    const fractions = rootFractions(root, best.patch);
+    const localU = (chunkU - fractions.minU) / (fractions.maxU - fractions.minU);
+    const localV = (chunkV - fractions.minV) / (fractions.maxV - fractions.minV);
+    const geometry = best.mesh.geometry;
+    const index = this.triangleIndex(geometry);
+    const uvs = geometry.getAttribute('uv');
+    const positions = geometry.getAttribute('position');
+    const cell = Math.min(PATCH_GRID - 1, Math.max(0, Math.floor(localV * PATCH_GRID))) * PATCH_GRID + Math.min(PATCH_GRID - 1, Math.max(0, Math.floor(localU * PATCH_GRID)));
+    const triangles = geometry.getIndex()!;
+    for (const triangle of index[cell]) {
+      const a = triangles.getX(triangle * 3);
+      const b = triangles.getX(triangle * 3 + 1);
+      const c = triangles.getX(triangle * 3 + 2);
+      // Barycentric weights in the patch's uv, where the mesh is flat before displacement.
+      const ax = uvs.getX(a), ay = uvs.getY(a), bx = uvs.getX(b), by = uvs.getY(b), cx = uvs.getX(c), cy = uvs.getY(c);
+      const det = (by - cy) * (ax - cx) + (cx - bx) * (ay - cy);
+      if (Math.abs(det) < 1e-12) continue;
+      const wa = ((by - cy) * (localU - cx) + (cx - bx) * (localV - cy)) / det;
+      const wb = ((cy - ay) * (localU - cx) + (ax - cx) * (localV - cy)) / det;
+      const wc = 1 - wa - wb;
+      if (wa < -1e-6 || wb < -1e-6 || wc < -1e-6) continue;
+      const corner = (vertex: number) => {
+        const raw = this.drawnRaw(best!, uvs.getX(vertex), uvs.getY(vertex), positions.getX(vertex), positions.getZ(vertex), maxHeight, heightBase);
+        return new THREE.Vector3(positions.getX(vertex), Math.max(0, raw + heightBase) * maxHeight, positions.getZ(vertex));
+      };
+      const pa = corner(a), pb = corner(b), pc = corner(c);
+      const normal = new THREE.Vector3().subVectors(pb, pa).cross(new THREE.Vector3().subVectors(pc, pa)).normalize();
+      if (normal.y < 0) normal.negate();
+      return { height: pa.y * wa + pb.y * wb + pc.y * wc, normal };
     }
-    return Math.max(0, raw + heightBase) * maxHeight;
+    return null;
+  }
+
+  // chunk.vert.glsl's displaced raw elevation at one mesh vertex (patch uv, chunk x and z): drawnElevation, the edge
+  // stitch points, then lakeRim. Kept line for line with the shader; change both together.
+  private drawnRaw(entry: ChunkPatchEntry, u: number, v: number, x: number, z: number, maxHeight: number, heightBase: number): number {
+    const elevation = (pu: number, pv: number, px: number, pz: number) => {
+      const fine = this.bakeAt(entry, pu, pv, 'data');
+      const { uMorphStart, uMorphEnd } = entry.material.uniforms;
+      if (!(uMorphEnd.value > uMorphStart.value)) return fine;
+      const oddU = (Math.floor(pu * PATCH_GRID + 0.5) % 2 + 2) % 2;
+      const oddV = (Math.floor(pv * PATCH_GRID + 0.5) % 2 + 2) % 2;
+      const lowU = pu - oddU / PATCH_GRID, highU = pu + oddU / PATCH_GRID;
+      const lowV = pv - oddV / PATCH_GRID, highV = pv + oddV / PATCH_GRID;
+      const coarse = 0.25 * (this.bakeAt(entry, lowU, lowV, 'parent') + this.bakeAt(entry, highU, lowV, 'parent') + this.bakeAt(entry, lowU, highV, 'parent') + this.bakeAt(entry, highU, highV, 'parent'));
+      const distance = Math.hypot(px - this.eye.x, Math.max(0, coarse + heightBase) * maxHeight - this.eye.y, pz - this.eye.z);
+      const morph = Math.min(1, Math.max(0, (distance - uMorphStart.value) / (uMorphEnd.value - uMorphStart.value))) * finerEdgeFade(pu, pv, entry.flags);
+      return fine + (coarse - fine) * morph;
+    };
+    let raw = elevation(u, v, x, z);
+    const edgeU = u < 1e-5 || u > 1 - 1e-5;
+    const edgeV = v < 1e-5 || v > 1 - 1e-5;
+    const along = edgeV ? u : v;
+    if ((edgeU || edgeV) && Math.abs(((along * PATCH_GRID) % 1) - 0.5) < 0.25) {
+      const stepU = edgeV ? 0.5 / PATCH_GRID : 0;
+      const stepV = edgeV ? 0 : 0.5 / PATCH_GRID;
+      const worldSize = entry.material.uniforms.uPatchWorldSize.value as number;
+      raw = 0.5 * (elevation(u - stepU, v - stepV, x - stepU * worldSize, z - stepV * worldSize) + elevation(u + stepU, v + stepV, x + stepU * worldSize, z + stepV * worldSize));
+    }
+    return this.lakeRim(x, z, raw, maxHeight);
+  }
+
+  // A bake channel at patch uv, bilinear, as chunk.vert.glsl's texture read (patchTextureUv).
+  private bakeAt(entry: ChunkPatchEntry, u: number, v: number, channel: 'data' | 'parent'): number {
+    const { size } = entry.heights!;
+    const values = entry.heights![channel];
+    const tx = Math.min(size - 1, Math.max(0, PATCH_BORDER_TEXELS + u * (entry.bakeSamples - 1)));
+    const ty = Math.min(size - 1, Math.max(0, PATCH_BORDER_TEXELS + v * (entry.bakeSamples - 1)));
+    const x0 = Math.min(Math.floor(tx), size - 2);
+    const y0 = Math.min(Math.floor(ty), size - 2);
+    const bx = tx - x0;
+    const by = ty - y0;
+    const at = (col: number, row: number) => values[row * size + col];
+    return (at(x0, y0) * (1 - bx) + at(x0 + 1, y0) * bx) * (1 - by) + (at(x0, y0 + 1) * (1 - bx) + at(x0 + 1, y0 + 1) * bx) * by;
+  }
+
+  // chunk.vert.glsl's lakeRim: ground beside a lake is lifted to half a meter above its level.
+  private lakeRim(x: number, z: number, raw: number, maxHeight: number): number {
+    const { uChunkLakeLevels, uLakeCells } = this.template.uniforms;
+    const cells = uLakeCells.value as number;
+    const data = (uChunkLakeLevels.value as THREE.DataTexture | null)?.image?.data as Float32Array | undefined;
+    if (cells < 2 || !data) return raw;
+    const cellX = Math.floor((x / this.chunkSize + 0.5) * (cells - 1) + 0.5);
+    const cellY = Math.floor((z / this.chunkSize + 0.5) * (cells - 1) + 0.5);
+    const level = (cx: number, cy: number) => {
+      const clampedX = Math.min(cells - 1, Math.max(0, cx));
+      const clampedY = Math.min(cells - 1, Math.max(0, cy));
+      return data[(clampedY * cells + clampedX) * 4];
+    };
+    if (level(cellX, cellY) > -999) return raw;
+    const lift = 0.5 / Math.max(maxHeight * 1000, 1e-6);
+    let rim = raw;
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const neighbor = level(cellX + dx, cellY + dy);
+      if (neighbor > -999) rim = Math.max(rim, neighbor + lift);
+    }
+    return rim;
+  }
+
+  // Each mesh's top triangles by the grid cell they overlap, built once per geometry, for sampleGround's lookup.
+  private triangleIndexes = new WeakMap<THREE.BufferGeometry, number[][]>();
+  private triangleIndex(geometry: THREE.BufferGeometry): number[][] {
+    const cached = this.triangleIndexes.get(geometry);
+    if (cached) return cached;
+    const cells: number[][] = Array.from({ length: PATCH_GRID * PATCH_GRID }, () => []);
+    const uvs = geometry.getAttribute('uv');
+    const displace = geometry.getAttribute('displace');
+    const triangles = geometry.getIndex()!;
+    for (let t = 0; t < triangles.count / 3; t++) {
+      const corners = [triangles.getX(t * 3), triangles.getX(t * 3 + 1), triangles.getX(t * 3 + 2)];
+      if (corners.some((vertex) => displace.getX(vertex) < 0.5)) continue; // skirts and walls
+      const us = corners.map((vertex) => uvs.getX(vertex));
+      const vs = corners.map((vertex) => uvs.getY(vertex));
+      const cellRange = (values: number[]) => [Math.max(0, Math.floor(Math.min(...values) * PATCH_GRID - 1e-6)), Math.min(PATCH_GRID - 1, Math.floor(Math.max(...values) * PATCH_GRID + 1e-6))];
+      const [lowU, highU] = cellRange(us);
+      const [lowV, highV] = cellRange(vs);
+      for (let j = lowV; j <= highV; j++) for (let i = lowU; i <= highU; i++) cells[j * PATCH_GRID + i].push(t);
+    }
+    this.triangleIndexes.set(geometry, cells);
+    return cells;
+  }
+
+  // The shown patches, asking for each one's CPU heights once (read without stalling).
+  shownPatches(renderer: THREE.WebGLRenderer): ShownChunkPatch[] {
+    const root = this.root;
+    if (!root) return [];
+    const list: ShownChunkPatch[] = [];
+    for (const key of this.shown) {
+      const entry = this.entries.get(key);
+      if (!entry) continue;
+      const size = entry.bakeSamples + 2 * PATCH_BORDER_TEXELS;
+      const ready = entry.heights && entry.heights.size === size;
+      if (!ready) this.requestHeights(renderer, entry, size);
+      list.push({
+        key,
+        fractions: rootFractions(root, entry.patch),
+        worldSize: chunkPatchWorldSize(root, entry.patch, this.chunkSize),
+        texture: entry.target.texture,
+        samples: entry.bakeSamples,
+        bakeCount: entry.bakeCount,
+        heights: ready ? { data: entry.heights!.data, size } : null,
+      });
+    }
+    return list;
   }
 
   // Reads a patch's whole bake back without stalling (this repo's rule for GPU reads) and keeps its heights (green).
@@ -353,6 +479,7 @@ export class ChunkPatchRenderer {
       vertexShader: this.template.vertexShader,
       fragmentShader: this.template.fragmentShader,
       side: this.template.side,
+      lights: this.template.lights, // three.js's shadow uniforms (the rocks' cast shadows)
       // Shared uniform objects, so the chunk material's updates reach every patch.
       uniforms: {
         ...this.template.uniforms,

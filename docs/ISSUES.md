@@ -1516,6 +1516,39 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **✅ Fixed 2026-11-11** · **Where:** `scene/sceneControls.ts`, `planet/planetControls.ts`
 - Scene lighting lived outside the planet's settings. It is now saved and undone with them (`[S88]`).
 
+## 🪨 Props and the drawn ground (2026-11-11 round)
+
+*Rocks on the chunk and what they stand on.*
+
+### [B183] Rock faces speckled per pixel · `wrong but workable`
+**✅ Fixed 2026-11-11** · **Where:** `shaders/props/rock.vert.glsl`, `rock.frag.glsl`
+- Flat faces took their direction from the change in world position between pixels; at thousands of km from the origin, float precision rounded those tiny differences away. Measured: texture off, still speckled; eye-relative positions (three.js's flat shading uses the view position), clean.
+
+### [B184] The walk eye sank into the ground at low eye height · `blocks work`
+**✅ Fixed 2026-11-11** · **Where:** `sampleGround` in `voxel/ChunkPatchRenderer.ts`
+- The eye's ground height was read from the patch's height texture (129 samples a side), but the ground is drawn as a 64-cell mesh, so between grid points the drawn triangles stood up to 6.7 m higher; at 2 m the eye was 1.46 m inside the terrain, showing a grey wall with stripes. Heights now come from the drawn triangle itself, by the shader's formula (`[S92]`).
+
+### [B185] Rocks floated above the ground · `wrong but workable`
+**✅ Fixed 2026-11-11** · **Where:** `placeRock`, `buildShapes` in `props/rockScatter.ts`, `rock.vert.glsl`
+- The sink assumed every shape's bottom sat half its height below its center, true only for cube-like ones, and the shape noise lifted the flat base's corners. Rocks now sink from each shape's real bottom, and the base is kept out of the noise.
+
+### [B186] Rock shadows: a dark rim, too light on dark ground, long streaks, swinging on pan · `wrong but workable`
+**✅ Fixed 2026-11-11** · **Where:** `shaders/props/rockShadows.glsl`, `updateSunShadow` in `voxel/LandChunkCanvas.tsx`
+- The shadow both darkened the lit color and blended toward the shade, so edges went darker than either; replacing the color with the shade made shadows lighter on dark ground; grazing sun stretched them across slopes. A shadow now multiplies the color already there, by how much the ground faces the sun, fading at the shadow box's edge (`[S93]`).
+- Swinging on pan was Light follows camera turning the sun with the view; it needs to be off with shadows. A fake blob shadow tried first never worked and was removed.
+
+### [B187] The ground shader would not compile with shadows · `blocks work`
+**✅ Fixed 2026-11-11** · **Where:** `shaders/atmosphere/haze.glsl`
+- Our haze grain's `interleavedGradientNoise` had the same name as a function in three.js's shadow code. Renamed `hazeGrainNoise`. The shader checker now resolves three's `#include` pieces, so it catches this.
+
+### [B188] Walk mode stuttered as rock patches loaded · `wrong but workable`
+**✅ Fixed 2026-11-11** · **Where:** `update` in `props/rockScatter.ts`, `updateSunShadow`
+- Measured: 49 patch generations at about 7 ms each bunched into single frames, and the shadow map redrew every frame. Generation now stops at 4 ms a frame, and the shadow map redraws only when the sun, its box or the set of drawn rocks changes.
+
+### [B189] Rock scattering still doesn't read right · `wrong but workable`
+**🔴 Open** · **Where:** `shaders/props/rockDensity.frag.glsl`, `generate` in `props/rockScatter.ts`
+- Dana, 2026-11-11: the scatter pattern needs more work; details to be given. Fields, cliff reach, clusters and height thinning are in place (`[S91]`).
+
 ## 🏗️ Architecture
 
 *Structural problems, and limits tracked but not scheduled.*

@@ -12,6 +12,8 @@ import { ColorRampEditor } from './panels/ColorRampEditor';
 import type { ColorStop } from '../planet/colorRamp';
 import type { RockSettings, WaterSettings } from '../planet/planetControls';
 import type { BiomeSettings } from '../biome/plantTypes';
+import type { PropSettings } from '../props/propSettings';
+import { PropsPanel } from './panels/PropsPanel';
 import { colorLockProps, randomAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { depthToRampPosition, landRampFloor, landShareAt, rampPositionToDepth, type HeightDistribution } from '../planet/seaLevel';
 import { MAX_MAX_ERROR_PIXELS, maxErrorPixelsToResolution, MIN_MAX_ERROR_PIXELS, resolutionToMaxErrorPixels } from '../planet/patch';
@@ -80,6 +82,8 @@ interface PanelProps {
   rock: RockSettings;
   biome: BiomeSettings;
   onBiomeChange: (changes: Partial<BiomeSettings>) => void;
+  props: PropSettings;
+  onPropsChange: (changes: Partial<PropSettings>) => void;
   lifeProgress: LifeProgress | null; // the life grid's regrowth, null when idle
   terrainEnabled: boolean; // off: the land is drawn flat
   onTerrainEnabledChange: (enabled: boolean) => void;
@@ -261,6 +265,8 @@ export function Panel({
   rock,
   biome,
   onBiomeChange,
+  props,
+  onPropsChange,
   lifeProgress,
   terrainEnabled,
   onTerrainEnabledChange,
@@ -1117,6 +1123,19 @@ export function Panel({
             <span className="panel-section-title">Color</span>
             <ColorPicker label="Horizon" value={atmosphere.horizonColor} onChange={(horizonColor) => onAtmosphereChange({ horizonColor })} {...colorLockProps(atmosphere, 'horizonColor', onAtmosphereChange)} />
             <ColorPicker label="Sky" value={atmosphere.zenithColor} onChange={(zenithColor) => onAtmosphereChange({ zenithColor })} {...colorLockProps(atmosphere, 'zenithColor', onAtmosphereChange)} />
+          </Accordion>
+        </div>
+
+        <div className="panel-section-divider" />
+
+        <div className="panel-section">
+          {/* Props on the land chunk (props/rockScatter.ts): rocks for now. */}
+          <Accordion
+            title="Props"
+            headerSwitch={{ value: props.enabled, onChange: (enabled) => onPropsChange({ enabled }), label: 'Props on or off' }}
+            description="Rocks on the land chunk, placed by rules: below cliffs, along shores, in fields with clear stretches."
+          >
+            <PropsPanel props={props} onPropsChange={onPropsChange} colorStops={colorStops} />
           </Accordion>
         </div>
 

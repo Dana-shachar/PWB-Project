@@ -6,7 +6,8 @@ import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
 import landLayersGlsl from '../shaders/terrain/landLayers.glsl?raw';
 import noiseGlsl from '../shaders/heightmap/noise.glsl?raw'; // the life layers' patterns
 import lifeLayersGlsl from '../shaders/biome/lifeLayers.glsl?raw';
-import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
+import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw';
+import rockShadowsGlsl from '../shaders/props/rockShadows.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
 import { camera, defaultCameraPosition, DEFAULT_FAR } from '../scene/camera';
 import { controls, keepAboveFlatGround } from '../scene/controls';
 import { WalkMode } from '../scene/walkMode';
@@ -16,6 +17,8 @@ import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
 import { patchCenterDirection, type TerrainPatch } from '../planet/patch';
 import { LifeGrid } from '../biome/lifeGrid';
+import { RockScatter } from '../props/rockScatter';
+import type { PropSettings } from '../props/propSettings';
 import type { DebugView, LifeProgress } from './landChunk';
 import { LIFE_SATURATION, landMiddleColor, lifeColors, rangeVector, geneOffset, type BiomeSettings, type Genome } from '../biome/plantTypes';
 import { ChunkPatchRenderer, type AdvanceChunkBase, type BakeChunkPatch } from './ChunkPatchRenderer';
@@ -37,14 +40,18 @@ import { HeightmapPipeline } from '../map/heightmap';
 import { landRampFloor } from '../planet/seaLevel';
 import { MAX_WAVE_WIND } from '../planet/oceanSpectrum';
 
-const chunkFragmentGlsl = terrainGlsl + noiseGlsl + landLayersGlsl + lifeLayersGlsl + hazeGlsl + chunkFragmentBody;
+const chunkFragmentGlsl = terrainGlsl + noiseGlsl + landLayersGlsl + lifeLayersGlsl + hazeGlsl + rockShadowsGlsl + chunkFragmentBody;
 
 // For the single shared gumball (scene/sharedGumball.ts) to target this
 // view's camera when the land-chunk pane is selected — see ISSUES.md,
 // 2026-09-23.
 // How high the haze reaches before thinning by 1/e, as a share of the terrain's height (maxHeight). Inferred, TUNABLE.
 const HAZE_SCALE_SHARE = 0.5;
-const WALK_MAP_REDRAW_MS = 2000; // how often the walk map is redrawn while walking. Inferred, TUNABLE
+const WALK_MAP_REDRAW_MS = 2000;
+// The rocks' shadow map: its box around the eye (world units, km), resolution, and how far up the sun it looks from. TUNABLE
+const SHADOW_HALF_SIZE = 1.5;
+const SHADOW_MAP_SIZE = 4096;
+const SHADOW_LIGHT_DISTANCE = 5; // how often the walk map is redrawn while walking. Inferred, TUNABLE
 
 export interface LandChunkCanvasHandle {
   getGumballTarget(): GumballTarget | null;
@@ -86,6 +93,7 @@ interface LandChunkCanvasProps {
   colorStops: ColorStop[];
   rock: RockSettings;
   biome: BiomeSettings;
+  propSettings: PropSettings; // rocks on the chunk (props/rockScatter.ts)
   onLifeProgress: (progress: LifeProgress | null) => void;
   debugView: DebugView;
   // This patch's own real low and high, in raw elevation units — the color
@@ -170,6 +178,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     colorStops,
     rock,
     biome,
+    propSettings,
     onLifeProgress,
     debugView,
     elevationMin,
@@ -225,8 +234,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   // Read each frame by the patch renderer, so onFrame never goes stale.
   const onLifeProgressRef = useRef(onLifeProgress);
   onLifeProgressRef.current = onLifeProgress;
-  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, lightFollowsCamera });
-  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, lightFollowsCamera };
+  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, propSettings, lightFollowsCamera });
+  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, propSettings, lightFollowsCamera };
 
   useImperativeHandle(
     handleRef,
@@ -447,7 +456,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       vertexShader: chunkVertexGlsl,
       fragmentShader: chunkFragmentGlsl,
       side: THREE.DoubleSide,
+      lights: true, // three.js fills its shadow uniforms: the rocks' cast shadows (props/rockScatter.ts)
       uniforms: {
+        ...THREE.UniformsUtils.clone(THREE.UniformsLib.lights),
         uBaseColor: { value: new THREE.Color(baseColor) },
         uLightDirection: { value: new THREE.Vector3(lightDirX, lightDirY, lightDirZ) },
         uAmbient: { value: ambientLight },
@@ -606,9 +617,63 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         }, biome, showLife, reportLife);
       }, 150);
     }
+    // Rocks (props/rockScatter.ts), per shown ground patch.
+    const rockScatter = new RockScatter(material.uniforms);
+    rockScatter.group.visible = false;
+    // The rocks' sun shadows: three.js's shadow map from a light along the scene's sun, its box following the eye and
+    // snapped to whole shadow texels so the shadows don't shimmer as you move (stable shadow maps). Only rocks cast.
+    const sunShadow = new THREE.DirectionalLight(0xffffff, 0); // casts only; our shaders do their own lighting
+    sunShadow.castShadow = true;
+    sunShadow.shadow.mapSize.set(SHADOW_MAP_SIZE, SHADOW_MAP_SIZE);
+    Object.assign(sunShadow.shadow.camera, { left: -SHADOW_HALF_SIZE, right: SHADOW_HALF_SIZE, top: SHADOW_HALF_SIZE, bottom: -SHADOW_HALF_SIZE, near: 0, far: 2 * SHADOW_LIGHT_DISTANCE });
+    sunShadow.shadow.camera.updateProjectionMatrix();
+    sunShadow.shadow.bias = -0.0005;
+    scene.add(sunShadow, sunShadow.target);
+    const shadowRotation = new THREE.Matrix4();
+    let shadowKey = '';
+    const shadowCenter = new THREE.Vector3();
+    function updateSunShadow(settings: typeof patchSettingsRef.current, renderer: THREE.WebGLRenderer) {
+      if (!renderer.shadowMap.enabled) renderer.shadowMap.enabled = true;
+      renderer.shadowMap.autoUpdate = false; // redrawn below only when the sun, the box or the rocks change (three.js docs)
+      sunShadow.castShadow = settings.propSettings.enabled;
+      const toSun = frameLight.clone().normalize();
+      shadowRotation.lookAt(toSun, new THREE.Vector3(), Math.abs(toSun.y) > 0.99 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0));
+      const texel = (2 * SHADOW_HALF_SIZE) / SHADOW_MAP_SIZE;
+      // Centered on the ground being viewed: under the eye when walking, the orbit point otherwise.
+      shadowCenter.copy(walkMode.active ? perspectiveCamera.position : orbitControls.target).applyMatrix4(shadowRotation.clone().transpose());
+      shadowCenter.set(Math.round(shadowCenter.x / texel) * texel, Math.round(shadowCenter.y / texel) * texel, shadowCenter.z).applyMatrix4(shadowRotation);
+      sunShadow.target.position.copy(shadowCenter);
+      sunShadow.position.copy(shadowCenter).addScaledVector(toSun, SHADOW_LIGHT_DISTANCE);
+      sunShadow.target.updateMatrixWorld();
+      sunShadow.updateMatrixWorld();
+      const key = [toSun.x, toSun.y, toSun.z, shadowCenter.x, shadowCenter.y, shadowCenter.z, rockScatter.version, sunShadow.castShadow].join();
+      if (key !== shadowKey) {
+        shadowKey = key;
+        renderer.shadowMap.needsUpdate = true;
+      }
+    }
+    function updateRocks(settings: typeof patchSettingsRef.current) {
+      const rockRenderer = sharedRendererRef.current.renderer;
+      const heightTexture = material.uniforms.uChunkHeightMap.value as THREE.Texture | null;
+      if (!rockRenderer || !heightTexture) return;
+      updateSunShadow(settings, rockRenderer);
+      rockScatter.update(rockRenderer, patchRenderer.shownPatches(rockRenderer), {
+        chunkHeightMap: heightTexture,
+        heightMapGreenChannel: material.uniforms.uHeightMapGreenChannel.value > 0.5,
+        lakeLevels: chunkLakes.texture,
+        seaLevel: material.uniforms.uWaterOn.value > 0.5 ? (material.uniforms.uSeaLevel.value as number) : -1.0e6, // no sea with Water off
+        maxHeight: material.uniforms.uMaxHeight.value as number,
+        heightBase: material.uniforms.uHeightBase.value as number,
+        chunkSize: material.uniforms.uChunkSize.value as number,
+        elevationMin: material.uniforms.uElevationMin.value as number,
+        elevationMax: material.uniforms.uElevationMax.value as number,
+        sampleGround: (x, z) => patchRenderer.sampleGround(rockRenderer, x, z, material.uniforms.uMaxHeight.value as number, material.uniforms.uHeightBase.value as number),
+      }, perspectiveCamera, Math.max(1, viewportElement!.clientHeight), settings.propSettings);
+    }
     const patchRenderer = new ChunkPatchRenderer(material);
     patchRenderer.group.visible = false;
     scene.add(patchRenderer.group);
+    scene.add(rockScatter.group);
     patchRendererRef.current = patchRenderer;
     const water = createChunkWater();
     const chunkLakes = new ChunkLakes();
@@ -692,9 +757,11 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       (water.mesh.material.uniforms.uLightDirection.value as THREE.Vector3).copy(frameLight);
       updateSkyDomeFrame(sky, perspectiveCamera, frameLight, atmosphereRef.current.wind, deltaSeconds);
       updateChunkWaterFrame(water, perspectiveCamera.position, deltaSeconds, viewportElement!.clientWidth * window.devicePixelRatio);
+      rockScatter.group.visible = patchRenderer.group.visible && patchSettingsRef.current.propSettings.enabled;
       if (!patchRenderer.group.visible) return;
       const settings = patchSettingsRef.current;
       updateLife(settings);
+      updateRocks(settings);
       perspectiveCamera.updateMatrixWorld();
       patchViewMatrix.multiplyMatrices(perspectiveCamera.projectionMatrix, perspectiveCamera.matrixWorldInverse);
       patchFrustum.setFromProjectionMatrix(patchViewMatrix);
@@ -742,6 +809,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       sharedRenderer.unregisterView('landChunk');
       clearTimeout(lifeTimer);
       lifeGrid.dispose();
+      rockScatter.dispose();
       walkMap.dispose();
       walkMode.dispose();
       orbitControls.dispose();

@@ -1,3 +1,6 @@
+// three.js's shadow mapping (its ShadowMaterial's pieces): rocks cast onto this surface through the sun's shadow map.
+#include <common>
+#include <shadowmap_pars_vertex>
 // Passes the mesh's own normal through to chunk.frag.glsl, in world terms so
 // the shared light direction means the same thing here as on the planet.
 // Voxel mode's geometry already carries its real heights baked in (no
@@ -150,5 +153,8 @@ void main() {
   }
 
   vWorldPosition = (modelMatrix * vec4(displacedPosition, 1.0)).xyz;
+  vec4 worldPosition = modelMatrix * vec4(displacedPosition, 1.0);
+  vec3 transformedNormal = normalMatrix * normal;
+  #include <shadowmap_vertex>
   gl_Position = projectionMatrix * modelViewMatrix * vec4(displacedPosition, 1.0);
 }

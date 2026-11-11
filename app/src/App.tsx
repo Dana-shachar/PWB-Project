@@ -218,6 +218,8 @@ function App() {
         rock={planetControls.rock}
         biome={planetControls.biome}
         onBiomeChange={planetControls.updateBiome}
+        props={planetControls.props}
+        onPropsChange={planetControls.updateProps}
         lifeProgress={landChunk.lifeProgress}
         terrainEnabled={planetControls.terrainEnabled}
         onTerrainEnabledChange={planetControls.setTerrainEnabled}
@@ -367,6 +369,7 @@ function App() {
             >
               <LandChunkCanvas
                 biome={planetControls.biome}
+                propSettings={planetControls.props}
                 onLifeProgress={landChunk.setLifeProgress}
                 debugView={landChunk.debugView}
                 ref={landChunkHandleRef}

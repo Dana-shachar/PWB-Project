@@ -8,15 +8,15 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-11):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md` and `docs/BIOME-PLAN.md`.*
+> **Start from here (2026-11-11, evening):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md` and `docs/BIOME-PLAN.md`.*
 >
-> **State.** `main` holds biome evolution (`[S87]`), algae limited by distance to water (`[B179]`), lighting saved per planet (`[S88]`), Climate and Terrain switches (`[S89]`) and the chunk's Patches debug view (`[S90]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - A full life regrowth takes about 6 s, nearly all of it waiting on era read-backs (`[B178]`); the GPU version is deferred.
-> - Two app tabs share the graphics card: frame times measured with both open read about double.
+> **State.** `main` holds rocks on the chunk (Props, `[S91]`, `[S94]`) with real shadows (`[S93]`), and one drawn-ground lookup for everything on the chunk (`[S92]`), which also fixed the walk eye sinking into the ground (`[B184]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Shadows need Scene > Light > Light follows camera off; its default is still on (small todo below).
+> - Walking measured about 79 fps with rocks and shadows (`[B188]`). Two app tabs share the graphics card: frame times with both open read about double.
 >
-> **How to work (Dana, 2026-11-11).** Build only what can be seen from walking height. Every color derives from the palette. Never improvise a method; name unsourced parts before building. A question or an "ok" with a question is not a go. Don't test what's already known; put findings at the end of a reply, after all tool calls. Keep Claude's tab open; Dana tests there too.
+> **How to work (Dana, 2026-11-11).** Real fixes only, never a fake stand-in. Measure the cause before a fix, one change per test. Ask before reloading or clicking in Claude's tab; Dana tests there. Build only what reads from walking height, textures included. No real-world limits on sizes or shapes: ask, or make it a control.
 >
-> **Next.** Revisit the tear (`[B176]`) with the Patches view, then the Terrain-off slab (`[B177]`). Open decisions below: the Moisture need rename, per-type evolution sliders.
+> **Next.** Rock scattering (`[B189]`, Dana to describe what's off). Then softer rock shapes (more hull points), moss on rock tops with the biome, and the deferred bugs `[B176]`, `[B177]` when Dana picks them.
 ---
 
 ## 🧭 Direction
@@ -59,7 +59,7 @@
 6. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock. Sources to start from: parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*), space colonization, genes mutated per Sims 1991; EZ-Tree considered for earth-like trees (check its license).
 7. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
 8. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll).
-9. ⚪ **Rocks and props:** procedural rocks scattered by slope and biome; height-field formations (mesas, terraces, spires). Arches and overhangs are a stretch (Peytavie et al. 2009).
+9. 🟡 **Rocks and props:** ✅ rocks on the chunk (2026-11-11, `[S91]` to `[S94]`): per-patch placement by rules, convex-hull shapes, palette colors, real shadows. Still: 🔴 scattering (`[B189]`), ⚪ softer shapes (20 to 40 hull points), ⚪ moss on rock tops (with the biome). Not cost-effective now (Dana): holes, overhangs, arches. Height-field formations (mesas, terraces, spires) later.
 10. ⚪ **Lava planet**, then ⚪ **Ice planet** (depends on water the most).
 
 ## ❓ Open decisions
@@ -95,6 +95,7 @@
 
 *Small, agreed, not urgent.*
 
+- 📌 Light follows camera defaults to on, which swings rock shadows on pan (`[B186]`): default it off in `scene/sceneControls.ts` (Dana flips it per project for now).
 - 📌 Chunk depth and chunk resolution are not saved with the planet (lighting now is, `[S88]`).
 - 📌 Leftovers in code: `chunkDepth` and `changeDepth` in `landChunk.ts`, `uWaterDeepest` in the wall shader, `chunkBaseDepth`'s unused parameter. The Height slider's meters in Chunk view understate what's drawn.
 - 📌 Brighter fill light: Dana liked the colors and wants it brighter (⚠️ the luminance scaling can push shadows toward a very saturated sky color).

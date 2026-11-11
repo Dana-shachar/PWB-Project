@@ -229,6 +229,7 @@ export function useSaveProject({
     planetControls.rock,
     planetControls.spin,
     planetControls.biome,
+    planetControls.props,
     planetControls.lighting,
     planetControls.terrainEnabled,
   ]);

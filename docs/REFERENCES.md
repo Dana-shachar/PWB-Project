@@ -163,6 +163,39 @@
 
 ## ⚙️ Computational
 
+**Rockfall reach: the shadow angle** · Evans and Hungr 1993, via USGS and NHESS · `method used`
+- Fallen rocks stop where a line from the cliff above, at the shadow angle, meets the ground; published values run 27° to 37°. Used as Props > Reach (default 30°) for rocks below cliffs (`[S91]`).
+- *[USGS Yosemite rockfall report](https://pubs.usgs.gov/of/1998/ofr-98-0467); [NHESS 2011](https://nhess.copernicus.org/articles/11/819/2011/nhess-11-819-2011.pdf). Search summary 2026-11-11*
+
+**Fall sorting on scree slopes** · Bithell et al. 2014 · `method used`
+- Larger blocks roll farther, collecting at the foot of a slope, not its top. Behind rocks gathering below cliffs and boulders thinning toward the tops.
+- *[Earth Surface Processes and Landforms, 2014](https://www.repository.cam.ac.uk/bitstream/1810/247016/1/Bithell_et_al-2014-Earth_Surface_Processes_and_Landforms.pdf). Search summary 2026-11-11*
+
+**Boulder sizes follow a power law** · boulder surveys (Vesta, comets) · `method used`
+- Cumulative counts fall as about D^-3: each doubling in size has about an eighth as many. Rocks are drawn from it in doubling size bands (`rockScatter.ts`); only the shape, not the real-world sizes, is taken.
+- *[The boulder population of asteroid 4 Vesta](https://arxiv.org/pdf/2009.00957). Search summary 2026-11-11*
+
+**Clustered points: the Thomas process** · Neyman-Scott cluster processes · `method used`
+- Parent points, each with children spread around it by a normal distribution. Used for small rocks around boulders (`CLUSTER_SHARE`). Recalled, not re-read: flagged.
+
+**Convex hulls for rock shapes** · three.js `ConvexGeometry` · `method used`
+- The tightest flat-faced shell around a set of points; random points in a box, slab, pillar or sphere give cut rock shapes, then bent by noise (`[S94]`).
+- *three.js addons, `ConvexGeometry`, read in `node_modules` 2026-11-11*
+
+**Props sunk and aligned to the ground** · Unreal foliage (Z Offset, Align to Normal) · `method used`
+- Placed props are pushed into the ground and leaned with the slope. Used for rocks: 10% of their real height, half the slope.
+
+**Surface-stable fractal dithering** · Rune Skovbo Johansen, Dither3D (2025) · `method used`
+- Dither dots stick to a surface yet stay pixel-sized: the pattern's level is picked from how fast the surface coordinates change per pixel, in powers of two with a crossfade. MPL-2.0. Only the level choice is used, written anew on 3D surface points (rocks have no UVs): the rocks' grain.
+- *[runevision.com/tech/dither3d](https://runevision.com/tech/dither3d), [github.com/runevision/Dither3D](https://github.com/runevision/Dither3D). Read 2026-11-11*
+
+**Shadow mapping in a custom shader** · three.js `ShadowMaterial` pieces · `method used`
+- `shadowmap_pars_vertex`, `shadowmap_vertex`, `shadowmap_pars_fragment`, `shadowmask_pars_fragment` (`getShadowMask`) with `lights: true`; `shadowMap.autoUpdate = false` with `needsUpdate` redraws only on change. A shadow box snapped to whole shadow texels doesn't shimmer (stable shadow maps), and shadows fade at its edge (the shadow distance fade of engines). Used for rock shadows (`[S93]`).
+- *three.js source in `node_modules`, read 2026-11-11*
+
+**Precision far from the origin** · eye-relative positions · `method used`
+- Float32 on the GPU loses small differences at large coordinates; computing positions relative to the eye keeps them small (three.js's flat shading uses the view position; AGI's "Precisions, Precisions" for the general method). Fixed the rocks' speckled faces (`[B183]`).
+
 **Many strategies competing per grid cell** · JeDi-DGVM, Pavlick et al. 2013 · `method used`
 - A vegetation model that samples many growth strategies per cell; trade-offs decide whether a strategy survives the cell's climate and how it performs against the others, so selection emerges from competition. The basis for the biome's variants per cell.
 - Used: 4 variants per life type share each cell's free space; a new strategy enters small, so a mutant starts from nothing (`[S87]`).
@@ -200,7 +233,7 @@
 - Steps of aging and seeding, spread distance, collision radius with overlap priority, shade radius, "can grow in shade", scale by age: the engine form of plants as competing circles, per instance.
 - *[Procedural Foliage Tool](https://dev.epicgames.com/documentation/unreal-engine/procedural-foliage-tool-in-unreal-engine). Read 2026-11-10*
 
-**Runtime GPU placement from density maps** · Horizon Zero Dawn, GDC 2017 · `method planned`
+**Runtime GPU placement from density maps** · Horizon Zero Dawn, GDC 2017 · `method used`
 - All vegetation placed on the GPU at runtime from 2D maps (about 0.25 ms per frame); the same ecotope data drives asset choice, distribution and colorization.
 - *[Van Muijden, GPU-Based Procedural Placement in Horizon Zero Dawn](https://www.guerrilla-games.com/read/gpu-based-procedural-placement-in-horizon-zero-dawn). Search summary 2026-11-10*
 

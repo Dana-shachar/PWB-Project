@@ -740,3 +740,25 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - A Debug view dropdown under the view pill, shown with the chunk. Patches tints each ground patch its own bright color, a debug exception to the palette, so seams and patches at the wrong height show. Dana.
 
+
+### [S91] Props: rocks on the chunk, placed by rules · `decided`
+**Decided:** 2026-11-11
+
+- A Props section (rocks for now; trees later) on the land chunk only, never the planet. Rocks belong to the shown ground patches, as engines place props per terrain tile (Horizon Zero Dawn's GPU density maps): each patch gets a density map from its own heights, dithered into rocks.
+- Placement rules: rock fields with bare ground between them (Patchiness), more below cliffs out to the shadow angle (Reach, 27° to 37° in the rockfall literature), a band along shores, none under water, few large boulders toward the tops. Most small rocks gather around boulders (a Thomas cluster process).
+- Sizes follow a power law, many small and few large, and scale with the terrain's height scale so they read from the walk eye on any planet. Only rocks covering at least 2 pixels and within Draw distance are drawn, the biggest first. Dana.
+
+### [S92] Everything on the chunk stands on the drawn ground · `decided`
+**Decided:** 2026-11-11
+
+- Anything placed on the chunk (the walk eye, the camera pivot, rocks, later plants) takes its height and slope from the triangle actually drawn there (`sampleGround`), built by the ground shader's own formula, never from the raw height map, which holds detail the mesh doesn't show. Dana.
+
+### [S93] Rocks cast real shadows · `decided`
+**Decided:** 2026-11-11
+
+- Rocks cast into a three.js sun shadow map that follows the viewed ground and redraws only when the sun, its box or the drawn rocks change. A rock shadow darkens the color already there (never replaces it), with the toon feather's edge, as much as the ground faces the sun, and fades at the box's edge. A fixed sun is needed: Light follows camera off. Fakes (blob shadows) are not used. Dana.
+
+### [S94] How rocks look · `decided`
+**Decided:** 2026-11-11
+
+- Shapes are convex hulls around random points (three.js ConvexGeometry) in four families, bent by noise, with a flat base sunk 10% into the ground. Colors come from the ground's: a hue range picked on a rock-color bar and a Saturation share. Bigger rocks carry bands and mottling; all carry a surface-stable grain (Johansen's Dither3D level choice on 3D surface points), denser in shade. Dana.

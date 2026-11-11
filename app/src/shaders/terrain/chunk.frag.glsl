@@ -308,5 +308,6 @@ void main() {
     vec3 shade = shadeColor(surfaceColor, uShadeHueTurn, uShadeLift, uShadeChroma) + surfaceColor * fill;
     litColor = mix(baseColor, shade, shadeMask);
   }
+  litColor = applyRockShadow(litColor, uShadeHueTurn, uShadeChroma, uShadeFeather, dot(normal, lightDir)); // the rocks' cast shadows
   gl_FragColor = vec4(applyHaze(litColor, vWorldPosition, uCameraPosition, uLightDirection), 1.0);
 }

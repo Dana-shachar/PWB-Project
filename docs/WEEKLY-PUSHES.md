@@ -13,9 +13,11 @@
 
 `Covers 2026-11-11 to 2026-11-18 · Class topic: Optimization and performance · Due: start of class, 10:10 am`
 
-*Made life evolve: algae and moss now compete in variants that mutate over eras, with algae held to the shore, and measured where the biome's time goes.*
+*Made life evolve: algae and moss now compete in variants that mutate over eras, with algae held to the shore, and measured where the biome's time goes. Then added rocks to the chunk, placed by rules and casting real shadows.*
 
 ![The land chunk with evolved moss and algae, and the new Debug view under the view pill.](screenshots/2026-11-11-chunk-biome-evolution.png)
+
+![Rocks on the chunk in walk mode: faceted boulders with grain, casting shadows on the ground.](screenshots/2026-11-11-chunk-rocks.png)
 
 ### 🛠️ Done
 - **Evolution (`[S87]`):** 4 variants per life type compete for each cell's space (JeDi-DGVM), and each era the rarest is replaced by a mutant of the commonest (Sims 1991). A new mutant starts from nothing and grows in (`[B180]`). Controls: an Evolution switch, Variation, Mutation rate and Shuffle.
@@ -24,18 +26,23 @@
 - **Algae by the shore (`[B179]`):** algae needs low ground and closeness to water, the distance from a jump-flooding map (Rong and Tan 2006), with a Shore reach slider.
 - **Saving and switches (`[S88]`, `[S89]`, `[B182]`):** lighting saves and undoes with the planet; Climate and Terrain sections have on/off switches.
 - **Debug view (`[S90]`):** a Patches mode colors each ground patch, to find seams.
+- **Rocks (`[S91]`, `[S94]`):** a Props section. Rocks are placed per ground patch from a density map (Horizon Zero Dawn's method): rock fields with bare ground between, more below cliffs out to the rockfall shadow angle, along shores, none under water, few boulders toward the tops, small rocks clustered around boulders. Shapes are cut convex hulls with a flat base; colors are a hue range and saturation from the ground's color; sizes scale with the landscape so they read from the walk eye.
+- **Real shadows (`[S93]`):** rocks cast into a three.js sun shadow map that follows the view and redraws only on change, darkening the ground by how much it faces the sun.
+- **Standing on the drawn ground (`[S92]`, `[B184]`):** the walk eye sank up to 1.5 m into the terrain at low eye height, because heights were read from a finer texture than the mesh draws. Everything on the chunk now reads the actual drawn triangle.
 
 ### 🤖 How AI was used
 - Claude built the evolution from the papers already in the references, and measured the regrowth's time before choosing a fix: the measurement showed that a planned shader rewrite would have gained almost nothing.
+- For the rocks, Claude researched placement, shadows and grain before building, and measured each bug's cause in the running app (precision, the sinking eye, floating rocks, stutter) before fixing it.
 - What Claude got wrong: it built several changes without Dana's go, and one "continue instead of regrowing" change made colors drift with every slider move until it was reverted. A Terrain switch version that hid every layer caused a tear and was reverted. Claude also ran repeated tests for causes that were already known, and Dana stopped it.
 
 ### ❌ What didn't work
 - Continuing evolution from the current grid on a slider change: the drift added up, and results no longer matched a reload.
 - Checking GPU read-backs every 4 ms instead of every frame: no gain, removed.
 - Terrain off still leaves the chunk a sheet with no slab (`[B177]`), and the tear (`[B176]`) is not yet explained.
+- Rocks first appeared only in walk mode, too small for the landscape and too scarce; a fake blob shadow never showed and was removed for real shadow maps; a screen-space grain stayed on the screen instead of the rock. Each was replaced after measuring why.
 
 ### ➡️ Next
-- Find the tear with the Patches view, then give the flat chunk its slab. Name Moisture need clearly, and decide on per-type evolution sliders.
+- Rock scattering (`[B189]`), softer rock shapes, moss on rock tops. Then the tear and the flat slab when picked.
 
 ---
 

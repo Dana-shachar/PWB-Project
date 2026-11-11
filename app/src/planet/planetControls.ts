@@ -1,5 +1,6 @@
 import type { LightingSettings } from '../scene/sceneControls';
 import { DEFAULT_BIOME_SETTINGS, migrateBiome, type BiomeSettings } from '../biome/plantTypes';
+import { DEFAULT_PROP_SETTINGS, migrateProps, type PropSettings } from '../props/propSettings';
 import { DEFAULT_COLOR_GRADE, migrateColorGrade, type ColorGradeSettings } from '../scene/colorGrade';
 import { ruleTurn, randomAtmosphereColors, DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { DEFAULT_SPIN, type SpinSettings } from '../scene/planetSpin';
@@ -238,6 +239,8 @@ export interface PlanetSettings {
   rock?: RockSettings;
   // Life on the chunk (biome/plantTypes.ts). Absent in older saves, which load the defaults.
   biome?: BiomeSettings;
+  // Props on the chunk (props/propSettings.ts). Absent in older saves, which load the defaults.
+  props?: PropSettings;
   // The color grade (scene/colorGrade.ts). Absent in older saves, which load neutral.
   colorGrade?: ColorGradeSettings;
   // The scene's lighting (scene/sceneControls.ts). Absent in older saves, which load the defaults.
@@ -351,6 +354,7 @@ export function usePlanetControls(scene: { lighting: LightingSettings; applyLigh
   const [rock, setRock] = useState<RockSettings>(DEFAULT_ROCK_SETTINGS);
   const [colorGrade, setColorGrade] = useState<ColorGradeSettings>(DEFAULT_COLOR_GRADE);
   const [biome, setBiome] = useState<BiomeSettings>(DEFAULT_BIOME_SETTINGS);
+  const [props, setProps] = useState<PropSettings>(DEFAULT_PROP_SETTINGS);
   // Heightmap self-shadowing — land chunk only for now, see shaders/
   // terrain.glsl for why the planet's curved surface is a separate step.
   const [shadowsEnabled, setShadowsEnabled] = useState(DEFAULT_PLANET_SETTINGS.shadowsEnabled);
@@ -412,7 +416,7 @@ export function usePlanetControls(scene: { lighting: LightingSettings; applyLigh
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock, colorGrade, biome, lighting: scene.lighting, terrainEnabled };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock, colorGrade, biome, props, lighting: scene.lighting, terrainEnabled };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -429,6 +433,7 @@ export function usePlanetControls(scene: { lighting: LightingSettings; applyLigh
     setRock({ ...DEFAULT_ROCK_SETTINGS, ...settings.rock });
     setColorGrade(migrateColorGrade(settings.colorGrade));
     setBiome(migrateBiome(settings.biome));
+    setProps(migrateProps(settings.props));
     setShadowsEnabled(settings.shadowsEnabled);
     setTerrainEnabled(settings.terrainEnabled ?? true);
     setDetailAmount(settings.detailAmount ?? DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
@@ -480,6 +485,8 @@ export function usePlanetControls(scene: { lighting: LightingSettings; applyLigh
     lighting: scene.lighting,
     biome,
     updateBiome: (changes: Partial<BiomeSettings>) => setBiome((previous) => ({ ...previous, ...changes })),
+    props,
+    updateProps: (changes: Partial<PropSettings>) => setProps((previous) => ({ ...previous, ...changes })),
     shadowsEnabled,
     setShadowsEnabled,
     detailAmount,

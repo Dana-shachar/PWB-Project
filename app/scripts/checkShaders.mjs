@@ -8,9 +8,28 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 const SHADERS = 'src/shaders/';
+// three.js resolves #include <chunk> from its ShaderChunk files and writes its light counts into the source
+// (WebGLProgram.js resolveIncludes, replaceLightNums); done the same way here, with one shadow-casting sun as at run time.
+const CHUNKS = 'node_modules/three/src/renderers/shaders/ShaderChunk/';
+const LIGHT_NUMS = { NUM_DIR_LIGHTS: 1, NUM_SPOT_LIGHTS: 0, NUM_SPOT_LIGHT_MAPS: 0, NUM_SPOT_LIGHT_COORDS: 0, NUM_RECT_AREA_LIGHTS: 0, NUM_POINT_LIGHTS: 0, NUM_HEMI_LIGHTS: 0, NUM_DIR_LIGHT_SHADOWS: 1, NUM_SPOT_LIGHT_SHADOWS: 0, NUM_SPOT_LIGHT_SHADOWS_WITH_MAPS: 0, NUM_POINT_LIGHT_SHADOWS: 0 };
+const resolveIncludes = (source) => source.replace(/^[ \t]*#include +<([\w.]+)>/gm, (_, name) => {
+  const text = readFileSync(CHUNKS + name + '.glsl.js', 'utf8');
+  return resolveIncludes(text.slice(text.indexOf('`') + 1, text.lastIndexOf('`')));
+});
+const unrollLoops = (source) => source.replace(/#pragma unroll_loop_start\s+for \( int i = (\d+); i < (\d+); i \+\+ \) \{([\s\S]+?)\}\s+#pragma unroll_loop_end/g, (_, start, end, body) => {
+  let out = '';
+  for (let i = Number(start); i < Number(end); i++) out += body.replace(/\[\s*i\s*\]/g, `[ ${i} ]`).replace(/UNROLLED_LOOP_INDEX/g, String(i));
+  return out;
+});
+const prepare = (source) => {
+  let text = resolveIncludes(source);
+  for (const [name, value] of Object.entries(LIGHT_NUMS)) text = text.replace(new RegExp(name, 'g'), String(value));
+  // glslang reserves the name 'average', which three's common chunk defines and browsers accept: renamed for the check only.
+  return unrollLoops(text).replace(/\baverage\(/g, 'threeAverage(');
+};
 const read = (file) => readFileSync(SHADERS + file, 'utf8');
 
-const PRECISION = 'precision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp samplerCube;\n';
+const PRECISION = 'precision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp samplerCube;\nprecision highp sampler3D;\nprecision highp sampler2DShadow;\nprecision highp samplerCubeShadow;\n';
 const VERTEX_HEADER = `#version 300 es
 #define attribute in
 #define varying out
@@ -43,7 +62,7 @@ uniform bool isOrthographic;
 const MATERIALS = [
   { name: 'planet patch (planet/planetPatchMesh.ts)', vertex: ['terrain/vertex.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/landLayers.glsl', 'water/water.glsl', 'water/oceanWaves.glsl', 'atmosphere/airGround.glsl', 'atmosphere/planetAir.glsl', 'terrain/planetPatch.frag.glsl'] },
   { name: 'planet mesh (planet/mesh.ts)', vertex: ['terrain/vertex.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/fragment.glsl'] },
-  { name: 'land chunk (voxel/LandChunkCanvas.tsx)', vertex: ['terrain/chunk.vert.glsl'], fragment: ['terrain/terrain.glsl', 'heightmap/noise.glsl', 'terrain/landLayers.glsl', 'biome/lifeLayers.glsl', 'atmosphere/haze.glsl', 'terrain/chunk.frag.glsl'] },
+  { name: 'land chunk (voxel/LandChunkCanvas.tsx)', shadows: true, vertex: ['terrain/chunk.vert.glsl'], fragment: ['terrain/terrain.glsl', 'heightmap/noise.glsl', 'terrain/landLayers.glsl', 'biome/lifeLayers.glsl', 'atmosphere/haze.glsl', 'props/rockShadows.glsl', 'terrain/chunk.frag.glsl'] },
   { name: 'chunk water (voxel/chunkWater.ts)', vertex: ['water/chunkWater.vert.glsl'], fragment: ['water/seaLookOverride.glsl', 'terrain/terrain.glsl', 'water/water.glsl', 'water/oceanWaves.glsl', 'atmosphere/haze.glsl', 'water/chunkWater.frag.glsl'] },
   { name: 'chunk water walls (voxel/chunkWater.ts)', vertex: ['water/chunkWaterWall.vert.glsl'], fragment: ['terrain/terrain.glsl', 'water/water.glsl', 'atmosphere/haze.glsl', 'water/chunkWaterWall.frag.glsl'] },
   { name: 'planet haze (atmosphere/planetHaze.ts)', vertex: ['atmosphere/planetHaze.vert.glsl'], fragment: ['atmosphere/airGround.glsl', 'atmosphere/planetAir.glsl', 'atmosphere/planetHaze.frag.glsl'] },
@@ -62,6 +81,8 @@ const MATERIALS = [
   { name: 'life step (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeStep.frag.glsl'] },
   { name: 'life sum (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeSum.frag.glsl'] },
   { name: 'life shore (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeShore.frag.glsl'] },
+  { name: 'rock density (props/rockScatter.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['terrain/terrain.glsl', 'heightmap/noise.glsl', 'props/rockDensity.frag.glsl'] },
+  { name: 'rocks (props/rockScatter.ts)', instanced: true, shadows: true, vertex: ['heightmap/noise.glsl', 'props/rock.vert.glsl'], fragment: ['terrain/terrain.glsl', 'heightmap/noise.glsl', 'terrain/landLayers.glsl', 'atmosphere/haze.glsl', 'props/rockShadows.glsl', 'props/rock.frag.glsl'] },
   { name: 'color grade (scene/colorGrade.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['post/colorGrade.frag.glsl'] },
   { name: 'stream power pass (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerPlanet.frag.glsl'] },
 ];
@@ -71,7 +92,10 @@ let failures = 0;
 for (const material of MATERIALS) {
   for (const [stage, header, parts] of [['vert', VERTEX_HEADER, material.vertex], ['frag', FRAGMENT_HEADER, material.fragment]]) {
     // The defines go after the header's #version line, as three.js puts a material's defines in its prefix.
-    const source = header.replace('\n', '\n' + (material.defines ?? '')) + parts.map(read).join('\n');
+    // An instanced material gets three.js's instanceMatrix attribute (WebGLProgram.js, USE_INSTANCING).
+    const instancing = material.instanced && stage === 'vert' ? 'attribute mat4 instanceMatrix;\n' : '';
+    const shadows = material.shadows ? '#define USE_SHADOWMAP\n#define SHADOWMAP_TYPE_PCF\n#define HAS_NORMAL\n' : '';
+    const source = prepare(header.replace('\n', '\n' + (material.defines ?? '') + shadows) + instancing + parts.map(read).join('\n'));
     const file = join(folder, `shader.${stage}`);
     writeFileSync(file, source);
     try {
@@ -80,7 +104,7 @@ for (const material of MATERIALS) {
       failures++;
       // glslang reports lines in the joined source; name the piece each error line falls in.
       const starts = [];
-      let line = header.split('\n').length + (material.defines ? 1 : 0);
+      let line = header.split('\n').length + (material.defines ? 1 : 0) + (instancing ? 1 : 0) + (shadows ? 3 : 0);
       for (const part of parts) {
         starts.push([line, part]);
         line += read(part).split('\n').length;
