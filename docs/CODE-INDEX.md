@@ -1,6 +1,6 @@
 # 🧭 Code Index
 
-`Last updated: 2026-11-10`
+`Last updated: 2026-11-11`
 
 *Where every part of the app lives, so a read can jump straight to the right file and function. Paths are under `app/src/`.*
 
@@ -36,7 +36,8 @@
 | Change the color grade | `scene/colorGrade.ts` (`ColorGrade`, `prepareLiftGammaGain`, `SAMPLES`), `shaders/post/colorGrade.frag.glsl`, `scene/sharedViewportRenderer.ts`, `randomColorGrade` in `planet/planetControls.ts` |
 | Change the chunk's toon shading | `toonShadeMask` and `shadeColor` in `shaders/terrain/landLayers.glsl`, `shadeColorFor` and `shadeHueTrackGradient` (the Shadow hue preview) in `scene/fillLight.ts`, the shade block in `chunk.frag.glsl`, `shade*` in `atmosphere/atmosphereSettings.ts`, `uShade*` in `voxel/LandChunkCanvas.tsx` |
 | Change templates or the project list | `handleCreateTemplate`, `handleEditTemplate`, `handleNewFromTemplate`, `handleRenameById`, `editingTemplate` in `projectSettings/saveProject.ts`; `template` in `firebase/storage.ts`; Project Settings in `ui/Panel.tsx` |
-| Change the biome (life grid, moss and algae) | `biome/plantTypes.ts` (`BiomeSettings`, `DEFAULT_BIOME_SETTINGS`, `lifeColors`, `LIFE_SATURATION`), `biome/lifeGrid.ts` (`LifeGrid`), `shaders/biome/lifeInputs.frag.glsl`, `lifeStep.frag.glsl`, `lifeLayers.glsl`, the life block in `chunk.frag.glsl`, `updateLife` in `voxel/LandChunkCanvas.tsx`, `ui/panels/BiomePanel.tsx`, the Biome section in `ui/Panel.tsx` |
+| Change the chunk's debug view | `voxel/DebugViewControl.tsx`, `debugView` in `voxel/landChunk.ts`, `uPatchDebug` and `uPatchColor` (`patchDebugColor` in `voxel/ChunkPatchRenderer.ts`, the tint in `chunk.frag.glsl`) |
+| Change the biome (life grid, moss and algae) | `biome/plantTypes.ts` (`BiomeSettings`, `DEFAULT_BIOME_SETTINGS`, `lifeColors`, `LIFE_SATURATION`), `biome/lifeGrid.ts` (`LifeGrid`, `newEra`, `simulate`), `shaders/biome/lifeInputs.frag.glsl`, `lifeStep.frag.glsl`, `lifeSum.frag.glsl`, `lifeShore.frag.glsl`, `lifeLayers.glsl`, the life block in `chunk.frag.glsl`, `updateLife` in `voxel/LandChunkCanvas.tsx`, `ui/panels/BiomePanel.tsx`, the Biome section in `ui/Panel.tsx` |
 | Change settings undo (Cmd+Z) | `useSettingsHistory` in `projectSettings/settingsHistory.ts` |
 | Add a saved planet setting | `planet/planetControls.ts` (`PlanetSettings`, `applySettings`), `projectSettings/saveProject.ts` |
 | Add a design-system component | `ui/UIElements.tsx` (incl. `LinkMenu`), `design.css`, `ui/icons.tsx` |
@@ -151,7 +152,7 @@
 
 **planet/planetControls.ts**
 - What it is: the planet's settings state and their migrations.
-- Key names: `PlanetSettings` (incl. `maxErrorPixels`, `detailAmount`, `autoDetail`, `water`, `atmosphere`), `WaterSettings` (incl. `shine`, `reflection`), `DEFAULT_WATER_SETTINGS`, `updateAtmosphere`, `WATER_SKY_COLOR`, `WATER_SHININESS`, `migrateWater`, `shoreSeaLevel` (debounced), `effectiveMaxErrorPixels`, `DEFAULT_PLANET_SETTINGS`, `usePlanetControls`, `applySettings`, `currentSettings`, `migrateColorStops`; `RockSettings` (`enabled`, `stops`, `slope`, `softness`), `DEFAULT_ROCK_SETTINGS`; `colorGrade`, `updateColorGrade`, `randomColorGrade`, `randomRockPalette` (from the land ramp, `ROCK_SATURATION_SHARE`, `ROCK_LIGHTNESS_SHARE`); `randomizeColors` (one roll sets land, sea, lakes, rock, sky and the grade from the land's hue: `randomTerrainPalette`, `randomWaterPalette`, `randomRockPalette`).
+- Key names: `PlanetSettings` (incl. `maxErrorPixels`, `detailAmount`, `autoDetail`, `water`, `atmosphere`, `lighting`, `terrainEnabled`), the section switches' drawn values (`drawnHeightScale`, `drawnColorByElevation`, `drawnAtmosphere`, `[S89]`), `WaterSettings` (incl. `shine`, `reflection`), `DEFAULT_WATER_SETTINGS`, `updateAtmosphere`, `WATER_SKY_COLOR`, `WATER_SHININESS`, `migrateWater`, `shoreSeaLevel` (debounced), `effectiveMaxErrorPixels`, `DEFAULT_PLANET_SETTINGS`, `usePlanetControls`, `applySettings`, `currentSettings`, `migrateColorStops`; `RockSettings` (`enabled`, `stops`, `slope`, `softness`), `DEFAULT_ROCK_SETTINGS`; `colorGrade`, `updateColorGrade`, `randomColorGrade`, `randomRockPalette` (from the land ramp, `ROCK_SATURATION_SHARE`, `ROCK_LIGHTNESS_SHARE`); `randomizeColors` (one roll sets land, sea, lakes, rock, sky and the grade from the land's hue: `randomTerrainPalette`, `randomWaterPalette`, `randomRockPalette`).
 
 **planet/seaLevel.ts**
 - What it is: the planet's area-weighted height distribution, the "% land" readout, and the water ramp's spacing by light remaining.
@@ -270,8 +271,8 @@
 - Key names: `useSharedViewportRenderer`, `registerView`.
 
 **scene/sceneControls.ts**
-- What it is: lighting and grid state, including whether the light follows the camera (on by default). Not saved with projects.
-- Key names: `useSceneControls`, `lightFollowsCamera`.
+- What it is: lighting and grid state, including whether the light follows the camera (on by default). The lighting saves and undoes with the planet through `PlanetSettings.lighting` (`[S88]`); grid and walk field of view are view settings.
+- Key names: `useSceneControls`, `LightingSettings`, `DEFAULT_LIGHTING`, `lighting`, `applyLighting`, `lightFollowsCamera`.
 
 **scene/fillLight.ts**
 - What it is: the sky fill's color: the sky's top color turned by Shadow hue, scaled to white's luminance; white with no atmosphere. Also the Shadow hue slider's track and swatch colors.
@@ -303,7 +304,7 @@
 
 **voxel/landChunk.ts**
 - What it is: chunk state, picking and the view mode. In smooth style its main effect bakes one whole-chunk texture for shadows, a CPU copy of the heights for the camera, and bumps `bakeVersion` so the patches re-bake. Voxel style (being dropped) still builds one mesh.
-- Key names: `useLandChunk`, `startResize`, `CHUNK_SHADOW_SAMPLES`, `GROUND_SAMPLES`, `bakeVersion`, `groundHeights`.
+- Key names: `useLandChunk`, `startResize`, `CHUNK_SHADOW_SAMPLES`, `GROUND_SAMPLES`, `bakeVersion`, `groundHeights`, `lifeProgress` (`LifeProgress`), `debugView` (`DebugView`).
 
 **voxel/areaSelect.ts**
 - What it is: selection mode: dragging a square on the planet, Esc, and the Size (km) slider's area.
@@ -450,14 +451,14 @@
 
 **projectSettings/saveProject.ts**
 - What it is: autosave, load, new and reset.
-- Key names: `useSaveProject` (the autosave's trigger list includes the atmosphere, rock, spin, grade and biome, `[B70]`; skipped while `editingTemplate`; reopens the last open project or template, `LAST_OPEN_KEY`), `openSaved`, templates (`handleCreateTemplate`, `handleEditTemplate`, `handleNewFromTemplate`), `handleRenameById`, `createFreshProject`, `handleReset`.
+- Key names: `useSaveProject` (the autosave's trigger list includes the atmosphere, rock, spin, grade, biome, lighting and the Terrain switch, `[B70]`; skipped while `editingTemplate`; reopens the last open project or template, `LAST_OPEN_KEY`), `openSaved`, templates (`handleCreateTemplate`, `handleEditTemplate`, `handleNewFromTemplate`), `handleRenameById`, `createFreshProject`, `handleReset`.
 
 **biome/plantTypes.ts**, **biome/lifeGrid.ts**
-- What it is: the life grid (Cordonnier 2017): algae and moss per cell on the chunk, regrown from bare ground on the GPU when its inputs change (150 ms after they settle), never while walking. Inputs per cell: temperature (Climate, Peak cooling, Pole cooling), moisture (rain, hollows, waterline), sunlight, and the waterline alone for aquatic algae.
-- Key names: `LifeGrid` (`run`, `texture`, `inputs`), `LIFE_GRID_SIZE`, `BiomeSettings`, `LifeType`, `LifeLook` (`hueTurn`, `lightnessShare`), `rangeVector`, `lifeColors`, `landMiddleColor`, `LIFE_SATURATION`, `migrateBiome`.
+- What it is: the life grid (Cordonnier 2017): algae and moss per cell on the chunk, 4 evolving variants per type (`[S87]`), regrown from bare ground on the GPU when its inputs change (150 ms after they settle), never while walking. Three target sets: one shown, two a run ping-pongs between out of sight. Inputs per cell: temperature (Climate, Peak cooling, Pole cooling), moisture (rain, hollows, waterline), sunlight; algae reads the waterline and the distance to water (`shore`).
+- Key names: `LifeGrid` (`run`, `simulate`, `newEra`, `applyGenes`, `algae`, `moss`, `shore`, `inputs`, `genomes`), `LIFE_GRID_SIZE`, `SUM_BLOCK`, `BiomeSettings` (`evolve`, `seed`, `variation`, `mutationRate`, `shoreReach`), `Genome`, `BASE_GENOME`, `geneOffset`, `mutate`, `seededRandom`, `LIFE_VARIANTS`, `ERA_YEARS`, `MAX_ERAS`, `LifeType`, `LifeLook`, `rangeVector`, `lifeColors`, `landMiddleColor`, `LIFE_SATURATION`, `migrateBiome`. Progress: `onProgress` to `lifeProgress` in `voxel/landChunk.ts`, shown by `ProgressBar` in the Biome section.
 
-**shaders/biome/** (`lifeInputs.frag.glsl`, `lifeStep.frag.glsl`, `lifeLayers.glsl`)
-- What it is: the grid's inputs pass and yearly step, and the drawn layer: `lifeSuitability` (the grid's rule per pixel), `lifeLayer` (Berg's height blend on suitability, top-down and edge masks), `lifeTint` (the ground tinted, its lightness kept), `lifeSampleSmooth` (cubic B-spline read of the grid).
+**shaders/biome/** (`lifeInputs.frag.glsl`, `lifeStep.frag.glsl`, `lifeSum.frag.glsl`, `lifeShore.frag.glsl`, `lifeLayers.glsl`)
+- What it is: the grid's inputs pass and yearly step (one pass per target, `uOutput`; `uAlgaeCleared` for a replaced variant), the era totals summed on the GPU (`lifeSum`), the distance to water by jump flooding (`lifeShore`, `shoreWetness`), and the drawn layer: `lifeShoreWetness`, `lifeSuitability` (the grid's rule per pixel), `lifeLayer` (Berg's height blend on suitability, top-down and edge masks), `lifeTint` (the ground tinted, its lightness kept), `lifeSampleSmooth` (cubic B-spline read of the grid).
 
 **scene/colorGrade.ts**
 - What it is: the per-planet color grade, a post pass over the shared canvas: a 2-sample multisampled half-float image with a float depth texture (reversed depth), an `EffectComposer` and one `ShaderPass` (no `OutputPass`: the scene's shaders already write screen color).

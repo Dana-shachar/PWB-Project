@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 import * as THREE from 'three';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
+
+// The chunk's debug draw mode (DebugViewControl.tsx); a view setting, not saved.
+export type DebugView = 'normal' | 'patches';
+
+export interface LifeProgress {
+  share: number;
+  secondsLeft: number | null;
+}
 import type { NoiseLayer } from '../map/heightmap';
 import { buildChunkHeights } from './density';
 import { CHUNK_SLAB_SHARE } from './chunkPatchMesh';
@@ -313,7 +321,15 @@ export function useLandChunk(
     setPatch((current) => patchAtDepth(current.face, current.min.clone().add(current.max).multiplyScalar(0.5), depth));
   }
 
+  // The life grid's regrowth progress (biome/lifeGrid.ts), shown in the Biome section; null when idle.
+  const [lifeProgress, setLifeProgress] = useState<LifeProgress | null>(null);
+  const [debugView, setDebugView] = useState<DebugView>('normal');
+
   return {
+    lifeProgress,
+    setLifeProgress,
+    debugView,
+    setDebugView,
     viewMode,
     setViewMode,
     geometry,

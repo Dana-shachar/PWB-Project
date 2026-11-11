@@ -1,6 +1,7 @@
+import type { LifeProgress } from '../voxel/landChunk';
 import { LIQUIDS, liquidNamed, rainfallMax, referenceTemperature } from '../rivers/riverClimate';
 import { useState } from 'react';
-import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, DualHueSlider, SectionTitle, Dial, LinkMenu } from './UIElements';
+import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, DualHueSlider, SectionTitle, Dial, LinkMenu, ProgressBar } from './UIElements';
 import { splitHueTrackGradient, splitSwatch, type ColorGradeSettings } from '../scene/colorGrade';
 import type { SpinSettings } from '../scene/planetSpin';
 import { AREA_SIZE_MAX_KM, AREA_SIZE_MIN_KM } from '../voxel/areaSelect';
@@ -79,6 +80,9 @@ interface PanelProps {
   rock: RockSettings;
   biome: BiomeSettings;
   onBiomeChange: (changes: Partial<BiomeSettings>) => void;
+  lifeProgress: LifeProgress | null; // the life grid's regrowth, null when idle
+  terrainEnabled: boolean; // off: the land is drawn flat
+  onTerrainEnabledChange: (enabled: boolean) => void;
   onRockChange: (changes: Partial<RockSettings>) => void;
   colorGrade: ColorGradeSettings;
   onColorGradeChange: (changes: Partial<ColorGradeSettings>) => void;
@@ -257,6 +261,9 @@ export function Panel({
   rock,
   biome,
   onBiomeChange,
+  lifeProgress,
+  terrainEnabled,
+  onTerrainEnabledChange,
   onRockChange,
   colorGrade,
   onColorGradeChange,
@@ -643,7 +650,7 @@ export function Panel({
               Planet accordion, not a separate always-open "Chunk" section. */}
           {/* Also the Terrain pipeline stage, its old row merged in here
               (Dana, 2026-10-21): any header click shows the noise controls. */}
-          <Accordion title="Planet Terrain" onHeaderClick={() => onStageChange('terrain')} active={activeStage === 'terrain'}>
+          <Accordion title="Planet Terrain" onHeaderClick={() => onStageChange('terrain')} active={activeStage === 'terrain'} headerSwitch={{ value: terrainEnabled, onChange: onTerrainEnabledChange, label: 'Terrain on or off' }}>
             {/* Same action as the Layers section's own Randomize (Dana,
                 2026-10-13: "add a random seed button at the top of the
                 planet section") — reseeds every layer at once, so it's
@@ -1019,6 +1026,7 @@ export function Panel({
           {/* Climate: how much of the liquid there is, which sets the lakes, rivers and erosion (Dana, 2026-11-08). */}
           <Accordion
             title="Climate"
+            headerSwitch={{ value: atmosphere.climateEnabled, onChange: (climateEnabled) => onAtmosphereChange({ climateEnabled }), label: 'Climate on or off' }}
             description="The rain, heat and liquid that decide how much water the planet has: its lakes, rivers and erosion."
           >
             <Select
@@ -1126,6 +1134,11 @@ export function Panel({
           >
             <Slider label="Years" value={biome.years} onChange={(years) => onBiomeChange({ years })} min={1} max={1000000} scale="log" step={1} precision={0} description="How long life has grown on the square. A long span settles toward where life can last." />
             <Slider label="Growth rate" value={biome.growthRate} onChange={(growthRate) => onBiomeChange({ growthRate })} min={0.001} max={1} scale="log" step={0.001} precision={3} description="How fast life spreads into free ground where it thrives, per year." />
+            {lifeProgress !== null && (
+              <div className="panel-progress">
+                <ProgressBar label="Growing life" share={lifeProgress.share} secondsLeft={lifeProgress.secondsLeft} />
+              </div>
+            )}
           </Accordion>
         </div>
 

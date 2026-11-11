@@ -229,6 +229,8 @@ export function useSaveProject({
     planetControls.rock,
     planetControls.spin,
     planetControls.biome,
+    planetControls.lighting,
+    planetControls.terrainEnabled,
   ]);
 
   // Shared by handleNewProject() and handleReset() — clears the canvas to

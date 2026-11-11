@@ -1,6 +1,6 @@
 # Biome Plan
 
-`Last updated: 2026-11-10`
+`Last updated: 2026-11-11`
 
 *The living chunk: life simulated on a grid like erosion, evolving over time, drawn as ground color from afar and as real plants up close.*
 
@@ -86,8 +86,15 @@
 
 1. ✅ **Life grid** (test 1): the simulation, algae and moss, the Biome section and right panel. Years is a slider until the World Clock is revised.
 2. ✅ **Ground layer** (2026-11-10): terrain-driven placement and a palette tint, as built above. Open: moss strength (minimum saturation 0.5, awaiting Dana's go).
-3. ⚪ **Planet far tint:** a global grid at the drainage grid's resolution.
-4. ⚪ **Bare ground:** the land ramp becomes soil and rock; color comes from life.
-5. ⚪ **Genes and eras, only what shows:** each type's genome is its visible traits (hue turn, brightness, moisture need, shade need; temperature range kept but uncontrolled); Sims's mutation per era (m = 0.2, ±d = 0.4); the grid's cover decides which mutations last (❓ inferred, needs a source or hand selection as Sims did); eras unlock the next stage once enough humus builds (❓ threshold unsourced). Shape genes wait for plants big enough to see.
-6. ⚪ **Grass, shrubs, trees and flowers:** new types on the grid, a tint first; geometry only for plants large enough to read from walking height, simple alien shapes, near the camera from density on the GPU (Horizon Zero Dawn).
-7. ⚪ **Agents:** pollinators and animals reading and writing the grid.
+3. ✅ **Evolution of algae and moss** (built 2026-11-11, `[S87]`): selection by access to resources, death and renewal, not a fitness rule.
+   - **Variants compete per cell:** 4 variants per type live side by side in every cell, each by its own genes against the cell's moisture, shade and temperature, sharing the cell's free space (JeDi-DGVM, Pavlick et al. 2013: many strategies per cell, trade-offs decide who survives; Cordonnier's growth into free space).
+   - **Death and renewal:** die-back by stress, regrowth into freed space by vigor (Cordonnier).
+   - **Mutation each era:** the least abundant variant is replaced by a mutant of the most abundant one; each gene changes with chance 0.2 by up to ±0.4 of its range (Sims 1991; mutations every reproductive cycle, arXiv 1905.10272). Seeded, so a rerun replays the same history.
+   - **Genes, only visible ones:** hue turn, brightness, moisture need, shade need. Shown as the cell's color, the abundance-weighted mix of its variants.
+   - ❓ Inferred, TUNABLE: 4 variants, an era of 50 years (at most 40 eras), gene spans (hue ±60°, the rest ±0.4), Variation from 0 to 2.
+   - **As built:** Variation scales only hue and brightness (a look change, instant); a mutant starts from nothing; runs work out of sight and swap in when done. Controls: an Evolution section with its switch, Variation, Mutation rate and Shuffle.
+   - **Algae by the shore:** wetness needs low ground and closeness to water, the latter within Shore reach (jump flooding, Rong and Tan 2006). The distance falloff shape is inferred, TUNABLE.
+   - ⏸️ Evolution fully on the GPU, to remove the era read-back waits (`[B178]`).
+4. ⚪ **Grass, then shrubs and trees:** new grid types that need humus (❓ threshold unsourced, to research); a tint first, then simple tufts and trees as geometry near the camera (Horizon Zero Dawn placement, EZ-Tree for trees).
+5. ⚪ **The planet's far tint:** a coarse global grid.
+

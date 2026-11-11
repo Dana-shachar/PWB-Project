@@ -39,6 +39,12 @@ vec4 lifeSampleSmooth(sampler2D grid, vec2 uv, float gridSize) {
        + g1.y * (g0.x * texture2D(grid, vec2(h0.x, h1.y)) + g1.x * texture2D(grid, h1));
 }
 
+// Algae's wetness: the lower of height above water and distance from it (lifeStep.frag.glsl's rule, the same falloff).
+float lifeShoreWetness(float heightWetness, float shoreDistance, float reach, float metersPerUv) {
+  if (heightWetness >= 1.5) return heightWetness;
+  return min(heightWetness, exp(-3.0 * shoreDistance * metersPerUv / max(reach, 1.0)));
+}
+
 // HSL to RGB, the standard formula.
 vec3 hslToRgb(vec3 hsl) {
   vec3 rgb = clamp(abs(mod(hsl.x * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);

@@ -1091,6 +1091,29 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   border: 1px solid var(--color-track);
 }
 
+/* The chunk's debug view (voxel/DebugViewControl.tsx): a small header over a dropdown, under the view pill. */
+.debug-view-control {
+  position: absolute;
+  top: calc(16px + 36px);
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  /* The walk controls' frame, so it reads on a bright sky (Dana, 2026-11-11). */
+  box-sizing: border-box;
+  padding: var(--gap-sm);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-system-gray) 60%, transparent);
+}
+.debug-view-title {
+  font: 400 var(--font-size-xs) var(--font-ui);
+  color: var(--color-text);
+}
+.debug-view-select {
+  width: auto;
+}
+
 .view-mode-btn {
   padding: 6px 10px;
   cursor: pointer;
@@ -2020,6 +2043,10 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
 }
 @media (prefers-reduced-motion: reduce) {
   .progress-bar-fill { transition: none; }
+}
+/* A progress bar inside a section's sliders: room above and below so it never crowds them. */
+.panel-progress {
+  padding: var(--gap-md) 0;
 }
 @keyframes busy-indicator-spin {
   to { transform: rotate(360deg); }

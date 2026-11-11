@@ -1,6 +1,6 @@
 # 📚 References
 
-`Last updated: 2026-11-04`
+`Last updated: 2026-11-11`
 
 *Every outside source this project relies on, with what it is and what was taken from it. Cited once here, linked from everywhere else.*
 
@@ -163,14 +163,34 @@
 
 ## ⚙️ Computational
 
+**Many strategies competing per grid cell** · JeDi-DGVM, Pavlick et al. 2013 · `method used`
+- A vegetation model that samples many growth strategies per cell; trade-offs decide whether a strategy survives the cell's climate and how it performs against the others, so selection emerges from competition. The basis for the biome's variants per cell.
+- Used: 4 variants per life type share each cell's free space; a new strategy enters small, so a mutant starts from nothing (`[S87]`).
+- *[Biogeosciences, 2013](https://doaj.org/article/bce8ccecaa6646aaa307f41a2509d691). Search summary 2026-11-10*
+
+**Mutation each reproductive cycle, competition for resources** · arXiv 1905.10272 · `method planned`
+- Evolving plants in a heterogeneous environment: mutations at each reproductive cycle, plants competing for resources.
+- *[arXiv 1905.10272](https://web3.arxiv.org/pdf/1905.10272). Search summary 2026-11-10*
+
 **Ecosystem on a grid, coupled with erosion** · Cordonnier et al. 2017 · `method planned`
 - Plants in aggregate per cell, as ecologists' global vegetation models do, because individual plants as circles get "computationally costly" beyond about 1 km². Trees and shrubs store count, summed heights and summed ages per cell; grass only a density; dead matter turns to humus at 30% a year.
 - Viability per plant type from a hat function per input (temperature with a 6.5 °C/km lapse rate, soil moisture, sun hours with terrain shadow), the lowest one wins (Liebig's law). Yearly: germination in proportion to vigor times free space if unstressed (0.24 saplings/m² for woody plants), growth by vigor, death by self-thinning (coverage above 1), stress and old age; taller layers shade lower ones.
 - *Cordonnier, Galin, Gain, Benes, Guérin, Peytavie, Cani, ACM TOG 36(4) 134, 2017; PDF in the course folder. Read 2026-11-10*
 
-**Evolving plant shapes from parameter genomes** · Sims 1991 · `method planned`
+**Evolving plant shapes from parameter genomes** · Sims 1991 · `method used`
 - The genotype is the parameter set, the phenotype the plant grown from it: 21 genetic parameters decide how fast each segment grows, when it buds and in which direction, "grown in arbitrarily small increments for smooth simulation of development". Mutation: genes normalized to 0 to 1, each copied with probability m of adding a random ±d (he used m = 0.2, d = 0.4); two parents can be mated.
+- Used: the biome's genes stored 0 to 1 and mutated by his rule, m as the Mutation rate slider, d = 0.4 (`[S87]`).
 - *[Artificial Evolution for Computer Graphics, SIGGRAPH 1991](https://www.karlsims.com/papers/SimsSiggraph91.pdf). Read 2026-11-10*
+
+**Distance to the nearest seed on the GPU** · jump flooding, Rong and Tan 2006 · `method used`
+- Each cell keeps the nearest seed found so far, checking 8 neighbors at a step that halves each pass, so a 512 grid needs 9 passes.
+- Algae's distance to water (`lifeShore.frag.glsl`, `[B179]`). Cited from recall, not re-read.
+- *Rong and Tan, "Jump Flooding in GPU with Applications to Voronoi Diagram and Distance Transform", I3D 2006*
+
+**Summing a texture on the GPU before reading it** · GPU reduction, GPU Gems 2, ch. 31 · `method used`
+- Each output pixel sums a block of the input, so only a small texture is read back to the CPU.
+- The biome's era totals, both types in one 64 by 32 read (`lifeSum.frag.glsl`, `[B178]`). Cited from recall, not re-read.
+- *Harris, "Mapping Computational Concepts to GPUs", GPU Gems 2, ch. 31, 2005*
 
 **Procedural trees from parameters** · EZ-Tree (Dan Greenheck) · `considered`
 - MIT, npm `@dgreenheck/ez-tree`, three.js; a tree mesh generated at runtime from a seed and parameters (branch levels, per-level angle, children, gnarliness, length, radius, taper; twist, force; leaf count, size, angle, tint; bark tint), with built-in LODs and raw geometry for instancing. A generator for artists, not an evolution system: the evolution would be ours, on its parameters. Shrubs not documented.

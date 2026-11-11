@@ -60,6 +60,8 @@ const MATERIALS = [
   // The grade's vertex is three.js's CopyShader (inline); the brush vertex stands in, a full-screen pass alike.
   { name: 'life inputs (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['terrain/terrain.glsl', 'biome/lifeInputs.frag.glsl'] },
   { name: 'life step (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeStep.frag.glsl'] },
+  { name: 'life sum (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeSum.frag.glsl'] },
+  { name: 'life shore (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeShore.frag.glsl'] },
   { name: 'color grade (scene/colorGrade.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['post/colorGrade.frag.glsl'] },
   { name: 'stream power pass (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerPlanet.frag.glsl'] },
 ];

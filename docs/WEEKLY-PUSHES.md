@@ -1,11 +1,41 @@
 # 📅 Weekly Pushes
 
-`Last updated: 2026-11-09`
+`Last updated: 2026-11-11`
 
 *The syllabus's graded weekly report: what was attempted, how AI tools were used, what worked and what comes next. Newest first. Original screenshots live in the course folder `Cornell/Fall 26/PWB/Screenshots/`, outside the repo.*
 
 > [!NOTE]
 > **How the entries are numbered.** By the syllabus's own sessions (`Syllabus-FA26-DESIGN6197-SEM130-DRAFT.pdf`, in the course folder): the class meets on Wednesdays, and each weekly report is committed by the start of that Wednesday's class (10:10 am). Work stays in the earlier session's entry until it is committed: the first commit after a class starts the next session's entry. Two entries in one session are marked "part 1 of 2". Sessions 1 and 2 (Aug 26, Sep 2) are left empty, before the project started. The next sessions are pre-built at the end of this file: fill one in, then move it to the top.
+
+---
+
+## Session 13 · Wed 2026-11-18
+
+`Covers 2026-11-11 to 2026-11-18 · Class topic: Optimization and performance · Due: start of class, 10:10 am`
+
+*Made life evolve: algae and moss now compete in variants that mutate over eras, with algae held to the shore, and measured where the biome's time goes.*
+
+![The land chunk with evolved moss and algae, and the new Debug view under the view pill.](screenshots/2026-11-11-chunk-biome-evolution.png)
+
+### 🛠️ Done
+- **Evolution (`[S87]`):** 4 variants per life type compete for each cell's space (JeDi-DGVM), and each era the rarest is replaced by a mutant of the commonest (Sims 1991). A new mutant starts from nothing and grows in (`[B180]`). Controls: an Evolution switch, Variation, Mutation rate and Shuffle.
+- **Performance, measured (`[B178]`):** a full regrowth took 10.6 s, of which 10.5 s was waiting on GPU read-backs and 0.06 s was the simulation. One read per era instead of two brought it to 6.2 s; the rest is deferred to evolution fully on the GPU.
+- **No flicker (`[B181]`):** regrowth runs out of sight and swaps in when done, with a progress bar; Variation recolors instantly without a regrowth.
+- **Algae by the shore (`[B179]`):** algae needs low ground and closeness to water, the distance from a jump-flooding map (Rong and Tan 2006), with a Shore reach slider.
+- **Saving and switches (`[S88]`, `[S89]`, `[B182]`):** lighting saves and undoes with the planet; Climate and Terrain sections have on/off switches.
+- **Debug view (`[S90]`):** a Patches mode colors each ground patch, to find seams.
+
+### 🤖 How AI was used
+- Claude built the evolution from the papers already in the references, and measured the regrowth's time before choosing a fix: the measurement showed that a planned shader rewrite would have gained almost nothing.
+- What Claude got wrong: it built several changes without Dana's go, and one "continue instead of regrowing" change made colors drift with every slider move until it was reverted. A Terrain switch version that hid every layer caused a tear and was reverted. Claude also ran repeated tests for causes that were already known, and Dana stopped it.
+
+### ❌ What didn't work
+- Continuing evolution from the current grid on a slider change: the drift added up, and results no longer matched a reload.
+- Checking GPU read-backs every 4 ms instead of every frame: no gain, removed.
+- Terrain off still leaves the chunk a sheet with no slab (`[B177]`), and the tear (`[B176]`) is not yet explained.
+
+### ➡️ Next
+- Find the tear with the Patches view, then give the flat chunk its slab. Name Moisture need clearly, and decide on per-type evolution sliders.
 
 ---
 
@@ -508,25 +538,6 @@
 *⚪ One-line summary of the week.*
 
 🖼️ `![caption](screenshots/2026-11-11-name.png)`
-
-#### 🛠️ Done
-- ⚪
-
-#### 🤖 AI process
-- ⚪
-
-#### 📊 Worked / didn't / next
-- ✅
-- ❌
-- ⏭️
-
-### Session 13 · Wed 2026-11-18
-
-`Covers 2026-11-11 to 2026-11-18 · Class topic: Optimization and performance · Due: start of class, 10:10 am`
-
-*⚪ One-line summary of the week.*
-
-🖼️ `![caption](screenshots/2026-11-18-name.png)`
 
 #### 🛠️ Done
 - ⚪

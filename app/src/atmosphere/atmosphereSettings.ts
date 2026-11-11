@@ -54,6 +54,7 @@ export interface AtmosphereSettings {
   // own relief, since Earth's 6.5 °C per km breaks on its exaggerated heights. Alien worlds can go far past Earth's. TUNABLE.
   peakCooling: number;
   poleCooling: number;
+  climateEnabled: boolean; // off: the planet is dry (no lakes, rivers or rain); the Climate values are kept
   liquid: string;
   moon: boolean;
   // How many moons show (1 to 5), and all five, so changing the count never loses one (atmosphere/moonTexture.ts).
@@ -108,6 +109,7 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   temperature: 15,
   peakCooling: 40, // inferred, TUNABLE
   poleCooling: 30, // inferred, TUNABLE
+  climateEnabled: true,
   liquid: 'Water',
   moon: false,
   moonCount: 1,

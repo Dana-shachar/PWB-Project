@@ -1,6 +1,6 @@
 # 📐 Spec
 
-`Last updated: 2026-11-10`
+`Last updated: 2026-11-11`
 
 *What the system is: its architecture, and the decisions that define it.*
 
@@ -717,4 +717,26 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 **Decided:** 2026-11-10
 
 - A reload reopens the last open project or template, back in template mode for a template, so a reload never silently switches which planet is being edited. Dana.
+
+### [S87] Life evolves: variants compete, eras mutate · `decided`
+**Decided:** 2026-11-11
+
+- Each life type has 4 variants side by side in every cell, sharing its free space (JeDi-DGVM, Pavlick et al. 2013). Each era the least abundant is replaced by a mutant of the most abundant (Sims 1991), and the mutant starts from nothing and grows in. Seeded, so the same settings always give the same result.
+- Genes are only visible traits, stored 0 to 1: hue, brightness, moisture need, shade need. Variation scales only hue and brightness, so it changes the look instantly without a regrowth; Mutation rate, Shuffle and the switch regrow.
+- A regrowth runs out of sight and swaps in when done, with a progress bar in the Biome section. Algae needs the shore by height and by distance (Shore reach, by jump flooding). Dana.
+
+### [S88] Lighting is saved with the planet · `decided`
+**Decided:** 2026-11-11
+
+- Ambient, light direction, Intensity, Specular, Shininess, Wrap and Light follows camera save, load and undo with the planet. View settings (grid, walk field of view, debug view) do not. Dana.
+
+### [S89] Climate and Terrain have switches · `decided`
+**Decided:** 2026-11-11
+
+- Climate off makes the planet dry, as Liquid Dry does: no lakes, rivers or rain; the ocean stays with Water's switch. Terrain off draws the land flat in its base color. Both keep their values for when they're turned back on. Dana.
+
+### [S90] A debug view for the chunk · `decided`
+**Decided:** 2026-11-11
+
+- A Debug view dropdown under the view pill, shown with the chunk. Patches tints each ground patch its own bright color, a debug exception to the palette, so seams and patches at the wrong height show. Dana.
 

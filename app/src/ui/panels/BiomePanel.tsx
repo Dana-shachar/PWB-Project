@@ -1,6 +1,7 @@
 import { Accordion, DualHueSlider, Slider } from '../UIElements';
 import { LIFE_SATURATION, landMiddleColor, lifeColors, type BiomeSettings, type LifeType, type LifeTypeKey } from '../../biome/plantTypes';
 import type { ColorStop } from '../../planet/colorRamp';
+import { DiceIcon } from '../icons';
 
 // The Biome stage's right panel: the granular controls per life type (biome/plantTypes.ts). The main ones live in the
 // left panel's Biome section.
@@ -63,10 +64,10 @@ export function BiomePanel({ biome, onBiomeChange, colorStops }: BiomePanelProps
               value={type.moisture.idealMin}
               onChange={(need) => update(key, { moisture: { ...type.moisture, idealMin: need, min: Math.max(need - 0.2, 0) } })}
               min={0}
-              max={1.4}
+              max={2}
               step={0.01}
               precision={2}
-              description="How wet the ground must be: low tolerates dry ground, 1 needs soaked ground, above 1 only at and under water."
+              description="How wet the ground must be: low tolerates dry ground, 1 needs soaked ground, above 1 only at and under water. Evolution can lower a variant's need by up to 0.4, so the top of the range offsets that."
             />
             <Slider
               label="Shade need"
@@ -78,9 +79,57 @@ export function BiomePanel({ biome, onBiomeChange, colorStops }: BiomePanelProps
               precision={2}
               description="How much shade it needs: 0 thrives in full sun, 1 only in deep shade."
             />
+            {key === 'algae' && (
+              <Slider
+                label="Shore reach"
+                value={biome.shoreReach}
+                onChange={(shoreReach) => onBiomeChange({ shoreReach })}
+                min={10}
+                max={5000}
+                scale="log"
+                step={1}
+                precision={0}
+                description="How far from the water algae can grow, in meters. It also needs low ground: Moisture need sets how high above the water."
+              />
+            )}
           </Accordion>
         );
       })}
+      <Accordion
+        title="Evolution"
+        defaultOpen
+        headerSwitch={{ value: biome.evolve, onChange: (evolve) => onBiomeChange({ evolve }), label: 'Evolution on or off' }}
+      >
+        <Slider
+          label="Variation"
+          value={biome.variation}
+          onChange={(variation) => onBiomeChange({ variation })}
+          min={0}
+          max={2}
+          step={0.01}
+          precision={2}
+          description="How different the variants look from their type: 0 keeps one color, 1 is the default, 2 is wide. Changes the look only, instantly."
+        />
+        <Slider
+          label="Mutation rate"
+          value={biome.mutationRate}
+          onChange={(mutationRate) => onBiomeChange({ mutationRate })}
+          min={0}
+          max={1}
+          step={0.01}
+          precision={2}
+          description="How often a variant's genes change each era: low drifts slowly, high changes fast."
+        />
+        <button
+          type="button"
+          className="noise-add-layer-btn ui-tooltip-anchor"
+          disabled={!biome.evolve}
+          onClick={() => onBiomeChange({ seed: Math.floor(Math.random() * 1e9) })}
+        >
+          <DiceIcon /> Shuffle
+          <span className="ui-tooltip">Replays evolution with a new seed, so different variants win</span>
+        </button>
+      </Accordion>
     </div>
   );
 }

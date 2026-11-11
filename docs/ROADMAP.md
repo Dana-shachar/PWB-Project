@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-10`
+`Last updated: 2026-11-11`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,16 +8,15 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-10, night):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md` and `docs/BIOME-PLAN.md`.*
+> **Start from here (2026-11-11):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md` and `docs/BIOME-PLAN.md`.*
 >
-> **State.** `main` holds the biome's first round (`[S85]`): the life grid, algae and moss as a ground tint, four controls per type, plus the template reopen fix (`[S86]`, `[B175]`) and Ambient with Shading (`[B174]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - Flora is the template to work in; Dana saved its colors and biome values herself.
-> - Scene lighting (Ambient, Light) isn't saved per planet; its defaults are in `scene/sceneControls.ts`.
+> **State.** `main` holds biome evolution (`[S87]`), algae limited by distance to water (`[B179]`), lighting saved per planet (`[S88]`), Climate and Terrain switches (`[S89]`) and the chunk's Patches debug view (`[S90]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - A full life regrowth takes about 6 s, nearly all of it waiting on era read-backs (`[B178]`); the GPU version is deferred.
 > - Two app tabs share the graphics card: frame times measured with both open read about double.
 >
-> **How to work (Dana, 2026-11-10).** Build only what can be seen from walking height (`.claude/CLAUDE.md`). Every color derives from the palette. Never improvise a method; name unsourced parts before building. Clear instructions are a go; don't ask small questions. Keep Claude's tab open; Dana tests there too.
+> **How to work (Dana, 2026-11-11).** Build only what can be seen from walking height. Every color derives from the palette. Never improvise a method; name unsourced parts before building. A question or an "ok" with a question is not a go. Don't test what's already known; put findings at the end of a reply, after all tool calls. Keep Claude's tab open; Dana tests there too.
 >
-> **Next job: biome evolution, step one** (`BIOME-PLAN.md` stage 5): algae and moss drifting in visible traits over eras, Sims's mutation; two parts still unsourced (which mutations last, the humus threshold for the next stage).
+> **Next.** Revisit the tear (`[B176]`) with the Patches view, then the Terrain-off slab (`[B177]`). Open decisions below: the Moisture need rename, per-type evolution sliders.
 ---
 
 ## 🧭 Direction
@@ -46,7 +45,7 @@
    4. ⚪ The grade per view: only the chunk graded, the planet drawn after the grade (Unity's per-camera post processing; check its docs first).
 5. ✅ **Flora planet terrain** (template Flora): plains, hills and mountain regions by layer masks, sea level set by Dana.
 6. 🟡 **Biome evolution** (Dana, 2026-11-10; the full plan and its research live in `BIOME-PLAN.md`): life on a grid run like erosion, never individual plants in the simulation; plants drawn as real geometry near the camera and as a tint from afar. Evolution and succession layered: eras unlock forms, the grid places them. Sources in `REFERENCES.md` (Cordonnier 2017, Sims 1991, Horizon Zero Dawn, EZ-Tree).
-   1. ⚪ **Life grid and pioneer layers (test 1).** Generation 0, algae and moss, plus humus, as per-cell densities stepped one year per GPU pass; the year comes from the World Clock, a long jump runs to the settled state, nothing stored (replayed like erosion).
+   1. ✅ **Life grid and pioneer layers (test 1)** (2026-11-10, `[S85]`; built as below except the year comes from a Years slider until the World Clock is revised). Generation 0, algae and moss, plus humus, as per-cell densities stepped one year per GPU pass; the year comes from the World Clock, a long jump runs to the settled state, nothing stored (replayed like erosion).
       - Viability per type: each input scored −1 to 1 by its own ranges (Cordonnier's hat function), the worst wins (Liebig's law); above 0 grows into free space, below 0 dies back.
       - Inputs: moisture (drainage, lakes, Climate rainfall), temperature (Climate's, minus altitude and pole cooling, two tunable sliders in Climate), sunlight (facing the scene's sun, times the cast shadow; no day and night cycle).
       - Dead matter to humus at a rate scaled by moisture and temperature (LPJ, Sitch et al. 2003; 📌 Dana to download the paper for the formula).
@@ -54,7 +53,7 @@
       - Shader: a layer per life type with its own color, pattern and scale (algae a glossy film at waterlines, moss clumpy cushions), coverage spreading by a noise threshold (Unreal's HeightLerp). Biome section: switch, per-type colors and pattern scale, growth rate; Randomize colors picks the colors.
       - Files: new `biome/plantTypes.ts`, `biome/lifeGrid.ts`, `biome/biomeControls.ts`, `shaders/biome/lifeStep.frag.glsl`; `landLayers.glsl`, `chunk.frag.glsl`, `planetPatch.frag.glsl`, `LandChunkCanvas.tsx`, `planetPatchMesh.ts`, `planetControls.ts`, `Panel.tsx`, `App.tsx`.
    2. ⚪ **Bare ground (test 2).** The land ramp becomes soil and rock; green appears only where life grows.
-   3. ⚪ **Genes and eras.** A genome per planet (the plant generator's parameters plus colors, visible as sliders), Sims's mutation per era (rate m and amount d, shown), eras unlocking stages (pioneers, then grass, shrubs, trees and flowers), divergence from Earth by wide starting ranges, and a reroll per planet with locks.
+   3. 🟡 **Genes and eras.** ✅ Evolution of algae and moss (2026-11-11, `[S87]`): 4 variants per type compete per cell, an era replaces the least abundant by a mutant of the most, Variation and Mutation rate sliders, Shuffle. Still to do: A genome per planet (the plant generator's parameters plus colors, visible as sliders), Sims's mutation per era (rate m and amount d, shown), eras unlocking stages (pioneers, then grass, shrubs, trees and flowers), divergence from Earth by wide starting ranges, and a reroll per planet with locks.
    4. ⚪ **Grass, shrubs and trees.** New types on the grid (Cordonnier: count, height and age per cell, self-thinning, shade of lower layers), drawn near the camera from the grid's density on the GPU (Horizon Zero Dawn), a few generated variants each with lower-detail versions further away; their own tint from afar.
    5. ⚪ **Agents** (pollinators, animals): later, reading and writing the grid (Ecormier-Nocca 2021 to read).
 6. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock. Sources to start from: parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*), space colonization, genes mutated per Sims 1991; EZ-Tree considered for earth-like trees (check its license).
@@ -75,6 +74,8 @@
 - ❓ Endless-looking chunk: fade its edges into the haze now, or real terrain to the horizon at lower detail later.
 - ❓ Swirl as Musgrave's Coriolis twist (researched, waiting).
 - ❓ Memory savings (agreed in principle, none has a go): free the JS copy of the map after upload, a half-float map, reuse the worker's arrays, keep only land nodes.
+- ❓ A clearer name for Moisture need: Wetness for moss and a flipped Shore distance for algae (recommended), or Wetness for both.
+- ❓ Evolution sliders per type (Variation and Mutation rate in each type's section, recommended) or shared as now.
 - ❓ Ambient occlusion on the fill light only: computed live or baked with the height map (the performance rules favor baked).
 
 ## ⏸️ Deferred and open bugs
@@ -85,12 +86,15 @@
 - ⏸️ Deferred by Dana: `[B121]` gully walls, soft close-ups (fine gully detail at patch bake is the real fix), `[B124]` freeze, `[B110]` water corners (await her look).
 - ⏸️ `[B82]` Cast shadow toggle does nothing in Chunk view: deferred by Dana as unimportant (2026-11-10).
 - 🔴 Open: `[B172]` stripes on the side wall up close, `[B122]` grain line (per-pixel grain approved; measure the frame cost first), `[B54]`, `[B55]`, `[B57]`, `[B58]` stalling, `[B59]`, `[B60]`, `[B64]`, `[B67]`, `[B68]`, `[B81]`.
+- 🔴 Open: `[B176]` a tear across the chunk after Terrain off and on (check with the Patches debug view, `[S90]`); `[B177]` Terrain off leaves the chunk a sheet with no slab.
+- ⏸️ Later (Dana, 2026-11-11): biome evolution fully on the GPU (totals, winner and mutation in shaders, genes in a small texture, a GPU hash for randomness, Jarzynski and Olano 2020). Removes the era read-back waits, which are most of a regrowth's ~6 s; evolved colors would change. Worth it once grass and trees lengthen runs.
 - ⏸️ Later: erosion units (Dana approved; bring options first), liquids eroding differently, the chunk's water from the virtual-pipes engine, storms and rain or snow particles, cataclysms (a tsunami), planet-type profiles, large-scale color variation in the land shader.
 
 ## 📌 Small todos
 
 *Small, agreed, not urgent.*
 
+- 📌 Chunk depth and chunk resolution are not saved with the planet (lighting now is, `[S88]`).
 - 📌 Leftovers in code: `chunkDepth` and `changeDepth` in `landChunk.ts`, `uWaterDeepest` in the wall shader, `chunkBaseDepth`'s unused parameter. The Height slider's meters in Chunk view understate what's drawn.
 - 📌 Brighter fill light: Dana liked the colors and wants it brighter (⚠️ the luminance scaling can push shadows toward a very saturated sky color).
 - 📌 Moon look (plan waiting for a go): stronger glow, less halo distance, more inner glow, in `drawMoon`; the Texture slider's hover text still describes the old scale.

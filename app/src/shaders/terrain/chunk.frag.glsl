@@ -24,9 +24,20 @@ uniform float uShadeStep; // toon shading (landLayers.glsl toonShadeMask): where
 uniform float uShadeFeather;
 uniform float uShadeLift;
 uniform float uShadeChroma;
-// The life grid (biome/lifeGrid.ts): R algae, G moss, over the whole chunk square.
-uniform sampler2D uLifeState;
+// The life grid (biome/lifeGrid.ts) over the whole chunk square: each type's four variant amounts (RGBA).
+uniform sampler2D uLifeAlgae;
+uniform sampler2D uLifeMoss;
+uniform sampler2D uLifeShore; // distance to the nearest water, grid UV (lifeShore.frag.glsl)
+uniform float uShoreReach; // meters algae reaches from water
+// Each variant's genes that show: hue turn (degrees) and brightness, added to its type's own.
+uniform vec4 uAlgaeVariantHue;
+uniform vec4 uAlgaeVariantBrightness;
+uniform vec4 uMossVariantHue;
+uniform vec4 uMossVariantBrightness;
 uniform float uBiomeOn;
+// The Patches debug view (voxel/DebugViewControl.tsx): each ground patch tinted its own color.
+uniform float uPatchDebug;
+uniform vec3 uPatchColor;
 // Per life type (lifeLayers.glsl lifeLayer): hue, shade, mask (x: brightness), velvet (w: shine).
 uniform vec4 uAlgaeHue;
 uniform vec4 uAlgaeShade;
@@ -239,9 +250,21 @@ void main() {
   float mossCover = 0.0;
   vec3 algaeColor = vec3(0.0);
   vec3 mossColor = vec3(0.0);
+  float algaeBrightness = 1.0;
+  float mossBrightness = 1.0;
   if (uBiomeOn > 0.5 && vIsTopSurface > 0.5) {
     vec2 lifeUv = vWorldPosition.xz / uChunkSize + 0.5;
-    vec4 life = lifeSampleSmooth(uLifeState, lifeUv, 512.0); // biome/lifeGrid.ts LIFE_GRID_SIZE
+    vec4 algaeVariants = max(lifeSampleSmooth(uLifeAlgae, lifeUv, 512.0), 0.0); // biome/lifeGrid.ts LIFE_GRID_SIZE
+    vec4 mossVariants = max(lifeSampleSmooth(uLifeMoss, lifeUv, 512.0), 0.0);
+    float algaeAmount = dot(algaeVariants, vec4(1.0));
+    float mossAmount = dot(mossVariants, vec4(1.0));
+    // The cell's look is its variants' mix, weighted by abundance.
+    vec4 algaeWeights = algaeVariants / max(algaeAmount, 1e-5);
+    vec4 mossWeights = mossVariants / max(mossAmount, 1e-5);
+    vec4 algaeHue = uAlgaeHue + vec4(dot(algaeWeights, uAlgaeVariantHue), 0.0, 0.0, 0.0);
+    vec4 mossHue = uMossHue + vec4(dot(mossWeights, uMossVariantHue), 0.0, 0.0, 0.0);
+    algaeBrightness = max(uAlgaeMask.x + dot(algaeWeights, uAlgaeVariantBrightness), 0.0);
+    mossBrightness = max(uMossMask.x + dot(mossWeights, uMossVariantBrightness), 0.0);
     vec3 up = normalize(mat3(modelMatrix) * vec3(0.0, 1.0, 0.0));
     // The landform's normal, as rock reads it: life follows real slopes and shade, not every small bump.
     float upness = dot(rockNormal, up);
@@ -259,15 +282,17 @@ void main() {
     float sunlight = max(dot(rockNormal, normalize(uLifeSun)), 0.0);
     vec3 lifeInputs = vec3(temperature, moisture, sunlight);
     float groundDetail = 1.0 - rgbToHsv(max(surfaceColor, 0.0)).z; // darker ground fills first (the height blend's base layer)
-    vec3 algaeInputs = vec3(temperature, waterline, sunlight); // aquatic: the waterline alone
-    algaeCover = lifeLayer(life.r, upness, groundDetail, lifeSuitability(algaeInputs, uAlgaeTemperature, uAlgaeMoisture, uAlgaeSun), uAlgaeHue, uAlgaeShade, uAlgaeMask, algaeColor);
-    mossCover = lifeLayer(life.g, upness, groundDetail, lifeSuitability(lifeInputs, uMossTemperature, uMossMoisture, uMossSun), uMossHue, uMossShade, uMossMask, mossColor);
+    float algaeWetness = lifeShoreWetness(waterline, lifeSampleSmooth(uLifeShore, lifeUv, 512.0).r, uShoreReach, uChunkSize * 1000.0);
+    vec3 algaeInputs = vec3(temperature, algaeWetness, sunlight); // aquatic: near water, by height and distance
+    algaeCover = lifeLayer(algaeAmount, upness, groundDetail, lifeSuitability(algaeInputs, uAlgaeTemperature, uAlgaeMoisture, uAlgaeSun), algaeHue, uAlgaeShade, uAlgaeMask, algaeColor);
+    mossCover = lifeLayer(mossAmount, upness, groundDetail, lifeSuitability(lifeInputs, uMossTemperature, uMossMoisture, uMossSun), mossHue, uMossShade, uMossMask, mossColor);
   }
 
   // Never fully opaque, so the ground's color texture always shows through. Inferred, TUNABLE.
-  surfaceColor = mix(surfaceColor, lifeTint(surfaceColor, algaeColor, uAlgaeMask.x), algaeCover * LIFE_MAX_COVER);
-  surfaceColor = mix(surfaceColor, lifeTint(surfaceColor, mossColor, uMossMask.x), mossCover * LIFE_MAX_COVER);
+  surfaceColor = mix(surfaceColor, lifeTint(surfaceColor, algaeColor, algaeBrightness), algaeCover * LIFE_MAX_COVER);
+  surfaceColor = mix(surfaceColor, lifeTint(surfaceColor, mossColor, mossBrightness), mossCover * LIFE_MAX_COVER);
   // The land's wall always runs from the base up to the ground; water sits on top of it (chunkWaterWall.frag.glsl).
+  if (uPatchDebug > 0.5) surfaceColor = mix(surfaceColor, uPatchColor, 0.6);
 
   specular *= mix(1.0, uAlgaeVelvet.w, algaeCover) * mix(1.0, uMossVelvet.w, mossCover); // each type's shine
   vec3 litColor = surfaceColor * (fill + diffuse) + specular;

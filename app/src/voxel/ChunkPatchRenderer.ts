@@ -29,6 +29,15 @@ interface ChunkPatchEntry {
   bakeCount: number;
 }
 
+// The Patches debug view's color for a patch: a hue from its key, lighter for finer levels. Bright on purpose, a debug
+// exception to the palette rule.
+function patchDebugColor(patch: TerrainPatch): THREE.Color {
+  const key = patchKey(patch);
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return new THREE.Color().setHSL((hash % 360) / 360, 0.8, 0.3 + 0.08 * (patch.depth % 5));
+}
+
 // Which local edges (u = 0, u = 1, v = 0, v = 1) face a finer neighbor, for chunk.vert.glsl's uEdgeFiner.
 function edgeFinerVector(flags: EdgeStitchFlags | undefined, target = new THREE.Vector4()): THREE.Vector4 {
   return target.set(flags?.left ? 1 : 0, flags?.right ? 1 : 0, flags?.top ? 1 : 0, flags?.bottom ? 1 : 0);
@@ -356,6 +365,7 @@ export class ChunkPatchRenderer {
         uMorphStart: { value: 0 },
         uMorphEnd: { value: 0 },
         uEdgeFiner: { value: edgeFinerVector(flags) },
+        uPatchColor: { value: patchDebugColor(patch) },
       },
     });
     this.setTextureUniforms(material, target, samples);

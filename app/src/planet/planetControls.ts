@@ -1,8 +1,9 @@
+import type { LightingSettings } from '../scene/sceneControls';
 import { DEFAULT_BIOME_SETTINGS, migrateBiome, type BiomeSettings } from '../biome/plantTypes';
 import { DEFAULT_COLOR_GRADE, migrateColorGrade, type ColorGradeSettings } from '../scene/colorGrade';
 import { ruleTurn, randomAtmosphereColors, DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { DEFAULT_SPIN, type SpinSettings } from '../scene/planetSpin';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import { DEFAULT_COLOR_STOPS, type ColorStop } from './colorRamp';
 import type { HeightDistribution } from './seaLevel';
@@ -220,6 +221,8 @@ export interface PlanetSettings {
   // the lowest stop out (it was always baseColor), see migrateColorStops.
   rampHasBase: boolean;
   shadowsEnabled: boolean;
+  // Off: the land is drawn flat (height 0); layers, paint and the Height value are kept. Absent in older saves: on.
+  terrainEnabled?: boolean;
   // Strength of the fine detail that appears as you zoom in ([B51]). Absent in older saves.
   detailAmount?: number;
   // Display detail picked automatically, the slider ignored, as Unity's Pixel
@@ -237,6 +240,8 @@ export interface PlanetSettings {
   biome?: BiomeSettings;
   // The color grade (scene/colorGrade.ts). Absent in older saves, which load neutral.
   colorGrade?: ColorGradeSettings;
+  // The scene's lighting (scene/sceneControls.ts). Absent in older saves, which load the defaults.
+  lighting?: LightingSettings;
 }
 
 // The grade by the same color wheel rules as the sky: gain tints toward the land's hue, lift toward a rule partner, and
@@ -313,7 +318,8 @@ function migrateColorStops(settings: PlanetSettings & { colorMid?: string; color
 // Owns the planet-specific appearance controls — radius, base color, and
 // display mode — distinct from scene/sceneControls.ts's lighting/grid, which
 // aren't the planet itself. See ISSUES.md, 2026-09-22.
-export function usePlanetControls() {
+// The scene's lighting is saved with the planet, so it comes in from scene/sceneControls.ts.
+export function usePlanetControls(scene: { lighting: LightingSettings; applyLighting: (saved: Partial<LightingSettings> | undefined) => void }) {
   const [radiusKm, setRadiusKm] = useState(DEFAULT_PLANET_SETTINGS.radiusKm);
   const [baseColor, setBaseColor] = useState(DEFAULT_PLANET_SETTINGS.baseColor);
   const [displayMode, setDisplayMode] = useState(DEFAULT_PLANET_SETTINGS.displayMode);
@@ -330,6 +336,7 @@ export function usePlanetControls() {
   // radius*0.15 auto-derivation at any radius now, not just the default
   // one. See ISSUES.md, 2026-09-24.
   const [heightScale, setHeightScale] = useState(DEFAULT_PLANET_SETTINGS.heightScale);
+  const [terrainEnabled, setTerrainEnabled] = useState(true);
   // The Resolution slider, see PlanetSettings.maxErrorPixels.
   const [maxErrorPixels, setMaxErrorPixels] = useState(DEFAULT_PLANET_SETTINGS.maxErrorPixels);
   // Elevation color ramp (shaders/terrain/terrain.glsl) — off by default so nothing
@@ -400,10 +407,12 @@ export function usePlanetControls() {
     setAtmosphere((previous) => randomAtmosphereColors(previous, palette.baseHue / 360));
   }
 
+  const drawnAtmosphere = useMemo(() => (atmosphere.climateEnabled ? atmosphere : { ...atmosphere, liquid: 'Dry' }), [atmosphere]);
+
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock, colorGrade, biome };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock, colorGrade, biome, lighting: scene.lighting, terrainEnabled };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -421,11 +430,13 @@ export function usePlanetControls() {
     setColorGrade(migrateColorGrade(settings.colorGrade));
     setBiome(migrateBiome(settings.biome));
     setShadowsEnabled(settings.shadowsEnabled);
+    setTerrainEnabled(settings.terrainEnabled ?? true);
     setDetailAmount(settings.detailAmount ?? DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
     setAutoDetail(settings.autoDetail ?? true);
     setWater(migrateWater(settings.water));
     setAtmosphere(migrateAtmosphere(settings.atmosphere, (settings.water as { wind?: number } | undefined)?.wind));
     setSpin({ ...DEFAULT_SPIN, ...settings.spin });
+    scene.applyLighting(settings.lighting);
   }
 
   // A project with nothing saved yet (new, or an old save from before this
@@ -445,6 +456,13 @@ export function usePlanetControls() {
     setDisplayMode,
     heightScale,
     setHeightScale,
+    terrainEnabled,
+    setTerrainEnabled,
+    // What the scene draws with the section switches applied: flat, base-colored land when Terrain is off, a dry planet
+    // when Climate is.
+    drawnHeightScale: terrainEnabled ? heightScale : 0,
+    drawnColorByElevation: terrainEnabled && colorByElevation, // flat land shows the base color, as the lowest ground would
+    drawnAtmosphere,
     maxErrorPixels,
     setMaxErrorPixels,
     // What the planet actually draws with: automatic unless Auto detail is off.
@@ -459,6 +477,7 @@ export function usePlanetControls() {
     updateRock: (changes: Partial<RockSettings>) => setRock((previous) => ({ ...previous, ...changes })),
     colorGrade,
     updateColorGrade: (changes: Partial<ColorGradeSettings>) => setColorGrade((previous) => ({ ...previous, ...changes })),
+    lighting: scene.lighting,
     biome,
     updateBiome: (changes: Partial<BiomeSettings>) => setBiome((previous) => ({ ...previous, ...changes })),
     shadowsEnabled,

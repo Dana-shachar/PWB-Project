@@ -41,6 +41,11 @@ export interface BiomeSettings {
   enabled: boolean;
   years: number; // how long life has grown on the square
   growthRate: number; // coverage gained per year at full vigor
+  evolve: boolean; // variants compete and mutate each era (stage 3)
+  variation: number; // scales the visible genes (hue, brightness): how different variants look, 0 to 2
+  mutationRate: number; // chance each gene changes per era (Sims's m)
+  shoreReach: number; // meters from water algae can grow
+  seed: number; // the evolution's random seed, so a rerun replays the same history
   deathRate: number; // coverage lost per year at full stress
   algae: LifeType;
   moss: LifeType;
@@ -50,6 +55,11 @@ export const DEFAULT_BIOME_SETTINGS: BiomeSettings = {
   enabled: true,
   years: 200,
   growthRate: 0.05,
+  evolve: true,
+  variation: 1,
+  mutationRate: 0.2,
+  shoreReach: 200,
+  seed: 1,
   deathRate: 0.2,
   // Algae: warm-tolerant, wet ground, shorelines and under water, in light.
   algae: {
@@ -94,3 +104,48 @@ export const LIFE_SATURATION: Record<LifeTypeKey, [number, number]> = { algae: [
 export const landMiddleColor = (stops: { color: string }[]) => stops[Math.floor(stops.length / 2)]?.color ?? '#808080';
 
 export const rangeVector = (range: ResponseRange): [number, number, number, number] => [range.min, range.idealMin, range.idealMax, range.max];
+
+// Evolution (BIOME-PLAN.md stage 3). Four variants per type compete in every cell (JeDi-DGVM); each era the least
+// abundant is replaced by a mutant of the most abundant (Sims 1991). Genes are only visible traits, as offsets from the
+// type's own settings. Counts, era length and gene spans inferred, TUNABLE.
+export const LIFE_VARIANTS = 4;
+export const ERA_YEARS = 50;
+export const MAX_ERAS = 40; // a longer span takes longer eras, so readbacks stay few
+// Genes are stored 0 to 1, 0.5 the type's own value (Sims 1991 normalizes them), and turned into offsets only when used.
+export interface Genome {
+  hueTurn: number; // turn from the type's hue
+  brightness: number; // added to its brightness
+  moistureShift: number; // moves its moisture range (higher needs wetter ground)
+  shadeShift: number; // moves its sunlight range down (higher needs more shade)
+}
+// Each gene's widest offset at 0 or 1. Variation scales only the visible ones, so it changes the look, never the growth.
+const GENE_SPANS: Record<keyof Genome, number> = { hueTurn: 60, brightness: 0.4, moistureShift: 0.4, shadeShift: 0.4 };
+const LOOK_GENES: (keyof Genome)[] = ['hueTurn', 'brightness'];
+export const BASE_GENOME: Genome = { hueTurn: 0.5, brightness: 0.5, moistureShift: 0.5, shadeShift: 0.5 };
+export function geneOffset(genome: Genome, gene: keyof Genome, variation: number): number {
+  return (genome[gene] * 2 - 1) * GENE_SPANS[gene] * (LOOK_GENES.includes(gene) ? variation : 1);
+}
+
+// Sims 1991: each gene copied with chance m (Mutation rate) of adding a random amount in ±d, then clamped to 0 to 1.
+const MUTATION_AMOUNT = 0.4; // Sims's d
+export function mutate(parent: Genome, random: () => number, rate: number): Genome {
+  const child = { ...parent };
+  for (const gene of Object.keys(GENE_SPANS) as (keyof Genome)[]) {
+    if (random() >= rate) continue;
+    child[gene] = Math.min(Math.max(parent[gene] + (random() * 2 - 1) * MUTATION_AMOUNT, 0), 1);
+  }
+  return child;
+}
+
+// A seeded random (mulberry32), so a rerun replays the same evolution.
+export function seededRandom(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+

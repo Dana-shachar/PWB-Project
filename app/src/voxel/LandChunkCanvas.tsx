@@ -16,7 +16,8 @@ import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
 import { patchCenterDirection, type TerrainPatch } from '../planet/patch';
 import { LifeGrid } from '../biome/lifeGrid';
-import { LIFE_SATURATION, landMiddleColor, lifeColors, rangeVector, type BiomeSettings } from '../biome/plantTypes';
+import type { DebugView, LifeProgress } from './landChunk';
+import { LIFE_SATURATION, landMiddleColor, lifeColors, rangeVector, geneOffset, type BiomeSettings, type Genome } from '../biome/plantTypes';
 import { ChunkPatchRenderer, type AdvanceChunkBase, type BakeChunkPatch } from './ChunkPatchRenderer';
 import { chunkBaseDepth } from './chunkPatchMesh';
 import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
@@ -85,6 +86,8 @@ interface LandChunkCanvasProps {
   colorStops: ColorStop[];
   rock: RockSettings;
   biome: BiomeSettings;
+  onLifeProgress: (progress: LifeProgress | null) => void;
+  debugView: DebugView;
   // This patch's own real low and high, in raw elevation units — the color
   // ramp spans this range, not a guessed or fixed-anchor one. See
   // voxel/landChunk.ts and shaders/terrain/terrain.glsl.
@@ -167,6 +170,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     colorStops,
     rock,
     biome,
+    onLifeProgress,
+    debugView,
     elevationMin,
     elevationMax,
     shadowsEnabled,
@@ -218,6 +223,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   const gridVisibleRef = useRef(gridVisible); // the Scene setting; walk mode hides the grid on top of it
   const patchRendererRef = useRef<ChunkPatchRenderer | null>(null);
   // Read each frame by the patch renderer, so onFrame never goes stale.
+  const onLifeProgressRef = useRef(onLifeProgress);
+  onLifeProgressRef.current = onLifeProgress;
   const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, lightFollowsCamera });
   patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, lightFollowsCamera };
 
@@ -450,7 +457,16 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uShadeLift: { value: atmosphere.shadeLift },
         uShadeChroma: { value: atmosphere.shadeChroma },
         uShadeHueTurn: { value: shadowHue / 360 },
-        uLifeState: { value: null },
+        uPatchDebug: { value: 0 },
+        uPatchColor: { value: new THREE.Color(0.5, 0.5, 0.5) }, // the coarse base mesh; each patch has its own
+        uLifeAlgae: { value: null },
+        uLifeMoss: { value: null },
+        uLifeShore: { value: null },
+        uShoreReach: { value: 200 },
+        uAlgaeVariantHue: { value: new THREE.Vector4() },
+        uAlgaeVariantBrightness: { value: new THREE.Vector4() },
+        uMossVariantHue: { value: new THREE.Vector4() },
+        uMossVariantBrightness: { value: new THREE.Vector4() },
         uBiomeOn: { value: 0 },
         uAlgaeHue: { value: new THREE.Vector4() },
         uAlgaeShade: { value: new THREE.Vector4() },
@@ -515,13 +531,36 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
 
     // The life grid (biome/lifeGrid.ts): regrown from bare ground when its inputs change, 150 ms after they settle.
     const lifeGrid = new LifeGrid();
+    let lifeStartMs = 0;
+    // The run's progress with the time left from its pace so far, as the river carving's bar does.
+    const reportLife = (share: number | null) => {
+      if (share === null) return onLifeProgressRef.current(null);
+      if (share === 0) lifeStartMs = performance.now();
+      const elapsed = (performance.now() - lifeStartMs) / 1000;
+      onLifeProgressRef.current({ share, secondsLeft: share > 0.05 ? Math.max(1, Math.round((elapsed / share) * (1 - share))) : null });
+    };
     let lifeKey = '';
     let lifeTimer: ReturnType<typeof setTimeout> | undefined;
     const upSun = new THREE.Vector3(0, 1, 0);
+    // The grid's current state and its variants' visible genes (hue turn, brightness) into the chunk's uniforms.
+    let lifeVariation = 1; // Variation only stretches the visible genes, so it updates here without a regrowth
+    function showLife() {
+      const u = material.uniforms;
+      u.uLifeAlgae.value = lifeGrid.algae;
+      u.uLifeMoss.value = lifeGrid.moss;
+      const genes = (list: Genome[], gene: 'hueTurn' | 'brightness') => list.map((genome) => geneOffset(genome, gene, lifeVariation)) as [number, number, number, number];
+      (u.uAlgaeVariantHue.value as THREE.Vector4).set(...genes(lifeGrid.genomes.algae, 'hueTurn'));
+      (u.uAlgaeVariantBrightness.value as THREE.Vector4).set(...genes(lifeGrid.genomes.algae, 'brightness'));
+      (u.uMossVariantHue.value as THREE.Vector4).set(...genes(lifeGrid.genomes.moss, 'hueTurn'));
+      (u.uMossVariantBrightness.value as THREE.Vector4).set(...genes(lifeGrid.genomes.moss, 'brightness'));
+    }
     function updateLife(settings: typeof patchSettingsRef.current) {
       const biome = settings.biome;
-      material.uniforms.uLifeState.value = lifeGrid.texture;
+      lifeVariation = biome.variation;
+      showLife();
       material.uniforms.uLifeInputs.value = lifeGrid.inputs;
+      material.uniforms.uLifeShore.value = lifeGrid.shore;
+      material.uniforms.uShoreReach.value = biome.shoreReach;
       material.uniforms.uBiomeOn.value = biome.enabled ? 1 : 0;
       const lifeRenderer = sharedRendererRef.current.renderer;
       const heightTexture = material.uniforms.uChunkHeightMap.value as THREE.Texture | null;
@@ -529,7 +568,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       // A light that follows the camera would regrow life on every turn, so life then takes the sun from straight above.
       const sun = settings.lightFollowsCamera ? upSun : (material.uniforms.uLightDirection.value as THREE.Vector3);
       const atmosphere = settings.atmosphere;
-      const growth = [biome.years, biome.growthRate, biome.deathRate, biome.algae.temperature, biome.algae.moisture, biome.algae.sun, biome.moss.temperature, biome.moss.moisture, biome.moss.sun];
+      const growth = [biome.years, biome.growthRate, biome.deathRate, biome.algae.temperature, biome.algae.moisture, biome.algae.sun, biome.moss.temperature, biome.moss.moisture, biome.moss.sun, biome.evolve, biome.seed, biome.mutationRate, biome.shoreReach];
       const key = JSON.stringify([heightTexture.uuid, heightTexture.version, chunkLakes.texture.version, material.uniforms.uSeaLevel.value, material.uniforms.uMaxHeight.value, material.uniforms.uChunkSize.value, material.uniforms.uShadowsEnabled.value, atmosphere.temperature, atmosphere.rainfall, atmosphere.liquid, atmosphere.peakCooling, atmosphere.poleCooling, material.uniforms.uElevationMin.value, material.uniforms.uElevationMax.value, sun.toArray().map((value) => value.toFixed(3)), growth]);
       if (key === lifeKey) return;
       lifeKey = key;
@@ -564,7 +603,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
           rainShare: Math.min(atmosphere.rainfall / Math.max(2 * liquid.typicalRainfall, 1), 1),
           sunDirection: sun.clone(),
           shadowsEnabled: material.uniforms.uShadowsEnabled.value > 0.5,
-        }, biome, () => { material.uniforms.uLifeState.value = lifeGrid.texture; });
+        }, biome, showLife, reportLife);
       }, 150);
     }
     const patchRenderer = new ChunkPatchRenderer(material);
@@ -780,6 +819,12 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       (material.uniforms[prefix + 'Sun'].value as THREE.Vector4).set(...rangeVector(type.sun));
     }
   }, [biome, colorStops]);
+
+  // The Patches debug view: each patch's own color over the ground.
+  useEffect(() => {
+    const material = materialRef.current;
+    if (material) material.uniforms.uPatchDebug.value = debugView === 'patches' ? 1 : 0;
+  }, [debugView]);
 
   // Toon shading (atmosphere's shade settings).
   useEffect(() => {

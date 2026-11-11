@@ -1,6 +1,6 @@
 # 🐛 Issues
 
-`Last updated: 2026-11-08`
+`Last updated: 2026-11-11`
 
 *What is broken, what was broken and why, and problems tracked but not scheduled.*
 
@@ -1487,6 +1487,34 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 ### [B175] A reload dropped template mode and edits went to another project · `blocks work`
 **✅ Fixed 2026-11-10** · **Where:** the load effect in `projectSettings/saveProject.ts`
 - A reload opened the most recent project, so edits meant for Flora went to Dana 01. The app now reopens the last open project or template (`[S86]`).
+
+### [B176] A tear across the chunk after Terrain off and on · `wrong but workable`
+**🔴 Open, not reproduced** · **Found:** 2026-11-11 · **Where:** the chunk's ground, close up
+- A dark band crossed ridges and a lake after a Terrain switch version that hid every layer (since reverted). Dana reads it as a patch mismatch; Claude's other theory is a river channel carved on the flat ground. Hiding one layer and showing it again did not reproduce it. Check with the Patches debug view (`[S90]`): a band along a color border is a patch mismatch.
+
+### [B177] Terrain off leaves the chunk a sheet with no slab · `wrong but workable`
+**🔴 Open** · **Found:** 2026-11-11 · **Where:** `voxel/landChunk.ts` (`heightBase`), the chunk shaders' `uHeightBase`
+- The slab's thickness is stored in height units and multiplied by the height scale, so a height of 0 makes it 0. The fix is to keep the thickness independent of the scale (about 10 files). Hiding the layers instead kept the slab but caused `[B176]`, so it was reverted.
+
+### [B178] Life regrowth took 10.6 s · `wrong but workable`
+**🟡 Improved 2026-11-11** · **Where:** era read-backs in `biome/lifeGrid.ts`
+- Measured: 10.5 of 10.6 s waited on 79 GPU read-backs (about 133 ms each); the 400 steps took 0.06 s. Reading algae and moss in one wait brought it to 6.2 s. Checking the read every 4 ms instead of every frame gained nothing and was removed. The rest goes with evolution on the GPU (deferred).
+
+### [B179] Algae grew far from any lake · `wrong but workable`
+**✅ Fixed 2026-11-11** · **Where:** `shaders/biome/lifeShore.frag.glsl`, `lifeStep.frag.glsl`, `lifeLayers.glsl`
+- Algae's wetness came from height above water only, so flat ground just above a lake's level counted as shore kilometers away. It now also needs distance to water within Shore reach, from a jump-flooding distance map (Rong and Tan 2006).
+
+### [B180] Evolution colors jumped all at once · `wrong but workable`
+**✅ Fixed 2026-11-11** · **Where:** `newEra` in `biome/lifeGrid.ts`, `lifeStep.frag.glsl`
+- A new mutant inherited the replaced variant's whole cover, so its color appeared everywhere at once. The replaced cover is now cleared and the mutant grows in.
+
+### [B181] Evolution sliders flickered after release · `wrong but workable`
+**✅ Fixed 2026-11-11** · **Where:** `biome/lifeGrid.ts`, `voxel/LandChunkCanvas.tsx`
+- Every regrowth was drawn as it ran, with colors swinging at each era. Runs now work in hidden targets and swap in when done, and Variation recolors without a regrowth. Continuing from the current grid instead was tried and reverted: the drift added up with every slider move.
+
+### [B182] Lighting reset on every load and was missing from undo · `wrong but workable`
+**✅ Fixed 2026-11-11** · **Where:** `scene/sceneControls.ts`, `planet/planetControls.ts`
+- Scene lighting lived outside the planet's settings. It is now saved and undone with them (`[S88]`).
 
 ## 🏗️ Architecture
 
