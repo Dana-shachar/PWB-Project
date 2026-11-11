@@ -18,10 +18,34 @@ uniform vec3 uBaseColor;
 uniform vec3 uLightDirection;
 uniform float uAmbient;
 uniform vec3 uFillColor; // the sky fill's color (scene/fillLight.ts)
+const float TOON_DETAIL = 0.5; // how much angle-based lighting the toon lit side keeps
 uniform float uShadeStep; // toon shading (landLayers.glsl toonShadeMask): where light turns to shade, 0 off
 uniform float uShadeFeather;
 uniform float uShadeLift;
 uniform float uShadeChroma;
+// The life grid (biome/lifeGrid.ts): R algae, G moss, over the whole chunk square.
+uniform sampler2D uLifeState;
+uniform float uBiomeOn;
+// Per life type (lifeLayers.glsl lifeLayer): hue, shade, mask (x: brightness), velvet (w: shine).
+uniform vec4 uAlgaeHue;
+uniform vec4 uAlgaeShade;
+uniform vec4 uAlgaeMask;
+uniform vec4 uAlgaeVelvet;
+uniform vec4 uMossHue;
+uniform vec4 uMossShade;
+uniform vec4 uMossMask;
+uniform vec4 uMossVelvet;
+// Per-pixel suitability inputs, the grid's (lifeInputs.frag.glsl): base temperature, peak cooling, pole cooling at this
+// latitude, rain share; the sun life reads; each type's ranges (temperature, moisture, sunlight).
+uniform vec4 uLifeClimate;
+uniform sampler2D uLifeInputs; // biome/lifeGrid.ts: G the moisture with hollows, baked once per change
+uniform vec3 uLifeSun;
+uniform vec4 uAlgaeTemperature;
+uniform vec4 uAlgaeMoisture;
+uniform vec4 uAlgaeSun;
+uniform vec4 uMossTemperature;
+uniform vec4 uMossMoisture;
+uniform vec4 uMossSun;
 uniform float uShadeHueTurn; // Shadow hue as a share of the wheel
 uniform float uLightIntensity;
 uniform float uSpecularStrength;
@@ -163,6 +187,35 @@ void main() {
     rockNormal = normalize(mat3(modelMatrix) * heightfieldNormal(uChunkHeightMap, rockUv, ROCK_SLOPE_STEP_UV, uHeightMapGreenChannel, vec3(uChunkSize, 0.0, 0.0), vec3(0.0, 0.0, uChunkSize), vec3(0.0, 1.0, 0.0), uMaxHeight));
   }
 
+  // Life on the top surface (lifeLayers.glsl): its cover, colors and relief, before the lighting so the cushions shade.
+  float algaeCover = 0.0;
+  float mossCover = 0.0;
+  vec3 algaeColor = vec3(0.0);
+  vec3 mossColor = vec3(0.0);
+  if (uBiomeOn > 0.5 && vIsTopSurface > 0.5) {
+    vec2 lifeUv = vWorldPosition.xz / uChunkSize + 0.5;
+    vec4 life = lifeSampleSmooth(uLifeState, lifeUv, 512.0); // biome/lifeGrid.ts LIFE_GRID_SIZE
+    vec3 up = normalize(mat3(modelMatrix) * vec3(0.0, 1.0, 0.0));
+    // The landform's normal, as rock reads it: life follows real slopes and shade, not every small bump.
+    float upness = dot(rockNormal, up);
+    // This pixel's own temperature, moisture and sunlight, by the grid's rules (lifeInputs.frag.glsl), with hollows
+    // wetter (water gathers in recessed ground, Unity's Concavity; the wetness index).
+    float relief = max(uElevationMax - uElevationMin, 1e-6);
+    vec4 lake = texture2D(uChunkLakeLevels, lifeUv);
+    float waterLevel = max(lake.b <= uSeaLevel ? uSeaLevel : -1.0e9, lake.r);
+    float aboveWater = (elevationRaw - waterLevel) / relief;
+    float slope = sqrt(max(1.0 - upness * upness, 0.0)) / max(upness, 0.05);
+    float waterline = aboveWater < 0.0 ? 1.5 : exp(-aboveWater / 0.03);
+    float hollowWetness = max(lifeSampleSmooth(uLifeInputs, lifeUv, 512.0).g - uLifeClimate.w, 0.0); // the grid's hollows, beyond rain
+    float moisture = aboveWater < 0.0 ? 1.5 : clamp(uLifeClimate.w / (1.0 + slope * 3.0) + waterline + hollowWetness * 0.3, 0.0, 1.0);
+    float temperature = uLifeClimate.x - uLifeClimate.y * clamp((elevationRaw - uSeaLevel) / max(uElevationMax - uSeaLevel, 1e-6), 0.0, 1.0) - uLifeClimate.z;
+    float sunlight = max(dot(rockNormal, normalize(uLifeSun)), 0.0);
+    vec3 lifeInputs = vec3(temperature, moisture, sunlight);
+    vec3 algaeInputs = vec3(temperature, waterline, sunlight); // aquatic: the waterline alone
+    algaeCover = lifeLayer(life.r, upness, lifeSuitability(algaeInputs, uAlgaeTemperature, uAlgaeMoisture, uAlgaeSun), uAlgaeHue, uAlgaeShade, uAlgaeMask, algaeColor);
+    mossCover = lifeLayer(life.g, upness, lifeSuitability(lifeInputs, uMossTemperature, uMossMoisture, uMossSun), uMossHue, uMossShade, uMossMask, mossColor);
+  }
+
   vec3 lightDir = normalize(uLightDirection);
 
   // The same wrap lighting as the planet (terrain.glsl's softDiffuse), so the
@@ -207,8 +260,12 @@ void main() {
     // Only the top surface: the walls keep the land ramp.
     surfaceColor = vIsTopSurface > 0.5 ? landSurfaceColor(ramp, rockColor, rockNormal, mat3(modelMatrix) * vec3(0.0, 1.0, 0.0), uRockSlope, uRockSoftness) : ramp;
   }
+  // Life's colors over the ground (the material function's albedo lerp): algae, then moss.
+  surfaceColor = mix(surfaceColor, lifeTint(surfaceColor, algaeColor, uAlgaeMask.x), algaeCover);
+  surfaceColor = mix(surfaceColor, lifeTint(surfaceColor, mossColor, uMossMask.x), mossCover);
   // The land's wall always runs from the base up to the ground; water sits on top of it (chunkWaterWall.frag.glsl).
 
+  specular *= mix(1.0, uAlgaeVelvet.w, algaeCover) * mix(1.0, uMossVelvet.w, mossCover); // each type's shine
   vec3 litColor = surfaceColor * (fill + diffuse) + specular;
   // Unity Toon Shader's blend (UniversalToonBodyDoubleShadeWithFeather.hlsl): the base is the surface times the light,
   // not darkened by angle, and the shade its own color. Half-Lambert from the smooth landform normal, Unity's default
@@ -216,8 +273,11 @@ void main() {
   if (uShadeStep > 0.0) {
     float halfLambert = (0.5 * dot(rockNormal, lightDir) + 0.5) * castShadow;
     float shadeMask = toonShadeMask(halfLambert, uShadeStep, uShadeFeather);
-    vec3 baseColor = surfaceColor * uLightIntensity + specular;
-    litColor = mix(baseColor, shadeColor(surfaceColor, uShadeHueTurn, uShadeLift, uShadeChroma), shadeMask);
+    // The lit side keeps half its angle-based lighting, so ground detail still reads (Unity's base is flat; the half is
+    // inferred, TUNABLE), and both sides take the ambient fill, so Ambient light works with Shading on.
+    vec3 baseColor = surfaceColor * (fill + mix(uLightIntensity, diffuse, TOON_DETAIL)) + specular;
+    vec3 shade = shadeColor(surfaceColor, uShadeHueTurn, uShadeLift, uShadeChroma) + surfaceColor * fill;
+    litColor = mix(baseColor, shade, shadeMask);
   }
   gl_FragColor = vec4(applyHaze(litColor, vWorldPosition, uCameraPosition, uLightDirection), 1.0);
 }

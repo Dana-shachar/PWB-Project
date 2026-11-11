@@ -42,3 +42,4 @@ vec3 landSurfaceColor(vec3 rampColor, vec3 rockColor, vec3 normal, vec3 up, floa
   float rock = smoothstep(slopeStart, slopeStart + max(softness, 1e-3), steepness);
   return mix(rampColor, rockColor, rock);
 }
+

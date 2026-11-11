@@ -131,9 +131,81 @@
 - Shadow colors that are harmonious yet unexpected set the scene. Monument Valley picks them by hand; here they come from a procedural rule (the Shadow hue, then the palette stage).
 - ![](references/monument-valley-palette.png) ![](references/monument-valley-fog.png) ![](references/monument-valley-violet-shadows.png)
 
+**No Man's Sky, alien flora** · `reference` (biome)
+- One strong hue per planet carried into the plants, with an accent in its complement or a neighbor; plant forms are alien (bulbs, bells, spirals, tentacle crowns), never Earth species. Stylized: clean shapes, soft gradients, little photographic detail.
+- ![](references/nms-glowing-alien-flora.png) ![](references/nms-alien-trees.png) ![](references/nms-tree-moss-cliffs.png)
+
+**No Man's Sky, ground under the plants** · `reference` (biome)
+- Under and between the plants the ground carries a colored, lightly textured layer (moss or algae tone) that blends softly into soil, so the soil shows through at the edges; simple, not complex. Coverage follows the land: carpets on flats and lower slopes, bare on ridges and rock.
+- ![](references/nms-textured-ground-under-leaves.png) ![](references/nms-red-ground-cover.png) ![](references/nms-ground-pattern-mushrooms.png)
+
+**No Man's Sky, rocks with grass and moss** · `reference` (biome)
+- Ground cover sits around and on top of rocks where it is sheltered; rock faces stay bare.
+- ![](references/nms-rocks-grass-moss.png)
+
+**No Man's Sky, a planet close to ours** · `reference` (biome)
+- Warm sky, olive and rust land, violet trees, a turquoise lake with orange shores: one palette with a complementary accent, soft painted ground color, life read from afar as color patches.
+- ![](references/nms-lake-planet-style.png)
+
+**No Man's Sky, stylized grass** · `reference` (biome)
+- Thick, simple blades in two or three palette hues, clumped, with flat soft shading.
+- ![](references/nms-stylized-grass.png)
+
+**Moss, how it reads** · Moss (Polyarc), a stylized Unity scene, a photo · `reference` (biome)
+- Moss has relief (rounded cushions lit on top, shaded below), a velvety surface lighter at the tips, and soft fuzzy edges into soil; clearly lighter and more saturated than the dirt it sits on. It gathers on flats, around rocks and on logs, with plants on top of it.
+- ![](references/moss-game-teal-carpet.png) ![](references/moss-game-forest.png) ![](references/moss-stylized-unity-scene.png) ![](references/moss-on-log-photo.png)
+
+**Where moss grows** · bryophyte ecology · `method planned`
+- Needs a stable surface, moisture that stays, light that isn't harsh and mild temperature; richest near water, thick on trees and boulders in forests, on the shaded side of trunks and rocks (sun dries it); forest-floor moss tolerates deep shade and colonizes logs, trunks and rocks.
+- *[ANBG, bryophyte habitats](https://anbg.gov.au/bryophyte/ecology-habitats.html) · [ANBG, micro-habitats](https://anbg.gov.au/bryophyte/ecology-habitats-micro.html) · [USDA Forest Service, Evans 2012](https://www.fs.usda.gov/pnw/pubs/journals/pnw_2012_evans.pdf). Read 2026-11-10*
+
 ---
 
 ## ⚙️ Computational
+
+**Ecosystem on a grid, coupled with erosion** · Cordonnier et al. 2017 · `method planned`
+- Plants in aggregate per cell, as ecologists' global vegetation models do, because individual plants as circles get "computationally costly" beyond about 1 km². Trees and shrubs store count, summed heights and summed ages per cell; grass only a density; dead matter turns to humus at 30% a year.
+- Viability per plant type from a hat function per input (temperature with a 6.5 °C/km lapse rate, soil moisture, sun hours with terrain shadow), the lowest one wins (Liebig's law). Yearly: germination in proportion to vigor times free space if unstressed (0.24 saplings/m² for woody plants), growth by vigor, death by self-thinning (coverage above 1), stress and old age; taller layers shade lower ones.
+- *Cordonnier, Galin, Gain, Benes, Guérin, Peytavie, Cani, ACM TOG 36(4) 134, 2017; PDF in the course folder. Read 2026-11-10*
+
+**Evolving plant shapes from parameter genomes** · Sims 1991 · `method planned`
+- The genotype is the parameter set, the phenotype the plant grown from it: 21 genetic parameters decide how fast each segment grows, when it buds and in which direction, "grown in arbitrarily small increments for smooth simulation of development". Mutation: genes normalized to 0 to 1, each copied with probability m of adding a random ±d (he used m = 0.2, d = 0.4); two parents can be mated.
+- *[Artificial Evolution for Computer Graphics, SIGGRAPH 1991](https://www.karlsims.com/papers/SimsSiggraph91.pdf). Read 2026-11-10*
+
+**Procedural trees from parameters** · EZ-Tree (Dan Greenheck) · `considered`
+- MIT, npm `@dgreenheck/ez-tree`, three.js; a tree mesh generated at runtime from a seed and parameters (branch levels, per-level angle, children, gnarliness, length, radius, taper; twist, force; leaf count, size, angle, tint; bark tint), with built-in LODs and raw geometry for instancing. A generator for artists, not an evolution system: the evolution would be ours, on its parameters. Shrubs not documented.
+- *[github.com/dgreenheck/ez-tree](https://github.com/dgreenheck/ez-tree). README read 2026-11-10*
+
+**Foliage simulation by instances** · Unreal Engine Procedural Foliage Tool · `reference`
+- Steps of aging and seeding, spread distance, collision radius with overlap priority, shade radius, "can grow in shade", scale by age: the engine form of plants as competing circles, per instance.
+- *[Procedural Foliage Tool](https://dev.epicgames.com/documentation/unreal-engine/procedural-foliage-tool-in-unreal-engine). Read 2026-11-10*
+
+**Runtime GPU placement from density maps** · Horizon Zero Dawn, GDC 2017 · `method planned`
+- All vegetation placed on the GPU at runtime from 2D maps (about 0.25 ms per frame); the same ecotope data drives asset choice, distribution and colorization.
+- *[Van Muijden, GPU-Based Procedural Placement in Horizon Zero Dawn](https://www.guerrilla-games.com/read/gpu-based-procedural-placement-in-horizon-zero-dawn). Search summary 2026-11-10*
+
+**Recent ecosystem research, to read** · `to read`
+- Synthetic Silviculture (Makowski et al. 2019, from bare ground after an ice age), Ecoclimates (Pałubicki et al., climate response), Authoring Consistent Landscapes with Flora and Fauna (Ecormier-Nocca et al. 2021, for agents later).
+- *[Purdue vegetation page](https://www.cs.purdue.edu/homes/bbenes/vegetation) · [Ecoclimates](https://history.siggraph.org/?p=117929) · [Ecormier-Nocca 2021](https://www.cs.purdue.edu/homes/bbenes/papers/Nocca21ToG.pdf)*
+
+**A production moss shader** · Robert Berg (Neon Giant), Unreal · `method planned`
+- Moss blends onto a surface by two masks: a painted amount times a grayscale blend texture, raised to a high power (BlendPower 15) and clamped, so a soft amount becomes crisp edges along the texture's pattern (a height blend); and a top-down mask, the surface's upward component times 3 plus the blend texture, to the power 5. Moss textures map by world position; its look uses Unreal's FuzzyShading (velvet, Fresnel-like: CoreDarkness where the surface faces the camera, EdgeBrightness at grazing angles); its height displaces along the normal.
+- Values: BlendPower 15, TopdownMaskMultiplier 3, TopdownMaskPower 5; FuzzyShading CoreDarkness 0.2, Power 3, EdgeBrightness 3. The blend texture is a cellular, bubbly pattern.
+- ![](references/moss-berg-blend-graph.png) ![](references/moss-berg-material-function.png)
+- *[Moss Shader breakdown, ArtStation](https://pixelgoat.artstation.com/projects/GPGr4) (node graphs MF_moss_01 and env_standard); [Unreal shading functions, FuzzyShading](https://dev.epicgames.com/documentation/unreal-engine/shading-material-functions-in-unreal-engine). Read 2026-11-10; FuzzyShading's exact formula is not published*
+
+**A moss material function, top and edge masks** · Unreal node graph (r/gamedevscreens) · `method planned`
+- Top Mask: dot(normal, up) to the power Top Thickness, saturated, times Top Moss Amount; Edge Mask: 1 minus dot(normal, up) to the power Edge Thickness, times Edge Moss Amount; each times its own noise texture and intensity; Final Mask = saturate(top + edge); albedo, normal and roughness each lerp from the surface's to the moss's by the Final Mask, with a moss albedo tint.
+- ![](references/moss-material-function-graph.png)
+- *Node graph shared by Dana 2026-11-10 (post not readable here). General background: [Vegetation creation techniques for video games, 80.lv](https://80.lv/articles/vegetation-creation-techniques-for-video-games)*
+
+**Moss on rock, in code** · Shane, "Canyon Pass" (Shadertoy, CC BY-NC-SA 3.0) · `method planned`
+- Rounded cushions from a cellular bump (four overlapping spheres per tile, nearest distance, "comparable to beveled Voronoi"); moss where the bumped surface faces up, `pow(abs(n.y), 4)`, so it sits on cushion tops and flats; applied as a multiplicative tint so the rock shows through; ambient occlusion in crevices and a Fresnel rim for the soft edge. The author calls the moss "quickly improvised": a tested technique, not a standard.
+- *Canyon Pass, Shadertoy, Shane. Code shared by Dana 2026-11-10*
+
+**Height blending between terrain layers** · Mishkinis · `method planned`
+- Layers blend by their own height maps plus the blend weight, so one layer fills the other's low points with a sharp, detailed transition instead of a linear fade; published shader code.
+- *[Advanced Terrain Texture Splatting, gamedev.net](https://ehe.gamedev.net/tutorials/programming/graphics/advanced-terrain-texture-splatting-r3287). Search summary 2026-11-10*
 
 **Color grading: lift, gamma, gain, split toning, saturation** · Unity URP · `method used`
 - Unity's grade in its own source: split toning (soft light, in gamma space), then `color × gain + lift`, then `^ gamma`, then saturation around luminance; each tint is prepared by `PrepareLiftGammaGain` (scaled, its brightness removed, the amount added back). Copied exactly into the color grade pass.

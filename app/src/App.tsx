@@ -215,6 +215,8 @@ function App() {
         colorStops={planetControls.colorStops}
         onColorStopsChange={planetControls.setColorStops}
         rock={planetControls.rock}
+        biome={planetControls.biome}
+        onBiomeChange={planetControls.updateBiome}
         onRockChange={planetControls.updateRock}
         colorGrade={planetControls.colorGrade}
         onColorGradeChange={planetControls.updateColorGrade}
@@ -360,6 +362,7 @@ function App() {
               onClick={(event) => sharedGumball.handlePaneClick('landChunk', event)}
             >
               <LandChunkCanvas
+                biome={planetControls.biome}
                 ref={landChunkHandleRef}
                 viewportRef={chunkViewportRef}
                 sharedRenderer={sharedViewportRenderer}
@@ -438,6 +441,9 @@ function App() {
       <RightPanel
         atmosphere={planetControls.atmosphere}
         onAtmosphereChange={planetControls.updateAtmosphere}
+        biome={planetControls.biome}
+        onBiomeChange={planetControls.updateBiome}
+        biomeColorStops={planetControls.colorStops}
         activeStage={activeStage}
         layers={noiseLayers.layers}
         selectedLayerIds={noiseLayers.selectedLayerIds}

@@ -10,6 +10,7 @@ import { DiceIcon, PaletteIcon, UndoIcon, RedoIcon, ResetIcon } from './icons';
 import { ColorRampEditor } from './panels/ColorRampEditor';
 import type { ColorStop } from '../planet/colorRamp';
 import type { RockSettings, WaterSettings } from '../planet/planetControls';
+import type { BiomeSettings } from '../biome/plantTypes';
 import { colorLockProps, randomAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { depthToRampPosition, landRampFloor, landShareAt, rampPositionToDepth, type HeightDistribution } from '../planet/seaLevel';
 import { MAX_MAX_ERROR_PIXELS, maxErrorPixelsToResolution, MIN_MAX_ERROR_PIXELS, resolutionToMaxErrorPixels } from '../planet/patch';
@@ -76,6 +77,8 @@ interface PanelProps {
   colorStops: ColorStop[];
   onColorStopsChange: (stops: ColorStop[]) => void;
   rock: RockSettings;
+  biome: BiomeSettings;
+  onBiomeChange: (changes: Partial<BiomeSettings>) => void;
   onRockChange: (changes: Partial<RockSettings>) => void;
   colorGrade: ColorGradeSettings;
   onColorGradeChange: (changes: Partial<ColorGradeSettings>) => void;
@@ -210,6 +213,7 @@ function PipelineStageRow({
 //
 // "Project Settings" and "Edit" are collapsible (Dana, 2026-09-22 — they
 // don't need to stay visible all the time), unlike Scene/Planet controls.
+
 export function Panel({
   ambientLight,
   onAmbientLightChange,
@@ -251,6 +255,8 @@ export function Panel({
   colorStops,
   onColorStopsChange,
   rock,
+  biome,
+  onBiomeChange,
   onRockChange,
   colorGrade,
   onColorGradeChange,
@@ -1045,6 +1051,8 @@ export function Panel({
               unit="°C"
               description="Runs across the range this liquid stays liquid. Hotter evaporates more, so lakes shrink and rivers fade."
             />
+            <Slider label="Peak cooling" unit="°C" value={atmosphere.peakCooling} onChange={(peakCooling) => onAtmosphereChange({ peakCooling })} min={0} max={300} step={1} precision={0} description="How much colder the highest ground is than the shore. Life's temperature reads it." />
+            <Slider label="Pole cooling" unit="°C" value={atmosphere.poleCooling} onChange={(poleCooling) => onAtmosphereChange({ poleCooling })} min={0} max={150} step={1} precision={0} description="How much colder the poles are than the equator. Life's temperature reads it." />
           </Accordion>
         </div>
 
@@ -1108,7 +1116,23 @@ export function Panel({
 
         <div className="panel-section">
           {/* Terrain and the Climate System are selected from their own sections above; Erosion lives in the Climate System's right panel. */}
-          {PIPELINE_STAGES.filter((stage) => stage.key !== 'terrain' && stage.key !== 'atmosphere').map((stage) => (
+          {/* Life on the chunk (biome/lifeGrid.ts): its section here, the granular ranges in the right panel. */}
+          <Accordion
+            title="Biome"
+            onHeaderClick={() => onStageChange('biome')}
+            active={activeStage === 'biome'}
+            headerSwitch={{ value: biome.enabled, onChange: (enabled) => onBiomeChange({ enabled }), label: 'Life on or off' }}
+            description="Life on the land chunk, grown on a grid from bare ground by light, water and temperature."
+          >
+            <Slider label="Years" value={biome.years} onChange={(years) => onBiomeChange({ years })} min={1} max={1000000} scale="log" step={1} precision={0} description="How long life has grown on the square. A long span settles toward where life can last." />
+            <Slider label="Growth rate" value={biome.growthRate} onChange={(growthRate) => onBiomeChange({ growthRate })} min={0.001} max={1} scale="log" step={0.001} precision={3} description="How fast life spreads into free ground where it thrives, per year." />
+          </Accordion>
+        </div>
+
+        <div className="panel-section-divider" />
+
+        <div className="panel-section">
+          {PIPELINE_STAGES.filter((stage) => stage.key !== 'terrain' && stage.key !== 'atmosphere' && stage.key !== 'biome').map((stage) => (
             <PipelineStageRow
               key={stage.key}
               label={stage.label}

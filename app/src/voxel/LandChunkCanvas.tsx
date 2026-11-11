@@ -4,6 +4,8 @@ import chunkVertexGlsl from '../shaders/terrain/chunk.vert.glsl?raw';
 import chunkFragmentBody from '../shaders/terrain/chunk.frag.glsl?raw';
 import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
 import landLayersGlsl from '../shaders/terrain/landLayers.glsl?raw';
+import noiseGlsl from '../shaders/heightmap/noise.glsl?raw'; // the life layers' patterns
+import lifeLayersGlsl from '../shaders/biome/lifeLayers.glsl?raw';
 import hazeGlsl from '../shaders/atmosphere/haze.glsl?raw'; // elevation color ramp + shadow march — shared with fragment.glsl, see shaders/terrain/terrain.glsl
 import { camera, defaultCameraPosition, DEFAULT_FAR } from '../scene/camera';
 import { controls, keepAboveFlatGround } from '../scene/controls';
@@ -12,7 +14,9 @@ import { grid } from '../scene/grid';
 import type { GumballTarget } from '../scene/Gumball';
 import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
 import { buildRampUniformArrays, MAX_COLOR_STOPS, type ColorStop } from '../planet/colorRamp';
-import type { TerrainPatch } from '../planet/patch';
+import { patchCenterDirection, type TerrainPatch } from '../planet/patch';
+import { LifeGrid } from '../biome/lifeGrid';
+import { LIFE_SATURATION, landMiddleColor, lifeColors, rangeVector, type BiomeSettings } from '../biome/plantTypes';
 import { ChunkPatchRenderer, type AdvanceChunkBase, type BakeChunkPatch } from './ChunkPatchRenderer';
 import { chunkBaseDepth } from './chunkPatchMesh';
 import { groundHeightAt, raycastGround, type ChunkGround } from './chunkGround';
@@ -32,7 +36,7 @@ import { HeightmapPipeline } from '../map/heightmap';
 import { landRampFloor } from '../planet/seaLevel';
 import { MAX_WAVE_WIND } from '../planet/oceanSpectrum';
 
-const chunkFragmentGlsl = terrainGlsl + landLayersGlsl + hazeGlsl + chunkFragmentBody;
+const chunkFragmentGlsl = terrainGlsl + noiseGlsl + landLayersGlsl + lifeLayersGlsl + hazeGlsl + chunkFragmentBody;
 
 // For the single shared gumball (scene/sharedGumball.ts) to target this
 // view's camera when the land-chunk pane is selected — see ISSUES.md,
@@ -80,6 +84,7 @@ interface LandChunkCanvasProps {
   colorByElevation: boolean;
   colorStops: ColorStop[];
   rock: RockSettings;
+  biome: BiomeSettings;
   // This patch's own real low and high, in raw elevation units — the color
   // ramp spans this range, not a guessed or fixed-anchor one. See
   // voxel/landChunk.ts and shaders/terrain/terrain.glsl.
@@ -161,6 +166,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     colorByElevation,
     colorStops,
     rock,
+    biome,
     elevationMin,
     elevationMax,
     shadowsEnabled,
@@ -212,8 +218,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   const gridVisibleRef = useRef(gridVisible); // the Scene setting; walk mode hides the grid on top of it
   const patchRendererRef = useRef<ChunkPatchRenderer | null>(null);
   // Read each frame by the patch renderer, so onFrame never goes stale.
-  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights });
-  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights };
+  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, lightFollowsCamera });
+  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, lightFollowsCamera };
 
   useImperativeHandle(
     handleRef,
@@ -444,6 +450,25 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         uShadeLift: { value: atmosphere.shadeLift },
         uShadeChroma: { value: atmosphere.shadeChroma },
         uShadeHueTurn: { value: shadowHue / 360 },
+        uLifeState: { value: null },
+        uBiomeOn: { value: 0 },
+        uAlgaeHue: { value: new THREE.Vector4() },
+        uAlgaeShade: { value: new THREE.Vector4() },
+        uAlgaeMask: { value: new THREE.Vector4() },
+        uAlgaeVelvet: { value: new THREE.Vector4() },
+        uMossHue: { value: new THREE.Vector4() },
+        uMossShade: { value: new THREE.Vector4() },
+        uMossMask: { value: new THREE.Vector4() },
+        uMossVelvet: { value: new THREE.Vector4() },
+        uLifeClimate: { value: new THREE.Vector4() },
+        uLifeSun: { value: new THREE.Vector3(0, 1, 0) },
+        uLifeInputs: { value: null },
+        uAlgaeTemperature: { value: new THREE.Vector4() },
+        uAlgaeMoisture: { value: new THREE.Vector4() },
+        uAlgaeSun: { value: new THREE.Vector4() },
+        uMossTemperature: { value: new THREE.Vector4() },
+        uMossMoisture: { value: new THREE.Vector4() },
+        uMossSun: { value: new THREE.Vector4() },
         uLightIntensity: { value: lightIntensity },
         uSpecularStrength: { value: specularStrength },
         uShininess: { value: shininess },
@@ -487,6 +512,61 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       },
     });
     materialRef.current = material;
+
+    // The life grid (biome/lifeGrid.ts): regrown from bare ground when its inputs change, 150 ms after they settle.
+    const lifeGrid = new LifeGrid();
+    let lifeKey = '';
+    let lifeTimer: ReturnType<typeof setTimeout> | undefined;
+    const upSun = new THREE.Vector3(0, 1, 0);
+    function updateLife(settings: typeof patchSettingsRef.current) {
+      const biome = settings.biome;
+      material.uniforms.uLifeState.value = lifeGrid.texture;
+      material.uniforms.uLifeInputs.value = lifeGrid.inputs;
+      material.uniforms.uBiomeOn.value = biome.enabled ? 1 : 0;
+      const lifeRenderer = sharedRendererRef.current.renderer;
+      const heightTexture = material.uniforms.uChunkHeightMap.value as THREE.Texture | null;
+      if (!biome.enabled || !lifeRenderer || !heightTexture) return;
+      // A light that follows the camera would regrow life on every turn, so life then takes the sun from straight above.
+      const sun = settings.lightFollowsCamera ? upSun : (material.uniforms.uLightDirection.value as THREE.Vector3);
+      const atmosphere = settings.atmosphere;
+      const growth = [biome.years, biome.growthRate, biome.deathRate, biome.algae.temperature, biome.algae.moisture, biome.algae.sun, biome.moss.temperature, biome.moss.moisture, biome.moss.sun];
+      const key = JSON.stringify([heightTexture.uuid, heightTexture.version, chunkLakes.texture.version, material.uniforms.uSeaLevel.value, material.uniforms.uMaxHeight.value, material.uniforms.uChunkSize.value, material.uniforms.uShadowsEnabled.value, atmosphere.temperature, atmosphere.rainfall, atmosphere.liquid, atmosphere.peakCooling, atmosphere.poleCooling, material.uniforms.uElevationMin.value, material.uniforms.uElevationMax.value, sun.toArray().map((value) => value.toFixed(3)), growth]);
+      if (key === lifeKey) return;
+      lifeKey = key;
+      // Only when they change: the same inputs per pixel (chunk.frag.glsl), so life fills the best spots first.
+      const lifeLiquid = liquidNamed(atmosphere.liquid);
+      const lifeCenter = settings.patch ? patchCenterDirection(settings.patch) : upSun;
+      (material.uniforms.uLifeClimate.value as THREE.Vector4).set(
+        atmosphere.temperature,
+        atmosphere.peakCooling,
+        atmosphere.poleCooling * Math.abs(THREE.MathUtils.clamp(lifeCenter.y, -1, 1)),
+        Math.min(atmosphere.rainfall / Math.max(2 * lifeLiquid.typicalRainfall, 1), 1),
+      );
+      (material.uniforms.uLifeSun.value as THREE.Vector3).copy(sun);
+      clearTimeout(lifeTimer);
+      lifeTimer = setTimeout(() => {
+        const liquid = liquidNamed(atmosphere.liquid);
+        const center = settings.patch ? patchCenterDirection(settings.patch) : upSun;
+        void lifeGrid.run(lifeRenderer, {
+          heightMap: heightTexture,
+          heightMapGreenChannel: material.uniforms.uHeightMapGreenChannel.value > 0.5,
+          heightMapSize: (heightTexture.image as { width?: number } | undefined)?.width ?? 512,
+          lakeLevels: chunkLakes.texture,
+          seaLevel: material.uniforms.uSeaLevel.value as number,
+          maxHeight: material.uniforms.uMaxHeight.value as number,
+          chunkSize: material.uniforms.uChunkSize.value as number,
+          temperature: atmosphere.temperature,
+          peakCooling: atmosphere.peakCooling,
+          elevationMin: material.uniforms.uElevationMin.value as number,
+          elevationMax: material.uniforms.uElevationMax.value as number,
+          poleCooling: atmosphere.poleCooling,
+          latitude: Math.asin(THREE.MathUtils.clamp(center.y, -1, 1)),
+          rainShare: Math.min(atmosphere.rainfall / Math.max(2 * liquid.typicalRainfall, 1), 1),
+          sunDirection: sun.clone(),
+          shadowsEnabled: material.uniforms.uShadowsEnabled.value > 0.5,
+        }, biome, () => { material.uniforms.uLifeState.value = lifeGrid.texture; });
+      }, 150);
+    }
     const patchRenderer = new ChunkPatchRenderer(material);
     patchRenderer.group.visible = false;
     scene.add(patchRenderer.group);
@@ -575,6 +655,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       updateChunkWaterFrame(water, perspectiveCamera.position, deltaSeconds, viewportElement!.clientWidth * window.devicePixelRatio);
       if (!patchRenderer.group.visible) return;
       const settings = patchSettingsRef.current;
+      updateLife(settings);
       perspectiveCamera.updateMatrixWorld();
       patchViewMatrix.multiplyMatrices(perspectiveCamera.projectionMatrix, perspectiveCamera.matrixWorldInverse);
       patchFrustum.setFromProjectionMatrix(patchViewMatrix);
@@ -609,7 +690,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       if (preview && lakeRenderer) chunkLakes.update(lakeRenderer, preview, water.tide.baseSeaLevel, settings.atmosphere, squareSizeKm(settings.patch, settings.radiusKm), settings.radiusKm, settings.lakesOn, Math.max(settings.maxHeight, 0) * 1000);
       material.uniforms.uLakeCells.value = chunkLakes.texture.image.width;
     }
-    sharedRenderer.registerView('landChunk', { scene, camera: perspectiveCamera, elementRef: viewportRef, onFrame });
+    sharedRenderer.registerView('landChunk', { scene, camera: perspectiveCamera, elementRef: viewportRef, onFrame, graded: true });
 
     return () => {
       viewportElement.removeEventListener('pointerdown', pivotOnGround, { capture: true });
@@ -620,6 +701,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       viewportElement.removeEventListener('pointerleave', markPointerOut);
       viewportElement.removeEventListener('wheel', pivotOnGround, { capture: true });
       sharedRenderer.unregisterView('landChunk');
+      clearTimeout(lifeTimer);
+      lifeGrid.dispose();
       walkMap.dispose();
       walkMode.dispose();
       orbitControls.dispose();
@@ -675,6 +758,28 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     if (!material) return;
     (material.uniforms.uFillColor.value as THREE.Color).copy(fillColorFor(atmosphere.enabled, atmosphere.zenithColor, shadowHue));
   }, [atmosphere.enabled, atmosphere.zenithColor, shadowHue]);
+
+  // Life's looks (biome/plantTypes.ts): colors and pattern change without regrowing it.
+  useEffect(() => {
+    const material = materialRef.current;
+    if (!material) return;
+    const land = landMiddleColor(colorStops);
+    const look = (prefix: 'uAlgae' | 'uMoss', type: BiomeSettings['algae'], seed: number) => {
+      const colors = lifeColors({ ...type.look, saturationShare: LIFE_SATURATION[prefix === 'uAlgae' ? 'algae' : 'moss'] }, land);
+      const vector = (name: string) => material.uniforms[prefix + name].value as THREE.Vector4;
+      vector('Hue').set(colors.hue, type.look.hueSpread, colors.saturation[0], colors.saturation[1]);
+      vector('Shade').set(colors.lightness[0], colors.lightness[1], Math.max(type.look.patternMeters, 0.01), seed);
+      vector('Mask').set((type.look.lightnessShare[0] + type.look.lightnessShare[1]) / 2, type.look.edgeAmount, type.look.edgeThickness, 0);
+      vector('Velvet').set(type.look.velvetCore, type.look.velvetPower, type.look.velvetEdge, type.look.shine);
+    };
+    look('uAlgae', biome.algae, 1);
+    look('uMoss', biome.moss, 2);
+    for (const [prefix, type] of [['uAlgae', biome.algae], ['uMoss', biome.moss]] as const) {
+      (material.uniforms[prefix + 'Temperature'].value as THREE.Vector4).set(...rangeVector(type.temperature));
+      (material.uniforms[prefix + 'Moisture'].value as THREE.Vector4).set(...rangeVector(type.moisture));
+      (material.uniforms[prefix + 'Sun'].value as THREE.Vector4).set(...rangeVector(type.sun));
+    }
+  }, [biome, colorStops]);
 
   // Toon shading (atmosphere's shade settings).
   useEffect(() => {

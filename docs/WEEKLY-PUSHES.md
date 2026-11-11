@@ -42,6 +42,7 @@
 - **Drips on hillsides (`[B171]`):** measured two causes. Far skirts showed through the ground because the depth buffer ran out of precision (1,660 pixels at one view, 0 after a reversed depth buffer), and coarse patches left their shared edges with finer ones (up to 1.66 km far away, now matched). The same depth fix ended the distant flicker (`[B157]`).
 - **Walk speed and eye height:** walking speeds up with eye height, as Cesium's camera does (speed proportional to height), and the eye starts at 8 m, since walk mode's height read and the drawn ground still differ by up to 7 m (`[B165]`).
 - **Color and shading (2026-11-10):** a per-planet color grade after the frame is drawn, in Unity's own math (split toning, lift, gamma, gain, saturation), and toon shading on the chunk from Unity Toon Shader's model, where shade is a color of its own. Measured the grade's cost: 4× edge smoothing dropped frames in walk mode, 2× matched no grade. Templates keep each slice planet's settings safe from day-to-day tuning (Flora made from Dana 01).
+- **Biome, first round (2026-11-10):** life simulated on a grid (Cordonnier 2017's rules): algae at the shores, moss on damp, shaded ground, growing over years; drawn as a palette tint of the ground. Several detailed versions (cushions, relief, velvet) were cut for not reading from walking height.
 
 ### 🤖 How AI was used
 - Claude drove the app through Chrome and measured each cause before a fix, comparing old and new behavior in the same session. Dana reproduced problems, set priorities and corrected wrong theories.

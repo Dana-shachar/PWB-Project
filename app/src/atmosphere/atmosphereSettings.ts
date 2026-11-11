@@ -50,6 +50,10 @@ export interface AtmosphereSettings {
   // The climate that sets the rivers and lakes (rivers/riverClimate.ts): mm a year, degrees C, and what falls and flows.
   rainfall: number;
   temperature: number;
+  // How much colder the highest ground is than the shore, and the poles than the equator (°C). Relative to the planet's
+  // own relief, since Earth's 6.5 °C per km breaks on its exaggerated heights. Alien worlds can go far past Earth's. TUNABLE.
+  peakCooling: number;
+  poleCooling: number;
   liquid: string;
   moon: boolean;
   // How many moons show (1 to 5), and all five, so changing the count never loses one (atmosphere/moonTexture.ts).
@@ -102,6 +106,8 @@ export const DEFAULT_ATMOSPHERE_SETTINGS: AtmosphereSettings = {
   wind: 4,
   rainfall: 450,
   temperature: 15,
+  peakCooling: 40, // inferred, TUNABLE
+  poleCooling: 30, // inferred, TUNABLE
   liquid: 'Water',
   moon: false,
   moonCount: 1,

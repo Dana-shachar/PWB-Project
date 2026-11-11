@@ -3,6 +3,9 @@ import { NoisePanel } from './NoisePanel';
 import { ErosionPanel } from './panels/ErosionPanel';
 import { StagePlaceholder } from './panels/StagePlaceholder';
 import { AtmospherePanel } from './panels/AtmospherePanel';
+import { BiomePanel } from './panels/BiomePanel';
+import type { BiomeSettings } from '../biome/plantTypes';
+import type { ColorStop } from '../planet/colorRamp';
 import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
@@ -18,6 +21,9 @@ interface RightPanelProps {
   activeStage: PipelineStage;
   atmosphere: AtmosphereSettings;
   onAtmosphereChange: (changes: Partial<AtmosphereSettings>) => void;
+  biome: BiomeSettings;
+  onBiomeChange: (changes: Partial<BiomeSettings>) => void;
+  biomeColorStops: ColorStop[];
   layers: NoiseLayer[];
   selectedLayerIds: string[];
   onLayerClick: (id: string, event: { shiftKey: boolean }) => void;
@@ -62,7 +68,7 @@ interface RightPanelProps {
 // (ui/Panel.tsx's `activeStage`/`onStageChange`). Terrain gets the existing
 // full `NoisePanel` and Erosion its own; every remaining stage is still an
 // empty placeholder until that stage's own feature gets built.
-export function RightPanel({ width, activeStage, atmosphere, onAtmosphereChange, erosion, waterProgress, chunkMeshResolution, ...props }: RightPanelProps) {
+export function RightPanel({ width, activeStage, atmosphere, onAtmosphereChange, biome, onBiomeChange, biomeColorStops, erosion, waterProgress, chunkMeshResolution, ...props }: RightPanelProps) {
   return (
     <div className="panel-outer" style={{ width }}>
       <div className="panel-content">
@@ -86,7 +92,8 @@ export function RightPanel({ width, activeStage, atmosphere, onAtmosphereChange,
             />
           </>
         )}
-        {activeStage !== 'terrain' && activeStage !== 'atmosphere' && (
+        {activeStage === 'biome' && <BiomePanel biome={biome} onBiomeChange={onBiomeChange} colorStops={biomeColorStops} />}
+        {activeStage !== 'terrain' && activeStage !== 'atmosphere' && activeStage !== 'biome' && (
           <StagePlaceholder label={PIPELINE_STAGES.find((stage) => stage.key === activeStage)!.label} />
         )}
       </div>

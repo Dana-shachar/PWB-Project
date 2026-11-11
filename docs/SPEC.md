@@ -707,3 +707,14 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - A template changes only by Save Template; while one is being edited, autosave is off. "+ Project from" makes a new project copied from it, leaving it untouched. The vertical slice's planets start as templates (Flora from Dana 01). Dana.
 
+### [S85] Life is simulated on a grid and drawn as a tint of the ground · `decided`
+**Decided:** 2026-11-10
+
+- Algae and moss grow on a cell grid by Cordonnier 2017's rules (viability by hat functions, the worst input wins, growth into free space, die-back by stress), regrown only when inputs change. Inputs are relative to the planet's own relief, since Earth's per-km rules break on its heights.
+- Drawn only as what shows from walking height: placement from the terrain (per-pixel suitability on the smoothed landform), the ground tinted toward a palette color with its own lightness and texture kept. No life texture, relief or velvet of its own. Algae is aquatic (waterline only). Four controls per type. Dana.
+
+### [S86] Reopen what was open · `decided`
+**Decided:** 2026-11-10
+
+- A reload reopens the last open project or template, back in template mode for a template, so a reload never silently switches which planet is being edited. Dana.
+

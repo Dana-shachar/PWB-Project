@@ -8,17 +8,16 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-10, evening):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Everything else live is in the standing sections below.*
+> **Start from here (2026-11-10, night):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md` and `docs/BIOME-PLAN.md`.*
 >
-> **State.** `main` is pushed at `7822204` (the color grade, toon shading, templates, the 2026-11-10 diagram). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - Built and approved 11-10: shading fix B (the shade is the ground's hue turned by Shadow hue; Shade chroma), the Shadow hue preview, rock colors from the land ramp, the Link menu, and the Flora template's terrain (plains, hills and mountain regions by layer masks, edited in the app).
-> - Shading fix A (smooth landform normal, base not darkened by angle) is committed but Dana hasn't judged it yet; she may find the lit side too flat (Next in order 4.3).
-> - Hot reload keeps old settings and the old grade object: after changing a settings shape or the render loop, hard reload (Cmd+Shift+R) before judging a bug.
-> - Reversed depth applies to the whole app: a pass rendering into its own target clears it first (the shared renderer has `autoClear` off), and a render target needs a float `DepthTexture` for 32-bit depth.
+> **State.** `main` holds the biome's first round (`[S85]`): the life grid, algae and moss as a ground tint, four controls per type, plus the template reopen fix (`[S86]`, `[B175]`) and Ambient with Shading (`[B174]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Flora is the template to work in; Dana saved its colors and biome values herself.
+> - Scene lighting (Ambient, Light) isn't saved per planet; its defaults are in `scene/sceneControls.ts`.
+> - Two app tabs share the graphics card: frame times measured with both open read about double.
 >
-> **How to work (Dana, 2026-11-10).** Dana tests visual results herself; don't drive her test in Claude's tab unless asked. Clear instructions are a go: don't ask small questions, pick and say so. Keep tokens low: read narrowly, no rereads.
+> **How to work (Dana, 2026-11-10).** Build only what can be seen from walking height (`.claude/CLAUDE.md`). Every color derives from the palette. Never improvise a method; name unsourced parts before building. Clear instructions are a go; don't ask small questions. Keep Claude's tab open; Dana tests there too.
 >
-> **Next job: plan biome evolution** (Next in order 6).
+> **Next job: biome evolution, step one** (`BIOME-PLAN.md` stage 5): algae and moss drifting in visible traits over eras, Sims's mutation; two parts still unsourced (which mutations last, the humus threshold for the next stage).
 ---
 
 ## 🧭 Direction
@@ -46,7 +45,18 @@
    3. ⚪ If the lit side reads too flat, keep fine bumps in the lit color. A second, darker shade (Unity's 2nd shade) if depth is missing.
    4. ⚪ The grade per view: only the chunk graded, the planet drawn after the grade (Unity's per-camera post processing; check its docs first).
 5. ✅ **Flora planet terrain** (template Flora): plains, hills and mountain regions by layer masks, sea level set by Dana.
-6. ⚪ **Biome evolution** (Dana, 2026-11-10): plan next.
+6. 🟡 **Biome evolution** (Dana, 2026-11-10; the full plan and its research live in `BIOME-PLAN.md`): life on a grid run like erosion, never individual plants in the simulation; plants drawn as real geometry near the camera and as a tint from afar. Evolution and succession layered: eras unlock forms, the grid places them. Sources in `REFERENCES.md` (Cordonnier 2017, Sims 1991, Horizon Zero Dawn, EZ-Tree).
+   1. ⚪ **Life grid and pioneer layers (test 1).** Generation 0, algae and moss, plus humus, as per-cell densities stepped one year per GPU pass; the year comes from the World Clock, a long jump runs to the settled state, nothing stored (replayed like erosion).
+      - Viability per type: each input scored −1 to 1 by its own ranges (Cordonnier's hat function), the worst wins (Liebig's law); above 0 grows into free space, below 0 dies back.
+      - Inputs: moisture (drainage, lakes, Climate rainfall), temperature (Climate's, minus altitude and pole cooling, two tunable sliders in Climate), sunlight (facing the scene's sun, times the cast shadow; no day and night cycle).
+      - Dead matter to humus at a rate scaled by moisture and temperature (LPJ, Sitch et al. 2003; 📌 Dana to download the paper for the formula).
+      - One global grid (drainage resolution) for the planet's far tint, a finer grid on the chunk seeded from it.
+      - Shader: a layer per life type with its own color, pattern and scale (algae a glossy film at waterlines, moss clumpy cushions), coverage spreading by a noise threshold (Unreal's HeightLerp). Biome section: switch, per-type colors and pattern scale, growth rate; Randomize colors picks the colors.
+      - Files: new `biome/plantTypes.ts`, `biome/lifeGrid.ts`, `biome/biomeControls.ts`, `shaders/biome/lifeStep.frag.glsl`; `landLayers.glsl`, `chunk.frag.glsl`, `planetPatch.frag.glsl`, `LandChunkCanvas.tsx`, `planetPatchMesh.ts`, `planetControls.ts`, `Panel.tsx`, `App.tsx`.
+   2. ⚪ **Bare ground (test 2).** The land ramp becomes soil and rock; green appears only where life grows.
+   3. ⚪ **Genes and eras.** A genome per planet (the plant generator's parameters plus colors, visible as sliders), Sims's mutation per era (rate m and amount d, shown), eras unlocking stages (pioneers, then grass, shrubs, trees and flowers), divergence from Earth by wide starting ranges, and a reroll per planet with locks.
+   4. ⚪ **Grass, shrubs and trees.** New types on the grid (Cordonnier: count, height and age per cell, self-thinning, shade of lower layers), drawn near the camera from the grid's density on the GPU (Horizon Zero Dawn), a few generated variants each with lower-detail versions further away; their own tint from afar.
+   5. ⚪ **Agents** (pollinators, animals): later, reading and writing the grid (Ecormier-Nocca 2021 to read).
 6. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock. Sources to start from: parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*), space colonization, genes mutated per Sims 1991; EZ-Tree considered for earth-like trees (check its license).
 7. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
 8. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll).

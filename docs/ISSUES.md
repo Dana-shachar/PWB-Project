@@ -1476,6 +1476,18 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **🔴 Open** · **Found:** 2026-11-10 · **Where:** the chunk's cut side walls, not yet measured
 - Panning close to the chunk's edge shows vertical light stripes running down the side wall under the ground. Seen by Dana with the new toon shading and color grade on; not yet checked whether either causes it.
 
+### [B173] Radial streaks and flat triangles at maximum orbit zoom · `wrong but workable`
+**🔴 Open, not reproduced** · **Found:** 2026-11-10 · **Where:** chunk view, orbit at maximum zoom
+- Dana saw streaks converging on one point and large flat triangles. In Claude's tab at maximum zoom the camera stayed 2.2 km above the ground (near plane 111 m), so the cause is unmeasured.
+
+### [B174] Ambient light did nothing on the chunk with Shading on · `wrong but workable`
+**✅ Fixed 2026-11-10** · **Where:** the toon block in `chunk.frag.glsl`
+- The toon lit side and shade left out the ambient fill. Both now take it, and the lit side keeps half its angle lighting so ground detail reads.
+
+### [B175] A reload dropped template mode and edits went to another project · `blocks work`
+**✅ Fixed 2026-11-10** · **Where:** the load effect in `projectSettings/saveProject.ts`
+- A reload opened the most recent project, so edits meant for Flora went to Dana 01. The app now reopens the last open project or template (`[S86]`).
+
 ## 🏗️ Architecture
 
 *Structural problems, and limits tracked but not scheduled.*

@@ -26,6 +26,8 @@ export interface SharedViewportView {
   // specular/eye-position uniform, the planet's own patch LOD update) — runs
   // right before this view renders, every frame it's actually drawn.
   onFrame?: () => void;
+  // Drawn through the color grade (scene/colorGrade.ts); the chunk is, the planet isn't (Dana, 2026-11-10).
+  graded?: boolean;
 }
 
 export interface SharedViewportRenderer {
@@ -116,38 +118,53 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
       const containerRect = container!.getBoundingClientRect();
       const containerHeight = containerRect.height;
 
-      grade.begin();
-
+      // Graded views (the chunk) draw into the grade's image, then the grade pass; the rest (the planet) draw straight
+      // onto the canvas after it, as engines set post processing per camera. No graded view on screen, no grade pass.
+      type Placed = { view: SharedViewportView; left: number; bottom: number; width: number; height: number };
+      const placed: Placed[] = [];
       viewsRef.current.forEach((view) => {
         const element = view.elementRef.current;
         if (!element) return;
         const rect = element.getBoundingClientRect();
-        // A hidden pane (display:none via .viewport-pane--hidden) reports a
-        // zero-size rect in every browser — this alone is what skips
-        // rendering it, no separate visible flag to keep in sync with the
-        // CSS class.
+        // A hidden pane (display:none) reports a zero-size rect, which alone skips rendering it.
         if (rect.width === 0 || rect.height === 0) return;
-
-        // Both rects share one coordinate space (getBoundingClientRect() is
-        // always relative to the browser viewport), so subtracting the
-        // container's own origin gives this pane's position relative to the
-        // shared canvas, which is sized and positioned to exactly cover the
-        // container. WebGL's viewport/scissor origin is bottom-left, DOM's
-        // is top-left — left stays as-is, top needs flipping.
+        // WebGL's origin is bottom-left, the DOM's top-left, both relative to the shared canvas.
         const left = rect.left - containerRect.left;
         const top = rect.top - containerRect.top;
-        const bottom = containerHeight - (top + rect.height);
-
-        const aspect = rect.width / rect.height;
+        placed.push({ view, left, bottom: containerHeight - (top + rect.height), width: rect.width, height: rect.height });
+      });
+      const prepare = ({ view, width, height }: Placed) => {
+        const aspect = width / height;
         if (view.camera.aspect !== aspect) {
           view.camera.aspect = aspect;
           view.camera.updateProjectionMatrix();
         }
-
         view.onFrame?.();
-        grade.drawView(view.scene, view.camera, left, bottom, rect.width, rect.height);
-      });
-      grade.finish(container!.clientWidth, containerHeight);
+      };
+
+      const graded = placed.filter((entry) => entry.view.graded);
+      if (graded.length > 0) {
+        grade.begin();
+        for (const entry of graded) {
+          prepare(entry);
+          grade.drawView(entry.view.scene, entry.view.camera, entry.left, entry.bottom, entry.width, entry.height);
+        }
+        grade.finish(container!.clientWidth, containerHeight);
+      } else {
+        webglRenderer.setRenderTarget(null);
+        webglRenderer.setScissorTest(false);
+        webglRenderer.clear();
+      }
+      for (const entry of placed) {
+        if (entry.view.graded) continue;
+        prepare(entry);
+        webglRenderer.setRenderTarget(null);
+        webglRenderer.setViewport(entry.left, entry.bottom, entry.width, entry.height);
+        webglRenderer.setScissor(entry.left, entry.bottom, entry.width, entry.height);
+        webglRenderer.setScissorTest(true);
+        webglRenderer.clear(); // only its rectangle: the scissor holds
+        webglRenderer.render(entry.view.scene, entry.view.camera);
+      }
 
       animationFrameId = requestAnimationFrame(animate);
     }

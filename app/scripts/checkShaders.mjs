@@ -43,7 +43,7 @@ uniform bool isOrthographic;
 const MATERIALS = [
   { name: 'planet patch (planet/planetPatchMesh.ts)', vertex: ['terrain/vertex.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/landLayers.glsl', 'water/water.glsl', 'water/oceanWaves.glsl', 'atmosphere/airGround.glsl', 'atmosphere/planetAir.glsl', 'terrain/planetPatch.frag.glsl'] },
   { name: 'planet mesh (planet/mesh.ts)', vertex: ['terrain/vertex.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/fragment.glsl'] },
-  { name: 'land chunk (voxel/LandChunkCanvas.tsx)', vertex: ['terrain/chunk.vert.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/landLayers.glsl', 'atmosphere/haze.glsl', 'terrain/chunk.frag.glsl'] },
+  { name: 'land chunk (voxel/LandChunkCanvas.tsx)', vertex: ['terrain/chunk.vert.glsl'], fragment: ['terrain/terrain.glsl', 'heightmap/noise.glsl', 'terrain/landLayers.glsl', 'biome/lifeLayers.glsl', 'atmosphere/haze.glsl', 'terrain/chunk.frag.glsl'] },
   { name: 'chunk water (voxel/chunkWater.ts)', vertex: ['water/chunkWater.vert.glsl'], fragment: ['water/seaLookOverride.glsl', 'terrain/terrain.glsl', 'water/water.glsl', 'water/oceanWaves.glsl', 'atmosphere/haze.glsl', 'water/chunkWater.frag.glsl'] },
   { name: 'chunk water walls (voxel/chunkWater.ts)', vertex: ['water/chunkWaterWall.vert.glsl'], fragment: ['terrain/terrain.glsl', 'water/water.glsl', 'atmosphere/haze.glsl', 'water/chunkWaterWall.frag.glsl'] },
   { name: 'planet haze (atmosphere/planetHaze.ts)', vertex: ['atmosphere/planetHaze.vert.glsl'], fragment: ['atmosphere/airGround.glsl', 'atmosphere/planetAir.glsl', 'atmosphere/planetHaze.frag.glsl'] },
@@ -58,6 +58,8 @@ const MATERIALS = [
   { name: 'elevation histogram (map/heightmap.ts)', vertex: ['heightmap/elevationHistogram.vert.glsl'], fragment: ['heightmap/elevationHistogram.frag.glsl'] },
   { name: 'stream power seed (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerSeed.frag.glsl'] },
   // The grade's vertex is three.js's CopyShader (inline); the brush vertex stands in, a full-screen pass alike.
+  { name: 'life inputs (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['terrain/terrain.glsl', 'biome/lifeInputs.frag.glsl'] },
+  { name: 'life step (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeStep.frag.glsl'] },
   { name: 'color grade (scene/colorGrade.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['post/colorGrade.frag.glsl'] },
   { name: 'stream power pass (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerPlanet.frag.glsl'] },
 ];

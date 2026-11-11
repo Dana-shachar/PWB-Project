@@ -46,15 +46,24 @@ float gaussian(float x, float center, float width) {
   return exp(-t * t);
 }
 
-float cloudFbm(vec3 p) {
+// Band-limited, as the terrain's fbm3D (heightmap.frag.glsl's octaveFade): an octave finer than a pixel fades out and the
+// loop stops, so far clouds skip layers they can't show. Normalized over every octave, so fading keeps the brightness.
+const float CLOUD_NYQUIST_FADE_MIN = 0.25;
+const float CLOUD_NYQUIST_FADE_MAX = 0.95;
+float cloudOctaveFade(float spacing) {
+  return smoothstep(CLOUD_NYQUIST_FADE_MIN, CLOUD_NYQUIST_FADE_MAX, 0.5 / max(spacing, 1e-6));
+}
+float cloudFbm(vec3 p, float spacing) {
   float sum = 0.0;
   float amp = 0.5;
   float norm = 0.0;
   for (int i = 0; i < 8; i++) {
     if (float(i) >= uCloudDetail) break;
-    sum += simplexNoise3D(p, 3.0) * amp;
     norm += amp;
+    float fade = cloudOctaveFade(spacing);
+    if (fade > 0.0) sum += simplexNoise3D(p, 3.0) * amp * fade;
     p = p * 2.03 + 7.7;
+    spacing *= 2.03;
     amp *= 0.5;
   }
   return sum / max(norm, 0.0001) * 0.5 + 0.5;
@@ -76,13 +85,15 @@ float cloudShape(vec3 dir, float angle, float threshold) {
     vec3 warp = vec3(simplexNoise3D(p * 1.7, 11.0), simplexNoise3D(p * 1.7, 23.0), simplexNoise3D(p * 1.7, 37.0));
     p += warp * uCloudSwirl * 0.6;
   }
-  float base = cloudFbm(p);
-  if (uCloudFeather <= 0.0 || base < threshold - 0.3) return base; // detail only near clouds, as in the talk
+  float spacing = length(fwidth(p)); // how far p moves across one pixel
+  float base = cloudFbm(p, spacing);
+  float featherFade = cloudOctaveFade(spacing * FEATHER_FREQUENCY);
+  if (uCloudFeather <= 0.0 || featherFade <= 0.0 || base < threshold - 0.3) return base; // detail only near clouds, as in the talk
   vec3 q = p * FEATHER_FREQUENCY;
   q += vec3(simplexNoise3D(q * 0.5, 41.0), simplexNoise3D(q * 0.5, 53.0), 0.0) * 0.8;
   float detail = simplexNoise3D(q, 61.0) * 0.5 + 0.5;
   float edgeness = 1.0 - clamp((base - threshold) / FEATHER_EDGE_ZONE, 0.0, 1.0);
-  return base - detail * uCloudFeather * 0.35 * edgeness;
+  return base - detail * uCloudFeather * 0.35 * edgeness * featherFade;
 }
 
 // Two tones: warped bands mix in the second color, after segue2ant's "Simple Spatial Planet" (CC0): its sine and cosine

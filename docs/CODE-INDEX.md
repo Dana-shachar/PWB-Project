@@ -36,6 +36,7 @@
 | Change the color grade | `scene/colorGrade.ts` (`ColorGrade`, `prepareLiftGammaGain`, `SAMPLES`), `shaders/post/colorGrade.frag.glsl`, `scene/sharedViewportRenderer.ts`, `randomColorGrade` in `planet/planetControls.ts` |
 | Change the chunk's toon shading | `toonShadeMask` and `shadeColor` in `shaders/terrain/landLayers.glsl`, `shadeColorFor` and `shadeHueTrackGradient` (the Shadow hue preview) in `scene/fillLight.ts`, the shade block in `chunk.frag.glsl`, `shade*` in `atmosphere/atmosphereSettings.ts`, `uShade*` in `voxel/LandChunkCanvas.tsx` |
 | Change templates or the project list | `handleCreateTemplate`, `handleEditTemplate`, `handleNewFromTemplate`, `handleRenameById`, `editingTemplate` in `projectSettings/saveProject.ts`; `template` in `firebase/storage.ts`; Project Settings in `ui/Panel.tsx` |
+| Change the biome (life grid, moss and algae) | `biome/plantTypes.ts` (`BiomeSettings`, `DEFAULT_BIOME_SETTINGS`, `lifeColors`, `LIFE_SATURATION`), `biome/lifeGrid.ts` (`LifeGrid`), `shaders/biome/lifeInputs.frag.glsl`, `lifeStep.frag.glsl`, `lifeLayers.glsl`, the life block in `chunk.frag.glsl`, `updateLife` in `voxel/LandChunkCanvas.tsx`, `ui/panels/BiomePanel.tsx`, the Biome section in `ui/Panel.tsx` |
 | Change settings undo (Cmd+Z) | `useSettingsHistory` in `projectSettings/settingsHistory.ts` |
 | Add a saved planet setting | `planet/planetControls.ts` (`PlanetSettings`, `applySettings`), `projectSettings/saveProject.ts` |
 | Add a design-system component | `ui/UIElements.tsx` (incl. `LinkMenu`), `design.css`, `ui/icons.tsx` |
@@ -449,7 +450,14 @@
 
 **projectSettings/saveProject.ts**
 - What it is: autosave, load, new and reset.
-- Key names: `useSaveProject` (the autosave's trigger list includes the atmosphere, rock, spin and grade, `[B70]`; skipped while `editingTemplate`), `openSaved`, templates (`handleCreateTemplate`, `handleEditTemplate`, `handleNewFromTemplate`), `handleRenameById`, `createFreshProject`, `handleReset`.
+- Key names: `useSaveProject` (the autosave's trigger list includes the atmosphere, rock, spin, grade and biome, `[B70]`; skipped while `editingTemplate`; reopens the last open project or template, `LAST_OPEN_KEY`), `openSaved`, templates (`handleCreateTemplate`, `handleEditTemplate`, `handleNewFromTemplate`), `handleRenameById`, `createFreshProject`, `handleReset`.
+
+**biome/plantTypes.ts**, **biome/lifeGrid.ts**
+- What it is: the life grid (Cordonnier 2017): algae and moss per cell on the chunk, regrown from bare ground on the GPU when its inputs change (150 ms after they settle), never while walking. Inputs per cell: temperature (Climate, Peak cooling, Pole cooling), moisture (rain, hollows, waterline), sunlight, and the waterline alone for aquatic algae.
+- Key names: `LifeGrid` (`run`, `texture`, `inputs`), `LIFE_GRID_SIZE`, `BiomeSettings`, `LifeType`, `LifeLook` (`hueTurn`, `lightnessShare`), `rangeVector`, `lifeColors`, `landMiddleColor`, `LIFE_SATURATION`, `migrateBiome`.
+
+**shaders/biome/** (`lifeInputs.frag.glsl`, `lifeStep.frag.glsl`, `lifeLayers.glsl`)
+- What it is: the grid's inputs pass and yearly step, and the drawn layer: `lifeSuitability` (the grid's rule per pixel), `lifeLayer` (Berg's height blend on suitability, top-down and edge masks), `lifeTint` (the ground tinted, its lightness kept), `lifeSampleSmooth` (cubic B-spline read of the grid).
 
 **scene/colorGrade.ts**
 - What it is: the per-planet color grade, a post pass over the shared canvas: a 2-sample multisampled half-float image with a float depth texture (reversed depth), an `EffectComposer` and one `ShaderPass` (no `OutputPass`: the scene's shaders already write screen color).

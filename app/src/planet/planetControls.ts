@@ -1,3 +1,4 @@
+import { DEFAULT_BIOME_SETTINGS, migrateBiome, type BiomeSettings } from '../biome/plantTypes';
 import { DEFAULT_COLOR_GRADE, migrateColorGrade, type ColorGradeSettings } from '../scene/colorGrade';
 import { ruleTurn, randomAtmosphereColors, DEFAULT_ATMOSPHERE_SETTINGS, migrateAtmosphere, type AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { DEFAULT_SPIN, type SpinSettings } from '../scene/planetSpin';
@@ -232,6 +233,8 @@ export interface PlanetSettings {
   spin?: SpinSettings;
   // Rock on steep ground. Absent in older saves, which load with the default rock.
   rock?: RockSettings;
+  // Life on the chunk (biome/plantTypes.ts). Absent in older saves, which load the defaults.
+  biome?: BiomeSettings;
   // The color grade (scene/colorGrade.ts). Absent in older saves, which load neutral.
   colorGrade?: ColorGradeSettings;
 }
@@ -340,6 +343,7 @@ export function usePlanetControls() {
   const [colorStops, setColorStops] = useState<ColorStop[]>(DEFAULT_PLANET_SETTINGS.colorStops);
   const [rock, setRock] = useState<RockSettings>(DEFAULT_ROCK_SETTINGS);
   const [colorGrade, setColorGrade] = useState<ColorGradeSettings>(DEFAULT_COLOR_GRADE);
+  const [biome, setBiome] = useState<BiomeSettings>(DEFAULT_BIOME_SETTINGS);
   // Heightmap self-shadowing — land chunk only for now, see shaders/
   // terrain.glsl for why the planet's curved surface is a separate step.
   const [shadowsEnabled, setShadowsEnabled] = useState(DEFAULT_PLANET_SETTINGS.shadowsEnabled);
@@ -386,13 +390,20 @@ export function usePlanetControls() {
     updateWater({ colorStops: randomWaterPalette(palette.baseHue, palette.highHue), lakeColorStops: randomWaterPalette(palette.baseHue, palette.highHue) });
     setRock((previous) => ({ ...previous, stops: randomRockPalette(palette) }));
     setColorGrade((previous) => randomColorGrade(previous, palette.baseHue));
+    // Life's hues turned from the land's by the color rules, each type its own.
+    const lifeTurn = () => Math.round((((ruleTurn() * 360 + 180) % 360) + 360) % 360 - 180);
+    setBiome((previous) => ({
+      ...previous,
+      algae: { ...previous.algae, look: { ...previous.algae.look, hueTurn: lifeTurn() } },
+      moss: { ...previous.moss, look: { ...previous.moss.look, hueTurn: lifeTurn() } },
+    }));
     setAtmosphere((previous) => randomAtmosphereColors(previous, palette.baseHue / 360));
   }
 
   // Every field above, as the one PlanetSettings shape — what
   // projectSettings/saveProject.ts actually persists.
   function currentSettings(): PlanetSettings {
-    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock, colorGrade };
+    return { radiusKm, baseColor, displayMode, heightScale, maxErrorPixels, detailVersion: CURRENT_DETAIL_VERSION, colorByElevation, colorStops, rampHasBase: true, shadowsEnabled, detailAmount, autoDetail, water, atmosphere, spin, rock, colorGrade, biome };
   }
 
   // Restores a saved project's settings — every setter in one call, so a
@@ -408,6 +419,7 @@ export function usePlanetControls() {
     setColorStops(migrateColorStops(settings));
     setRock({ ...DEFAULT_ROCK_SETTINGS, ...settings.rock });
     setColorGrade(migrateColorGrade(settings.colorGrade));
+    setBiome(migrateBiome(settings.biome));
     setShadowsEnabled(settings.shadowsEnabled);
     setDetailAmount(settings.detailAmount ?? DEFAULT_PLANET_SETTINGS.detailAmount ?? 0);
     setAutoDetail(settings.autoDetail ?? true);
@@ -447,6 +459,8 @@ export function usePlanetControls() {
     updateRock: (changes: Partial<RockSettings>) => setRock((previous) => ({ ...previous, ...changes })),
     colorGrade,
     updateColorGrade: (changes: Partial<ColorGradeSettings>) => setColorGrade((previous) => ({ ...previous, ...changes })),
+    biome,
+    updateBiome: (changes: Partial<BiomeSettings>) => setBiome((previous) => ({ ...previous, ...changes })),
     shadowsEnabled,
     setShadowsEnabled,
     detailAmount,

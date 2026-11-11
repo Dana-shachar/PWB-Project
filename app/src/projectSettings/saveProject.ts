@@ -59,6 +59,16 @@ function generateProjectName(existingCount: number): string {
   return `New Planet ${String(existingCount + 1).padStart(2, '0')}`;
 }
 
+const LAST_OPEN_KEY = 'pwb:lastOpen';
+function readLastOpen(): { id: string } | null {
+  try {
+    const raw = localStorage.getItem(LAST_OPEN_KEY);
+    return raw ? (JSON.parse(raw) as { id: string }) : null;
+  } catch {
+    return null;
+  }
+}
+
 // Creates and saves a brand-new blank planet under a generic name, making it
 // the currently-open one — shared by the zero-projects case on first load,
 // "+ New Project", and deleting the last remaining planet, so there's always
@@ -112,7 +122,9 @@ export function useSaveProject({
   useEffect(() => {
     if (!currentUser) return;
     listProjects(currentUser.uid).then(async (summaries) => {
-      const mostRecent = summaries.find((summary) => !summary.template); // templates open only through Edit
+      // Reopens whatever was worked on last, template or project (Dana, 2026-11-10); else the most recent project.
+      const lastOpen = readLastOpen();
+      const mostRecent = summaries.find((summary) => summary.id === lastOpen?.id) ?? summaries.find((summary) => !summary.template);
       if (mostRecent) {
         setProjects(summaries);
         const project = await loadProject(currentUser.uid, mostRecent.id);
@@ -144,6 +156,7 @@ export function useSaveProject({
           // real defaults, not whatever's currently in memory, same
           // reasoning as erosion.clear() just above.
           planetControls.applySettings(project.planetSettings ?? DEFAULT_PLANET_SETTINGS);
+          setEditingTemplate(mostRecent.template === true);
         }
       } else {
         const fresh = await createFreshProject(currentUser.uid, 0, layers, setCurrentPlanetId, setCurrentPlanetName);
@@ -153,6 +166,16 @@ export function useSaveProject({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- setters/layers are stable at initial mount, only currentUser should retrigger this
   }, [currentUser]);
+
+  // Remembers what's open, so a reload reopens it (a per-browser convenience).
+  useEffect(() => {
+    if (currentPlanetId === null) return;
+    try {
+      localStorage.setItem(LAST_OPEN_KEY, JSON.stringify({ id: currentPlanetId }));
+    } catch {
+      // storage blocked: a reload then opens the most recent project
+    }
+  }, [currentPlanetId]);
 
   // Debounced save on every layer/stroke change, only once a planet has
   // actually been saved once (currentPlanetId set) — a fresh, unnamed
@@ -205,6 +228,7 @@ export function useSaveProject({
     planetControls.colorGrade,
     planetControls.rock,
     planetControls.spin,
+    planetControls.biome,
   ]);
 
   // Shared by handleNewProject() and handleReset() — clears the canvas to
