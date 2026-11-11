@@ -5,6 +5,7 @@
 const float LIFE_BLEND_POWER = 15.0; // Berg's BlendPower
 const float LIFE_TOP_MULTIPLIER = 3.0; // Berg's TopdownMaskMultiplier
 const float LIFE_TOP_POWER = 5.0; // Berg's TopdownMaskPower
+const float LIFE_GROUND_SHARE = 0.35;
 
 // Cordonnier's hat function, the grid's own (lifeStep.frag.glsl): -1 outside survival, 1 in the ideal range.
 float lifeHat(float c, vec4 range) {
@@ -47,8 +48,10 @@ vec3 hslToRgb(vec3 hsl) {
 // One life type's layer: its cover, and its color. Placement from the terrain alone (suitability as Berg's height); no
 // texture of its own, since the ground's own texture shows through the tint (chunk.frag.glsl). hue: center (degrees),
 // unused, saturation min, max. shade: lightness min, max. mask: unused, edge amount, edge thickness, unused.
-float lifeLayer(float amount, float up, float suitability, vec4 hue, vec4 shade, vec4 mask, out vec3 color) {
-  float height = suitability;
+float lifeLayer(float amount, float up, float groundDetail, float suitability, vec4 hue, vec4 shade, vec4 mask, out vec3 color) {
+  // The height blend's height mixes in the ground's own texture (Mishkinis; Berg), so the edge breaks along the terrain's
+  // existing pattern instead of a smooth curve. Share inferred, TUNABLE.
+  float height = mix(suitability, groundDetail, LIFE_GROUND_SHARE);
   float a = clamp(amount, 0.0, 1.0);
   // Berg's height blend and top-down mask, the edge mask; each edge never sharper than a pixel (aastep, Gustavson 2012).
   float blendValue = height * a + a;
@@ -68,5 +71,6 @@ float lifeLayer(float amount, float up, float suitability, vec4 hue, vec4 shade,
 vec3 lifeTint(vec3 ground, vec3 life, float brightness) {
   vec3 groundHsv = rgbToHsv(max(ground, 0.0));
   vec3 lifeHsv = rgbToHsv(max(life, 0.0));
-  return hsvToRgb(vec3(lifeHsv.x, lifeHsv.y, groundHsv.z * brightness));
+  // The ground's saturation shifted toward the life's, not replaced, so its variation survives. Share inferred, TUNABLE.
+  return hsvToRgb(vec3(lifeHsv.x, mix(groundHsv.y, lifeHsv.y, 0.7), groundHsv.z * brightness));
 }

@@ -76,22 +76,19 @@ export function migrateBiome(saved: Partial<BiomeSettings> | undefined): BiomeSe
 }
 
 // A type's actual hue (degrees) and saturation and lightness ranges on this planet, in sRGB HSL, from the land color.
-const LIFE_MIN_SATURATION = 0.5;
-
 export function lifeColors(look: LifeLook, landColor: string): { hue: number; saturation: [number, number]; lightness: [number, number] } {
   const land = new THREE.Color(landColor).getHSL({ h: 0, s: 0, l: 0 }, THREE.SRGBColorSpace);
   const clamp01 = (value: number) => Math.min(Math.max(value, 0), 1);
   return {
     hue: (((land.h * 360 + look.hueTurn) % 360) + 360) % 360,
-    // At least LIFE_MIN_SATURATION, so life still reads on a muted palette. Inferred, TUNABLE.
-    saturation: [clamp01(Math.max(land.s * look.saturationShare[0], LIFE_MIN_SATURATION)), clamp01(Math.max(land.s * look.saturationShare[1], LIFE_MIN_SATURATION))],
+    saturation: [clamp01(land.s * look.saturationShare[0]), clamp01(land.s * look.saturationShare[1])],
     lightness: [clamp01(land.l * look.lightnessShare[0]), clamp01(land.l * look.lightnessShare[1])],
   };
 }
 
-// Life's saturation against the land's, fixed from the references (moss and algae read clearly more saturated than the
-// soil they grow on). Inferred numbers, TUNABLE.
-export const LIFE_SATURATION: Record<LifeTypeKey, [number, number]> = { algae: [1.1, 1.3], moss: [1.3, 1.5] };
+// Life's saturation against the land's: within the planet's own muted palette, so it blends; it reads by its hue turn and
+// lightness, not extra saturation (Dana, 2026-11-10). Inferred, TUNABLE.
+export const LIFE_SATURATION: Record<LifeTypeKey, [number, number]> = { algae: [1, 1.15], moss: [1, 1.15] };
 
 // The land's middle ramp color, the one life's colors turn from.
 export const landMiddleColor = (stops: { color: string }[]) => stops[Math.floor(stops.length / 2)]?.color ?? '#808080';

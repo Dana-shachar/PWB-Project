@@ -69,7 +69,8 @@
 **As built (2026-11-10), after the close-up detail was cut** (nothing finer than the viewing distance shows)
 - Placement from the terrain only: per-pixel suitability by the grid's rule (the type's ranges, worst input wins) on the smoothed landform, as Berg's height-blend height; the grid read with a cubic B-spline (Sigg and Hadwiger, GPU Gems 2) so edges curve.
 - Algae reads the waterline's wetness alone (aquatic), moss reads rain, hollows and waterline; a high algae Moisture need keeps it to a thin shore band.
-- Color: a tint of the ground (Shane's multiplicative tint): the life's hue and saturation (1.1 to 1.5 times the land's, at least 0.35), the ground's own lightness, so its texture shows through. No texture of its own.
+- Color: a tint of the ground (Shane's multiplicative tint): the life's hue, saturation within the land's own (1 to 1.15 times, so it blends), the ground's own lightness, at most 75% cover; its edge follows the ground's own texture (35% of the height blend). No texture or volume of its own.
+- 💡 Volume later: low tufts as geometry near the camera from the moss amount (Horizon Zero Dawn placement), as No Man's Sky and Moss do; and a visible-scale grain inside the tint.
 - Controls per type: Hue, Brightness, Moisture need, Shade need. Everything else fixed.
 
 **Not sourced yet, to research or defer**
