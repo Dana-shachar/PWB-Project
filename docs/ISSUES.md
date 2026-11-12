@@ -1549,6 +1549,14 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **🔴 Open** · **Where:** `shaders/props/rockDensity.frag.glsl`, `generate` in `props/rockScatter.ts`
 - Dana, 2026-11-11: the scatter pattern needs more work; details to be given. Fields, cliff reach, clusters and height thinning are in place (`[S91]`).
 
+### [B190] Walking fast uphill, the view cut into the slope · `blocks work`
+**✅ Fixed 2026-11-11** · **Where:** `floorAt`, `placeEye` in `scene/walkMode.ts`
+- Measured: fast uphill, the eased eye fell to its 0.5 m minimum, and in 27 of 117 frames the ground within the camera's near distance rose above it (stripes). The eye now has a collision sphere covering the near plane (camera collision, as Unreal's spring arm), so a rising slope holds the view out of it; eye height still counts from the ground underfoot. After: 0 of 117 on a 38° slope.
+
+### [B191] Rock shadows still flicker a little on pan · `minor`
+**🔴 Open** · **Where:** `fill` in `props/rockScatter.ts`, `updateSunShadow` in `voxel/LandChunkCanvas.tsx`
+- Better after the fixed sun and on-demand redraw (`[B186]`, `[B188]`). Likely left: rocks exist only for patches in view, so turning adds and drops casters. Planned real fix: casters chosen by the shadow box, not the view; edge filtering over one shadow pixel for the jagged edge. Not measured yet.
+
 ## 🏗️ Architecture
 
 *Structural problems, and limits tracked but not scheduled.*

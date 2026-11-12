@@ -290,7 +290,7 @@ export function DualHueSlider({ label, value, secondOffset, onChange, onSecondOf
   const share = (degrees: number) => ((degrees + 180) / 360) * 100;
   const [left, right] = [Math.min(share(value), share(second)), Math.max(share(value), share(second))];
   return (
-    <div className={'ui-slider-stack ui-tooltip-anchor' + (disabled ? ' ui-slider-row--disabled' : '')}>
+    <div className={'ui-slider-stack ui-slider-stack--dual-hue ui-tooltip-anchor' + (disabled ? ' ui-slider-row--disabled' : '')}>
       {description && <span className="ui-tooltip">{description}</span>}
       <div className="ui-slider-stack-top">
         <label className="ui-slider-label">{label} (°)</label>

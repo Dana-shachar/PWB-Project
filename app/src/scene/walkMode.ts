@@ -26,6 +26,10 @@ const JUMP_ARC_SHARE = 0.25;
 // The eye stands above the highest ground within this radius, so a rise just ahead lifts it before the camera reaches
 // it (a character controller's capsule, not a point). Inferred, TUNABLE.
 const GROUND_PROBE_METERS = 1;
+// The camera's collision sphere: out to this many near distances, which covers the near plane's corners at a normal field
+// of view, sampled on two rings. TUNABLE
+const NEAR_PLANE_REACH = 2;
+const COLLISION_DIRECTIONS = 8;
 const EDGE_MARGIN = 0.999;
 const LOOK_RADIANS_PER_PIXEL = 0.0025;
 const MAX_PITCH = Math.PI / 2 - 0.02;
@@ -205,21 +209,29 @@ export class WalkMode {
     };
   }
 
-  // The highest ground within the probe at (x, z), or the water there if higher ([B129]).
+  // The highest ground within the eye's collision sphere at (x, z), or the water there if higher ([B129]). The sphere
+  // covers the camera's near plane (camera collision, as Unreal's spring arm probes a sphere around the camera), so a slope
+  // rising just ahead lifts the eye before the view can cut into it, however fast it moves ([B190]).
   private floorAt(ground: ChunkGround, x: number, z: number): number {
-    const probe = GROUND_PROBE_METERS / METERS_PER_UNIT;
+    const radius = Math.max(GROUND_PROBE_METERS / METERS_PER_UNIT, this.camera.near * NEAR_PLANE_REACH);
     let groundAround = this.heightAt(ground, x, z);
-    for (const [dx, dz] of [[probe, 0], [-probe, 0], [0, probe], [0, -probe]]) groundAround = Math.max(groundAround, this.heightAt(ground, x + dx, z + dz));
+    for (const share of [0.5, 1]) {
+      for (let i = 0; i < COLLISION_DIRECTIONS; i++) {
+        const angle = (2 * Math.PI * i) / COLLISION_DIRECTIONS;
+        groundAround = Math.max(groundAround, this.heightAt(ground, x + Math.cos(angle) * radius * share, z + Math.sin(angle) * radius * share));
+      }
+    }
     return Math.max(groundAround, this.getWaterHeight(x, z) ?? -Infinity);
   }
 
   // Eases the eye toward standing, never closer to the floor than MIN_CLEARANCE_METERS.
   private placeEye(ground: ChunkGround, deltaSeconds: number): void {
     const { x, z } = this.camera.position;
-    const floor = this.floorAt(ground, x, z);
-    const standing = floor + this.eyeHeightMeters / METERS_PER_UNIT;
+    // Stands at eye height above the ground underfoot; the collision sphere only keeps the view out of the slope.
+    const underfoot = Math.max(this.heightAt(ground, x, z), this.getWaterHeight(x, z) ?? -Infinity);
+    const standing = underfoot + this.eyeHeightMeters / METERS_PER_UNIT;
     this.camera.position.y += (standing - this.camera.position.y) * (1 - Math.exp(-HEIGHT_SMOOTHING_PER_SECOND * deltaSeconds));
-    this.camera.position.y = Math.max(this.camera.position.y, floor + MIN_CLEARANCE_METERS / METERS_PER_UNIT);
+    this.camera.position.y = Math.max(this.camera.position.y, this.floorAt(ground, x, z) + MIN_CLEARANCE_METERS / METERS_PER_UNIT);
   }
 
   // Run after the frame's ground pieces are swapped in: update() set the eye from the ground before the swap, so a piece

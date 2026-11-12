@@ -43,12 +43,12 @@
 | Place something on the chunk's ground | `sampleGround` (height and slope of the drawn triangle) on `ChunkPatchRenderer` (`[S92]`) |
 | Change settings undo (Cmd+Z) | `useSettingsHistory` in `projectSettings/settingsHistory.ts` |
 | Add a saved planet setting | `planet/planetControls.ts` (`PlanetSettings`, `applySettings`), `projectSettings/saveProject.ts` |
-| Add a design-system component | `ui/UIElements.tsx` (incl. `LinkMenu`), `design.css`, `ui/icons.tsx` |
+| Add a design-system component | `ui/UIElements.tsx` (incl. `LinkMenu`, `DualHueSlider` with `ui-slider-stack--dual-hue` spacing), `design.css`, `ui/icons.tsx` |
 | Add a panel control | `ui/Panel.tsx` (left) or `ui/NoisePanel.tsx` (right), then `App.tsx` for wiring |
 | Change erosion | `erosion/erosionEngine.ts`, `shaders/erosion/`, `ui/panels/ErosionPanel.tsx` |
 | Change the land chunk | `voxel/landChunk.ts`, `voxel/LandChunkCanvas.tsx`, `voxel/ChunkPatchRenderer.ts`, `shaders/chunk.vert.glsl`, `shaders/terrain/chunk.frag.glsl` |
 | Change which patches the chunk shows | `voxel/chunkPatches.ts` (`selectChunkPatches`), `voxel/ChunkPatchRenderer.ts`, `voxel/chunkPatchMesh.ts` |
-| Change walk mode (person view): keys, speed, look, long-press to walk, fly-in | `scene/walkMode.ts` (`WalkMode`), its wiring in the setup effect of `voxel/LandChunkCanvas.tsx` (`enterWalk`), the person button and Speed slider in `scene/Gumball.tsx` (`toggleWalkMode`, `isWalking`, `setWalkSpeed`) |
+| Change walk mode (person view): keys, speed, look, long-press to walk, fly-in, the eye's camera collision | `scene/walkMode.ts` (`WalkMode`; `placeEye`, `floorAt` with `NEAR_PLANE_REACH`, `COLLISION_DIRECTIONS`, `[B190]`), its wiring in the setup effect of `voxel/LandChunkCanvas.tsx` (`enterWalk`), the person button and Speed slider in `scene/Gumball.tsx` (`toggleWalkMode`, `isWalking`, `setWalkSpeed`) |
 | Change the chunk camera's ground picking or collision | `voxel/chunkGround.ts` (`groundHeightAt`, `raycastGround`), `keepAboveFlatGround` in `scene/controls.ts`, `pivotAtScreenPoint` and the setup effect of `voxel/LandChunkCanvas.tsx`, `pivotToGround` in `scene/Gumball.tsx` |
 | Change patch texture borders or slope reading | `PATCH_BORDER_TEXELS`, `createPatchTarget` in `planet/patch.ts`, `borderTexels` in `map/heightmap.ts`, `borderedTextureUv` and `texelStepUv` in `shaders/terrain/terrain.glsl` |
 | Change how the camera moves or zooms | `scene/controls.ts` (`applyAltitudeRates`), `scene/camera.ts` (`MIN_CAMERA_ALTITUDE`), `scene/Gumball.tsx` (`levelToDistance`, `distanceToLevel`) |

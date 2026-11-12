@@ -8,15 +8,15 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-11, evening):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md` and `docs/BIOME-PLAN.md`.*
+> **Start from here (2026-11-11, night):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md` and `docs/BIOME-PLAN.md`.*
 >
-> **State.** `main` holds rocks on the chunk (Props, `[S91]`, `[S94]`) with real shadows (`[S93]`), and one drawn-ground lookup for everything on the chunk (`[S92]`), which also fixed the walk eye sinking into the ground (`[B184]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - Shadows need Scene > Light > Light follows camera off; its default is still on (small todo below).
-> - Walking measured about 79 fps with rocks and shadows (`[B188]`). Two app tabs share the graphics card: frame times with both open read about double.
+> **State.** `main` holds rocks on the chunk (Props, `[S91]`, `[S94]`) with real shadows (`[S93]`), one drawn-ground lookup for everything on the chunk (`[S92]`), and the walk eye's camera collision (`[B190]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Shadows need Scene > Light > Light follows camera off (its default is still on, small todo). A slight flicker on pan remains (`[B191]`).
+> - Walking measured about 79 fps with rocks and shadows. Two app tabs share the graphics card: frame times with both open read about double.
 >
-> **How to work (Dana, 2026-11-11).** Real fixes only, never a fake stand-in. Measure the cause before a fix, one change per test. Ask before reloading or clicking in Claude's tab; Dana tests there. Build only what reads from walking height, textures included. No real-world limits on sizes or shapes: ask, or make it a control.
+> **How to work (Dana, 2026-11-11).** Real fixes only, never a fake stand-in. Measure the cause before a fix, one change per test. Ask before reloading or clicking in Claude's tab; Dana tests there. Build only what reads from walking height, textures included. No real-world limits on sizes or shapes: ask, or make it a control. Keep replies short; don't re-propose what's already in the plan.
 >
-> **Next.** Rock scattering (`[B189]`, Dana to describe what's off). Then softer rock shapes (more hull points), moss on rock tops with the biome, and the deferred bugs `[B176]`, `[B177]` when Dana picks them.
+> **Next, in order (all already planned).** 1. Moss on rock tops: the rock shader reads the life grid's moss at the rock and shows it on upward faces (Berg's top-down mask, `REFERENCES.md`), in the moss colors. 2. Grass, then shrubs and trees (`BIOME-PLAN.md` stage 4): research the humus need and engine grass drawing first, then a grid type shown as a tint, then tufts near the camera through the rocks' per-patch placement. Open alongside: rock scattering (`[B189]`, Dana to describe), shadow flicker (`[B191]`).
 ---
 
 ## 🧭 Direction
@@ -59,7 +59,7 @@
 6. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock. Sources to start from: parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*), space colonization, genes mutated per Sims 1991; EZ-Tree considered for earth-like trees (check its license).
 7. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
 8. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll).
-9. 🟡 **Rocks and props:** ✅ rocks on the chunk (2026-11-11, `[S91]` to `[S94]`): per-patch placement by rules, convex-hull shapes, palette colors, real shadows. Still: 🔴 scattering (`[B189]`), ⚪ softer shapes (20 to 40 hull points), ⚪ moss on rock tops (with the biome). Not cost-effective now (Dana): holes, overhangs, arches. Height-field formations (mesas, terraces, spires) later.
+9. 🟡 **Rocks and props:** ✅ rocks on the chunk (2026-11-11, `[S91]` to `[S94]`): per-patch placement by rules, convex-hull shapes, palette colors, real shadows. Still: 🔴 scattering (`[B189]`), 🔴 slight shadow flicker (`[B191]`), ⚪ moss on rock tops (next), ⚪ softer shapes (20 to 40 hull points). Not cost-effective now (Dana): holes, overhangs, arches. Height-field formations (mesas, terraces, spires) later.
 10. ⚪ **Lava planet**, then ⚪ **Ice planet** (depends on water the most).
 
 ## ❓ Open decisions

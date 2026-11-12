@@ -376,6 +376,10 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   flex-direction: column;
   gap: var(--gap-sm);
 }
+/* A hue range takes more room than a slider row: extra space above and below (Dana, 2026-11-11). */
+.ui-slider-stack--dual-hue {
+  margin-block: var(--gap-sm);
+}
 .ui-slider-stack-top {
   display: flex;
   align-items: center;
