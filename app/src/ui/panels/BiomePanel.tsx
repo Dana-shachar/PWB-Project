@@ -79,6 +79,31 @@ export function BiomePanel({ biome, onBiomeChange, colorStops }: BiomePanelProps
               precision={2}
               description="How much shade it needs: 0 thrives in full sun, 1 only in deep shade."
             />
+            {key === 'moss' && (
+              <>
+                <Slider
+                  label="Breakup size"
+                  value={look.patternMeters}
+                  onChange={(patternMeters) => update(key, { look: { ...look, patternMeters } })}
+                  min={2}
+                  max={200}
+                  scale="log"
+                  step={0.1}
+                  precision={1}
+                  description="How big the patches are that break up its areas, in meters."
+                />
+                <Slider
+                  label="Breakup amount"
+                  value={look.breakupShare}
+                  onChange={(breakupShare) => update(key, { look: { ...look, breakupShare } })}
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  precision={2}
+                  description="How much the breakup cuts into its areas: 0 follows only sun, shade and moisture, 1 only the breakup."
+                />
+              </>
+            )}
             {key === 'algae' && (
               <Slider
                 label="Shore reach"

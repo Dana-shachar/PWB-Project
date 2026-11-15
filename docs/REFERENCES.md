@@ -252,7 +252,17 @@
 - ![](references/moss-material-function-graph.png)
 - *Node graph shared by Dana 2026-11-10 (post not readable here). General background: [Vegetation creation techniques for video games, 80.lv](https://80.lv/articles/vegetation-creation-techniques-for-video-games)*
 
-**Moss on rock, in code** · Shane, "Canyon Pass" (Shadertoy, CC BY-NC-SA 3.0) · `method planned`
+**Layered moss on rock** · CryEngine documentation, Ryse (Crytek) · `method planned`
+- The moss is the surface copied in layers pushed outward, sparse layers over denser ones; the layers' border is pushed back into the rock for a fuzzy 3D transition, and extra moss is blended around it. Very expensive in overdraw and triangles, so kept to small areas.
+- The planned moss skirt at rock bases (`[S95]`).
+- *[CryEngine, How to Create Layered Moss](https://www.cryengine.com/docs/static/engines/cryengine-3/categories/1114113/pages/15749298) · [Ryse Moss Tutorial, Polycount](https://polycount.com/discussion/comment/1986919). Read 2026-11-14*
+
+**Masks with large-scale noise variation** · TerraFormFX, Substance Sampler, Godfall · `method used`
+- Terrain and moss masks come from up-facing, occlusion and wetness, with a large-scale turbulence noise blended on top for variation, and a height blend for crisp edges.
+- Moss's Breakup (`lifeBreakup`, `[S95]`).
+- *[TerraFormFX Advanced Terrain Shader](https://docs.insydium.ltd/terraformfx/advanced-terrain-shader) · [Substance Sampler, Moss](https://helpx.adobe.com/substance-3d-sampler/filters/wear-and-finish/moss.html) · [Godfall environment shaders](https://virtualvagabond.artstation.com/projects/rAvdZe). Read 2026-11-15*
+
+**Moss on rock, in code** · Shane, "Canyon Pass" (Shadertoy, CC BY-NC-SA 3.0) · `method planned` (cushion pattern tried 2026-11-15 as small clumps and dropped: polka dots)
 - Rounded cushions from a cellular bump (four overlapping spheres per tile, nearest distance, "comparable to beveled Voronoi"); moss where the bumped surface faces up, `pow(abs(n.y), 4)`, so it sits on cushion tops and flats; applied as a multiplicative tint so the rock shows through; ambient occlusion in crevices and a Fresnel rim for the soft edge. The author calls the moss "quickly improvised": a tested technique, not a standard.
 - *Canyon Pass, Shadertoy, Shane. Code shared by Dana 2026-11-10*
 

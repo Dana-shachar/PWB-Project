@@ -32,7 +32,7 @@ const SHAPE_FAMILIES: { extent: [number, number, number]; round: boolean }[] = [
 ];
 const SHAPES_PER_FAMILY = 2;
 const SHAPE_COUNT = SHAPE_FAMILIES.length * SHAPES_PER_FAMILY;
-const HULL_POINTS = [8, 20];
+const HULL_POINTS = [20, 40];
 const FLAT_BASE_SHARE = 0.2; // of a rock's height cut flat at its base. TUNABLE // few points cut chunky, many round. TUNABLE
 
 // Counts per square meter at full density and amount 1, and sizes in meters drawn from a power law, many more small than

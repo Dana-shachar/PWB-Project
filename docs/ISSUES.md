@@ -1557,6 +1557,19 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **🔴 Open** · **Where:** `fill` in `props/rockScatter.ts`, `updateSunShadow` in `voxel/LandChunkCanvas.tsx`
 - Better after the fixed sun and on-demand redraw (`[B186]`, `[B188]`). Likely left: rocks exist only for patches in view, so turning adds and drops casters. Planned real fix: casters chosen by the shadow box, not the view; edge filtering over one shadow pixel for the jagged edge. Not measured yet.
 
+### [B192] Opening the chunk showed flat land under a tall water lid · `wrong but workable`
+**✅ Fixed 2026-11-15** · **Where:** `ChunkPatchRenderer` (`build`, `groundReady`) in `voxel/ChunkPatchRenderer.ts`, the water's visibility in `voxel/LandChunkCanvas.tsx`
+- Dana: after a reload, switching to Chunk view showed for a moment a part that stretched past the view. The same family as `[B164]` (water drawn over land that isn't there yet).
+- Measured (frame log and canvas recording): ground patches showed 0.1 s after the click, baked before the chunk's finished height map, so they were flat; the water and its walls (twice the terrain's height) turned on at 0.33 s, once a separate whole-chunk map existed; the real ground came at 1.08 s. The rocks' start-up stretched the gap from about 0.2 s to 0.3 s.
+- Cause: the ground and the water waited on different signals, and a new patch, unlike a re-bake, didn't wait for the finished map.
+- Fixed by load order, as terrain engines draw a tile only once its data is in (Cesium, CDLOD): a new patch waits for the finished map, and the water and the chunk's base wait for `groundReady`. The chunk now appears complete after about 1.1 s of sky.
+
+### [B193] Rock shadows were blurry and stair-stepped · `wrong but workable`
+**🟡 Partly fixed 2026-11-15** · **Where:** `updateSunShadow` in `voxel/LandChunkCanvas.tsx`, `rockShadowAmount` in `shaders/props/rockShadows.glsl`
+- Read from the code: one shadow texel covered about 0.7 m (a 3 km box at 4096 texels), and the edge fades over the toon feather on purpose.
+- Fixed: while walking the box is 200 m around the eye, about 5 cm per texel, so outlines follow the rocks. Still to do: a hard edge over about one pixel instead of the feather.
+- Shadows with no caster on screen were Light follows camera on (`[B186]`): the sun sat behind the eye, so rocks behind cast forward. With it off, a high sun can leave the view nearly shadowless when facing it; the sun angle is chosen per shot.
+
 ## 🏗️ Architecture
 
 *Structural problems, and limits tracked but not scheduled.*

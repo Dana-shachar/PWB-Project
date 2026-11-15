@@ -15,7 +15,8 @@ const float ROCK_SHADOW_DARKNESS = 0.6; // the shadowed color's value, as a shar
 // follows the toon shading's feather; the darkening takes the shade's hue turn and chroma (landLayers.glsl shadeColor).
 // A shadow is missing direct sun, so it shows as much as the surface faces the sun (facing: its normal against the
 // light): full on ground turned to the sun, none where sunlight only skims a slope. TUNABLE range
-vec3 applyRockShadow(vec3 color, float hueTurn, float chroma, float feather, float facing) {
+// How much a rock's cast shadow covers this pixel, 0 to 1.
+float rockShadowAmount(float feather, float facing) {
   float lit = getShadowMask();
   #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
     vec3 coord = vDirectionalShadowCoord[ 0 ].xyz / vDirectionalShadowCoord[ 0 ].w;
@@ -24,5 +25,9 @@ vec3 applyRockShadow(vec3 color, float hueTurn, float chroma, float feather, flo
   #endif
   float edge = max(feather, 0.02);
   float shade = smoothstep(0.5 - edge, 0.5 + edge, 1.0 - lit) * smoothstep(0.05, 0.35, facing);
-  return mix(color, shadeColor(color, hueTurn, ROCK_SHADOW_DARKNESS, chroma), shade);
+  return shade;
+}
+
+vec3 applyRockShadow(vec3 color, float hueTurn, float chroma, float feather, float facing) {
+  return mix(color, shadeColor(color, hueTurn, ROCK_SHADOW_DARKNESS, chroma), rockShadowAmount(feather, facing));
 }

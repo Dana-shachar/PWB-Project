@@ -50,6 +50,9 @@ const HAZE_SCALE_SHARE = 0.5;
 const WALK_MAP_REDRAW_MS = 2000;
 // The rocks' shadow map: its box around the eye (world units, km), resolution, and how far up the sun it looks from. TUNABLE
 const SHADOW_HALF_SIZE = 1.5;
+// Walking, the box shrinks to the ground near the eye, so a shadow texel is about 5 cm and rocks' shadows are crisp (one
+// cascade of cascaded shadow maps, sized to the view). Rocks further out fade at its edge. TUNABLE
+const WALK_SHADOW_HALF_SIZE = 0.1;
 const SHADOW_MAP_SIZE = 4096;
 const SHADOW_LIGHT_DISTANCE = 5; // how often the walk map is redrawn while walking. Inferred, TUNABLE
 
@@ -222,6 +225,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   lightFollowsCameraRef.current = lightFollowsCamera;
   const frameLight = new THREE.Vector3();
   const waterRef = useRef<ChunkWater | null>(null);
+  const waterWantedRef = useRef(false); // water on and its height map in; drawn once the ground is ready too
   const gridMeshRef = useRef<THREE.Mesh | null>(null);
   // The setup effect below runs once, so it reads the shared renderer through a ref (the renderer
   // is created after mount and arrives as new state).
@@ -638,7 +642,13 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       sunShadow.castShadow = settings.propSettings.enabled;
       const toSun = frameLight.clone().normalize();
       shadowRotation.lookAt(toSun, new THREE.Vector3(), Math.abs(toSun.y) > 0.99 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0));
-      const texel = (2 * SHADOW_HALF_SIZE) / SHADOW_MAP_SIZE;
+      const halfSize = walkMode.active ? WALK_SHADOW_HALF_SIZE : SHADOW_HALF_SIZE;
+      const shadowCamera = sunShadow.shadow.camera;
+      if (shadowCamera.right !== halfSize) {
+        Object.assign(shadowCamera, { left: -halfSize, right: halfSize, top: halfSize, bottom: -halfSize });
+        shadowCamera.updateProjectionMatrix();
+      }
+      const texel = (2 * halfSize) / SHADOW_MAP_SIZE;
       // Centered on the ground being viewed: under the eye when walking, the orbit point otherwise.
       shadowCenter.copy(walkMode.active ? perspectiveCamera.position : orbitControls.target).applyMatrix4(shadowRotation.clone().transpose());
       shadowCenter.set(Math.round(shadowCenter.x / texel) * texel, Math.round(shadowCenter.y / texel) * texel, shadowCenter.z).applyMatrix4(shadowRotation);
@@ -646,7 +656,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       sunShadow.position.copy(shadowCenter).addScaledVector(toSun, SHADOW_LIGHT_DISTANCE);
       sunShadow.target.updateMatrixWorld();
       sunShadow.updateMatrixWorld();
-      const key = [toSun.x, toSun.y, toSun.z, shadowCenter.x, shadowCenter.y, shadowCenter.z, rockScatter.version, sunShadow.castShadow].join();
+      const key = [halfSize, toSun.x, toSun.y, toSun.z, shadowCenter.x, shadowCenter.y, shadowCenter.z, rockScatter.version, sunShadow.castShadow].join();
       if (key !== shadowKey) {
         shadowKey = key;
         renderer.shadowMap.needsUpdate = true;
@@ -758,7 +768,10 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       updateSkyDomeFrame(sky, perspectiveCamera, frameLight, atmosphereRef.current.wind, deltaSeconds);
       updateChunkWaterFrame(water, perspectiveCamera.position, deltaSeconds, viewportElement!.clientWidth * window.devicePixelRatio);
       rockScatter.group.visible = patchRenderer.group.visible && patchSettingsRef.current.propSettings.enabled;
-      if (!patchRenderer.group.visible) return;
+      if (!patchRenderer.group.visible) {
+        water.mesh.visible = waterWantedRef.current;
+        return;
+      }
       const settings = patchSettingsRef.current;
       updateLife(settings);
       updateRocks(settings);
@@ -784,6 +797,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         sharedRendererRef.current.renderer?.capabilities.maxTextureSize ?? 2048,
         settings.advanceChunkBase,
       );
+      water.mesh.visible = waterWantedRef.current && patchRenderer.groundReady;
       walkMode.settleEye(); // after the ground pieces swap in, so the eye is never inside new ground
       // The shadows and water follow the finished map, so they switch with the patches when the full one is ready.
       const baseTexture = settings.chunkBaseTexture();
@@ -876,7 +890,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       const vector = (name: string) => material.uniforms[prefix + name].value as THREE.Vector4;
       vector('Hue').set(colors.hue, type.look.hueSpread, colors.saturation[0], colors.saturation[1]);
       vector('Shade').set(colors.lightness[0], colors.lightness[1], Math.max(type.look.patternMeters, 0.01), seed);
-      vector('Mask').set((type.look.lightnessShare[0] + type.look.lightnessShare[1]) / 2, type.look.edgeAmount, type.look.edgeThickness, 0);
+      vector('Mask').set((type.look.lightnessShare[0] + type.look.lightnessShare[1]) / 2, type.look.edgeAmount, type.look.edgeThickness, type.look.breakupShare);
       vector('Velvet').set(type.look.velvetCore, type.look.velvetPower, type.look.velvetEdge, type.look.shine);
     };
     look('uAlgae', biome.algae, 1);
@@ -969,7 +983,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     const chunkWater = waterRef.current;
     if (!chunkWater) return;
     updateChunkWater(chunkWater, water, chunkSize, maxHeight, heightBase, waterDeepest, waterClarityShare, heightMap, heightMapGreenChannel, Math.min(atmosphere.wind, MAX_WAVE_WIND));
-    chunkWater.mesh.visible = water.enabled && heightMap !== null;
+    waterWantedRef.current = water.enabled && heightMap !== null;
+    chunkWater.mesh.visible = waterWantedRef.current && (patchRendererRef.current?.groundReady ?? true);
   }, [water, waterDeepest, waterClarityShare, heightMap, heightMapGreenChannel, chunkSize, maxHeight, heightBase, atmosphere.wind]);
 
   // The atmosphere: the sky dome, and the haze the ground and water fade into (shaders/atmosphere/haze.glsl). Haze 1 halves

@@ -18,7 +18,6 @@ uniform vec3 uBaseColor;
 uniform vec3 uLightDirection;
 uniform float uAmbient;
 uniform vec3 uFillColor; // the sky fill's color (scene/fillLight.ts)
-const float LIFE_MAX_COVER = 0.75; // life's strongest share over the ground
 const float TOON_DETAIL = 0.5; // how much angle-based lighting the toon lit side keeps
 uniform float uShadeStep; // toon shading (landLayers.glsl toonShadeMask): where light turns to shade, 0 off
 uniform float uShadeFeather;
@@ -285,7 +284,8 @@ void main() {
     float algaeWetness = lifeShoreWetness(waterline, lifeSampleSmooth(uLifeShore, lifeUv, 512.0).r, uShoreReach, uChunkSize * 1000.0);
     vec3 algaeInputs = vec3(temperature, algaeWetness, sunlight); // aquatic: near water, by height and distance
     algaeCover = lifeLayer(algaeAmount, upness, groundDetail, lifeSuitability(algaeInputs, uAlgaeTemperature, uAlgaeMoisture, uAlgaeSun), algaeHue, uAlgaeShade, uAlgaeMask, algaeColor);
-    mossCover = lifeLayer(mossAmount, upness, groundDetail, lifeSuitability(lifeInputs, uMossTemperature, uMossMoisture, uMossSun), mossHue, uMossShade, uMossMask, mossColor);
+    float mossDetail = lifeBreakup(vWorldPosition.xz * 1000.0, uMossShade.z); // chunk-local meters: large-scale breakup of its areas
+    mossCover = lifeLayer(mossAmount, upness, mossDetail, lifeSuitability(lifeInputs, uMossTemperature, uMossMoisture, uMossSun), mossHue, uMossShade, uMossMask, mossColor);
   }
 
   // Never fully opaque, so the ground's color texture always shows through. Inferred, TUNABLE.

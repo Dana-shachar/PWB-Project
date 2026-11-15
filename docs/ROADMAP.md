@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-11`
+`Last updated: 2026-11-15`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,22 +8,22 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-11, night):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md` and `docs/BIOME-PLAN.md`.*
+> **Start from here (2026-11-15):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
 >
-> **State.** `main` holds rocks on the chunk (Props, `[S91]`, `[S94]`) with real shadows (`[S93]`), one drawn-ground lookup for everything on the chunk (`[S92]`), and the walk eye's camera collision (`[B190]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - Shadows need Scene > Light > Light follows camera off (its default is still on, small todo). A slight flicker on pan remains (`[B191]`).
-> - Walking measured about 79 fps with rocks and shadows. Two app tabs share the graphics card: frame times with both open read about double.
+> **State.** `main` adds the chunk's load order fix (`[B192]`), crisp walking shadows (`[B193]`, box 200 m), plain toon rocks with 20 to 40 hull points (`[S94]`), and moss as a color layer with a large-scale breakup (`[S95]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Dana's planet has Light follows camera off now; with a fixed sun the shadows depend on the sun angle, chosen per shot.
+> - Two app tabs share the graphics card. Close Claude's tab when Dana tests.
 >
-> **How to work (Dana, 2026-11-11).** Real fixes only, never a fake stand-in. Measure the cause before a fix, one change per test. Ask before reloading or clicking in Claude's tab; Dana tests there. Build only what reads from walking height, textures included. No real-world limits on sizes or shapes: ask, or make it a control. Keep replies short; don't re-propose what's already in the plan.
+> **How to work (Dana, 2026-11-15).** Claude acts as tech lead: flag problems and recommend, but every change still needs Dana's go on a numbered plan, one change per test. Measure the cause before a fix, and check a measuring method on a known case first (a rAF counter is not a frame time; confirm walk mode is on). Real fixes only. Build only what reads from walking height. Keep replies short.
 >
-> **Next, in order (all already planned).** 1. Moss on rock tops: the rock shader reads the life grid's moss at the rock and shows it on upward faces (Berg's top-down mask, `REFERENCES.md`), in the moss colors. 2. Grass, then shrubs and trees (`BIOME-PLAN.md` stage 4): research the humus need and engine grass drawing first, then a grid type shown as a tint, then tufts near the camera through the rocks' per-patch placement. Open alongside: rock scattering (`[B189]`, Dana to describe), shadow flicker (`[B191]`).
+> **Next, in order.** 1. Measure the lag: the app's own frame time inside the render loop, in Claude's tab, walking (Dana sees lag; cause unknown). 2. Shadow hard edge (`[B193]`). 3. Then "Plan to the final" from item 2 (World Clock or trees first: Dana leaned to trees, open). Open alongside: rock scattering (`[B189]`), shadow flicker (`[B191]`), `[B164]` returned in walk mode by lakes (Dana's planned fix stands).
 ---
 
 ## 🧭 Direction
 
 *What the final shows, and the references that steer it.*
 
-- **Vertical slice (Dana, 2026-11-08).** General development stops. The final (Dec 2) shows 3 planets built on the land chunk, each a procedural, stylized alien environment with one process that evolves on the World Clock. Rocks are shared by all three.
+- **Vertical slice (Dana, 2026-11-08; revised 2026-11-14).** General development stops. The final (Dec 2) is a recorded video of the demo, so each feature needs to work well enough to record along one camera path, not everywhere. Variety comes from one deep planet (Flora) plus two planets rerolled from the same systems (terrain template, palette, climate, plant genes), not three separately built planets. Rocks are shared by all.
   - **Living chunk (priority):** moss and algae as a ground color by wetness and slope; one plant family whose shape is a set of numeric genes, grown in small steps over the World Clock and mutated per planet (Karl Sims, *Panspermia*).
   - **Lava:** volcano cones added to the height, a lava shader (glowing cracks in a cooling crust). Evolution: lava cooling, cones building.
   - **Ice:** an ice shader, icebergs at sea level. Evolution: ice spreading or thawing.
@@ -34,6 +34,15 @@
 ## ➡️ Next in order
 
 *One step at a time; a later step waits for the one before.*
+
+> [!IMPORTANT]
+> **Plan to the final (Dana, 2026-11-14).** This order replaces the list below where they differ.
+> 1. 🟡 **Ground moss look:** ✅ large coverage areas from sun, shade and moisture, broken up by large-scale noise (`[S95]`, Breakup size and amount). ⏸️ Deferred: the layered moss skirt where ground meets rock (CryEngine's layered moss for Ryse: shells pushed out, their border pushed back into the rock; smoothed normals; base band near the camera only). ❌ Moss on rocks as a tint, small clumps. Rocks are plain toon facets; surface texture to revisit.
+> 2. ⚪ **World Clock** (or trees first, open): every evolution slider on one clock. One run computes the whole timeline behind a "Running a timeline simulation..." popup with a progress bar, then scrubbing is instant. Only displayed results are stored (8-bit, one snapshot per era, crossfaded between eras), never the simulation's working state. Reruns only when a simulation setting moves. Check the `ui-design` skill for a modal first.
+> 3. ⚪ **Grass**, drawn near the camera from the grid's density.
+> 4. ⚪ **Trees** from EZ-Tree (license to check), its parameters as the genes per planet, its materials replaced by our own shader as the rocks do. Shrubs are the same generator with other genes. Detail by distance as everywhere: under 2 pixels not drawn, leaves merging into canopy masses where they can't be told apart.
+> 5. ⚪ **Variety:** two more planets rerolled from Flora's systems.
+> 6. ⚪ **Only if time:** agents as populations on the grid (they change the planet on their own between eras), a volcanic region (cones and a lava shader) on a planet.
 
 1. ✅ **Water on the chunk** (2026-11-08, `[B158]` to `[B161]`). ❓ Keep the unrequested breaching (`selectiveBreach`)?
 2. ✅ **Stylized shading** (2026-11-08): slope rock (`[B163]`), rule-based palettes, layered haze, settings undo.
@@ -59,7 +68,7 @@
 6. ⚪ **Living chunk:** moss and algae, then the plant family on the World Clock. Sources to start from: parametric L-systems (`nylki/lindenmayer`, MIT; *The Algorithmic Beauty of Plants*), space colonization, genes mutated per Sims 1991; EZ-Tree considered for earth-like trees (check its license).
 7. ⚪ **Shadows** towards Monument Valley: lifted, tinted by the sky, depth read as color (biggest effect, Dana). Research Monument Valley's shading first.
 8. ⚪ **Per-planet color grade** (lift, gamma, gain, saturation from the palette roll).
-9. 🟡 **Rocks and props:** ✅ rocks on the chunk (2026-11-11, `[S91]` to `[S94]`): per-patch placement by rules, convex-hull shapes, palette colors, real shadows. Still: 🔴 scattering (`[B189]`), 🔴 slight shadow flicker (`[B191]`), ⚪ moss on rock tops (next), ⚪ softer shapes (20 to 40 hull points). Not cost-effective now (Dana): holes, overhangs, arches. Height-field formations (mesas, terraces, spires) later.
+9. 🟡 **Rocks and props:** ✅ rocks on the chunk (2026-11-11, `[S91]` to `[S94]`): per-patch placement by rules, convex-hull shapes, palette colors, real shadows. Still: 🔴 scattering (`[B189]`), 🔴 slight shadow flicker (`[B191]`), ❌ moss on rocks (dropped), ✅ softer shapes (20 to 40 hull points). Not cost-effective now (Dana): holes, overhangs, arches. Height-field formations (mesas, terraces, spires) later.
 10. ⚪ **Lava planet**, then ⚪ **Ice planet** (depends on water the most).
 
 ## ❓ Open decisions
@@ -67,7 +76,6 @@
 *Dana's to decide; ask, don't assume.*
 
 - ❓ The vertical slice's planet list and her real deadline.
-- ❓ Vegetation stages as build phases only, or grown over time by the World Clock (ecological succession, recommended).
 - ❓ Keep `voxel/chunkLodRanges.ts` (CDLOD ranges, unused) for `[B166]`, or delete it.
 - ❓ Whether to commit `README.md` (concept, research question, future features, walk mode mention); delete the old handover file and its screenshots.
 - ❓ A real moon orbiting the planet (plan given, waiting): a 3D moon sharing the sky moons' look, later with the chunk's sky moons and tides following it.

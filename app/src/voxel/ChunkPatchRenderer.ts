@@ -103,6 +103,7 @@ export class ChunkPatchRenderer {
     this.chunkSize = chunkSize;
     this.baseDepth = baseDepth;
     this.baseMesh = new THREE.Mesh(buildChunkBaseGeometry(chunkSize, baseDepth), this.template);
+    this.baseMesh.visible = false; // shown with the first real ground (groundReady)
     this.group.add(this.baseMesh);
   }
 
@@ -146,7 +147,14 @@ export class ChunkPatchRenderer {
       entry.material.uniforms.uMorphEnd.value = end;
     }
     this.settled = this.buildDone && this.wanted.every((patch) => this.shown.has(patchKey(patch)));
+    if (!this.groundReady && this.settled && !this.basePending) this.groundReady = true;
+    if (this.baseMesh) this.baseMesh.visible = this.groundReady;
   }
+
+  // The ground shows only once baked from the finished base map, as terrain engines draw a tile only once its data is
+  // loaded (Cesium, CDLOD); the water waits for it too ([B164]'s family: water over not-yet-real land).
+  groundReady = false;
+  private basePending = true;
 
   // Every wanted patch is built at its size and shown: the walk map's fade waits for this after a jump.
   settled = false;
@@ -170,6 +178,7 @@ export class ChunkPatchRenderer {
     let builds = 0;
     // Half the budget goes to the base map's upgrade, so patches keep building while it bakes.
     const base = advanceBase(root, MAX_BAKE_TEXELS_PER_FRAME / 2);
+    this.basePending = base.pending;
     if (base.switched) this.markAllStale();
     let texels = base.texels;
     for (const patch of this.wanted) {
@@ -209,6 +218,11 @@ export class ChunkPatchRenderer {
           builds++;
           texels += entry.bakeSamples * entry.bakeSamples;
         }
+        continue;
+      }
+      // A new patch waits for the finished base map, as a re-bake does, so its first image is the real ground.
+      if (base.pending) {
+        this.buildDone = false;
         continue;
       }
       const target = createPatchTarget(samples);
@@ -508,6 +522,7 @@ export class ChunkPatchRenderer {
     for (const key of [...this.entries.keys()]) this.remove(key);
     this.wanted = [];
     this.stitchFlags.clear();
+    this.groundReady = false;
     this.lastCameraPosition.set(Infinity, 0, 0);
     if (this.baseMesh) {
       this.group.remove(this.baseMesh);

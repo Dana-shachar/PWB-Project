@@ -756,9 +756,16 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 ### [S93] Rocks cast real shadows · `decided`
 **Decided:** 2026-11-11
 
-- Rocks cast into a three.js sun shadow map that follows the viewed ground and redraws only when the sun, its box or the drawn rocks change. A rock shadow darkens the color already there (never replaces it), with the toon feather's edge, as much as the ground faces the sun, and fades at the box's edge. A fixed sun is needed: Light follows camera off. Fakes (blob shadows) are not used. Dana.
+- Rocks cast into a three.js sun shadow map that follows the viewed ground and redraws only when the sun, its box or the drawn rocks change. A rock shadow darkens the color already there (never replaces it), with the toon feather's edge, as much as the ground faces the sun, and fades at the box's edge. While walking the box is 200 m around the eye (about 5 cm per shadow texel, so shadows are crisp; one cascade of cascaded shadow maps sized to the view), 3 km otherwise. A fixed sun is needed: Light follows camera off. Fakes (blob shadows) are not used. Dana; box size 2026-11-15.
 
 ### [S94] How rocks look · `decided`
 **Decided:** 2026-11-11
 
-- Shapes are convex hulls around random points (three.js ConvexGeometry) in four families, bent by noise, with a flat base sunk 10% into the ground. Colors come from the ground's: a hue range picked on a rock-color bar and a Saturation share. Bigger rocks carry bands and mottling; all carry a surface-stable grain (Johansen's Dither3D level choice on 3D surface points), denser in shade. Dana.
+- Shapes are convex hulls around 20 to 40 random points (three.js ConvexGeometry) in four families, bent by noise, with a flat base sunk 10% into the ground. Colors come from the ground's: a hue range picked on a rock-color bar and a Saturation share. Plain toon facets: grain, mottling and bands were removed (2026-11-14), since on flat faces they read as noise, stains or random patches. Surface texture is to be revisited. Dana.
+
+### [S95] Moss is a color layer, broken up at large scale · `decided`
+**Decided:** 2026-11-15
+
+- Moss stays a color layer over the ground: its areas come from sun, shade and moisture (the life grid and the per-pixel suitability), and a large-scale noise (three simplex octaves at Breakup size, 2 to 200 m) breaks them up through Berg's height blend, as terrain shaders add turbulence noise over their masks. Breakup amount sets how much. Small round clumps (a single cellular layer) were tried and dropped: they read as polka dots. Dana.
+- Moss volume on all ground is not built, since moss a few centimeters thick doesn't read from walking height. Moss on rocks as a flat tint was dropped. The one place volume is planned is a layered moss skirt where ground meets rock (CryEngine's layered moss for Ryse), deferred.
+

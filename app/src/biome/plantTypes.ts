@@ -17,7 +17,8 @@ export interface LifeLook {
   hueSpread: number; // degrees either side across patches
   saturationShare: [number, number]; // of the land color's saturation
   lightnessShare: [number, number]; // of the land color's lightness
-  patternMeters: number; // its cushions' size
+  patternMeters: number; // moss: its breakup's size in meters (Breakup size)
+  breakupShare: number; // how much the breakup (moss) or the ground's texture (algae), not suitability, shapes its edge, 0 to 1
   relief: number; // how much its cushions bend the light, 0 flat
   edgeAmount: number; // how much it creeps onto sideways faces (the moss material function's edge mask)
   edgeThickness: number; // how far onto them: higher keeps it to the steepest
@@ -67,7 +68,7 @@ export const DEFAULT_BIOME_SETTINGS: BiomeSettings = {
     moisture: { min: 0.7, idealMin: 0.9, idealMax: 1.5, max: 2 }, // at and below waterlines
     sun: { min: 0.05, idealMin: 0.3, idealMax: 1, max: 1.01 },
     // Algae: a flat film, no creep onto slopes, no velvet, a little gloss. Inferred, TUNABLE.
-    look: { hueTurn: 30, hueSpread: 15, saturationShare: [0.8, 1.1], lightnessShare: [0.9, 1.15], patternMeters: 6, relief: 0.1, edgeAmount: 0, edgeThickness: 4, hollowWeight: 0.35, velvetCore: 0, velvetPower: 3, velvetEdge: 1, shine: 2 },
+    look: { hueTurn: 30, hueSpread: 15, saturationShare: [0.8, 1.1], lightnessShare: [0.9, 1.15], patternMeters: 6, breakupShare: 0.35, relief: 0.1, edgeAmount: 0, edgeThickness: 4, hollowWeight: 0.35, velvetCore: 0, velvetPower: 3, velvetEdge: 1, shine: 2 },
   },
   // Moss: cold-tolerant, damp ground, prefers shade, drowns under water.
   moss: {
@@ -76,7 +77,7 @@ export const DEFAULT_BIOME_SETTINGS: BiomeSettings = {
     moisture: { min: 0.35, idealMin: 0.55, idealMax: 1.1, max: 1.3 },
     sun: { min: 0, idealMin: 0, idealMax: 0.45, max: 0.75 },
     // Moss: cushions, creeping onto slopes, Berg's velvet, matte. Velvet values Berg's; the rest inferred, TUNABLE.
-    look: { hueTurn: -30, hueSpread: 20, saturationShare: [0.6, 0.9], lightnessShare: [0.75, 1], patternMeters: 2, relief: 0.5, edgeAmount: 0.3, edgeThickness: 4, hollowWeight: 0.35, velvetCore: 0.2, velvetPower: 3, velvetEdge: 3, shine: 0.3 },
+    look: { hueTurn: -30, hueSpread: 20, saturationShare: [0.6, 0.9], lightnessShare: [0.75, 1], patternMeters: 15, breakupShare: 0.35, relief: 0.5, edgeAmount: 0.3, edgeThickness: 4, hollowWeight: 0.35, velvetCore: 0.2, velvetPower: 3, velvetEdge: 3, shine: 0.3 },
   },
 };
 

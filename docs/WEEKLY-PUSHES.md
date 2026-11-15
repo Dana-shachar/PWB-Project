@@ -29,21 +29,26 @@
 - **Rocks (`[S91]`, `[S94]`):** a Props section. Rocks are placed per ground patch from a density map (Horizon Zero Dawn's method): rock fields with bare ground between, more below cliffs out to the rockfall shadow angle, along shores, none under water, few boulders toward the tops, small rocks clustered around boulders. Shapes are cut convex hulls with a flat base; colors are a hue range and saturation from the ground's color; sizes scale with the landscape so they read from the walk eye.
 - **Real shadows (`[S93]`):** rocks cast into a three.js sun shadow map that follows the view and redraws only on change, darkening the ground by how much it faces the sun.
 - **Walk camera collision (`[B190]`):** walking fast uphill, the view cut into the slope; the eye now has a collision sphere over the camera's near plane (as Unreal's spring arm). Measured 27 bad frames of 117 before, 0 after.
+- **Chunk load order (`[B192]`):** opening the chunk showed flat land under a tall water lid for about a second. Measured frame by frame: new ground patches baked before the height map was finished, and the water turned on on a different signal. Now nothing shows until the real ground is in (as Cesium and CDLOD draw a tile only once its data has loaded).
+- **Crisp shadows (`[B193]`):** a shadow texel covered 0.7 m; walking, the shadow box now covers 200 m around the eye, about 5 cm per texel.
+- **Rocks simplified (`[S94]`):** grain, mottling and bands removed, since on flat faces they read as noise; rounder hulls.
+- **Moss as a color layer (`[S95]`):** areas from sun, shade and moisture, broken up by large-scale noise with two sliders.
 - **Standing on the drawn ground (`[S92]`, `[B184]`):** the walk eye sank up to 1.5 m into the terrain at low eye height, because heights were read from a finer texture than the mesh draws. Everything on the chunk now reads the actual drawn triangle.
 
 ### 🤖 How AI was used
 - Claude built the evolution from the papers already in the references, and measured the regrowth's time before choosing a fix: the measurement showed that a planned shader rewrite would have gained almost nothing.
 - For the rocks, Claude researched placement, shadows and grain before building, and measured each bug's cause in the running app (precision, the sinking eye, floating rocks, stutter) before fixing it.
-- What Claude got wrong: it built several changes without Dana's go, and one "continue instead of regrowing" change made colors drift with every slider move until it was reverted. A Terrain switch version that hid every layer caused a tear and was reverted. Claude also ran repeated tests for causes that were already known, and Dana stopped it.
+- What Claude got wrong: it built several changes without Dana's go, and one "continue instead of regrowing" change made colors drift with every slider move until it was reverted. A Terrain switch version that hid every layer caused a tear and was reverted. Claude also ran repeated tests for causes that were already known, and Dana stopped it. On the moss, Claude skipped the plan doc that already named the method (layered shells), built flat tints and small clumps that looked wrong, and bundled several changes into one test. Dana now has Claude act as tech lead, open every plan with the sources it read, and two hooks remind it before each code edit. A frame-rate check was also invalid (it counted screen refreshes, not the app's frames).
 
 ### ❌ What didn't work
 - Continuing evolution from the current grid on a slider change: the drift added up, and results no longer matched a reload.
 - Checking GPU read-backs every 4 ms instead of every frame: no gain, removed.
 - Terrain off still leaves the chunk a sheet with no slab (`[B177]`), and the tear (`[B176]`) is not yet explained.
+- Moss on rocks as a tint, then a stipple grain, mottling and small round moss clumps: each read as noise or polka dots from walking height, and was removed.
 - Rocks first appeared only in walk mode, too small for the landscape and too scarce; a fake blob shadow never showed and was removed for real shadow maps; a screen-space grain stayed on the screen instead of the rock. Each was replaced after measuring why.
 
 ### ➡️ Next
-- Rock scattering (`[B189]`), softer rock shapes, moss on rock tops. Then the tear and the flat slab when picked.
+- Measure the lag in the app's own frame time, then the shadows' hard edge. Then trees or the World Clock, toward the final video.
 
 ---
 

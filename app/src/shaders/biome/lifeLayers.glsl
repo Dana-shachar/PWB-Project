@@ -5,7 +5,14 @@
 const float LIFE_BLEND_POWER = 15.0; // Berg's BlendPower
 const float LIFE_TOP_MULTIPLIER = 3.0; // Berg's TopdownMaskMultiplier
 const float LIFE_TOP_POWER = 5.0; // Berg's TopdownMaskPower
-const float LIFE_GROUND_SHARE = 0.35;
+const float LIFE_MAX_COVER = 0.75; // life's strongest share over the ground (and rocks)
+
+// Large-scale variation over the coverage areas (terrain shaders' turbulence noise, as TerraFormFX's): three octaves of
+// simplex noise, -1 to 1, mixed into Berg's height blend so it breaks the sun, shade and moisture areas with crisp edges.
+float lifeBreakup(vec2 meters, float sizeMeters) { // sizeMeters: Breakup size (plantTypes.ts patternMeters)
+  vec2 p = meters / max(sizeMeters, 0.1);
+  return 0.57 * simplexNoise(p, 7.0) + 0.29 * simplexNoise(p * 2.03, 11.0) + 0.14 * simplexNoise(p * 4.01, 13.0);
+}
 
 // Cordonnier's hat function, the grid's own (lifeStep.frag.glsl): -1 outside survival, 1 in the ideal range.
 float lifeHat(float c, vec4 range) {
@@ -54,10 +61,16 @@ vec3 hslToRgb(vec3 hsl) {
 // One life type's layer: its cover, and its color. Placement from the terrain alone (suitability as Berg's height); no
 // texture of its own, since the ground's own texture shows through the tint (chunk.frag.glsl). hue: center (degrees),
 // unused, saturation min, max. shade: lightness min, max. mask: unused, edge amount, edge thickness, unused.
+// A life type's color from its hue and shade, in linear space as the land ramp is.
+vec3 lifeColor(vec4 hue, vec4 shade) {
+  vec3 srgb = hslToRgb(vec3(fract(hue.x / 360.0), (hue.z + hue.w) * 0.5, (shade.x + shade.y) * 0.5));
+  return mix(srgb / 12.92, pow((srgb + 0.055) / 1.055, vec3(2.4)), step(0.04045, srgb));
+}
+
 float lifeLayer(float amount, float up, float groundDetail, float suitability, vec4 hue, vec4 shade, vec4 mask, out vec3 color) {
   // The height blend's height mixes in the ground's own texture (Mishkinis; Berg), so the edge breaks along the terrain's
   // existing pattern instead of a smooth curve. Share inferred, TUNABLE.
-  float height = mix(suitability, groundDetail, LIFE_GROUND_SHARE);
+  float height = mix(suitability, groundDetail, mask.w); // mask.w: Breakup amount (plantTypes.ts breakupShare)
   float a = clamp(amount, 0.0, 1.0);
   // Berg's height blend and top-down mask, the edge mask; each edge never sharper than a pixel (aastep, Gustavson 2012).
   float blendValue = height * a + a;
@@ -67,8 +80,7 @@ float lifeLayer(float amount, float up, float groundDetail, float suitability, v
   float edgeMask = pow(1.0 - clamp(up, 0.0, 1.0), mask.z) * mask.y * height * a;
   float cover = clamp(amountMask * topMask + edgeMask, 0.0, 1.0);
 
-  vec3 srgb = hslToRgb(vec3(fract(hue.x / 360.0), (hue.z + hue.w) * 0.5, (shade.x + shade.y) * 0.5));
-  color = mix(srgb / 12.92, pow((srgb + 0.055) / 1.055, vec3(2.4)), step(0.04045, srgb)); // to linear, as the land ramp is
+  color = lifeColor(hue, shade);
   return cover;
 }
 
