@@ -349,8 +349,8 @@
 - Key names: `ChunkLakes` (`update`, `texture` RGBA: level, tide share, spill height, unused; `levelAt`, `drawnLevelAt` the sheet's own reach, `seaReaches`, `ground` the preview map's heights for detail selection and the cameras), `uChunkLakeLevels`; `getChunkPreview` in `map/heightmap.ts`.
 
 **voxel/chunkMap.ts**
-- What it is: the walk map, the chunk drawn from above with the scene's own materials into a 256-pixel image every 2 s while walking; the gumball shows it with the walker's dot and turns a click into a `teleport`.
-- Key names: `createChunkMap` (clears its target first: the shared renderer has `autoClear` off), `WALK_MAP_REDRAW_MS` in `LandChunkCanvas.tsx`, `walkMap`/`teleport` on `GumballTarget`, `drawWalkMap` and `handleMapClick` in `scene/Gumball.tsx`.
+- What it is: the walk map, the chunk drawn from above with the scene's own materials into a 256-pixel image while walking, redrawn only when its content changes (`[B168]`); the gumball shows it with the walker's dot and turns a click into a `teleport`.
+- Key names: `createChunkMap` (clears its target first: the shared renderer has `autoClear` off), `WALK_MAP_MIN_GAP_MS`, `settingsVersionRef` and `walkMapKey` in `LandChunkCanvas.tsx`, `shownVersion` on `ChunkPatchRenderer`, `walkMap`/`teleport` on `GumballTarget`, `drawWalkMap` and `handleMapClick` in `scene/Gumball.tsx`.
 
 **voxel/chunkGround.ts**
 - What it is: ground height anywhere on the chunk, for camera picking and collision.

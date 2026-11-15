@@ -10,13 +10,13 @@
 > [!IMPORTANT]
 > **Start from here (2026-11-15):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
 >
-> **State.** `main` adds the chunk's load order fix (`[B192]`), crisp walking shadows (`[B193]`, box 200 m), plain toon rocks with 20 to 40 hull points (`[S94]`), and moss as a color layer with a large-scale breakup (`[S95]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> **State.** `main` adds the walk map redrawn only on change (`[B168]`, the 2 s hitch), the chunk's load order fix (`[B192]`), crisp walking shadows (`[B193]`, box 200 m), plain toon rocks with 20 to 40 hull points (`[S94]`), and moss as a color layer with a large-scale breakup (`[S95]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
 > - Dana's planet has Light follows camera off now; with a fixed sun the shadows depend on the sun angle, chosen per shot.
 > - Two app tabs share the graphics card. Close Claude's tab when Dana tests.
 >
-> **How to work (Dana, 2026-11-15).** Claude acts as tech lead: flag problems and recommend, but every change still needs Dana's go on a numbered plan, one change per test. Measure the cause before a fix, and check a measuring method on a known case first (a rAF counter is not a frame time; confirm walk mode is on). Real fixes only. Build only what reads from walking height. Keep replies short.
+> **How to work (Dana, 2026-11-15).** Claude acts as tech lead: flag problems and recommend, but every change still needs Dana's go on a numbered plan, one change per test. Measure the cause before a fix, and check a measuring method on a known case first (confirm by screenshot that walk mode is on; the shared loop renders every animation frame, so frame intervals are real frame times). Real fixes only. Build only what reads from walking height. Keep replies short.
 >
-> **Next, in order.** 1. Measure the lag: the app's own frame time inside the render loop, in Claude's tab, walking (Dana sees lag; cause unknown). 2. Shadow hard edge (`[B193]`). 3. Then "Plan to the final" from item 2 (World Clock or trees first: Dana leaned to trees, open). Open alongside: rock scattering (`[B189]`), shadow flicker (`[B191]`), `[B164]` returned in walk mode by lakes (Dana's planned fix stands).
+> **Next, in order.** 1. The turning hitch (`[B168]`, still a little lag): time the chunk's per-frame parts separately (patch builds, rock generation, life, walk map) with a temporary timer in the shared render loop (`scene/sharedViewportRenderer.ts`, the `animate` loop) and in `onFrame`, in Claude's own tab, entering walk mode with one click and checking it by screenshot. 2. Shadow hard edge (`[B193]`). 3. Then "Plan to the final" from item 2: ❓ trees first (Dana leaned this way) or the World Clock. Open alongside: rock scattering (`[B189]`), shadow flicker (`[B191]`), `[B164]` back in walk mode by lakes (Dana's planned fix stands), moss skirt at rock bases (deferred, `[S95]`).
 ---
 
 ## 🧭 Direction

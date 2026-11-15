@@ -473,7 +473,11 @@ export class ChunkPatchRenderer {
     if (!entry) return;
     entry.mesh.visible = true;
     this.shown.add(key);
+    this.shownVersion++;
   }
+
+  // Bumped whenever the shown ground changes, so the walk map redraws only then.
+  shownVersion = 0;
 
   private remove(key: string): void {
     const entry = this.entries.get(key);
@@ -483,7 +487,7 @@ export class ChunkPatchRenderer {
     entry.material.dispose();
     entry.target.dispose();
     this.entries.delete(key);
-    this.shown.delete(key);
+    if (this.shown.delete(key)) this.shownVersion++;
   }
 
   private createMaterial(patch: TerrainPatch, target: THREE.WebGLRenderTarget, samples: number, flags: EdgeStitchFlags | undefined): THREE.ShaderMaterial {

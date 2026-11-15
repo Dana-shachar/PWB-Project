@@ -1448,10 +1448,11 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Rebuilt alone 2026-11-09, tested in memory then on the real code at the brown spot: level 8 (488 m a sample) to 10 or 11 (61 or 31 m), 0 frames with ground over the eye while walking, no added flicker (sharp pixel change on a 0.05° turn 0% off, 0.03% then 0% on), GPU time unchanged (23 ms). The box is CDLOD's per-node min and max height (Strugar 2009). ⚠️ The range comes from the preview ground map, so fine Roughness can stand slightly above it.
 - Left: nothing in the data is finer than about 30 m, so close ground still reads flat from 2 m; that is the close-up limit (`[B122]`), not this bug.
 
-### [B168] The walk map's redraw stalls walk mode every 2 s · `wrong but workable`
-**⏸️ Pending, not seen after `[B171]`'s fix (Dana, 2026-11-09); reopen if it returns** · **Where:** the walk map in `voxel/LandChunkCanvas.tsx` (`createChunkMap`, `WALK_MAP_REDRAW_MS`)
-- Measured: a second render of 296 ms GPU time about every 2 s while walking, with 250 to 310 ms long tasks, felt as a jump.
-- Also measured: walk mode at 17 fps on one view and about 40 on another after `[B157]`'s removal; the terrain is most of the frame. Not yet compared with the last commit.
+### [B168] The walk map's redraw stalled walk mode every 2 s · `wrong but workable`
+**🟡 Partly fixed 2026-11-15** · **Where:** the walk map in `voxel/LandChunkCanvas.tsx` (`createChunkMap`, `WALK_MAP_MIN_GAP_MS`, `walkMapKey`), `shownVersion` in `voxel/ChunkPatchRenderer.ts`
+- Measured 2026-11-09: a second render of 296 ms GPU time about every 2 s while walking, felt as a jump. Returned 2026-11-15 (Dana: laggy), measured with a frame timer in the render loop: worst frame 70 to 95 ms every 2 s; with the redraw switched off, 15 to 17 ms. The chunk's own per-frame work was about 2 ms, the steady frame about 13 ms (about 75 fps).
+- Fixed: the map redraws only when its content changes (any setting change, or the shown ground changing), at most every 0.5 s, as three.js renders on demand. Standing in walk mode, worst frame 16 to 19 ms after.
+- Still open: turning fast gave a 93 ms frame (the chunk's work spiked to 47 ms): new patches, new rocks, and a map redraw on each patch change. Next: time those parts separately; if it's the map, stop redrawing it on patch changes. Dana still feels a little lag.
 
 ### [B169] Ground flickered while panning in walk mode · `blocks work`
 **🟡 Built 2026-11-09, Dana confirmed in memory** · **Where:** `voxel/chunkPatches.ts` (`shouldSplit`), `voxel/ChunkPatchRenderer.ts` (`wantedSamples`)

@@ -47,7 +47,8 @@ const chunkFragmentGlsl = terrainGlsl + noiseGlsl + landLayersGlsl + lifeLayersG
 // 2026-09-23.
 // How high the haze reaches before thinning by 1/e, as a share of the terrain's height (maxHeight). Inferred, TUNABLE.
 const HAZE_SCALE_SHARE = 0.5;
-const WALK_MAP_REDRAW_MS = 2000;
+// The walk map redraws only when its content changes (rendering on demand), at most this often, so a drag batches. TUNABLE
+const WALK_MAP_MIN_GAP_MS = 500;
 // The rocks' shadow map: its box around the eye (world units, km), resolution, and how far up the sun it looks from. TUNABLE
 const SHADOW_HALF_SIZE = 1.5;
 // Walking, the box shrinks to the ground near the eye, so a shadow texel is about 5 cm and rocks' shadows are crisp (one
@@ -238,6 +239,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   // Read each frame by the patch renderer, so onFrame never goes stale.
   const onLifeProgressRef = useRef(onLifeProgress);
   onLifeProgressRef.current = onLifeProgress;
+  // Any prop change re-renders this component: a cheap "settings changed" signal for the walk map ([B168]).
+  const settingsVersionRef = useRef(0);
+  settingsVersionRef.current++;
   const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, propSettings, lightFollowsCamera });
   patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, propSettings, lightFollowsCamera };
 
@@ -304,6 +308,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     // The walk map (voxel/chunkMap.ts): redrawn every few seconds while walking, so lakes and new patches show.
     const walkMap = createChunkMap();
     let walkMapDrawnAt = -Infinity;
+    let walkMapKey = ''; // the content the map last showed
     const walkEuler = new THREE.Euler();
     gumballTargetRef.current = {
       camera: perspectiveCamera,
@@ -720,7 +725,9 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
         }
         walkMode.update(deltaSeconds);
         const mapRenderer = sharedRendererRef.current.renderer;
-        if (mapRenderer && walkMode.progress >= 1 && performance.now() - walkMapDrawnAt > WALK_MAP_REDRAW_MS) {
+        const mapKey = `${settingsVersionRef.current}|${patchRenderer.shownVersion}`;
+        if (mapRenderer && walkMode.progress >= 1 && mapKey !== walkMapKey && performance.now() - walkMapDrawnAt > WALK_MAP_MIN_GAP_MS) {
+          walkMapKey = mapKey;
           walkMapDrawnAt = performance.now();
           // Seen from above: the eye is the map's camera and there is no haze, then both go back for the view.
           walkMap.render(mapRenderer, scene, patchSettingsRef.current.chunkSize, Math.max(patchSettingsRef.current.maxHeight, 1) * 2, (eye) => {

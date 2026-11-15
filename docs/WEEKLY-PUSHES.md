@@ -13,7 +13,7 @@
 
 `Covers 2026-11-11 to 2026-11-18 · Class topic: Optimization and performance · Due: start of class, 10:10 am`
 
-*Made life evolve: algae and moss now compete in variants that mutate over eras, with algae held to the shore, and measured where the biome's time goes. Then added rocks to the chunk, placed by rules and casting real shadows.*
+*Made life evolve: algae and moss now compete in variants that mutate over eras, with algae held to the shore, and measured where the biome's time goes. Then added rocks to the chunk, placed by rules and casting real shadows, and spent the week's optimization topic on measured fixes: the chunk's load order, crisp shadows, and the walk map's 2-second hitch.*
 
 ![The land chunk with evolved moss and algae, and the new Debug view under the view pill.](screenshots/2026-11-11-chunk-biome-evolution.png)
 
@@ -30,6 +30,7 @@
 - **Real shadows (`[S93]`):** rocks cast into a three.js sun shadow map that follows the view and redraws only on change, darkening the ground by how much it faces the sun.
 - **Walk camera collision (`[B190]`):** walking fast uphill, the view cut into the slope; the eye now has a collision sphere over the camera's near plane (as Unreal's spring arm). Measured 27 bad frames of 117 before, 0 after.
 - **Chunk load order (`[B192]`):** opening the chunk showed flat land under a tall water lid for about a second. Measured frame by frame: new ground patches baked before the height map was finished, and the water turned on on a different signal. Now nothing shows until the real ground is in (as Cesium and CDLOD draw a tile only once its data has loaded).
+- **Lag (`[B168]`):** measured with a frame timer in the render loop: the walk map redrew the whole scene every 2 s (a 70 to 95 ms hitch). It now redraws only when its content changes; standing, the worst frame dropped to 16 to 19 ms. A smaller hitch when turning remains.
 - **Crisp shadows (`[B193]`):** a shadow texel covered 0.7 m; walking, the shadow box now covers 200 m around the eye, about 5 cm per texel.
 - **Rocks simplified (`[S94]`):** grain, mottling and bands removed, since on flat faces they read as noise; rounder hulls.
 - **Moss as a color layer (`[S95]`):** areas from sun, shade and moisture, broken up by large-scale noise with two sliders.
@@ -38,7 +39,7 @@
 ### 🤖 How AI was used
 - Claude built the evolution from the papers already in the references, and measured the regrowth's time before choosing a fix: the measurement showed that a planned shader rewrite would have gained almost nothing.
 - For the rocks, Claude researched placement, shadows and grain before building, and measured each bug's cause in the running app (precision, the sinking eye, floating rocks, stutter) before fixing it.
-- What Claude got wrong: it built several changes without Dana's go, and one "continue instead of regrowing" change made colors drift with every slider move until it was reverted. A Terrain switch version that hid every layer caused a tear and was reverted. Claude also ran repeated tests for causes that were already known, and Dana stopped it. On the moss, Claude skipped the plan doc that already named the method (layered shells), built flat tints and small clumps that looked wrong, and bundled several changes into one test. Dana now has Claude act as tech lead, open every plan with the sources it read, and two hooks remind it before each code edit. A frame-rate check was also invalid (it counted screen refreshes, not the app's frames).
+- What Claude got wrong: it built several changes without Dana's go, and one "continue instead of regrowing" change made colors drift with every slider move until it was reverted. A Terrain switch version that hid every layer caused a tear and was reverted. Claude also ran repeated tests for causes that were already known, and Dana stopped it. On the moss, Claude skipped the plan doc that already named the method (layered shells), built flat tints and small clumps that looked wrong, and bundled several changes into one test. Dana now has Claude act as tech lead, open every plan with the sources it read, and two hooks remind it before each code edit. A first frame-rate check was invalid: it timed the overview while walk mode had not started.
 
 ### ❌ What didn't work
 - Continuing evolution from the current grid on a slider change: the drift added up, and results no longer matched a reload.
@@ -48,7 +49,7 @@
 - Rocks first appeared only in walk mode, too small for the landscape and too scarce; a fake blob shadow never showed and was removed for real shadow maps; a screen-space grain stayed on the screen instead of the rock. Each was replaced after measuring why.
 
 ### ➡️ Next
-- Measure the lag in the app's own frame time, then the shadows' hard edge. Then trees or the World Clock, toward the final video.
+- Split the turning hitch by part, then the shadows' hard edge. Then trees or the World Clock, toward the final video.
 
 ---
 
