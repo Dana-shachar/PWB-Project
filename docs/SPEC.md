@@ -616,9 +616,10 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Lakes and rivers follow the Climate's liquid (Dry has none), not the Water switch, as Gaea and World Machine keep the sea apart from lakes.
 
 ### [S70] Time has its own World Clock · `decided`
-**Decided:** 2026-11-03
+**Decided:** 2026-11-03, revised 2026-11-16
 
-- The timeline dock moved out of Erosion into its own World Clock section, the one clock every time-based system will share.
+- The World Clock is its own section, the one clock the living systems share (`[S96]`).
+- Erosion is not on it: it keeps its own timeline, shown with the Atmosphere section where its panel lives. Gaea and World Machine treat erosion as a step that builds the terrain, with a Duration and no world timeline. Dana, 2026-11-16.
 
 ### [S71] A chunk area is drawn on the planet · `decided`
 **Decided:** 2026-11-03, refined 2026-11-04
@@ -762,6 +763,16 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 **Decided:** 2026-11-11
 
 - Shapes are convex hulls around 20 to 40 random points (three.js ConvexGeometry) in four families, bent by noise, with a flat base sunk 10% into the ground. Colors come from the ground's: a hue range picked on a rock-color bar and a Saturation share. Plain toon facets: grain, mottling and bands were removed (2026-11-14), since on flat faces they read as noise, stains or random patches. Surface texture is to be revisited. Dana.
+
+### [S96] The World Clock: one year, a track per living system · `decided`
+**Decided:** 2026-11-16
+
+- One world year, the playhead, and a track per living system, each with a start and a length, as Houdini's simulations offset one global time and Unreal's Sequencer stacks tracks. The biome is the first track; trees, population and events join as tracks.
+- A track's length is dragged at its end on the dock, as Sequencer and Premiere trim a section. The exact number stays the system's own setting (Biome's Years).
+- Any year shows the state the full run passes through: steps and eras follow the track's length, and the run stops at the playhead. A shorter rerun with its own eras would tell a different history.
+- Live motion (waves, tide, clouds, spin) stays in real seconds, off the clock.
+- Both timelines share one layout: a ruler, the rows, the navigator, then a bottom row with the year, Stop and Play/Pause, Unit and After Effects' time zoom (small mountain, slider, large mountain). Ticks carry their unit in the geology convention for durations (yr, kyr, Myr). A dock opens fitted to its rows and drags taller like the side panels.
+- Planned: stored eras for instant scrubbing and Play (Houdini's nearest stored step), settings changed along the timeline (Cordonnier 2017), and a run popup.
 
 ### [S95] Moss is a color layer, broken up at large scale · `decided`
 **Decided:** 2026-11-15

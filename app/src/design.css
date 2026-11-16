@@ -110,6 +110,7 @@ body {
 .app-timeline-dock {
   flex-shrink: 0;
   width: 100%;
+  box-sizing: border-box; /* padding inside the width, so the dock never runs past the window */
   border-top: 1px solid var(--color-divider);
   background: var(--color-panel-bg);
   /* Same panel-padding on all sides as the side panels' own .panel-content,
@@ -1557,23 +1558,11 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
    surface) with its cached bands, track and playhead, then the navigator
    and the exact-time readout. Renders even before a first Run — see the
    --empty/disabled states throughout, rather than not mounting at all. */
-.erosion-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-md);
-}
 
-.erosion-timeline-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--gap-sm);
-}
 
-.erosion-timeline-zoom-buttons {
-  display: flex;
-  gap: 2px;
-}
+
+
+
 
 .erosion-timeline-zoom-btn {
   width: 20px;
@@ -1703,13 +1692,7 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
 /* The unit's own name, shown once near the ruler rather than abbreviated on
    every tick (Dana, 2026-10-14: "0K reads to me as ok... use the current
    unit"). */
-.erosion-timeline-unit-label {
-  font: 300 var(--font-size-sm) var(--font-ui);
-  color: var(--color-text);
-  opacity: 0.6;
-  margin-right: auto;
-  padding-left: var(--gap-sm);
-}
+
 
 /* The navigator — a miniature of the whole run. Modeled directly on AE's own
    zoom control ("a horizontal scroll bar that changes size"): a thin
@@ -1790,13 +1773,7 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
    glyph convention: a media player's own transport controls earn real
    button chrome (Dana, 2026-10-14: "the media player buttons should sit on
    the top and be round... hover state and all button states"). */
-.erosion-timeline-transport {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  gap: var(--gap-sm);
-}
+
 
 .erosion-timeline-transport-btn {
   display: inline-flex;
@@ -1847,12 +1824,7 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
 /* Zoom buttons moved under the navigator, right-aligned, next to the
    current/total readout (Dana, 2026-10-14: "the -/+ need to be below it on
    the right" / "this belongs with the zoom controls"). */
-.erosion-timeline-zoom-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--gap-md);
-}
+
 
 /* A reusable, project-wide hover tooltip for icon-only buttons — a real
    styled label, not the browser's native title-attribute delay (Dana,
@@ -2060,4 +2032,205 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
     animation: none;
     border-color: var(--color-accent);
   }
+}
+
+/* Both timeline docks (clock/WorldClockDock.tsx, erosion/ErosionTimeline.tsx): one grid for the ruler, the tracks and
+   the navigator, so every row shares the name column and the gaps; then the shared bottom row. The dock fits its
+   content: each added track adds one row and one gap. */
+.app-timeline-dock--fit {
+  padding: 0 var(--panel-padding); /* the timeline's own margins do the top and bottom */
+}
+.world-clock {
+  --clock-margin-top: var(--gap-sm);
+  --clock-margin-bottom: var(--panel-padding);
+  --clock-track-height: 20px;
+  --clock-track-gap: var(--gap-sm); /* between every row */
+  --clock-footer-gap: var(--panel-padding); /* between the timeline area and the bottom row */
+  display: flex;
+  flex-direction: column;
+  gap: var(--clock-track-gap);
+  padding: var(--clock-margin-top) 0 var(--clock-margin-bottom);
+}
+.timeline-grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: max-content 1fr; /* the longest track name, then the lanes */
+  column-gap: var(--gap-sm);
+  row-gap: var(--clock-track-gap);
+  align-items: center;
+}
+.timeline-grid--single {
+  grid-template-columns: 1fr;
+}
+.timeline-scrub {
+  cursor: pointer;
+  user-select: none;
+}
+/* Over the track rows of the lane column: measures the lanes for scrubbing and carries the playhead. */
+.world-clock-playhead-lane {
+  grid-column: 2;
+  grid-row: 2 / span var(--track-count);
+  align-self: stretch;
+  position: relative;
+  pointer-events: none;
+}
+
+/* The playhead itself is grabbable, above a track's length grip where they meet. */
+.world-clock-playhead-lane .world-clock-playhead {
+  pointer-events: auto;
+  cursor: ew-resize;
+  z-index: 1;
+}
+
+/* The shared bottom row: year field left, transport centered, unit and time zoom right. */
+.timeline-footer {
+  margin-top: calc(var(--clock-footer-gap) - var(--clock-track-gap)); /* the row gap plus this makes the footer gap */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--gap-md);
+}
+.timeline-transport {
+  display: flex;
+  gap: var(--gap-sm);
+}
+.erosion-timeline-transport-btn.timeline-transport-btn {
+  width: 24px;
+  height: 24px;
+}
+.erosion-timeline-transport-btn[aria-disabled='true'] {
+  opacity: 0.3;
+  cursor: default;
+  border-color: var(--color-input-stroke);
+  background: var(--color-input-fill);
+  transform: none;
+}
+.timeline-view-controls {
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+}
+/* After Effects' time zoom: small mountain, slider, large mountain. */
+.timeline-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.timeline-zoom-slider {
+  width: 120px;
+}
+.ui-select-row--inline .ui-select-label {
+  min-width: 0;
+}
+.ui-select-row--inline .ui-select {
+  flex: none;
+  width: 128px;
+}
+
+/* Track bar: a system's name, then its span as a bar on a dim lane; the end is a grip that trims its length. */
+.track-bar {
+  display: contents; /* its name and lane are cells of the timeline grid */
+}
+.track-bar-label {
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.track-bar-lane {
+  position: relative;
+  overflow: hidden; /* zoomed in, a bar runs past the lane */
+  height: var(--clock-track-height);
+  border-radius: var(--panel-radius);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+.track-bar-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  min-width: 8px;
+  box-sizing: border-box;
+  background: var(--color-track);
+  border: 0.25px solid var(--color-input-stroke);
+  border-radius: 2px;
+  transition: background 0.1s;
+}
+.track-bar-fill:hover {
+  background: color-mix(in srgb, var(--color-text) 12%, var(--color-track));
+}
+/* A run in progress: the accent fills from the track's start toward the year it is heading for. */
+.track-bar-progress {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  background: color-mix(in srgb, var(--color-accent) 70%, transparent);
+  transition: width 0.2s ease-out;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .track-bar-progress {
+    transition: none;
+  }
+}
+.timeline-status {
+  font: 300 var(--font-size-sm) var(--font-ui);
+  color: var(--color-text);
+  white-space: nowrap;
+}
+.track-bar-cached {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--color-accent-alt);
+}
+.track-bar-fill--stale .track-bar-cached {
+  opacity: 0.45;
+}
+.track-bar-end {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 8px;
+  cursor: ew-resize;
+}
+.track-bar-end::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 1px;
+  background: var(--color-text);
+  opacity: 0.6;
+}
+.track-bar-end:hover::after {
+  opacity: 1;
+}
+.track-bar-fill--dragging .track-bar-end::after {
+  background: var(--color-accent);
+  opacity: 1;
+}
+.track-bar-end:focus {
+  outline: none;
+}
+.track-bar-end:focus-visible {
+  outline: 1px solid var(--color-accent);
+  border-radius: 2px;
+}
+.erosion-timeline-transport-btn[aria-disabled='true'] {
+  opacity: 0.3;
+  cursor: default;
+  border-color: var(--color-input-stroke);
+  background: var(--color-input-fill);
+  transform: none;
+}
+.track-bar--disabled > * {
+  opacity: 0.35;
+  pointer-events: none;
 }

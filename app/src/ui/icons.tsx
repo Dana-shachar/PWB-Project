@@ -99,6 +99,31 @@ export function PlayIcon({ className }: IconProps) {
   );
 }
 
+export function StopIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <rect x={3.5} y={3.5} width={9} height={9} rx={0.5} />
+    </svg>
+  );
+}
+
+// After Effects' time zoom ends: a small mountain zooms out, a large one zooms in.
+export function TimeZoomOutIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M3 12h10L9.5 7.5 8 9.5 6.5 8.5Z" />
+    </svg>
+  );
+}
+
+export function TimeZoomInIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+      <path d="M1 13.5h14L10 4 7.5 8.5 5.5 7Z" />
+    </svg>
+  );
+}
+
 export function PauseIcon({ className }: IconProps) {
   return (
     <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">

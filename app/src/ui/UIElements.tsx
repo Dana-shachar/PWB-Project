@@ -547,6 +547,7 @@ interface SelectProps {
   options: { value: string; label: string }[];
   description?: string; // shown on hover, same reason as Slider's
   disabled?: boolean;
+  inline?: boolean; // in a toolbar row: the label sits a small gap from the menu, not in the panel's label column
 }
 
 // Plain <select>, styled to match the panel's other controls — the React
@@ -610,9 +611,9 @@ export function LinkMenu({ label, options, onPick, description, emptyNote }: Lin
   );
 }
 
-export function Select({ label, value, onChange, options, description, disabled = false }: SelectProps) {
+export function Select({ label, value, onChange, options, description, disabled = false, inline = false }: SelectProps) {
   return (
-    <div className="ui-select-row ui-tooltip-anchor">
+    <div className={'ui-select-row ui-tooltip-anchor' + (inline ? ' ui-select-row--inline' : '')}>
       {description && <span className="ui-tooltip">{description}</span>}
       <label className="ui-select-label">{label}</label>
       <select className="ui-select" value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>

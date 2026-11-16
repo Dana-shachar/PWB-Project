@@ -1452,7 +1452,8 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **🟡 Partly fixed 2026-11-15** · **Where:** the walk map in `voxel/LandChunkCanvas.tsx` (`createChunkMap`, `WALK_MAP_MIN_GAP_MS`, `walkMapKey`), `shownVersion` in `voxel/ChunkPatchRenderer.ts`
 - Measured 2026-11-09: a second render of 296 ms GPU time about every 2 s while walking, felt as a jump. Returned 2026-11-15 (Dana: laggy), measured with a frame timer in the render loop: worst frame 70 to 95 ms every 2 s; with the redraw switched off, 15 to 17 ms. The chunk's own per-frame work was about 2 ms, the steady frame about 13 ms (about 75 fps).
 - Fixed: the map redraws only when its content changes (any setting change, or the shown ground changing), at most every 0.5 s, as three.js renders on demand. Standing in walk mode, worst frame 16 to 19 ms after.
-- Still open: turning fast gave a 93 ms frame (the chunk's work spiked to 47 ms): new patches, new rocks, and a map redraw on each patch change. Next: time those parts separately; if it's the map, stop redrawing it on patch changes. Dana still feels a little lag.
+- Still open: turning fast gave a 93 ms frame (the chunk's work spiked to 47 ms): new patches, new rocks, and a map redraw on each patch change. Dana still feels a little lag.
+- Measured 2026-11-16, each part timed in the render loop: turning (4 s) and running (6 s) by keys gave no frame over 30 ms; patches 1.3 ms, rocks 0.3 ms, no map redraw. Facing water, 6 frames of 304 took 33 to 47 ms with 3 ms of CPU work, so the graphics card is the slow part there. The 93 ms frame did not return. ⏸️ Tabled by Dana until she asks.
 
 ### [B169] Ground flickered while panning in walk mode · `blocks work`
 **🟡 Built 2026-11-09, Dana confirmed in memory** · **Where:** `voxel/chunkPatches.ts` (`shouldSplit`), `voxel/ChunkPatchRenderer.ts` (`wantedSamples`)
@@ -1570,6 +1571,16 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Read from the code: one shadow texel covered about 0.7 m (a 3 km box at 4096 texels), and the edge fades over the toon feather on purpose.
 - Fixed: while walking the box is 200 m around the eye, about 5 cm per texel, so outlines follow the rocks. Still to do: a hard edge over about one pixel instead of the feather.
 - Shadows with no caster on screen were Light follows camera on (`[B186]`): the sun sat behind the eye, so rocks behind cast forward. With it off, a high sun can leave the view nearly shadowless when facing it; the sun angle is chosen per shot.
+
+### [B194] The bottom dock ran 32 px past the window · `minor`
+**✅ Fixed 2026-11-16** · **Where:** `.app-timeline-dock` in `design.css`
+- Its width was the window plus its padding, so the right end of the Unit menu and the year field were cut off, in erosion's timeline too.
+- Fixed: the padding counts inside the width (`box-sizing: border-box`).
+
+### [B195] The World Clock's playhead couldn't be dragged from where it opens · `wrong but workable`
+**✅ Fixed 2026-11-16** · **Where:** `WorldClockDock` and `TrackBar` in `clock/`, `design.css`
+- Dana: the playhead wouldn't move. Measured: it opens at the end of the Biome bar, on the bar's length grip, and let clicks through, so a press grabbed the grip.
+- Fixed: the playhead's line and knob take the press and sit above the grip, as editors let the playhead be grabbed over a clip's edge.
 
 ## 🏗️ Architecture
 

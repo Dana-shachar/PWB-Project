@@ -544,6 +544,41 @@
 - How a timeline shows which frames are recorded, so a gap is visible rather than a surprise.
 - *[Blender, cache display](https://docs.blender.org/manual/nl/dev/editors/video_sequencer/sequencer/sidebar/cache.html). Read 2026-10-13*
 
+**One global time, each simulation offset and scaled from it** · Houdini, DOP networks · `method used`
+- A simulation's own time is the playbar's time minus its Offset Time, times its Time Scale; between two stored steps the nearest one is shown.
+- Used: the World Clock's one year with a start per track (`[S96]`); stored eras are planned on the nearest-step rule.
+- *[DOP network](https://www.sidefx.com/docs/houdini/nodes/obj/dopnet.html) · [doptime](https://www.sidefx.com/docs/houdini/expressions/doptime.html). Search summary 2026-11-16*
+
+**Tracks under one playhead** · Unreal Engine, Sequencer · `UX pattern`
+- A main sequence holds sub-sequences as sections on tracks, each with its own play rate; a section's length is trimmed by dragging its edge.
+- Used: a row per living system, its length dragged at its end (`[S96]`).
+- *[Time Warp track](https://dev.epicgames.com/documentation/unreal-engine/time-warp-track-in-unreal-engine). Search summary 2026-11-16*
+
+**A simulation cached as it plays, its valid range drawn on the timeline** · Blender, simulation zone · `UX pattern`
+- Inputs read once at the start, then a fixed step per frame; frames are cached during playback and the valid cache shows as a line on the timeline.
+- Used: the render band that fills the track while life regrows (`[S96]`).
+- *[Simulation Zone](https://docs.blender.org/manual/en/latest/modeling/geometry_nodes/simulation/simulation_zone.html). Search summary 2026-11-16*
+
+**Erosion as a terrain step, not a timeline** · Gaea, World Machine · `method used`
+- Both run erosion as a node or device with a Duration that sets how long it simulates; neither documents a world timeline for it.
+- Used: erosion keeps its own timeline, off the World Clock (`[S70]`).
+- *[Gaea Erosion](https://docs.quadspinner.com/Reference/Erosion/Erosion.html) · [World Machine Erosion](https://help.world-machine.com/topic/device-erosion/). Search summary 2026-11-16*
+
+**Time zoom slider between two mountain buttons** · After Effects, Timeline panel · `UX pattern`
+- Under the timeline, a Zoom Out button (small mountain), a slider, and a Zoom In button (large mountain), beside the navigator above the ruler and scroll-to-zoom.
+- Used: both timelines' bottom row (`[S96]`).
+- *[Adobe After Effects CS3 user guide](https://www.manualsdir.com/manuals/753848/adobe-after-effects-cs3.html?page=117) · [Noble Desktop](https://blog.nobledesktop.com/learn/after-effects/timeline-basics-in-after-effects). Search summary 2026-11-16*
+
+**Units for durations of geologic time** · GSA · `method used`
+- Points in time are ka, Ma and Ga; durations are yr, kyr, Myr and Gyr, a convention many geoscientists keep, though some journals use Ma for both.
+- Used: tick labels on both timelines (yr, kyr, Myr).
+- *[Christie-Blick, GSA Today 22(2)](https://rock.geosociety.org/gsatoday/archive/22/2/article/i1052-5173-22-2-28.htm). Search summary 2026-11-16*
+
+**Long processes first, finer ones on their result** · world-history simulators · `background`
+- Geology's time scales are far longer than a civilization's; simulators run the coarse long processes first and the finer ones after.
+- Supports erosion building the terrain before life's clock starts.
+- *[runevision](https://blog.runevision.com/2015/08/procedural-world-potentials-simulation.html) · [World History Sim devlog](https://drtardigrade.itch.io/worldhistorysim/devlog/161863/super-regions-and-expanded-simulation-time). Search summary 2026-11-16*
+
 **Seeking plays forward from the nearest keyframe** · `background`
 - Video stores a complete frame periodically and only differences in between, so jumping to a point means starting at the previous complete frame and playing forward to it.
 - The established name for recording periodically and replaying the few steps between, and the tradeoff that sizes the gap: a longer gap saves memory and costs seek time.

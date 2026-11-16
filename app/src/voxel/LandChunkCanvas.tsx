@@ -97,6 +97,7 @@ interface LandChunkCanvasProps {
   colorStops: ColorStop[];
   rock: RockSettings;
   biome: BiomeSettings;
+  lifeYear: number; // the World Clock's year: life is grown up to it
   propSettings: PropSettings; // rocks on the chunk (props/rockScatter.ts)
   onLifeProgress: (progress: LifeProgress | null) => void;
   debugView: DebugView;
@@ -182,6 +183,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
     colorStops,
     rock,
     biome,
+    lifeYear,
     propSettings,
     onLifeProgress,
     debugView,
@@ -242,8 +244,8 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
   // Any prop change re-renders this component: a cheap "settings changed" signal for the walk map ([B168]).
   const settingsVersionRef = useRef(0);
   settingsVersionRef.current++;
-  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, propSettings, lightFollowsCamera });
-  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, propSettings, lightFollowsCamera };
+  const patchSettingsRef = useRef({ maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, lifeYear, propSettings, lightFollowsCamera });
+  patchSettingsRef.current = { maxErrorPixels, maxHeight, heightBase, chunkSize, bakePatch, advanceChunkBase, chunkBaseTexture, chunkPreview, lakesOn, atmosphere, patch, radiusKm, groundHeights, biome, lifeYear, propSettings, lightFollowsCamera };
 
   useImperativeHandle(
     handleRef,
@@ -588,7 +590,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
       // A light that follows the camera would regrow life on every turn, so life then takes the sun from straight above.
       const sun = settings.lightFollowsCamera ? upSun : (material.uniforms.uLightDirection.value as THREE.Vector3);
       const atmosphere = settings.atmosphere;
-      const growth = [biome.years, biome.growthRate, biome.deathRate, biome.algae.temperature, biome.algae.moisture, biome.algae.sun, biome.moss.temperature, biome.moss.moisture, biome.moss.sun, biome.evolve, biome.seed, biome.mutationRate, biome.shoreReach];
+      const growth = [biome.years, settings.lifeYear, biome.growthRate, biome.deathRate, biome.algae.temperature, biome.algae.moisture, biome.algae.sun, biome.moss.temperature, biome.moss.moisture, biome.moss.sun, biome.evolve, biome.seed, biome.mutationRate, biome.shoreReach];
       const key = JSON.stringify([heightTexture.uuid, heightTexture.version, chunkLakes.texture.version, material.uniforms.uSeaLevel.value, material.uniforms.uMaxHeight.value, material.uniforms.uChunkSize.value, material.uniforms.uShadowsEnabled.value, atmosphere.temperature, atmosphere.rainfall, atmosphere.liquid, atmosphere.peakCooling, atmosphere.poleCooling, material.uniforms.uElevationMin.value, material.uniforms.uElevationMax.value, sun.toArray().map((value) => value.toFixed(3)), growth]);
       if (key === lifeKey) return;
       lifeKey = key;
@@ -623,7 +625,7 @@ export const LandChunkCanvas = forwardRef<LandChunkCanvasHandle, LandChunkCanvas
           rainShare: Math.min(atmosphere.rainfall / Math.max(2 * liquid.typicalRainfall, 1), 1),
           sunDirection: sun.clone(),
           shadowsEnabled: material.uniforms.uShadowsEnabled.value > 0.5,
-        }, biome, showLife, reportLife);
+        }, biome, settings.lifeYear, showLife, reportLife);
       }, 150);
     }
     // Rocks (props/rockScatter.ts), per shown ground patch.

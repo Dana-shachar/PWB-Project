@@ -163,7 +163,9 @@ export class LifeGrid {
 
   // Grows life from bare ground for the settings' years. Resolves false if a newer run took over.
   // onProgress: the share of steps done, null once finished.
-  async run(renderer: THREE.WebGLRenderer, inputs: LifeInputs, settings: BiomeSettings, onFrame: () => void, onProgress: (share: number | null) => void): Promise<boolean> {
+  // untilYear stops the run early (the World Clock's playhead); steps and eras still follow the full span, so any year
+  // shows the same state the full run passes through.
+  async run(renderer: THREE.WebGLRenderer, inputs: LifeInputs, settings: BiomeSettings, untilYear: number, onFrame: () => void, onProgress: (share: number | null) => void): Promise<boolean> {
     const generation = ++this.generation;
     const u = this.inputsMaterial.uniforms;
     u.uHeightMap.value = inputs.heightMap;
@@ -239,8 +241,9 @@ export class LifeGrid {
     this.stepYears = stepYears;
     // An era every ERA_YEARS, longer on a long span so there are at most MAX_ERAS.
     this.eraYears = Math.max(ERA_YEARS, settings.years / MAX_ERAS);
+    const runSteps = stepYears > 0 ? Math.min(steps, Math.round(Math.max(0, untilYear) / stepYears)) : 0;
     onProgress(0);
-    return this.simulate(renderer, settings, steps, random, generation, onFrame, onProgress);
+    return this.simulate(renderer, settings, runSteps, random, generation, onFrame, onProgress);
   }
 
   private applyGenes(): void {

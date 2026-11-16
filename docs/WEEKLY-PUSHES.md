@@ -13,7 +13,7 @@
 
 `Covers 2026-11-11 to 2026-11-18 · Class topic: Optimization and performance · Due: start of class, 10:10 am`
 
-*Made life evolve: algae and moss now compete in variants that mutate over eras, with algae held to the shore, and measured where the biome's time goes. Then added rocks to the chunk, placed by rules and casting real shadows, and spent the week's optimization topic on measured fixes: the chunk's load order, crisp shadows, and the walk map's 2-second hitch.*
+*Made life evolve: algae and moss now compete in variants that mutate over eras, with algae held to the shore, and measured where the biome's time goes. Then added rocks to the chunk, placed by rules and casting real shadows, and spent the week's optimization topic on measured fixes: the chunk's load order, crisp shadows, and the walk map's 2-second hitch. Ended with a first World Clock: one world year with a track per living system, life grown to the playhead.*
 
 ![The land chunk with evolved moss and algae, and the new Debug view under the view pill.](screenshots/2026-11-11-chunk-biome-evolution.png)
 
@@ -35,11 +35,14 @@
 - **Rocks simplified (`[S94]`):** grain, mottling and bands removed, since on flat faces they read as noise; rounder hulls.
 - **Moss as a color layer (`[S95]`):** areas from sun, shade and moisture, broken up by large-scale noise with two sliders.
 - **Standing on the drawn ground (`[S92]`, `[B184]`):** the walk eye sank up to 1.5 m into the terrain at low eye height, because heights were read from a finer texture than the mesh draws. Everything on the chunk now reads the actual drawn triangle.
+- **World Clock v1 (`[S96]`, `[S70]`):** one world year with a track per living system (Houdini's offset time, Unreal's Sequencer tracks), the biome first. A track's length is dragged at its end and stays in sync with Years; life grows to the playhead's year, following the full run's steps and eras so any year shows the same history. Erosion keeps its own timeline, as terrain tools treat it. Both timelines share one layout: ticks with units (yr, kyr, Myr), After Effects' time zoom, Stop and Play/Pause, a dock that fits its rows and drags taller, and a band that fills the track while life regrows.
+- **Turning hitch, re-measured (`[B168]`):** turning and running gave no frame over 30 ms; the slow frames left only face water, where the graphics card is the slow part. Tabled.
 
 ### 🤖 How AI was used
 - Claude built the evolution from the papers already in the references, and measured the regrowth's time before choosing a fix: the measurement showed that a planned shader rewrite would have gained almost nothing.
 - For the rocks, Claude researched placement, shadows and grain before building, and measured each bug's cause in the running app (precision, the sinking eye, floating rocks, stutter) before fixing it.
 - What Claude got wrong: it built several changes without Dana's go, and one "continue instead of regrowing" change made colors drift with every slider move until it was reverted. A Terrain switch version that hid every layer caused a tear and was reverted. Claude also ran repeated tests for causes that were already known, and Dana stopped it. On the moss, Claude skipped the plan doc that already named the method (layered shells), built flat tints and small clumps that looked wrong, and bundled several changes into one test. Dana now has Claude act as tech lead, open every plan with the sources it read, and two hooks remind it before each code edit. A first frame-rate check was invalid: it timed the overview while walk mode had not started.
+- For the World Clock, Claude first repeated the roadmap's order without checking its reason, then argued against it, until Dana pointed out that trees evolve and need the clock. It researched the clock's model (Houdini, Unreal, Blender, Gaea, Cordonnier) only after Dana asked. Building the dock, it left out erosion's play, zoom and resize controls without saying so; Dana had them restored and the layout standardized.
 
 ### ❌ What didn't work
 - Continuing evolution from the current grid on a slider change: the drift added up, and results no longer matched a reload.
@@ -49,7 +52,7 @@
 - Rocks first appeared only in walk mode, too small for the landscape and too scarce; a fake blob shadow never showed and was removed for real shadow maps; a screen-space grain stayed on the screen instead of the rock. Each was replaced after measuring why.
 
 ### ➡️ Next
-- Split the turning hitch by part, then the shadows' hard edge. Then trees or the World Clock, toward the final video.
+- World Clock: stored eras (instant scrubbing and Play), then trees evolving on it, toward the final video.
 
 ---
 

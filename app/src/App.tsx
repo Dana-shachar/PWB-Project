@@ -24,6 +24,8 @@ import type { SavedErosionRun } from './firebase/storage';
 import { engineRainfall, planetErosionPasses, useErosion, useErosionAutoRun } from './erosion/erosionControls';
 import { randomClimate } from './atmosphere/atmosphereSettings';
 import { ErosionTimeline } from './erosion/ErosionTimeline';
+import { useWorldClock, type ClockTrack } from './clock/worldClock';
+import { WorldClockDock } from './clock/WorldClockDock';
 import { useLandChunk } from './voxel/landChunk';
 import { LandChunkCanvas, type LandChunkCanvasHandle } from './voxel/LandChunkCanvas';
 import { ViewModeControl } from './voxel/ViewModeControl';
@@ -172,7 +174,35 @@ function App() {
   // panels' own width resize, with a floor so it can't be dragged down to
   // unusably small (Dana, 2026-10-14: "the timeline should be stretchable
   // like the side panels are w a minimal height enforced").
-  const timelineDock = useDockHeightResize(240);
+  const timelineDock = useDockHeightResize(0, 0);
+  const worldClock = useWorldClock();
+  const lifeYear = Math.min(worldClock.year ?? planetControls.biome.years, planetControls.biome.years);
+  // Each dock opens fitted to its content (plus the 1px top border) and drags taller like a side panel; never shorter.
+  const [dockFitHeight, setDockFitHeight] = useState(0);
+  const clockDock = useDockHeightResize(0, 0);
+  const dockRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const content = dockRef.current?.firstElementChild as HTMLElement | null | undefined;
+    if (!content) return;
+    const observer = new ResizeObserver(() => setDockFitHeight(content.offsetHeight + 1));
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [activeStage]);
+  const clockTracks: ClockTrack[] = [
+    {
+      id: 'biome',
+      label: 'Biome',
+      start: 0,
+      length: planetControls.biome.years,
+      minLength: 1,
+      maxLength: 1_000_000,
+      setLength: (years) => planetControls.updateBiome({ years }),
+      cachedRanges: [],
+      stale: false,
+      // A regrowth in progress, filling from the start toward the playhead's year.
+      progress: landChunk.lifeProgress ? { toYear: lifeYear, share: landChunk.lifeProgress.share, secondsLeft: landChunk.lifeProgress.secondsLeft, label: 'Growing life' } : null,
+    },
+  ];
 
   return (
     <div className="app-shell">
@@ -369,6 +399,7 @@ function App() {
             >
               <LandChunkCanvas
                 biome={planetControls.biome}
+                lifeYear={lifeYear}
                 propSettings={planetControls.props}
                 onLifeProgress={landChunk.setLifeProgress}
                 debugView={landChunk.debugView}
@@ -489,13 +520,21 @@ function App() {
     </div>
     {activeStageHasTimeline && (
       <>
-      <div className="app-timeline-dock-handle" onMouseDown={timelineDock.startResize} />
-      <div className="app-timeline-dock" style={{ height: timelineDock.height }}>
-        <ErosionTimeline
-          result={erosion.result}
-          onScrub={erosion.scrubTo}
-          isStale={erosion.isStale}
-        />
+      <div className="app-timeline-dock-handle" onMouseDown={activeStage === 'clock' ? clockDock.startResize : timelineDock.startResize} />
+      <div
+        ref={dockRef}
+        className="app-timeline-dock app-timeline-dock--fit"
+        style={{ height: Math.max(activeStage === 'clock' ? clockDock.height : timelineDock.height, dockFitHeight) }}
+      >
+        {activeStage === 'clock' ? (
+          <WorldClockDock tracks={clockTracks} year={lifeYear} onYearChange={worldClock.setYear} />
+        ) : (
+          <ErosionTimeline
+            result={erosion.result}
+            onScrub={erosion.scrubTo}
+            isStale={erosion.isStale}
+          />
+        )}
       </div>
       </>
     )}

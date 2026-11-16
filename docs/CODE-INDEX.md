@@ -38,6 +38,8 @@
 | Change templates or the project list | `handleCreateTemplate`, `handleEditTemplate`, `handleNewFromTemplate`, `handleRenameById`, `editingTemplate` in `projectSettings/saveProject.ts`; `template` in `firebase/storage.ts`; Project Settings in `ui/Panel.tsx` |
 | Change the chunk's debug view | `voxel/DebugViewControl.tsx`, `debugView` in `voxel/landChunk.ts`, `uPatchDebug` and `uPatchColor` (`patchDebugColor` in `voxel/ChunkPatchRenderer.ts`, the tint in `chunk.frag.glsl`) |
 | Change the biome (life grid, moss and algae) | `biome/plantTypes.ts` (`BiomeSettings`, `DEFAULT_BIOME_SETTINGS`, `lifeColors`, `LIFE_SATURATION`), `biome/lifeGrid.ts` (`LifeGrid`, `newEra`, `simulate`), `shaders/biome/lifeInputs.frag.glsl`, `lifeStep.frag.glsl`, `lifeSum.frag.glsl`, `lifeShore.frag.glsl`, `lifeLayers.glsl`, the life block in `chunk.frag.glsl`, `updateLife` in `voxel/LandChunkCanvas.tsx`, `ui/panels/BiomePanel.tsx`, the Biome section in `ui/Panel.tsx` |
+| Change the World Clock (tracks, playhead, the life year) | `clock/worldClock.ts` (`useWorldClock`, `ClockTrack`, `TrackProgress`, `trackEnd`), `clock/WorldClockDock.tsx`, `clock/TrackBar.tsx`, `clockTracks` and `lifeYear` in `App.tsx`, `lifeYear` in `voxel/LandChunkCanvas.tsx`, the `untilYear` of `LifeGrid.run` in `biome/lifeGrid.ts` |
+| Change either timeline's ruler, zoom or bottom row | `clock/timeRuler.ts` (`rulerTicks`, `formatTickValue`, `niceNumber`), `clock/timelineView.ts` (`useTimelineView`, `zoomTo`), `clock/TimelineFooter.tsx`, `StopIcon`, `TimeZoomOutIcon`, `TimeZoomInIcon` in `ui/icons.tsx`, the dock's fitted height (`dockFitHeight`) in `App.tsx`, `ui/pipelineStages.ts` |
 | Change rocks (props): placement, sizes, look, controls | `props/propSettings.ts` (`PropSettings`, `DEFAULT_PROP_SETTINGS`, `migrateProps`), `props/rockScatter.ts` (`RockScatter`, `update`, `makeDensity`, `generate`, `placeRock`, `fill`, `hullShape`), `shaders/props/rockDensity.frag.glsl`, `rock.vert.glsl`, `rock.frag.glsl`, `updateRocks` in `voxel/LandChunkCanvas.tsx`, `ui/panels/PropsPanel.tsx`, the Props section in `ui/Panel.tsx` |
 | Change rock shadows (the sun's shadow map) | `updateSunShadow` and `SHADOW_HALF_SIZE`, `WALK_SHADOW_HALF_SIZE` (the box while walking), `SHADOW_MAP_SIZE`, `SHADOW_LIGHT_DISTANCE` in `voxel/LandChunkCanvas.tsx`, `shaders/props/rockShadows.glsl` (`rockShadowAmount`, `applyRockShadow`), the `shadowmap_vertex` lines in `chunk.vert.glsl` and `rock.vert.glsl`, `RockScatter.version` |
 | Place something on the chunk's ground | `sampleGround` (height and slope of the drawn triangle) on `ChunkPatchRenderer` (`[S92]`) |
@@ -379,7 +381,26 @@
 - Key names: `useErosion` (`run`, `scrubTo`, `loadSavedRun`, `updateRates`).
 
 **erosion/ErosionTimeline.tsx**
-- What it is: the bottom dock with the scrub timeline.
+- What it is: erosion's own timeline in the bottom dock, shown with the Atmosphere section: ruler, cache bar with checkpoint bands, navigator and the shared bottom row (`[S70]`).
+- Key names: `ErosionTimeline`, `PLAYBACK_TICKS`, `CHECKPOINT_BAND_FRACTION`; zoom from `useTimelineView`.
+
+---
+
+## ⏱️ World Clock (`clock/`)
+
+*One world year, a track per living system, and the timeline parts both docks share (`[S96]`).*
+
+**clock/worldClock.ts**
+- What it is: the clock's year (null keeps the playhead at the end) and the track type.
+- Key names: `useWorldClock`, `ClockTrack` (`start`, `length`, `setLength`, `cachedRanges`, `stale`, `progress`), `TrackProgress`, `trackEnd`.
+
+**clock/WorldClockDock.tsx**, **clock/TrackBar.tsx**
+- What it is: the dock (one grid: ruler, a row per track, playhead, navigator; then the bottom row) and a track's row (name, bar, length grip with a cursor readout, render band, ready bands).
+- Key names: `WorldClockDock` (`SPAN_HEADROOM`, `handleScrubDown`), `TrackBar` (`handleEndDown`, `handleKeyDown`).
+
+**clock/timeRuler.ts**, **clock/timelineView.ts**, **clock/TimelineFooter.tsx**
+- What it is: tick steps and labels (yr, kyr, Myr), the zoomed window (buttons, slider, scroll, navigator), and the bottom row (year, Stop and Play/Pause, Unit, After Effects' time zoom, run status).
+- Key names: `rulerTicks`, `formatTickValue`, `formatCompactYears`, `useTimelineView` (`zoomTo`, `zoomLevel`, `handleNavigatorPan`, `handleNavigatorEdge`), `TimelineFooter`.
 
 ---
 

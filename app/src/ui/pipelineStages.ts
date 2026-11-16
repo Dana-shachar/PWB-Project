@@ -12,15 +12,15 @@ export type PipelineStage = 'terrain' | 'atmosphere' | 'biome' | 'population' | 
 
 // hasTimeline: whether this stage's content plays out over time and gets the
 // global bottom timeline dock (App.tsx) rather than a static settings panel.
-// Only the World Clock has the timeline; a future time-based stage
-// (Atmosphere, Events) just flips this on rather than rebuilding the dock.
+// The Climate System shows erosion's timeline (erosion lives in its right panel); the World Clock shows the
+// living systems' tracks.
 export const PIPELINE_STAGES: { key: PipelineStage; label: string; hasTimeline?: boolean }[] = [
   { key: 'terrain', label: 'Terrain' },
   // Climate became Atmosphere (Dana, 2026-10-27); selected from its own left-panel section.
-  { key: 'atmosphere', label: 'Climate System' },
+  { key: 'atmosphere', label: 'Climate System', hasTimeline: true },
   { key: 'biome', label: 'Biome' },
   { key: 'population', label: 'Population' },
   { key: 'events', label: 'Events' },
-  // The one world clock every time-based system will share; for now it holds the erosion timeline (Dana, 2026-11-03).
+  // One clock for the living systems; erosion keeps its own timeline, as terrain tools treat it (Dana, 2026-11-16).
   { key: 'clock', label: 'World Clock', hasTimeline: true },
 ];
