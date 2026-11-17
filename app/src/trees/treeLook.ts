@@ -25,6 +25,12 @@ export interface TreeLighting {
 const MAX_LEAF_PARTS = 3000; // keeps a rolled giant species drawable; more spots are thinned evenly. TUNABLE
 const SHADE_JITTER = 0.16; // each leaf's brightness varies by this share, so leaves of one tree differ. TUNABLE
 const NORMAL_BEND = 0.6; // how far leaf normals turn toward the canopy sphere's. TUNABLE
+// Per-part color shows only while the tree is big on screen: camera distance in tree sizes (bounding radii), full
+// detail nearer than NEAR, none past FAR, as LOD groups switch by screen size (Unity LODGroup). TUNABLE
+const DETAIL_NEAR = 8;
+const DETAIL_FAR = 16;
+
+const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 const fragmentShader = terrainGlsl + '\n' + landLayersGlsl + '\n' + treeFragmentBody;
 
@@ -47,11 +53,13 @@ function buildLeaves(tree: AlienTree, genes: TreeGenes): THREE.BufferGeometry {
     const random = seededRandom(spot.seed);
     transform.compose(spot.origin, spot.orientation, new THREE.Vector3(1, 1, 1));
     builder.begin(transform, 1 + (random() - 0.5) * 2 * SHADE_JITTER);
-    buildLeafPart(builder, partFor(spot.seed, genes), spot.size, random, genes.leafAngle, genes.droop);
+    const up = WORLD_UP.clone().applyQuaternion(spot.orientation.clone().invert());
+    buildLeafPart(builder, partFor(spot.seed, genes), spot.size, random, genes.leafAngle, genes.droop, spot.branchRadius, up);
   }
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(builder.positions, 3));
   geometry.setAttribute('aShade', new THREE.Float32BufferAttribute(builder.shades, 1));
+  geometry.setAttribute('aAlong', new THREE.Float32BufferAttribute(builder.alongs, 1));
   geometry.setIndex(builder.indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
@@ -75,7 +83,7 @@ function swellBase(geometry: THREE.BufferGeometry, genes: TreeGenes): void {
   geometry.computeVertexNormals();
 }
 
-function treeMaterial(isLeaf: boolean, colorA: THREE.Color, colorB: THREE.Color, lighting: TreeLighting): THREE.ShaderMaterial {
+function treeMaterial(isLeaf: boolean, colorA: THREE.Color, colorB: THREE.Color, lighting: TreeLighting, tipA = colorA, tipB = colorB): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     vertexShader: treeVertexGlsl,
     fragmentShader,
@@ -84,6 +92,11 @@ function treeMaterial(isLeaf: boolean, colorA: THREE.Color, colorB: THREE.Color,
       uIsLeaf: { value: isLeaf ? 1 : 0 },
       uColorA: { value: colorA },
       uColorB: { value: colorB },
+      uTipColorA: { value: tipA },
+      uTipColorB: { value: tipB },
+      uTreeSize: { value: 1 },
+      uDetailNear: { value: DETAIL_NEAR },
+      uDetailFar: { value: DETAIL_FAR },
       uCanopyCenter: { value: new THREE.Vector3() },
       uCanopyRadius: { value: 1 },
       uCanopyBottom: { value: 0 },
@@ -118,7 +131,7 @@ export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: stri
 
   const trunkMaterial = treeMaterial(false, colors.trunkBase, colors.trunkTop, lighting);
   trunkMaterial.uniforms.uTrunkTop.value = Math.max(branches.geometry.boundingBox?.max.y ?? 1, 1e-3);
-  const leafMaterial = treeMaterial(true, colors.canopyInner, colors.canopyOuter, lighting);
+  const leafMaterial = treeMaterial(true, colors.canopyInner, colors.canopyOuter, lighting, colors.tipInner, colors.tipOuter);
   const canopy = leaves.geometry.boundingBox;
   if (canopy && !canopy.isEmpty()) {
     const sphere = canopy.getBoundingSphere(new THREE.Sphere());
@@ -126,6 +139,8 @@ export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: stri
     leafMaterial.uniforms.uCanopyRadius.value = sphere.radius;
     leafMaterial.uniforms.uCanopyBottom.value = canopy.min.y;
     leafMaterial.uniforms.uCanopyTop.value = canopy.max.y;
+    const whole = canopy.clone().union(branches.geometry.boundingBox ?? canopy);
+    leafMaterial.uniforms.uTreeSize.value = Math.max(whole.getBoundingSphere(new THREE.Sphere()).radius, 1e-3);
   }
   branches.material = trunkMaterial;
   leaves.material = leafMaterial;

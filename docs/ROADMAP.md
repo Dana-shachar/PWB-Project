@@ -8,23 +8,25 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-17):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
+> **Start from here (2026-11-17, evening):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
 >
-> **State.** `main` has the World Clock v1 (`[S96]`: the biome as a track, life grown to the playhead, erosion on its own timeline, both docks on one layout) and tree species (`[S97]`: EZ-Tree trunks with our 3D leaf parts, gradients, toon shading, the Tree view with a species list, randomizing with locks). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - Species save with the planet (`treeSpecies` in Biome settings), so a template made from a planet carries them.
-> - Two app tabs share the graphics card. Close Claude's tab when Dana tests. Test species in Claude's tab on a throwaway species and remove it after: the tab autosaves to Dana's planet.
-> - Hot reload doesn't rebuild trees whose genes didn't change: reload the page after editing `trees/` or `shaders/trees/`. Run `node scripts/checkShaders.mjs` after any `.glsl` edit.
+> **State.** `main` has tree species (`[S97]`) with joints matched to the branch (`[B197]`), umbrella pads (`[B198]`), Vary at the Mutation rate, the per-part Tip color shown up close, and save feedback (a toast and a "Last saved" line, `[B199]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Dana's trees live in the **Flora** template. While a template is open for editing, autosave is off: only Save Template keeps changes. Claude's test tab can change species freely there, and closes without saving.
+> - Two app tabs share the graphics card. Close Claude's tab when Dana tests. Reload after editing `trees/` or `shaders/trees/`; run `node scripts/checkShaders.mjs` after any `.glsl` edit.
 >
-> **How to work (Dana, 2026-11-15 and 11-16).** Claude acts as tech lead: flag problems and recommend, but every change still needs Dana's explicit go on a numbered plan (a new requirement added to a plan is not a go). Look at Dana's references in `docs/references/` and her shots before proposing a look; imitate them, never stamp generic flat shapes. Prioritize what reads from walking height; skip costly close-up detail. Don't remove existing controls or features without saying so. Few options in menus: replace weak ones instead of adding. Keep replies short.
+> **How to work.** Claude acts as tech lead: flag and recommend, every change needs Dana's go on a numbered plan; a clear directive is the go. Imitate the references in `docs/references/`. Only what reads from walking height; close-up detail only up close. Short replies.
 >
-> **Next, in order.**
-> 1. Tree joints (`[B197]`): each leaf part's base starts at the branch's own radius where it sits (read from EZ-Tree's sections in `generateLeaves`) and widens over its first stretch; the base end closed and sunk slightly into the branch. Proposed to Dana 2026-11-17, not yet approved. Then check Vary, New species, locks and Leaf angle by clicking (built, not clicked yet).
-> 2. Trees on the chunk: placement per ground patch from the life grid (Horizon Zero Dawn's method, as rocks), woods versus lone trees by a Spread gene (seed dispersal, `REFERENCES.md`), then a Trees track on the World Clock with humus (Cordonnier) and mutation per era with Vary's rule, shown in the Tree view. Plan first ("Plan to the final" item 4).
-> 3. Stored eras and Play, after trees and before recording (item 2). 4. The run popup.
+> **Next, in order (Dana, 2026-11-17).**
+> 1. Color round 2: Leaf parts 2 and 3 turn their hue from the main part (`slotTurn`, uses `aSlot` per vertex), up close only. ❓ First Dana's yes on full detail always in the Tree view (recommended; now the fade hides it when several species are shown).
+> 2. Dana's asks (2026-11-17): more leaf size variance within a tree (now a fixed ±40%, `sizeVariance` in `applyTreeGenes`; likely a gene and slider), and a range of coloring between individuals of one species (per-tree hue variation, SpeedTree's method, `REFERENCES.md`), shown in the Tree view too. Plan first.
+> 3. Tree fixes, one per test: droop toward the ground (`[B201]`), a minimum part base (`[B200]`), thick upward limbs (`[B202]`), hide the trunk sliders Crown doesn't use.
+> 4. Color sliders update uniforms only (`[B203]`), before scattering.
+> 5. Trees on the chunk: placement per ground patch from the life grid (Horizon Zero Dawn, as rocks), woods versus lone trees (Spread gene), then a Trees track with humus and mutation per era. Shrubs on the same species system; a Tendril family (curly trunk, Cup leaves) as a shrub. Plan first.
+> 6. Flowers in the same engine (a stem and a flower-head part, big and small): research how engines build flower heads, then plan. 7. Stored eras and Play. 8. The run popup.
 >
-> Weekly push: only when Dana says so. Pending for Session 13 (`WEEKLY-PUSHES.md`, text updated): the screenshot copies in `docs/screenshots/` and this week's architecture diagram (new `clock/` and `trees/` modules).
+> Weekly push: only when Dana says so. Pending for Session 13: the screenshot copies in `docs/screenshots/` and this week's architecture diagram (new `clock/` and `trees/` modules).
 >
-> `[B168]` is tabled by Dana until she asks; the shadow hard edge (`[B193]`) waits. Open alongside: rock scattering (`[B189]`), shadow flicker (`[B191]`), `[B164]` back in walk mode by lakes (Dana's planned fix stands), moss skirt at rock bases (deferred, `[S95]`), flowers after trees.
+> `[B168]` is tabled by Dana until she asks; the shadow hard edge (`[B193]`) waits. Open alongside: rock scattering (`[B189]`), shadow flicker (`[B191]`), `[B164]` in walk mode by lakes, moss skirt at rock bases (deferred, `[S95]`).
 ---
 
 ## 🧭 Direction
@@ -48,7 +50,7 @@
 > 1. 🟡 **Ground moss look:** ✅ large coverage areas from sun, shade and moisture, broken up by large-scale noise (`[S95]`, Breakup size and amount). ⏸️ Deferred: the layered moss skirt where ground meets rock (CryEngine's layered moss for Ryse: shells pushed out, their border pushed back into the rock; smoothed normals; base band near the camera only). ❌ Moss on rocks as a tint, small clumps. Rocks are plain toon facets; surface texture to revisit.
 > 2. 🟡 **World Clock** (first, then trees, which evolve on it; `[S96]`). ✅ v1 (2026-11-16): one world year, the biome as its first track (length dragged on the dock, synced with Years), life grown to the playhead's year, erosion back on its own timeline, both docks on one layout (Stop and Play/Pause, Unit, After Effects' time zoom, ticks with units). ⏸️ Deferred until after trees (Dana, 2026-11-16): stored eras, one 8-bit snapshot per era of everything shown (algae, moss and trees together, so the format is built once), which turn on Play for the final video and make scrubbing instant; nearest-era snapping first, a crossfade only if playback looks jumpy. Then the "Running a timeline simulation..." popup (needs a modal in the `ui-design` skill). Reruns only when a simulation setting moves.
 > 3. ⚪ **Grass**, drawn near the camera from the grid's density.
-> 4. 🟡 **Trees** (`[S97]`). ✅ Species from EZ-Tree (MIT) with our 3D leaf parts, gradients and toon shader, the Tree view, three-level randomizing with locks (2026-11-17). Next: placement on the chunk from the life grid (woods and scattered, a Spread gene), a Trees track on the clock with humus, mutation per era shown in the Tree view; a Shrub family; detail by distance (under 2 pixels not drawn, canopy masses far away); sun shadows. ⏸️ Flowers after trees (phyllotaxis, L-systems or space colonization, compared first).
+> 4. 🟡 **Trees** (`[S97]`). ✅ Species from EZ-Tree (MIT) with our 3D leaf parts, gradients and toon shader, the Tree view, three-level randomizing with locks (2026-11-17). ✅ Joints, umbrella pads, Vary at the Mutation rate, the Tip color up close (2026-11-17). Next: the order in the Start block; detail by distance (under 2 pixels not drawn, canopy masses far away); sun shadows. ⏸️ Flowers after trees, in the same species engine (Dana, 2026-11-17).
 > 5. ⚪ **Variety:** two more planets rerolled from Flora's systems.
 > 6. ⚪ **Only if time:** agents as populations on the grid (they change the planet on their own between eras), a volcanic region (cones and a lava shader) on a planet.
 

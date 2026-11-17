@@ -34,6 +34,7 @@ import { ViewModeControl } from './voxel/ViewModeControl';
 import { DebugViewControl } from './voxel/DebugViewControl';
 import { useAreaSelect } from './voxel/areaSelect';
 import { SelectAreaIcon } from './ui/icons';
+import { Toast } from './ui/Toast';
 
 const INITIAL_LAYER_ID = 'layer-1';
 
@@ -221,6 +222,7 @@ function App() {
 
   return (
     <div className="app-shell">
+      <Toast notice={project.saveNotice} onDismiss={project.dismissSaveNotice} />
     <div className="app-layout">
       <Panel
         ambientLight={sceneControls.ambientLight}
@@ -291,6 +293,7 @@ function App() {
         onCreateTemplate={project.handleCreateTemplate}
         onNewFromTemplate={project.handleNewFromTemplate}
         onSaveProject={project.handleSave}
+        lastSavedAt={project.lastSavedAt}
         onRenameProject={project.handleRenameInline}
         onDeleteProject={project.handleDeleteProject}
         chunkResolution={landChunk.resolution}

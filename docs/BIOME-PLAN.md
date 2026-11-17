@@ -88,14 +88,16 @@
 - One silhouette family per species: Clumps, Cone, Umbrella, Fan, or Crown (a single trunk with a star of leaves at its top, as palms grow).
 - Leaves are 3D parts with volume, not flat stamps, after Dana's flora references: Tendril, Curl, Frond, Spikes, Antler, Blade, Fan, Pad, Cup, Bulb. Strands taper to a point and grow out of their branch along its direction; a Droop gene bends fronds, blades and fans down or up. Up to three parts mix in one tree.
 - Every leaf varies: each rolls its own size, bend, twist and brightness from a seed, so no two match and the species rebuilds the same.
+- Parts grow out of their branch: a tube's base starts at the branch's own radius and widens, capped. Pads are umbrellas (`nms-umbrella-disc-trees`): a stalk flaring into the center of a level disc with a drooping rim.
 
 **Color**
-- Two gradients per species, read from walking distance: the canopy from inner and lower to outer and top, and the trunk from base to top, each a two-handle hue slider; Harmony sets the trunk from the leaves. No per-leaf gradient, bands or bark texture: they only read up close (Dana, 2026-11-16).
+- Two gradients per species, read from walking distance: the canopy from inner and lower to outer and top, and the trunk from base to top, each a two-handle hue slider; Harmony sets the trunk from the leaves.
+- Up close only, each leaf part also blends from base to tip toward a Tip hue (as in `lowpoly-alien-flora-sheet`), fading out as the tree gets small on screen, as LOD groups switch by screen size (Dana, 2026-11-17, replacing her 11-16 "no per-leaf gradient"). Bands and bark texture stay out.
 - Hues come from the planet palette as turns off the land color.
 - Toon shading with the planet's own shade settings (`[S83]`), leaf normals bent outward from the canopy's center, leaves lit from both sides. Far trees flatten into silhouettes in the haze.
 
 **Randomizing**
-- Three levels: New individual (a new seed), Vary (a cousin: Sims's mutation, each gene nudged by chance, the rule evolution will use per era), New species (rolled from a family's start, many big leaves never together). A padlock on Shape, Leaves and Color keeps that group.
+- Three levels: New individual (a new seed), Vary (a cousin: Sims's mutation, each gene changing with the Evolution panel's Mutation rate by up to ±0.4 of its range, the rule evolution will use per era), New species (rolled from a family's start, many big leaves never together). A padlock on Shape, Leaves and Color keeps that group.
 
 **Grouping**
 - Woods are dense stands of one species at a shared height; scattered trees are a few of another species in the open. A Spread gene sets which (seed dispersal distance: short gives clumps, long gives lone trees), so evolution can make both on one planet.

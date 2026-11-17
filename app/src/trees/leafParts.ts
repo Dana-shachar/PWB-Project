@@ -35,24 +35,36 @@ export function seededRandom(seed: number): () => number {
 export class PartBuilder {
   positions: number[] = [];
   shades: number[] = []; // per-vertex brightness jitter, so leaves of one tree differ a little
+  alongs: number[] = []; // per-vertex share from the part's base (0) to its tip (1), for the tip color
   indices: number[] = [];
   private transform = new THREE.Matrix4();
   private shade = 1;
+  private alongFrom = 0;
+  private alongTo = 1;
 
   begin(transform: THREE.Matrix4, shade: number) {
     this.transform.copy(transform);
     this.shade = shade;
+    this.along(0, 1);
   }
 
-  private vertex(point: THREE.Vector3): number {
+  // The share of the part the next shapes span, base to tip (a stalk 0 to 0.4, its disc 0.4 to 1).
+  along(from: number, to: number) {
+    this.alongFrom = from;
+    this.alongTo = to;
+  }
+
+  private vertex(point: THREE.Vector3, share: number): number {
     const world = point.clone().applyMatrix4(this.transform);
     this.positions.push(world.x, world.y, world.z);
     this.shades.push(this.shade);
+    this.alongs.push(this.alongFrom + (this.alongTo - this.alongFrom) * share);
     return this.positions.length / 3 - 1;
   }
 
   // A tube along a curve through the points, its radius at each share of the length; a zero radius closes the tip.
-  tube(points: THREE.Vector3[], radius: (share: number) => number, rings: number, sides: number) {
+  // `closeBase` caps the first ring with a fan, so a joint never shows an open rim ([B197]).
+  tube(points: THREE.Vector3[], radius: (share: number) => number, rings: number, sides: number, closeBase = false) {
     const curve = new THREE.CatmullRomCurve3(points);
     const frames = curve.computeFrenetFrames(rings, false);
     const first = this.positions.length / 3;
@@ -63,7 +75,7 @@ export class PartBuilder {
       for (let j = 0; j < sides; j++) {
         const angle = (j / sides) * Math.PI * 2;
         const offset = frames.normals[i].clone().multiplyScalar(Math.cos(angle) * r).addScaledVector(frames.binormals[i], Math.sin(angle) * r);
-        this.vertex(center.clone().add(offset));
+        this.vertex(center.clone().add(offset), share);
       }
     }
     for (let i = 0; i < rings; i++) {
@@ -74,6 +86,10 @@ export class PartBuilder {
         const d = b + sides;
         this.indices.push(a, c, b, b, c, d);
       }
+    }
+    if (closeBase) {
+      const center = this.vertex(curve.getPointAt(0), 0);
+      for (let j = 0; j < sides; j++) this.indices.push(center, first + j, first + ((j + 1) % sides));
     }
   }
 
@@ -89,9 +105,9 @@ export class PartBuilder {
       const across = side.clone().sub(tangent.clone().multiplyScalar(side.dot(tangent))).normalize();
       const facing = new THREE.Vector3().crossVectors(across, tangent).normalize();
       const w = Math.max(width(share), 0) / 2;
-      this.vertex(center.clone().addScaledVector(across, -w));
-      this.vertex(center.clone().addScaledVector(facing, fold * w));
-      this.vertex(center.clone().addScaledVector(across, w));
+      this.vertex(center.clone().addScaledVector(across, -w), share);
+      this.vertex(center.clone().addScaledVector(facing, fold * w), share);
+      this.vertex(center.clone().addScaledVector(across, w), share);
     }
     for (let i = 0; i < rows; i++) {
       for (let k = 0; k < 2; k++) {
@@ -104,9 +120,14 @@ export class PartBuilder {
     }
   }
 
-  // A disc facing +z around a center, its rim wobbling, cupped toward +z by `cup`.
-  disc(center: THREE.Vector3, radius: number, cup: number, wobble: number, phase: number, segments: number) {
-    const middle = this.vertex(center);
+  // A disc facing `normal` around a center, its rim wobbling, cupped toward the normal by `cup` (negative domes it).
+  disc(center: THREE.Vector3, normal: THREE.Vector3, radius: number, cup: number, wobble: number, phase: number, segments: number) {
+    const facing = normal.clone().normalize();
+    const across = new THREE.Vector3(1, 0, 0).cross(facing);
+    if (across.lengthSq() < 1e-6) across.set(0, 1, 0).cross(facing);
+    across.normalize();
+    const along = new THREE.Vector3().crossVectors(facing, across);
+    const middle = this.vertex(center, 0);
     const rings = 2;
     const first = this.positions.length / 3;
     for (let ring = 1; ring <= rings; ring++) {
@@ -114,7 +135,7 @@ export class PartBuilder {
       for (let j = 0; j < segments; j++) {
         const angle = (j / segments) * Math.PI * 2;
         const r = radius * share * (1 + wobble * Math.sin(angle * 5 + phase));
-        this.vertex(new THREE.Vector3(center.x + Math.cos(angle) * r, center.y + Math.sin(angle) * r, center.z + cup * radius * share * share));
+        this.vertex(center.clone().addScaledVector(across, Math.cos(angle) * r).addScaledVector(along, Math.sin(angle) * r).addScaledVector(facing, cup * radius * share * share), share);
       }
     }
     for (let j = 0; j < segments; j++) {
@@ -136,6 +157,18 @@ function branchDirection(leafAngleDegrees: number): THREE.Vector3 {
   return v(0, Math.cos(a), -Math.sin(a));
 }
 
+const JOINT_STRETCH = 0.15; // share of a part's length over which its base widens from the branch's radius. TUNABLE
+
+// A part's radius starting at the branch's own radius and easing into the part's width over its first stretch,
+// as EZ-Tree starts a child branch from its parent's radius ([B197]).
+function jointed(radius: (share: number) => number, branchRadius: number): (share: number) => number {
+  return (share) => {
+    if (share >= JOINT_STRETCH) return radius(share);
+    const blend = THREE.MathUtils.smoothstep(share, 0, JOINT_STRETCH);
+    return THREE.MathUtils.lerp(branchRadius, radius(share), blend);
+  };
+}
+
 // Prepends a short lead along the branch, shifting the part's own path to start where the lead ends.
 function grownFromBranch(points: THREE.Vector3[], branch: THREE.Vector3, lead: number): THREE.Vector3[] {
   const offset = branch.clone().multiplyScalar(lead);
@@ -143,8 +176,12 @@ function grownFromBranch(points: THREE.Vector3[], branch: THREE.Vector3, lead: n
 }
 
 // Adds one leaf part of `size` in the builder's current frame.
-export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number, random: () => number, leafAngle: number, bend: number) {
+// `up` is the world's up in the leaf's own frame, for parts that level themselves (pads).
+export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number, random: () => number, leafAngle: number, bend: number, branchRadius: number, up: THREE.Vector3) {
   const branch = branchDirection(leafAngle);
+  // A tube growing out of the branch: its base matches the branch's radius and is capped.
+  const stem = (points: THREE.Vector3[], radius: (share: number) => number, rings: number, sides: number) =>
+    builder.tube(points, jointed(radius, branchRadius), rings, sides, true);
   if (part === 'spikes') {
     // Straight sharp cones radiating from one point (#26 spiky crowns): for bushes and spiky trees.
     const count = 5 + Math.floor(random() * 5);
@@ -155,16 +192,18 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
       const dir = v(Math.sin(tilt) * Math.cos(around), Math.cos(tilt), Math.sin(tilt) * Math.sin(around));
       const length = size * between(random, 0.5, 1);
       const width = size * between(random, 0.04, 0.07);
-      builder.tube([v(0, 0, 0), dir.clone().multiplyScalar(length * 0.5), dir.clone().multiplyScalar(length)], (t) => width * (1 - t), 6, 5);
+      stem([v(0, 0, 0), dir.clone().multiplyScalar(length * 0.5), dir.clone().multiplyScalar(length)], (t) => width * (1 - t), 6, 5);
     }
     return;
   }
   if (part === 'antler') {
     // A tapered stem forking twice into pointed tines; for shrubs and odd crowns.
-    const stem = size * between(random, 0.35, 0.5);
+    const stemLength = size * between(random, 0.35, 0.5);
     const width = size * between(random, 0.05, 0.08);
-    const fork = v(0, stem, 0);
-    builder.tube(grownFromBranch([v(0, 0, 0), v(0, stem * 0.5, 0), fork], branch, size * 0.1), (t) => width * (1 - 0.3 * t), 6, 6);
+    const fork = v(0, stemLength, 0);
+    builder.along(0, 0.4);
+    stem(grownFromBranch([v(0, 0, 0), v(0, stemLength * 0.5, 0), fork], branch, size * 0.1), (t) => width * (1 - 0.3 * t), 6, 6);
+    builder.along(0.4, 1);
     const forkAt = fork.clone().addScaledVector(branch, size * 0.1);
     for (const side of [-1, 1]) {
       const reach = size * between(random, 0.35, 0.55);
@@ -184,7 +223,7 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
     const droop = size * between(random, 0.3, 0.6) * bend;
     const rib = grownFromBranch([v(0, 0, 0), v(0, length * 0.35, droop * 0.1), v(0, length * 0.7, droop * 0.45), v(0, length, droop)], branch, size * 0.08);
     const ribWidth = size * 0.03;
-    builder.tube(rib, (t) => ribWidth * (1 - 0.8 * t), 10, 5);
+    stem(rib, (t) => ribWidth * (1 - 0.8 * t), 10, 5);
     const curve = new THREE.CatmullRomCurve3(rib);
     const pairs = 7 + Math.floor(random() * 5);
     for (let i = 0; i < pairs; i++) {
@@ -193,6 +232,7 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
       const along = curve.getTangentAt(t);
       const leaflet = size * between(random, 0.28, 0.4) * (1 - 0.55 * t);
       const width = size * between(random, 0.05, 0.08) * (1 - 0.4 * t);
+      builder.along(t, 1);
       for (const side of [-1, 1]) {
         const out = v(side, 0, 0).addScaledVector(along, 0.45).normalize();
         const sag = v(0, -leaflet * between(random, 0.15, 0.35), leaflet * 0.25 * bend);
@@ -215,10 +255,10 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
       const angle = phase + twist * t;
       points.push(v(Math.cos(angle) * sway * t ** 1.5, length * t, Math.sin(angle) * sway * t ** 1.5));
     }
-    builder.tube(grownFromBranch(points, branch, size * 0.12), (t) => width * (1 - t) ** 1.2, 16, 6);
+    stem(grownFromBranch(points, branch, size * 0.12), (t) => width * (1 - t) ** 1.2, 16, 6);
   } else if (part === 'curl') {
     // A fiddlehead (#32, #34): a stem that rolls into a spiral at its tip, thinning as it winds.
-    const stem = size * between(random, 0.5, 0.9);
+    const stemLength = size * between(random, 0.5, 0.9);
     const roll = size * between(random, 0.18, 0.3);
     const turns = between(random, 1.2, 2);
     const width = size * between(random, 0.05, 0.09);
@@ -226,9 +266,9 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
     const points: THREE.Vector3[] = [];
     for (let i = 0; i <= 4; i++) {
       const t = i / 4;
-      points.push(v(lean * t * t, stem * t, 0));
+      points.push(v(lean * t * t, stemLength * t, 0));
     }
-    const center = v(lean + roll, stem, 0);
+    const center = v(lean + roll, stemLength, 0);
     const steps = 24;
     for (let i = 1; i <= steps; i++) {
       const theta = (i / steps) * turns * Math.PI * 2;
@@ -236,21 +276,21 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
       const angle = Math.PI - theta;
       points.push(v(center.x + Math.cos(angle) * r, center.y + Math.sin(angle) * r, (i / steps) * size * 0.05));
     }
-    builder.tube(grownFromBranch(points, branch, size * 0.1), (t) => width * (1 - 0.85 * t), 40, 6);
+    stem(grownFromBranch(points, branch, size * 0.1), (t) => width * (1 - 0.85 * t), 40, 6);
   } else if (part === 'bulb') {
     // A club or bud on a thin stalk, swelling then closing to a point (#34 clubs and buds, #27 pods).
     const length = size * between(random, 0.7, 1.2);
     const width = size * between(random, 0.12, 0.22);
     const bend = size * between(random, -0.2, 0.2);
     const points = [v(0, 0, 0), v(bend * 0.3, length * 0.4, 0), v(bend * 0.7, length * 0.75, 0), v(bend, length, 0)];
-    builder.tube(grownFromBranch(points, branch, size * 0.1), (t) => width * (0.15 + 0.85 * Math.sin(Math.PI * Math.min(Math.max((t - 0.35) / 0.65, 0), 1)) ** 0.8), 12, 7);
+    stem(grownFromBranch(points, branch, size * 0.1), (t) => width * (0.15 + 0.85 * Math.sin(Math.PI * Math.min(Math.max((t - 0.35) / 0.65, 0), 1)) ** 0.8), 12, 7);
   } else if (part === 'cup') {
     // A trumpet opening upward (#34 calla cups, #27 bells): a cone widening to an open rim, curving slightly.
     const length = size * between(random, 0.8, 1.2);
     const width = size * between(random, 0.25, 0.4);
     const bend = size * between(random, 0.05, 0.25);
     const points = [v(0, 0, 0), v(0, length * 0.4, bend * 0.2), v(0, length * 0.75, bend * 0.6), v(0, length, bend)];
-    builder.tube(grownFromBranch(points, branch, size * 0.1), (t) => width * (0.08 + t ** 1.6), 10, 8);
+    stem(grownFromBranch(points, branch, size * 0.1), (t) => width * (0.08 + t ** 1.6), 10, 8);
   } else if (part === 'blade') {
     // A long leaf, pointed, creased along its rib, arching back (#32 fern blades, #34 grass).
     const length = size * between(random, 0.8, 1.3);
@@ -272,10 +312,17 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
       builder.strip(points, (t) => width * 2 * t ** 0.3 * (1 - t) ** 0.8, 6, 0.3, v(Math.cos(angle), -Math.sin(angle), 0));
     }
   } else {
-    // pad: a round, cupped leaf on a short stalk, its rim slightly uneven (#34 lily pads and rosettes, #30 discs).
-    const stalk = size * between(random, 0.15, 0.4);
+    // pad: an umbrella (nms-umbrella-disc-trees): a stalk leaving the branch, turning upward and flaring into the
+    // center of a level disc whose rim droops, its edge slightly uneven. Proportions inferred, TUNABLE.
+    const stalk = size * between(random, 0.3, 0.6);
     const radius = size * between(random, 0.3, 0.5);
-    builder.tube([v(0, 0, 0), v(0, stalk * 0.5, 0), v(0, stalk, 0)], () => size * 0.03, 3, 5);
-    builder.disc(v(0, stalk + radius * 0.9, 0), radius, between(random, 0.15, 0.4), between(random, 0.03, 0.1), random() * Math.PI * 2, 10);
+    const width = size * 0.035;
+    const lead = branch.clone().multiplyScalar(stalk * 0.35);
+    const rise = lead.clone().addScaledVector(up, stalk * 0.35);
+    const tip = lead.clone().addScaledVector(up, stalk * 0.65);
+    builder.along(0, 0.4);
+    stem([v(0, 0, 0), lead, rise, tip], (t) => width * (1 + 2.5 * THREE.MathUtils.smoothstep(t, 0.7, 1)), 10, 6);
+    builder.along(0.4, 1);
+    builder.disc(tip, up, radius, -between(random, 0.15, 0.35), between(random, 0.03, 0.1), random() * Math.PI * 2, 12);
   }
 }

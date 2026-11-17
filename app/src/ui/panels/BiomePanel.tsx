@@ -1,5 +1,5 @@
 import { Fragment } from 'react';
-import { Accordion, DualHueSlider, EditableText, IconButton, LockButton, Select, Slider } from '../UIElements';
+import { Accordion, DualHueSlider, EditableText, HueSlider, IconButton, LockButton, Select, Slider } from '../UIElements';
 import { randomTreeGenes, varyTreeGenes, NO_LOCKS, SHAPE_GENE_RANGES, TREE_FAMILIES, TREE_FAMILY_OPTIONS, treeColors, type GeneGroup, type NumericShapeGene, type TreeFamily, type TreeGenes, type TreeSpecies } from '../../trees/treeGenes';
 import { LEAF_PART_OPTIONS, type LeafPart } from '../../trees/leafParts';
 import { HARMONY_RULES, harmonyFor } from '../../atmosphere/moonTexture';
@@ -199,9 +199,10 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
     const colors = treeColors({ ...genes, hueTurn: part === 'canopy' ? turn : genes.hueTurn, trunkOffset: part === 'trunk' ? turn - genes.hueTurn : genes.trunkOffset }, land);
     return (part === 'canopy' ? colors.canopyInner : colors.trunkBase).getStyle();
   };
-  const track = (part: 'canopy' | 'trunk') => {
+  // `from` shifts the track for a turn measured from another hue (Tip turns from the leaves' own).
+  const track = (part: 'canopy' | 'trunk', from = 0) => {
     const stops: string[] = [];
-    for (let turn = -180; turn <= 180; turn += 30) stops.push(swatch(turn, part));
+    for (let turn = -180; turn <= 180; turn += 30) stops.push(swatch(turn + from, part));
     return `linear-gradient(to right, ${stops.join(', ')})`;
   };
   const colors = treeColors(genes, land);
@@ -219,7 +220,7 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
         <span className="panel-section-title">Species</span>
         <span className="panel-title-actions">
           <IconButton icon={<SproutIcon />} label="New individual: the same species, a new seed" onClick={() => onChange({ seed: Math.floor(Math.random() * 1e9) })} />
-          <IconButton icon={<VaryIcon />} label="Vary: a cousin of this species, every gene nudged a little (locked groups kept)" onClick={() => onChange(varyTreeGenes(genes, selected.locks))} />
+          <IconButton icon={<VaryIcon />} label="Vary: a cousin of this species, some genes changed by chance at the Mutation rate (locked groups kept)" onClick={() => onChange(varyTreeGenes(genes, selected.locks, biome.mutationRate))} />
           <IconButton icon={<DiceIcon />} label="New species: rolls every gene (locked groups kept)" onClick={() => onChange(randomTreeGenes(genes, selected.locks, HARMONY_RULES.map((rule) => rule.offset)))} />
         </span>
       </div>
@@ -285,6 +286,14 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
         swatchColor={colors.canopyInner.getStyle()}
         secondSwatchColor={colors.canopyOuter.getStyle()}
         description="The canopy's gradient: the large handle colors its inner and lower leaves, the small one its outer and top ones. 0 is the land's own hue."
+      />
+      <HueSlider
+        label="Tip"
+        value={genes.tipTurn ?? 0}
+        onChange={(tipTurn) => onChange({ tipTurn })}
+        trackBackground={track('canopy', genes.hueTurn)}
+        swatchColor={colors.tipInner.getStyle()}
+        description="Each leaf part blends from its base to its tip toward this hue, measured from the leaves' color. Shows only up close; 0 keeps parts one color."
       />
       <DualHueSlider
         label="Trunk"

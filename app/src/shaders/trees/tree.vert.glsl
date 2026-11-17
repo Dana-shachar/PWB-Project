@@ -4,10 +4,12 @@ uniform float uIsLeaf;
 uniform vec3 uCanopyCenter; // local
 uniform float uNormalBend; // 0 the part's own normal, 1 the canopy sphere's
 attribute float aShade;
+attribute float aAlong; // leaf parts: base 0 to tip 1 (trees/leafParts.ts); trunk has none, reads 0
 varying vec3 vWorldPosition;
 varying vec3 vWorldNormal;
 varying vec3 vLocal;
 varying float vShade;
+varying float vAlong;
 
 void main() {
   vec3 objectNormal = normal;
@@ -20,5 +22,6 @@ void main() {
   vWorldNormal = normalize(mat3(modelMatrix) * objectNormal);
   vLocal = position;
   vShade = aShade;
+  vAlong = aAlong;
   gl_Position = projectionMatrix * viewMatrix * world;
 }

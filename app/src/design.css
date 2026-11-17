@@ -35,6 +35,8 @@
   --color-panel-bg: #49494a;
   --color-divider: rgba(255, 255, 255, 0.2);
   --color-tooltip-bg: #000; /* tooltips read as black, apart from the panel (Dana, 2026-10-21) */
+  --status-good: #4caf50; /* the design system's status set */
+  --status-error: #ff3333;
   --divider-weight: 0.5px;
   --color-btn-bg: #0c0c0d;
   --color-btn-hover-bg: #1a1a1a;
@@ -2245,4 +2247,48 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
 .track-bar--disabled > * {
   opacity: 0.35;
   pointer-events: none;
+}
+
+/* Toast: a short message at the bottom center of the window, styled as a tooltip, with a status dot and a close ×.
+   A good notice fades after 3 s; an error stays until closed (ui/Toast.tsx). */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  max-width: 420px;
+  padding: 8px 8px 8px 12px;
+  border-radius: var(--panel-radius);
+  background: var(--color-tooltip-bg);
+  border: var(--divider-weight) solid var(--color-divider);
+  color: var(--color-text);
+  font: 300 var(--font-size-sm) var(--font-ui);
+  z-index: 100;
+  animation: toast-in 0.15s ease-out;
+}
+.toast-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-good);
+}
+.toast--error .toast-dot {
+  background: var(--status-error);
+}
+.toast--error {
+  border-color: var(--status-error);
+}
+.toast-close {
+  flex: none;
+}
+@keyframes toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast { animation: none; }
 }

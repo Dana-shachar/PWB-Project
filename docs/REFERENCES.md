@@ -213,6 +213,7 @@
 **Evolving plant shapes from parameter genomes** · Sims 1991 · `method used`
 - The genotype is the parameter set, the phenotype the plant grown from it: 21 genetic parameters decide how fast each segment grows, when it buds and in which direction, "grown in arbitrarily small increments for smooth simulation of development". Mutation: genes normalized to 0 to 1, each copied with probability m of adding a random ±d (he used m = 0.2, d = 0.4); two parents can be mated.
 - Used: the biome's genes stored 0 to 1 and mutated by his rule, m as the Mutation rate slider, d = 0.4 (`[S87]`).
+- Used: tree species' Vary by the same rule, each gene a share of its own range, at the same Mutation rate (`trees/treeGenes.ts`).
 - *[Artificial Evolution for Computer Graphics, SIGGRAPH 1991](https://www.karlsims.com/papers/SimsSiggraph91.pdf). Read 2026-11-10*
 
 **Distance to the nearest seed on the GPU** · jump flooding, Rong and Tan 2006 · `method used`
@@ -229,6 +230,16 @@
 - MIT, npm `@dgreenheck/ez-tree` 1.1.0, three.js; a tree mesh generated at runtime from a seed and parameters (branch levels, per-level angle, children, gnarliness, length, radius, taper; twist, force; leaf count, size, angle). Source read 2026-11-16: no built-in detail levels; leaves are photo cards placed by public methods (`generateLeaves`, `generateLeaf`), each tilted from its branch by the leaf angle about its x axis.
 - Used: the trunk and limbs as built; our species genes set its options; a subclass takes over `generateLeaf` so our 3D leaf parts grow at its spots; our toon shader replaces its materials (`trees/`).
 - *[github.com/dgreenheck/ez-tree](https://github.com/dgreenheck/ez-tree). README read 2026-11-10, source 2026-11-16*
+
+**Detail by screen size** · Unity `LODGroup` · `method used`
+- A model switches detail by how much of the screen it covers, not by raw distance.
+- Used: each leaf part's tip color fades by camera distance in tree sizes (`DETAIL_NEAR`, `DETAIL_FAR` in `trees/treeLook.ts`, tunable).
+- *Unity manual, LOD Group. Recalled, not re-read*
+
+**Per-tree hue variation** · SpeedTree in Unity and Unreal · `planned`
+- Each tree's color is shifted a random amount toward a set hue, keyed to where it stands, to break up a forest of one model.
+- Planned for scattering trees, so a wood of one species doesn't look cloned.
+- *[Unity SpeedTreeImporter.hueVariation](https://docs.unity3d.com/2023.1/Documentation/ScriptReference/SpeedTreeImporter-hueVariation.html) · [Unreal SpeedTree Colour Variation node](https://kumquat-chameleon-a2p4.squarespace.com/blog/quick-dev-tip-76-ue4-ue5-speed-tree-colour-variation-node). Search results read 2026-11-17*
 
 **Tubes along a curve** · three.js `TubeGeometry` · `method used`
 - Rings placed along a curve on its Frenet frames (the curve's tangent, normal and binormal at each point).

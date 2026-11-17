@@ -1588,9 +1588,35 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - In a leaf's own frame +z points down once EZ-Tree tilts it, and drooping parts bent toward −z. Fixed, and Droop now sets the direction on purpose (−1 up, 1 down).
 
 ### [B197] Leaf parts join their branches badly · `wrong but workable`
-**🔴 Open 2026-11-17** · **Where:** `buildLeafPart` and `grownFromBranch` in `trees/leafParts.ts`
-- Dana: the joints look bad, worst with mixed parts (Antler, Cup, Spikes). Seen in her shots: every part starts at its own full width with an open end, while EZ-Tree's twigs taper almost to nothing at their tips, so a thick open rim sits on a hairline twig.
-- Proposed fix: the part's base starts at the branch's radius where it sits (EZ-Tree's sections carry it) and widens over its first stretch; the base end closed and sunk slightly into the branch.
+**✅ Fixed 2026-11-17** · **Where:** `buildLeafPart`, `jointed` in `trees/leafParts.ts`; `radiusAt`, `generateLeaves` in `trees/alienTree.ts`
+- Dana: the joints look bad, worst with mixed parts (Antler, Cup, Spikes). Every part started at its own full width with an open end, while EZ-Tree's twigs taper almost to nothing, so a thick open rim sat on a hairline twig.
+- Fixed: each leaf spot records the branch radius where it sits, interpolated between EZ-Tree's sections as EZ-Tree starts a child branch; every tube part starts at that radius, widens over its first 15% (`JOINT_STRETCH`, tunable), and its base is capped. No sink needed: EZ-Tree's leaf origin already lies on the branch's center line.
+
+### [B198] Pads floated beside the tree and stood upright · `wrong but workable`
+**✅ Fixed 2026-11-17** · **Where:** the pad in `buildLeafPart`, `disc` in `trees/leafParts.ts`
+- Dana: on an umbrella tree, a pad floated unconnected, and after Vary pads stood vertical. The disc was joined to its thin stalk by its rim and faced sideways in the leaf's frame.
+- Fixed, after `nms-umbrella-disc-trees`: the stalk leaves the branch, turns up, and flares into the center of a disc that faces world up, its rim drooping.
+
+### [B199] A failed save showed nothing · `wrong but workable`
+**✅ Fixed 2026-11-17** · **Where:** `useSaveStatus` in `projectSettings/saveStatus.ts`, `ui/Toast.tsx`
+- Dana couldn't tell whether a template had saved: no save reported its result, and an error only reached the console.
+- Fixed: Save, Save Template and a new template show a toast; autosave stays quiet unless it fails; a "Last saved" line sits under the Save button.
+
+### [B200] Leaf parts narrow to a pencil point on hairline twigs · `minor`
+**🔴 Open 2026-11-17** · **Where:** `jointed` in `trees/leafParts.ts`
+- Seen after a Vary that rolled very thin twigs: a part's base follows the branch radius down to almost nothing (`[B197]`'s fix). A part needs a visible minimum base width. Not measured yet.
+
+### [B201] Droop bends upright leaves sideways, not toward the ground · `wrong but workable`
+**🔴 Open 2026-11-17** · **Where:** `bend` uses in `buildLeafPart`, `trees/leafParts.ts`
+- Dana: fronds standing up don't droop. Droop bends toward the leaf frame's +z, not world down. Planned: pull toward the ground, as EZ-Tree's own force does.
+
+### [B202] Thick upward limbs stick out of the tree · `wrong but workable`
+**🔴 Open 2026-11-17** · **Where:** child branches in EZ-Tree (`generateChildBranches`), `applyTreeGenes` in `trees/treeGenes.ts`
+- Dana: when limbs are very thick and steep they poke out and look broken, in any family. Not measured yet.
+
+### [B203] Every tree color slider rebuilds the whole tree · `wrong but workable`
+**🔴 Open 2026-11-17** · **Where:** the rebuild key in `trees/TreeViewCanvas.tsx`
+- The key is all the genes, so Leaves, Trunk and Tip hues regenerate the tree instead of updating uniforms, against the performance rules. Fine in the Tree view, too slow for many trees; fix before scattering.
 
 ## 🏗️ Architecture
 

@@ -118,6 +118,7 @@ interface PanelProps {
   onCreateTemplate: () => void;
   onNewFromTemplate: (templateId: string) => void;
   onSaveProject: () => void;
+  lastSavedAt: number | null;
   onRenameProject: (name: string) => void;
   onDeleteProject: (id: string) => void;
   // Land chunk (Stage 07)
@@ -293,6 +294,7 @@ export function Panel({
   onCreateTemplate,
   onNewFromTemplate,
   onSaveProject,
+  lastSavedAt,
   onRenameProject,
   onDeleteProject,
   chunkResolution,
@@ -431,6 +433,7 @@ export function Panel({
             <button type="button" className="noise-add-layer-btn panel-btn-hug" onClick={onSaveProject}>
               {editingTemplate ? 'Save Template' : 'Save'}
             </button>
+            <p className="ui-note">{lastSavedAt === null ? 'Not saved yet this session' : `Last saved ${formatSaveTime(lastSavedAt)}`}</p>
           </Accordion>
         </div>
 
@@ -1180,4 +1183,11 @@ export function Panel({
       </div>
     </div>
   );
+}
+
+// Today's saves show the time; older ones the date too.
+function formatSaveTime(time: number): string {
+  const date = new Date(time);
+  const clock = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return date.toDateString() === new Date().toDateString() ? clock : `${date.toLocaleDateString()} ${clock}`;
 }

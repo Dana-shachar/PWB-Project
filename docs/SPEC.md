@@ -769,7 +769,9 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - A planet has a list of tree species, each a set of genes: EZ-Tree's settings for trunk and limbs, a leaf part (up to three mixed), droop, and two hue gradients. Trees are generated at runtime, never stored models.
 - Leaves are our own 3D parts at EZ-Tree's leaf spots, not its photo cards; trees are toon shaded with the planet's shade settings. Style rules in `BIOME-PLAN.md`, Trees.
-- Species are tuned in a Tree view, a fourth view beside Planet, Chunk and Split, which opens the Biome panel by itself. Randomizing has three levels (individual, Vary, new species) with group locks; Vary is the mutation evolution will use.
+- Species are tuned in a Tree view, a fourth view beside Planet, Chunk and Split, which opens the Biome panel by itself. Randomizing has three levels (individual, Vary, new species) with group locks; Vary is the mutation evolution will use, at the Evolution panel's Mutation rate.
+- Detail that only reads up close (each part's base-to-tip color) fades by the tree's size on screen, never drawn for far trees.
+- Shrubs and flowers come from the same species system: a shrub as bush-shaped genes, a flower as a stem with a flower-head part (to research before building).
 
 ### [S96] The World Clock: one year, a track per living system · `decided`
 **Decided:** 2026-11-16

@@ -7,6 +7,7 @@ import type { useErosion } from '../erosion/erosionControls';
 import type { useLandChunk } from '../voxel/landChunk';
 import { squareSizeKm } from '../voxel/areaSelect';
 import { DEFAULT_PLANET_SETTINGS, type usePlanetControls } from '../planet/planetControls';
+import { useSaveStatus } from './saveStatus';
 import {
   deleteProject as deleteProjectFromFirestore,
   listProjects,
@@ -112,6 +113,7 @@ export function useSaveProject({
   const [projects, setProjects] = useState<ProjectSummary[]>([]); // for the Project picker dropdown
   // The open planet is a template being edited: autosave is off, and only Save Template writes it.
   const [editingTemplate, setEditingTemplate] = useState(false);
+  const saveStatus = useSaveStatus();
 
   // Loads the signed-in user's most recently-edited saved planet, if any.
   // A brand-new user with no saved planets yet gets one created immediately,
@@ -188,13 +190,16 @@ export function useSaveProject({
   useEffect(() => {
     if (!currentUser || !hasLoadedRef.current || currentPlanetId === null || editingTemplate) return;
     const timeoutId = setTimeout(() => {
-      saveProjectToFirestore(currentUser.uid, currentPlanetId, {
-        name: currentPlanetName ?? 'Untitled',
-        layers,
-        strokeHistory,
-        erosionRun: currentErosionRun(erosion, landChunk.patch),
-        planetSettings: planetControls.currentSettings(),
-      });
+      void saveStatus.track(
+        saveProjectToFirestore(currentUser.uid, currentPlanetId, {
+          name: currentPlanetName ?? 'Untitled',
+          layers,
+          strokeHistory,
+          erosionRun: currentErosionRun(erosion, landChunk.patch),
+          planetSettings: planetControls.currentSettings(),
+        }),
+        null,
+      );
     }, 3000);
     return () => clearTimeout(timeoutId);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- erosion/landChunk/planetControls are read fresh each call (closes over the latest render's values at the moment the timeout fires, same debounce pattern layers/strokeHistory already use); adding every one of their fields to deps would just restart the 3s debounce on every scrub or slider drag, which isn't a meaningful edit to persist mid-drag.
@@ -313,15 +318,19 @@ export function useSaveProject({
   // Saves the open planet as a new template, without leaving it.
   async function handleCreateTemplate() {
     if (!currentUser) return;
-    await saveProjectToFirestore(currentUser.uid, newProjectId(), {
-      name: `${currentPlanetName ?? 'Untitled'} Template`,
-      layers,
-      strokeHistory,
-      erosionRun: currentErosionRun(erosion, landChunk.patch),
-      planetSettings: planetControls.currentSettings(),
-      template: true,
-    });
-    setProjects(await listProjects(currentUser.uid));
+    const name = `${currentPlanetName ?? 'Untitled'} Template`;
+    const saved = await saveStatus.track(
+      saveProjectToFirestore(currentUser.uid, newProjectId(), {
+        name,
+        layers,
+        strokeHistory,
+        erosionRun: currentErosionRun(erosion, landChunk.patch),
+        planetSettings: planetControls.currentSettings(),
+        template: true,
+      }),
+      `Template saved: ${name}`,
+    );
+    if (saved) setProjects(await listProjects(currentUser.uid));
   }
 
   // A new project copied from a template, numbered after it ("Flora 01"), then opened.
@@ -349,15 +358,18 @@ export function useSaveProject({
   // so there's no longer a name-prompt branch here.
   async function handleSave() {
     if (!currentUser || currentPlanetId === null) return;
-    await saveProjectToFirestore(currentUser.uid, currentPlanetId, {
-      name: currentPlanetName ?? 'Untitled',
-      layers,
-      strokeHistory,
-      erosionRun: currentErosionRun(erosion, landChunk.patch),
-      planetSettings: planetControls.currentSettings(),
-      template: editingTemplate, // Save Template while editing one
-    });
-    setProjects(await listProjects(currentUser.uid));
+    const saved = await saveStatus.track(
+      saveProjectToFirestore(currentUser.uid, currentPlanetId, {
+        name: currentPlanetName ?? 'Untitled',
+        layers,
+        strokeHistory,
+        erosionRun: currentErosionRun(erosion, landChunk.patch),
+        planetSettings: planetControls.currentSettings(),
+        template: editingTemplate, // Save Template while editing one
+      }),
+      editingTemplate ? 'Template saved' : 'Saved',
+    );
+    if (saved) setProjects(await listProjects(currentUser.uid));
   }
 
   // Inline rename (EditableText in Panel.tsx) — replaces the old prompt-
@@ -414,5 +426,8 @@ export function useSaveProject({
     handleEditTemplate,
     handleCreateTemplate,
     handleNewFromTemplate,
+    saveNotice: saveStatus.notice,
+    lastSavedAt: saveStatus.lastSavedAt,
+    dismissSaveNotice: saveStatus.dismiss,
   };
 }
