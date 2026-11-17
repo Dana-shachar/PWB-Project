@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { Accordion, DualHueSlider, EditableText, HueSlider, IconButton, LockButton, Select, Slider } from '../UIElements';
-import { randomTreeGenes, varyTreeGenes, NO_LOCKS, SHAPE_GENE_RANGES, TREE_FAMILIES, TREE_FAMILY_OPTIONS, treeColors, type GeneGroup, type NumericShapeGene, type TreeFamily, type TreeGenes, type TreeSpecies } from '../../trees/treeGenes';
+import { FIREFLIES_MAX, HUE_RANGE_MAX, randomTreeGenes, varyTreeGenes, NO_LOCKS, SHAPE_GENE_RANGES, TREE_FAMILIES, TREE_FAMILY_OPTIONS, treeColors, type GeneGroup, type NumericShapeGene, type TreeFamily, type TreeGenes, type TreeSpecies } from '../../trees/treeGenes';
 import { LEAF_PART_OPTIONS, type LeafPart } from '../../trees/leafParts';
 import { HARMONY_RULES, harmonyFor } from '../../atmosphere/moonTexture';
 import { LIFE_SATURATION, landMiddleColor, lifeColors, type BiomeSettings, type LifeType, type LifeTypeKey } from '../../biome/plantTypes';
@@ -192,7 +192,7 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
     setSpecies(next, id === biome.selectedSpecies ? next[0].id : biome.selectedSpecies);
   };
   const gene = (key: NumericShapeGene, label: string, step: number, description: string) => (
-    <Slider label={label} value={genes[key]} onChange={(value) => onChange({ [key]: value })} min={SHAPE_GENE_RANGES[key][0]} max={SHAPE_GENE_RANGES[key][1]} step={step} precision={step < 1 ? 2 : 0} description={description} />
+    <Slider label={label} value={genes[key] ?? TREE_FAMILIES[genes.family][key]} onChange={(value) => onChange({ [key]: value })} min={SHAPE_GENE_RANGES[key][0]} max={SHAPE_GENE_RANGES[key][1]} step={step} precision={step < 1 ? 2 : 0} description={description} />
   );
   // A color at an absolute hue turn from the land, as the canopy (inner) or the trunk (base) would take it.
   const swatch = (turn: number, part: 'canopy' | 'trunk') => {
@@ -274,6 +274,7 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
       {gene('leafCount', 'Leaves', 1, 'Leaves on each branch tip.')}
       {gene('leafSize', 'Leaf size', 0.1, 'How big each leaf card is.')}
       {gene('leafAngle', 'Leaf angle', 1, 'How far leaves lean from their branch, in degrees.')}
+      {gene('leafSizeRange', 'Size range', 0.01, 'How much leaf sizes differ within one tree: 0 all alike, 0.9 from a tenth of Leaf size to almost double.')}
       {gene('droop', 'Droop', 0.01, 'How fronds, blades and fans bend: below 0 they curl up, above 0 they droop down.')}
       <div className="panel-section-divider panel-section-divider--spaced" />
       {groupTitle('Color', 'color')}
@@ -307,6 +308,19 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
         secondSwatchColor={colors.trunkTop.getStyle()}
         description="The trunk's own gradient: the large handle colors its base, the small one its top. Harmony below sets the base from the leaves' color."
       />
+      <Slider
+        label="Color range"
+        unit="°"
+        value={genes.hueRange ?? 0}
+        onChange={(hueRange) => onChange({ hueRange })}
+        min={0}
+        max={HUE_RANGE_MAX}
+        step={1}
+        precision={0}
+        description="How far individuals of this species turn from its colors, each by its own amount. New individual shows another; 0 makes them all alike."
+      />
+      <Slider label="Glow" value={genes.glow ?? 0} onChange={(glow) => onChange({ glow })} min={0} max={1} step={0.01} precision={2} description="A soft light toward the leaf tips, in the Tip hue. It grows with the tree: a young tree glows faintly. 0 is none." />
+      <Slider label="Fireflies" value={genes.fireflies ?? 0} onChange={(fireflies) => onChange({ fireflies })} min={0} max={FIREFLIES_MAX} step={1} precision={0} description="Small lights drifting around the canopy, in the Tip hue, seen only up close. A young tree has fewer. 0 is none." />
       <Select
         label="Harmony"
         value={harmonyFor(genes.trunkOffset)}

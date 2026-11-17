@@ -92,13 +92,14 @@
 
 **Color**
 - Two gradients per species, read from walking distance: the canopy from inner and lower to outer and top, and the trunk from base to top, each a two-handle hue slider; Harmony sets the trunk from the leaves.
+- Each species has a Color range: individuals turn its hues by their own amount, from their seed (SpeedTree's hue variation), and a Size range for how much its leaves differ.
 - Up close only, each leaf part also blends from base to tip toward a Tip hue (as in `lowpoly-alien-flora-sheet`), fading out as the tree gets small on screen, as LOD groups switch by screen size (Dana, 2026-11-17, replacing her 11-16 "no per-leaf gradient"). Bands and bark texture stay out.
 - Hues come from the planet palette as turns off the land color.
 - Toon shading with the planet's own shade settings (`[S83]`), leaf normals bent outward from the canopy's center, leaves lit from both sides. Far trees flatten into silhouettes in the haze.
 
 **Wind and effects**
 - Trees sway with the Atmosphere's Wind, the way Crysis bends vegetation: the whole tree leans (more with height), and leaves flutter on their own. A small or young tree sways less than a tall one; a thick trunk barely sways, but its leaves always move (Dana, 2026-11-17).
-- Planned, one test each: a glow at the tips (a `glow` gene), selective bloom, floating lights around the canopy (a `lights` gene, near the camera only). All follow the tree's size, and later its age on the Trees track; glow and lights are genes that mutate per era and can start at 0.
+- ✅ Glow (a soft light toward the tips, in the Tip hue) and Fireflies (lights drifting around the canopy, near the camera only) are genes that mutate per era and can start at 0; both follow the tree's size, later its age on the Trees track. ❓ Selective bloom only if the glow needs a halo.
 - Effects cost only what is seen (Dana, 2026-11-17): wind and glow run in the tree shader, so only drawn trees pay; trees outside the view are culled; on the chunk the leaf flutter and floating lights run near the camera only, and bloom touches only the bloom layer.
 
 **Randomizing**

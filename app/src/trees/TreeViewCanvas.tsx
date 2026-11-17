@@ -25,7 +25,7 @@ const GAP_SHARE = 0.25; // space between neighboring trees around the ring, as a
 
 function disposeTree(tree: AlienTree) {
   tree.traverse((object) => {
-    if (object instanceof THREE.Mesh) {
+    if (object instanceof THREE.Mesh || object instanceof THREE.Points) {
       object.geometry.dispose();
       (object.material as THREE.Material).dispose();
     }

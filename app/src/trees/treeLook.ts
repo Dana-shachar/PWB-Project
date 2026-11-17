@@ -5,7 +5,8 @@ import treeVertexGlsl from '../shaders/trees/tree.vert.glsl?raw';
 import treeFragmentBody from '../shaders/trees/tree.frag.glsl?raw';
 import type { AlienTree } from './alienTree';
 import { buildLeafPart, PartBuilder, seededRandom, type LeafPart } from './leafParts';
-import { treeColors, type TreeGenes } from './treeGenes';
+import { growth, individualTurn, treeColors, type TreeGenes } from './treeGenes';
+import { applyFireflies, showAllFireflies, updateFireflies } from './treeLights';
 
 // A tree's look (BIOME-PLAN.md, Trees): 3D leaf parts at EZ-Tree's leaf spots, a two-hue gradient on the canopy and
 // on the trunk, toon shaded with the planet's own shade settings, a swollen trunk base.
@@ -35,10 +36,12 @@ const DETAIL_FAR = 16;
 // tall one, a thick trunk barely sways, but its leaves always move. Amounts inferred, TUNABLE.
 const WIND_DIRECTION = new THREE.Vector2(1, 0.35).normalize(); // no wind direction in the settings yet. TUNABLE
 const MAIN_BEND = 0.04; // the tip's sway at full wind, as a share of the tree's height. TUNABLE
-const MAX_LEAN = 0.12; // the tip never moves more than this share of the tree's height (Crysis: limit it). TUNABLE
+const MAX_LEAN = 0.25; // in high wind the tip moves at most this share of the tree's height (Crysis: limit it). TUNABLE
+const HIGH_WIND_FROM = 8; // Beaufort force where the high-wind protections start blending in. TUNABLE
+const HIGH_WIND_TO = 20; // and where they are fully on
 const SLENDER_REF = 12; // height over trunk radius at which a tree bends fully; stouter trees bend less. TUNABLE
 const LEAF_EDGE = 0.015; // leaf edge flutter at full wind, as a share of leaf size. TUNABLE
-const LEAF_BOB = 0.04; // whole-leaf up and down at full wind, as a share of leaf size. TUNABLE
+const LEAF_BOB = 0.06; // whole-leaf up and down at full wind, as a share of leaf size. TUNABLE
 const BEAUFORT_MAX_SPEED = 0.836 * 12 ** 1.5; // m/s at force 12 (the Beaufort formula v = 0.836 B^1.5)
 
 // The Beaufort force as a share of force 12's wind speed. Wind goes past 12 (to 40, Jupiter's jets): beyond force 12
@@ -51,12 +54,15 @@ export function windShare(beaufort: number): number {
 // Each frame: the clock and the wind, on both of a tree's materials.
 export function updateTreeWind(tree: AlienTree, time: number, beaufort: number): void {
   const share = windShare(beaufort);
+  const high = THREE.MathUtils.smoothstep(beaufort, HIGH_WIND_FROM, HIGH_WIND_TO);
   for (const mesh of [tree.branchesMesh, tree.leavesMesh]) {
     const uniforms = (mesh.material as THREE.ShaderMaterial).uniforms;
     if (!uniforms?.uTime) continue;
     uniforms.uTime.value = time;
     uniforms.uWind.value = share;
+    uniforms.uHighWind.value = high;
   }
+  updateFireflies(tree, time);
 }
 
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
@@ -127,12 +133,15 @@ function treeMaterial(isLeaf: boolean, colorA: THREE.Color, colorB: THREE.Color,
       uTrunkColorB: { value: new THREE.Color() },
       uTipColorB: { value: tipB },
       uTreeSize: { value: 1 },
+      uGlow: { value: 0 },
       uTime: { value: 0 },
       uWind: { value: 0 },
       uWindDirection: { value: WIND_DIRECTION.clone() },
       uBendHeight: { value: 1 },
       uMainBend: { value: 0 },
       uMaxLean: { value: 0 },
+      uLeafSize: { value: 1 },
+      uHighWind: { value: 0 },
       uLeafEdge: { value: 0 },
       uLeafBob: { value: 0 },
       uDetailNear: { value: DETAIL_NEAR },
@@ -162,11 +171,12 @@ export function showFullDetail(tree: AlienTree): void {
   const uniforms = (tree.leavesMesh.material as THREE.ShaderMaterial).uniforms;
   uniforms.uDetailNear.value = 1e9;
   uniforms.uDetailFar.value = 2e9;
+  showAllFireflies(tree);
 }
 
 // Replaces a freshly generated tree's leaves with our parts and both materials with the toon gradient shader.
 export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: string, lighting: TreeLighting): void {
-  const colors = treeColors(genes, landColor);
+  const colors = treeColors({ ...genes, hueTurn: genes.hueTurn + individualTurn(genes) }, landColor); // this individual's colors
   const branches = tree.branchesMesh;
   const leaves = tree.leavesMesh;
   (branches.material as THREE.Material).dispose();
@@ -199,9 +209,14 @@ export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: stri
     material.uniforms.uBendHeight.value = 1 / height;
     material.uniforms.uMainBend.value = MAIN_BEND * height * stiffness;
     material.uniforms.uMaxLean.value = MAX_LEAN * height;
+    material.uniforms.uLeafSize.value = genes.leafSize;
     material.uniforms.uLeafEdge.value = LEAF_EDGE * genes.leafSize;
     material.uniforms.uLeafBob.value = LEAF_BOB * genes.leafSize;
   }
+  // Glow and fireflies grow with the tree; both in the tips' hue.
+  leafMaterial.uniforms.uGlow.value = (genes.glow ?? 0) * growth(genes);
+  const lightColor = colors.tipOuter.clone().lerp(new THREE.Color(1, 1, 1), 0.45);
+  applyFireflies(tree, genes, lightColor, leafMaterial.uniforms.uTreeSize.value, DETAIL_NEAR, DETAIL_FAR);
   branches.material = trunkMaterial;
   leaves.material = leafMaterial;
 }
