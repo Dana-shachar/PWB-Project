@@ -18,6 +18,7 @@
 > **How to work (Dana, 2026-11-15 and 11-16).** Claude acts as tech lead: flag problems and recommend, but every change still needs Dana's explicit go on a numbered plan (a new requirement added to a plan is not a go). Look at Dana's references in `docs/references/` and her shots before proposing a look; imitate them, never stamp generic flat shapes. Prioritize what reads from walking height; skip costly close-up detail. Don't remove existing controls or features without saying so. Few options in menus: replace weak ones instead of adding. Keep replies short.
 >
 > **Next, in order.**
+> 0. Before class on Wed 2026-11-18, 10:10 am (Session 13 in `WEEKLY-PUSHES.md`, text already updated): copy this week's screenshots into `docs/screenshots/` (the World Clock dock, the Tree view, a palm crown; ask Dana for the shots or take them in Claude's tab) and link them in the entry; make this week's architecture diagram (new `clock/` and `trees/` modules) with the local script as a new dated SVG, linked from the README and the entry.
 > 1. Tree joints (`[B197]`): each leaf part's base starts at the branch's own radius where it sits (read from EZ-Tree's sections in `generateLeaves`) and widens over its first stretch; the base end closed and sunk slightly into the branch. Proposed to Dana 2026-11-17, not yet approved. Then check Vary, New species, locks and Leaf angle by clicking (built, not clicked yet).
 > 2. Trees on the chunk: placement per ground patch from the life grid (Horizon Zero Dawn's method, as rocks), woods versus lone trees by a Spread gene (seed dispersal, `REFERENCES.md`), then a Trees track on the World Clock with humus (Cordonnier) and mutation per era with Vary's rule, shown in the Tree view. Plan first ("Plan to the final" item 4).
 > 3. Stored eras and Play, after trees and before recording (item 2). 4. The run popup.
@@ -111,6 +112,9 @@
 
 - 📌 Light follows camera defaults to on, which swings rock shadows on pan (`[B186]`): default it off in `scene/sceneControls.ts` (Dana flips it per project for now).
 - 📌 Chunk depth and chunk resolution are not saved with the planet (lighting now is, `[S88]`).
+- 📌 Tree view: with several species the turntable turns the whole row, so trees hide behind each other at some angles; arrange them in a ring (2026-11-17).
+- 📌 The wider section gap around dividers (`panel-section-divider--spaced`) is on the Biome panel only; offered for the Atmosphere and Erosion panels, Dana hasn't answered (2026-11-16).
+- 📌 A Trees track on the World Clock needs a draggable start, not only an end (trees start from a certain year, Dana 2026-11-16).
 - 📌 Leftovers in code: `chunkDepth` and `changeDepth` in `landChunk.ts`, `uWaterDeepest` in the wall shader, `chunkBaseDepth`'s unused parameter. The Height slider's meters in Chunk view understate what's drawn.
 - 📌 Brighter fill light: Dana liked the colors and wants it brighter (⚠️ the luminance scaling can push shadows toward a very saturated sky color).
 - 📌 Moon look (plan waiting for a go): stronger glow, less halo distance, more inner glow, in `drawMoon`; the Texture slider's hover text still describes the old scale.

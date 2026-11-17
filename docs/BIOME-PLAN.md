@@ -80,7 +80,7 @@
 
 ### 🌳 Trees
 
-*How trees look, from Dana's references (`docs/references/nms-*`, `gris-forest`, `outer-wilds-forest`, and her No Man's Sky shots of 2026-11-16). Approved by Dana, 2026-11-16.*
+*How trees look, from Dana's references in `docs/references/`: `nms-trees-clumps-and-spiky-cones` (clumps, spiky cones), `nms-purple-palm-grove` (the complexity level to aim for: big leaves, simple trunks), `nms-umbrella-disc-trees`, `nms-tentacle-tree-pink-sky` and `nms-alien-trees` (tendrils), `nms-curled-fern-plants` and `lowpoly-alien-flora-sheet` (curls, cups, clubs, pads: simple shapes with volume and a gradient), `lowpoly-tree-kit-wireframe` (how low the geometry can be), `nms-glowing-alien-flora`, `nms-tree-moss-cliffs`, `gris-forest`, `outer-wilds-forest`. Approved by Dana, 2026-11-16.*
 
 **Shape**
 - A few big, readable parts; a tree reads from dozens of leaves, not thousands.
