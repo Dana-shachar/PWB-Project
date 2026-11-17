@@ -603,10 +603,10 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Water is drawn per point where the lake level stands above the ground, so shores follow the terrain (Cordonnier et al. 2016, 6.2).
 
 ### [S68] Erosion has one set of settings for the planet and the chunk · `decided`
-**Changed:** 2026-11-08: the Climate System section is gone; Erosion stays in the Atmosphere stage's right panel.
+**Changed:** 2026-11-17: Erosion moved into Climate, where rainfall is set (Dana); before, it sat in the Atmosphere stage's right panel.
 **Decided:** 2026-11-03
 
-- Erosion sits in the Atmosphere stage's right panel, under the moons: one switch and one set of settings for the planet and the land chunk. Sea level comes from Water and rain from Climate, never set twice.
+- Erosion is a nested section of Climate, with its switch in the header: one switch and one set of settings for the planet and the land chunk. Sea level comes from Water and rain from Climate, never set twice.
 - There is no Run button: a change reruns only what it affects.
 
 ### [S69] Ocean is only the sea · `decided`
@@ -616,10 +616,10 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 - Lakes and rivers follow the Climate's liquid (Dry has none), not the Water switch, as Gaea and World Machine keep the sea apart from lakes.
 
 ### [S70] Time has its own World Clock · `decided`
-**Decided:** 2026-11-03, revised 2026-11-16
+**Decided:** 2026-11-03, revised 2026-11-17
 
-- The World Clock is its own section, the one clock the living systems share (`[S96]`).
-- Erosion is not on it: it keeps its own timeline, shown with the Atmosphere section where its panel lives. Gaea and World Machine treat erosion as a step that builds the terrain, with a Duration and no world timeline. Dana, 2026-11-16.
+- The World Clock is its own section, the one clock the living systems and erosion share (`[S96]`); no other section has a timeline.
+- Erosion is a track on it while switched on: its length is Duration, its saved checkpoints the ready bands, and the playhead shows erosion at that year from its saved run. Dana, 2026-11-17, replacing erosion's own timeline (2026-11-16).
 
 ### [S71] A chunk area is drawn on the planet · `decided`
 **Decided:** 2026-11-03, refined 2026-11-04

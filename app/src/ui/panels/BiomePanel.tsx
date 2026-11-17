@@ -258,12 +258,13 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
       {gene('height', 'Height', 0.5, 'How tall the trunk grows.')}
       {gene('trunkRadius', 'Trunk width', 0.05, 'How thick the trunk is at its base.')}
       {gene('baseSwell', 'Base swell', 0.01, 'How much the trunk swells at its base. 0 keeps it straight.')}
-      {gene('limbs', 'Limbs', 1, 'Main limbs off the trunk.')}
-      {gene('limbAngle', 'Limb angle', 1, 'How far the limbs lean out from the trunk, in degrees.')}
-      {gene('limbLength', 'Limb length', 0.5, 'How long the main limbs are.')}
-      {gene('limbStart', 'Limb start', 0.01, 'Where along the trunk the limbs begin: 0 at the ground, 1 at the top.')}
+      {/* A crown has no limbs (applyTreeGenes), so its limb sliders would do nothing. */}
+      {genes.family !== 'crown' && gene('limbs', 'Limbs', 1, 'Main limbs off the trunk.')}
+      {genes.family !== 'crown' && gene('limbAngle', 'Limb angle', 1, 'How far the limbs lean out from the trunk, in degrees.')}
+      {genes.family !== 'crown' && gene('limbLength', 'Limb length', 0.5, 'How long the main limbs are.')}
+      {genes.family !== 'crown' && gene('limbStart', 'Limb start', 0.01, 'Where along the trunk the limbs begin: 0 at the ground, 1 at the top.')}
       {gene('gnarliness', 'Gnarl', 0.01, 'How much the limbs curl and twist.')}
-      {gene('twigs', 'Twigs', 1, 'Branches on each limb. 0 keeps bare limbs.')}
+      {genes.family !== 'crown' && gene('twigs', 'Twigs', 1, 'Branches on each limb. 0 keeps bare limbs.')}
       <div className="panel-section-divider panel-section-divider--spaced" />
       {groupTitle('Leaves', 'leaves')}
       <Select label="Leaf part" value={genes.leafPart} onChange={(leafPart) => onChange({ leafPart: leafPart as LeafPart })} options={LEAF_PART_OPTIONS} description="What each leaf is: a twisting tendril, a fiddlehead curl, a creased blade, a fan of fingers, a cupped pad, a trumpet cup, or a club on a stalk. Each one varies in size, bend and twist." />

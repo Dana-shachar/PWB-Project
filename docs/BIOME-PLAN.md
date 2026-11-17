@@ -96,6 +96,11 @@
 - Hues come from the planet palette as turns off the land color.
 - Toon shading with the planet's own shade settings (`[S83]`), leaf normals bent outward from the canopy's center, leaves lit from both sides. Far trees flatten into silhouettes in the haze.
 
+**Wind and effects**
+- Trees sway with the Atmosphere's Wind, the way Crysis bends vegetation: the whole tree leans (more with height), and leaves flutter on their own. A small or young tree sways less than a tall one; a thick trunk barely sways, but its leaves always move (Dana, 2026-11-17).
+- Planned, one test each: a glow at the tips (a `glow` gene), selective bloom, floating lights around the canopy (a `lights` gene, near the camera only). All follow the tree's size, and later its age on the Trees track; glow and lights are genes that mutate per era and can start at 0.
+- Effects cost only what is seen (Dana, 2026-11-17): wind and glow run in the tree shader, so only drawn trees pay; trees outside the view are culled; on the chunk the leaf flutter and floating lights run near the camera only, and bloom touches only the bloom layer.
+
 **Randomizing**
 - Three levels: New individual (a new seed), Vary (a cousin: Sims's mutation, each gene changing with the Evolution panel's Mutation rate by up to ±0.4 of its range, the rule evolution will use per era), New species (rolled from a family's start, many big leaves never together). A padlock on Shape, Leaves and Color keeps that group.
 

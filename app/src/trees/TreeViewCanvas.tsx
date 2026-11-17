@@ -1,10 +1,11 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { PauseIcon, PlayIcon } from '../ui/icons';
 import * as THREE from 'three';
 import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
 import { controls } from '../scene/controls';
 import { applyTreeGenes, type TreeSpecies } from './treeGenes';
-import { applyTreeLook, type TreeLighting } from './treeLook';
+import { applyTreeLook, showFullDetail, updateTreeWind, type TreeLighting } from './treeLook';
 import { AlienTree } from './alienTree';
 
 interface TreeViewCanvasProps {
@@ -13,13 +14,14 @@ interface TreeViewCanvasProps {
   species: TreeSpecies[];
   landColor: string; // the planet's land color, which the species' hues turn from
   shade: Omit<TreeLighting, 'lightDirection' | 'lightIntensity' | 'ambient' | 'diffuseWrap'>; // the planet's toon shade
+  wind: number; // the Atmosphere's Wind, Beaufort 0 to 12
 }
 
 // The Tree view's own light, from the same side as its sun lamp below. TUNABLE
 const VIEW_LIGHT = { lightDirection: new THREE.Vector3(30, 60, 20), lightIntensity: 1, ambient: 0.55, diffuseWrap: 0.3 };
 
 const TURN_SPEED = 0.6; // OrbitControls' autoRotateSpeed: about one turn every 100 s at 60 fps
-const GAP_SHARE = 0.25; // space between neighboring trees, as a share of the widest one
+const GAP_SHARE = 0.25; // space between neighboring trees around the ring, as a share of the widest one
 
 function disposeTree(tree: AlienTree) {
   tree.traverse((object) => {
@@ -32,12 +34,31 @@ function disposeTree(tree: AlienTree) {
 
 // The Tree view: every species whose eye is on, side by side on a ground disc, slowly turning, to tune species in
 // isolation as SpeedTree's modeler and EZ-Tree's own app do. Drawn by the shared renderer like the planet and the chunk.
-export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor, shade }: TreeViewCanvasProps) {
+export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor, shade, wind }: TreeViewCanvasProps) {
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const orbitRef = useRef<OrbitControls | null>(null);
   const groundRef = useRef<THREE.Mesh | null>(null);
   const treesRef = useRef(new Map<string, { tree: AlienTree; key: string }>());
+  const windRef = useRef(wind);
+  windRef.current = wind;
+  const framedRef = useRef(''); // the shown species last framed: editing a gene keeps the camera where it is
+  const [turning, setTurning] = useState(true);
+  const turnBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // OrbitControls captures the pointer on the viewport's own pointerdown, so a press must stop at the button natively
+  // (React's handler runs after the viewport's), or the release lands on the viewport and the click is lost.
+  useEffect(() => {
+    const btn = turnBtnRef.current;
+    if (!btn) return;
+    const stop = (event: PointerEvent) => event.stopPropagation();
+    btn.addEventListener('pointerdown', stop);
+    return () => btn.removeEventListener('pointerdown', stop);
+  }, []);
+
+  useEffect(() => {
+    if (orbitRef.current) orbitRef.current.autoRotate = turning;
+  }, [turning]);
 
   useEffect(() => {
     const element = viewportRef.current;
@@ -47,7 +68,7 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
     const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 2000);
     camera.position.set(40, 20, 40);
     const orbit = controls(camera, element);
-    orbit.autoRotate = true;
+    orbit.autoRotate = turning;
     orbit.autoRotateSpeed = TURN_SPEED;
     scene.add(new THREE.HemisphereLight(0xffffff, 0x404040, 1.2));
     const sun = new THREE.DirectionalLight(0xffffff, 2);
@@ -61,7 +82,17 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
     orbitRef.current = orbit;
     groundRef.current = ground;
     const trees = treesRef.current;
-    sharedRenderer.registerView('tree', { scene, camera, elementRef: viewportRef, onFrame: () => orbit.update() });
+    const clock = new THREE.Clock();
+    sharedRenderer.registerView('tree', {
+      scene,
+      camera,
+      elementRef: viewportRef,
+      onFrame: () => {
+        orbit.update();
+        const time = clock.getElapsedTime();
+        trees.forEach(({ tree }) => updateTreeWind(tree, time, windRef.current));
+      },
+    });
     return () => {
       sharedRenderer.unregisterView('tree');
       orbit.dispose();
@@ -102,16 +133,24 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
         applyTreeGenes(entry.tree, each.genes);
         entry.tree.generate();
         applyTreeLook(entry.tree, each.genes, landColor, { ...VIEW_LIGHT, ...shade });
+        showFullDetail(entry.tree);
         entry.key = key;
       }
     }
-    // A row along x, each tree spaced by the widest one's footprint.
+    // A ring on the ground disc, neighbors spaced by the widest footprint, so the turntable shows each in turn.
     const widths = shown.map((each) => {
       const size = new THREE.Box3().setFromObject(trees.get(each.id)!.tree).getSize(new THREE.Vector3());
       return Math.max(size.x, size.z, 1);
     });
     const step = Math.max(1, ...widths) * (1 + GAP_SHARE);
-    shown.forEach((each, i) => trees.get(each.id)!.tree.position.set((i - (shown.length - 1) / 2) * step, 0, 0));
+    const ringRadius = shown.length > 1 ? step / (2 * Math.sin(Math.PI / shown.length)) : 0;
+    shown.forEach((each, i) => {
+      const angle = (i / shown.length) * Math.PI * 2;
+      trees.get(each.id)!.tree.position.set(Math.cos(angle) * ringRadius, 0, Math.sin(angle) * ringRadius);
+    });
+    const shownKey = shown.map((each) => each.id).join(',');
+    if (shownKey === framedRef.current) return;
+    framedRef.current = shownKey;
 
     // Fits the trees' bounding sphere in the narrower of the two view angles, keeping the viewing angle.
     const box = new THREE.Box3();
@@ -129,5 +168,17 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
     camera.updateProjectionMatrix();
   }, [species, landColor, shade]);
 
-  return null;
+  return (
+    <button
+      type="button"
+      className={'gumball-btn gumball-btn--square tree-view-turn-btn' + (turning ? ' gumball-btn--active' : '')}
+      title={turning ? 'Stop turning' : 'Turn the trees'}
+      aria-label={turning ? 'Stop turning' : 'Turn the trees'}
+      aria-pressed={turning}
+      ref={turnBtnRef}
+      onClick={() => setTurning((on) => !on)}
+    >
+      {turning ? <PauseIcon /> : <PlayIcon />}
+    </button>
+  );
 }

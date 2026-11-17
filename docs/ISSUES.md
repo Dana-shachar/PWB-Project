@@ -1603,12 +1603,26 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Fixed: Save, Save Template and a new template show a toast; autosave stays quiet unless it fails; a "Last saved" line sits under the Save button.
 
 ### [B200] Leaf parts narrow to a pencil point on hairline twigs · `minor`
-**🔴 Open 2026-11-17** · **Where:** `jointed` in `trees/leafParts.ts`
-- Seen after a Vary that rolled very thin twigs: a part's base follows the branch radius down to almost nothing (`[B197]`'s fix). A part needs a visible minimum base width. Not measured yet.
+**✅ Fixed 2026-11-17** · **Where:** `jointed` in `trees/leafParts.ts`
+- Seen after a Vary that rolled very thin twigs: a part's base followed the branch radius down to almost nothing (`[B197]`'s fix). Fixed: the base never narrows below 40% of the part's own width (`MIN_BASE_SHARE`).
 
 ### [B201] Droop bends upright leaves sideways, not toward the ground · `wrong but workable`
-**🔴 Open 2026-11-17** · **Where:** `bend` uses in `buildLeafPart`, `trees/leafParts.ts`
-- Dana: fronds standing up don't droop. Droop bends toward the leaf frame's +z, not world down. Planned: pull toward the ground, as EZ-Tree's own force does.
+**✅ Fixed 2026-11-17** · **Where:** `gravityCurve` in `trees/leafParts.ts`
+- Dana: fronds standing up didn't droop; droop bent toward the leaf frame's +z, not world down.
+- Fixed as EZ-Tree bends a branch under its force: each step turns the part toward world down by an equal angle, up to 110° at Droop 1 (`MAX_DROOP_DEGREES`). Fronds, blades and fans; pads use the same curve pulled up.
+
+### [B204] Pads stacked into a column on Crown trees · `wrong but workable`
+**✅ Fixed 2026-11-17** · **Where:** the pad in `buildLeafPart`, `trees/leafParts.ts`
+- Dana: pads on a crown looked like a lamp. Every stalk rose along its branch, which on a crown is the trunk tip, so all discs stacked on one axis, under wide funnels.
+- Fixed after `nms-umbrella-disc-trees`: each stalk reaches out along its leaf's direction and arches up at a random length, ending in a small collar; discs are shallow bowls.
+
+### [B205] A hard color line where leaf parts meet their branch · `minor`
+**✅ Fixed 2026-11-17** · **Where:** `shaders/trees/tree.frag.glsl`
+- Leaf parts took the canopy's colors from their base, the branch the trunk's gradient. Fixed: a part's first 15% blends from the trunk gradient at its height to the leaf color (`JOINT_BLEND`).
+
+### [B206] The Tree view's pause button ignored real clicks · `wrong but workable`
+**✅ Fixed 2026-11-17** · **Where:** `TreeViewCanvas` in `trees/TreeViewCanvas.tsx`
+- OrbitControls captures the pointer on the viewport's pointerdown, so the release never reached the button; React's stop runs after the viewport's own listener. Fixed: a native pointerdown listener on the button stops the press first. A script click had hidden it in testing.
 
 ### [B202] Thick upward limbs stick out of the tree · `wrong but workable`
 **🔴 Open 2026-11-17** · **Where:** child branches in EZ-Tree (`generateChildBranches`), `applyTreeGenes` in `trees/treeGenes.ts`

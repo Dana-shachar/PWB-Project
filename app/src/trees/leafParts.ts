@@ -36,15 +36,18 @@ export class PartBuilder {
   positions: number[] = [];
   shades: number[] = []; // per-vertex brightness jitter, so leaves of one tree differ a little
   alongs: number[] = []; // per-vertex share from the part's base (0) to its tip (1), for the tip color
+  phases: number[] = []; // per-leaf wind phase, so every leaf moves differently (Crysis's green channel)
   indices: number[] = [];
   private transform = new THREE.Matrix4();
   private shade = 1;
+  private phase = 0;
   private alongFrom = 0;
   private alongTo = 1;
 
-  begin(transform: THREE.Matrix4, shade: number) {
+  begin(transform: THREE.Matrix4, shade: number, phase: number) {
     this.transform.copy(transform);
     this.shade = shade;
+    this.phase = phase;
     this.along(0, 1);
   }
 
@@ -58,6 +61,7 @@ export class PartBuilder {
     const world = point.clone().applyMatrix4(this.transform);
     this.positions.push(world.x, world.y, world.z);
     this.shades.push(this.shade);
+    this.phases.push(this.phase);
     this.alongs.push(this.alongFrom + (this.alongTo - this.alongFrom) * share);
     return this.positions.length / 3 - 1;
   }
@@ -151,22 +155,43 @@ const v = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 const between = (random: () => number, min: number, max: number) => min + random() * (max - min);
 
 // EZ-Tree tilts each leaf from its branch by the leaf angle about the leaf's x axis, so in the leaf's own frame the
-// branch runs along (0, cos a, -sin a), and +z points down and away: drooping parts bend toward +z. A part's first stretch follows it, so the part grows out of the branch smoothly.
+// branch runs along (0, cos a, -sin a). Drooping parts bend toward world down (gravityCurve). A part's first stretch follows it, so the part grows out of the branch smoothly.
 function branchDirection(leafAngleDegrees: number): THREE.Vector3 {
   const a = THREE.MathUtils.degToRad(leafAngleDegrees);
   return v(0, Math.cos(a), -Math.sin(a));
 }
 
 const JOINT_STRETCH = 0.15; // share of a part's length over which its base widens from the branch's radius. TUNABLE
+const MIN_BASE_SHARE = 0.4; // a part's base never narrows below this share of its own width, on hairline twigs ([B200]). TUNABLE
+const MAX_DROOP_DEGREES = 110; // how far Droop 1 turns a part toward the ground over its length. TUNABLE
 
 // A part's radius starting at the branch's own radius and easing into the part's width over its first stretch,
 // as EZ-Tree starts a child branch from its parent's radius ([B197]).
 function jointed(radius: (share: number) => number, branchRadius: number): (share: number) => number {
+  const base = Math.max(branchRadius, radius(0) * MIN_BASE_SHARE);
   return (share) => {
     if (share >= JOINT_STRETCH) return radius(share);
     const blend = THREE.MathUtils.smoothstep(share, 0, JOINT_STRETCH);
-    return THREE.MathUtils.lerp(branchRadius, radius(share), blend);
+    return THREE.MathUtils.lerp(base, radius(share), blend);
   };
+}
+
+// A path bending toward the ground as it grows, the way EZ-Tree bends a branch under its force: each step turns the
+// direction toward world down (`up` negated; up when `droop` is negative) by an equal angle ([B201]).
+function gravityCurve(start: THREE.Vector3, length: number, droop: number, up: THREE.Vector3, steps = 6): THREE.Vector3[] {
+  const target = up.clone().multiplyScalar(droop >= 0 ? -1 : 1).normalize();
+  const dir = start.clone().normalize();
+  const turn = new THREE.Quaternion().setFromUnitVectors(dir, target);
+  const step = THREE.MathUtils.degToRad(MAX_DROOP_DEGREES * Math.min(Math.abs(droop), 1)) / steps;
+  const orient = new THREE.Quaternion();
+  const points = [v(0, 0, 0)];
+  const point = v(0, 0, 0);
+  for (let i = 0; i < steps; i++) {
+    orient.rotateTowards(turn, step);
+    point.addScaledVector(dir.clone().applyQuaternion(orient), length / steps);
+    points.push(point.clone());
+  }
+  return points;
 }
 
 // Prepends a short lead along the branch, shifting the part's own path to start where the lead ends.
@@ -220,8 +245,8 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
   if (part === 'frond') {
     // A palm frond (#29, #34): an arching rib with paired pointed leaflets drooping off it, shrinking toward the tip.
     const length = size * between(random, 0.9, 1.3);
-    const droop = size * between(random, 0.3, 0.6) * bend;
-    const rib = grownFromBranch([v(0, 0, 0), v(0, length * 0.35, droop * 0.1), v(0, length * 0.7, droop * 0.45), v(0, length, droop)], branch, size * 0.08);
+    const rib = grownFromBranch(gravityCurve(v(0, 1, 0), length, between(random, 0.6, 1) * bend, up), branch, size * 0.08);
+    const down = up.clone().negate();
     const ribWidth = size * 0.03;
     stem(rib, (t) => ribWidth * (1 - 0.8 * t), 10, 5);
     const curve = new THREE.CatmullRomCurve3(rib);
@@ -235,7 +260,7 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
       builder.along(t, 1);
       for (const side of [-1, 1]) {
         const out = v(side, 0, 0).addScaledVector(along, 0.45).normalize();
-        const sag = v(0, -leaflet * between(random, 0.15, 0.35), leaflet * 0.25 * bend);
+        const sag = along.clone().multiplyScalar(-leaflet * between(random, 0.15, 0.35)).addScaledVector(down, leaflet * 0.3 * bend);
         const points = [base, base.clone().addScaledVector(out, leaflet * 0.5).addScaledVector(sag, 0.3), base.clone().addScaledVector(out, leaflet).add(sag)];
         builder.strip(points, (u) => width * 2.2 * u ** 0.3 * (1 - u) ** 0.8, 4, 0.4, along);
       }
@@ -295,8 +320,7 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
     // A long leaf, pointed, creased along its rib, arching back (#32 fern blades, #34 grass).
     const length = size * between(random, 0.8, 1.3);
     const width = size * between(random, 0.15, 0.3);
-    const arch = size * between(random, 0.1, 0.45) * bend;
-    const points = [v(0, 0, 0), v(0, length * 0.35, arch * 0.15), v(0, length * 0.7, arch * 0.55), v(0, length, arch)];
+    const points = gravityCurve(v(0, 1, 0), length, between(random, 0.3, 1) * bend, up);
     builder.strip(points, (t) => width * 2.2 * t ** 0.4 * (1 - t) ** 0.9, 8, between(random, 0.3, 0.6));
   } else if (part === 'fan') {
     // Narrow pointed fingers spreading from one base, arching out (#34 teal fan, palm fronds).
@@ -307,22 +331,21 @@ export function buildLeafPart(builder: PartBuilder, part: LeafPart, size: number
       const length = size * between(random, 0.6, 1);
       const width = size * between(random, 0.05, 0.1);
       const dir = v(Math.sin(angle), Math.cos(angle), 0);
-      const droop = size * between(random, 0.1, 0.3) * bend;
-      const points = [v(0, 0, 0), dir.clone().multiplyScalar(length * 0.4), dir.clone().multiplyScalar(length * 0.75).add(v(0, 0, droop * 0.4)), dir.clone().multiplyScalar(length).add(v(0, 0, droop))];
+      const points = gravityCurve(dir, length, between(random, 0.3, 0.8) * bend, up);
       builder.strip(points, (t) => width * 2 * t ** 0.3 * (1 - t) ** 0.8, 6, 0.3, v(Math.cos(angle), -Math.sin(angle), 0));
     }
   } else {
-    // pad: an umbrella (nms-umbrella-disc-trees): a stalk leaving the branch, turning upward and flaring into the
-    // center of a level disc whose rim droops, its edge slightly uneven. Proportions inferred, TUNABLE.
-    const stalk = size * between(random, 0.3, 0.6);
+    // pad: an umbrella (nms-umbrella-disc-trees): a stalk reaching out along the leaf's own direction and arching up
+    // (gravityCurve pulled upward), flaring into the center of a level disc, a shallow bowl, its edge slightly uneven.
+    // Each reach is random, so discs spread out at different heights instead of stacking. Proportions inferred, TUNABLE.
+    const stalk = size * between(random, 0.5, 1);
     const radius = size * between(random, 0.3, 0.5);
     const width = size * 0.035;
-    const lead = branch.clone().multiplyScalar(stalk * 0.35);
-    const rise = lead.clone().addScaledVector(up, stalk * 0.35);
-    const tip = lead.clone().addScaledVector(up, stalk * 0.65);
+    const path = grownFromBranch(gravityCurve(v(0, 1, 0), stalk, -between(random, 0.6, 1), up), branch, size * 0.08);
+    const tip = path[path.length - 1];
     builder.along(0, 0.4);
-    stem([v(0, 0, 0), lead, rise, tip], (t) => width * (1 + 2.5 * THREE.MathUtils.smoothstep(t, 0.7, 1)), 10, 6);
+    stem(path, (t) => width * (1 + 1.2 * THREE.MathUtils.smoothstep(t, 0.85, 1)), 12, 6); // a small collar under the disc, as in the reference
     builder.along(0.4, 1);
-    builder.disc(tip, up, radius, -between(random, 0.15, 0.35), between(random, 0.03, 0.1), random() * Math.PI * 2, 12);
+    builder.disc(tip, up, radius, between(random, 0.1, 0.25), between(random, 0.03, 0.1), random() * Math.PI * 2, 12);
   }
 }

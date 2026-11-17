@@ -30,6 +30,35 @@ const NORMAL_BEND = 0.6; // how far leaf normals turn toward the canopy sphere's
 const DETAIL_NEAR = 8;
 const DETAIL_FAR = 16;
 
+// Wind (GPU Gems 3 ch. 16, Crysis): a main bend of the whole tree and a detail bend of the leaves, both scaled by the
+// Atmosphere's Wind. Each tree's own stiffness, from Dana's rule (2026-11-17): a small or young tree sways less than a
+// tall one, a thick trunk barely sways, but its leaves always move. Amounts inferred, TUNABLE.
+const WIND_DIRECTION = new THREE.Vector2(1, 0.35).normalize(); // no wind direction in the settings yet. TUNABLE
+const MAIN_BEND = 0.04; // the tip's sway at full wind, as a share of the tree's height. TUNABLE
+const MAX_LEAN = 0.12; // the tip never moves more than this share of the tree's height (Crysis: limit it). TUNABLE
+const SLENDER_REF = 12; // height over trunk radius at which a tree bends fully; stouter trees bend less. TUNABLE
+const LEAF_EDGE = 0.015; // leaf edge flutter at full wind, as a share of leaf size. TUNABLE
+const LEAF_BOB = 0.04; // whole-leaf up and down at full wind, as a share of leaf size. TUNABLE
+const BEAUFORT_MAX_SPEED = 0.836 * 12 ** 1.5; // m/s at force 12 (the Beaufort formula v = 0.836 B^1.5)
+
+// The Beaufort force as a share of force 12's wind speed. Wind goes past 12 (to 40, Jupiter's jets): beyond force 12
+// the response keeps rising but tapers (1 + log of the excess), so leaves don't fly apart. Taper inferred, TUNABLE.
+export function windShare(beaufort: number): number {
+  const share = (0.836 * Math.max(beaufort, 0) ** 1.5) / BEAUFORT_MAX_SPEED;
+  return share <= 1 ? share : 1 + 0.5 * Math.log(share);
+}
+
+// Each frame: the clock and the wind, on both of a tree's materials.
+export function updateTreeWind(tree: AlienTree, time: number, beaufort: number): void {
+  const share = windShare(beaufort);
+  for (const mesh of [tree.branchesMesh, tree.leavesMesh]) {
+    const uniforms = (mesh.material as THREE.ShaderMaterial).uniforms;
+    if (!uniforms?.uTime) continue;
+    uniforms.uTime.value = time;
+    uniforms.uWind.value = share;
+  }
+}
+
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
 
 const fragmentShader = terrainGlsl + '\n' + landLayersGlsl + '\n' + treeFragmentBody;
@@ -52,7 +81,7 @@ function buildLeaves(tree: AlienTree, genes: TreeGenes): THREE.BufferGeometry {
     const spot = spots[Math.floor(index)];
     const random = seededRandom(spot.seed);
     transform.compose(spot.origin, spot.orientation, new THREE.Vector3(1, 1, 1));
-    builder.begin(transform, 1 + (random() - 0.5) * 2 * SHADE_JITTER);
+    builder.begin(transform, 1 + (random() - 0.5) * 2 * SHADE_JITTER, random());
     const up = WORLD_UP.clone().applyQuaternion(spot.orientation.clone().invert());
     buildLeafPart(builder, partFor(spot.seed, genes), spot.size, random, genes.leafAngle, genes.droop, spot.branchRadius, up);
   }
@@ -60,6 +89,7 @@ function buildLeaves(tree: AlienTree, genes: TreeGenes): THREE.BufferGeometry {
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(builder.positions, 3));
   geometry.setAttribute('aShade', new THREE.Float32BufferAttribute(builder.shades, 1));
   geometry.setAttribute('aAlong', new THREE.Float32BufferAttribute(builder.alongs, 1));
+  geometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(builder.phases, 1));
   geometry.setIndex(builder.indices);
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
@@ -93,8 +123,18 @@ function treeMaterial(isLeaf: boolean, colorA: THREE.Color, colorB: THREE.Color,
       uColorA: { value: colorA },
       uColorB: { value: colorB },
       uTipColorA: { value: tipA },
+      uTrunkColorA: { value: new THREE.Color() },
+      uTrunkColorB: { value: new THREE.Color() },
       uTipColorB: { value: tipB },
       uTreeSize: { value: 1 },
+      uTime: { value: 0 },
+      uWind: { value: 0 },
+      uWindDirection: { value: WIND_DIRECTION.clone() },
+      uBendHeight: { value: 1 },
+      uMainBend: { value: 0 },
+      uMaxLean: { value: 0 },
+      uLeafEdge: { value: 0 },
+      uLeafBob: { value: 0 },
       uDetailNear: { value: DETAIL_NEAR },
       uDetailFar: { value: DETAIL_FAR },
       uCanopyCenter: { value: new THREE.Vector3() },
@@ -117,6 +157,13 @@ function treeMaterial(isLeaf: boolean, colorA: THREE.Color, colorB: THREE.Color,
   });
 }
 
+// The Tree view tunes species, so it always shows the close-up detail, however small the trees are on screen.
+export function showFullDetail(tree: AlienTree): void {
+  const uniforms = (tree.leavesMesh.material as THREE.ShaderMaterial).uniforms;
+  uniforms.uDetailNear.value = 1e9;
+  uniforms.uDetailFar.value = 2e9;
+}
+
 // Replaces a freshly generated tree's leaves with our parts and both materials with the toon gradient shader.
 export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: string, lighting: TreeLighting): void {
   const colors = treeColors(genes, landColor);
@@ -132,6 +179,9 @@ export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: stri
   const trunkMaterial = treeMaterial(false, colors.trunkBase, colors.trunkTop, lighting);
   trunkMaterial.uniforms.uTrunkTop.value = Math.max(branches.geometry.boundingBox?.max.y ?? 1, 1e-3);
   const leafMaterial = treeMaterial(true, colors.canopyInner, colors.canopyOuter, lighting, colors.tipInner, colors.tipOuter);
+  leafMaterial.uniforms.uTrunkColorA.value = colors.trunkBase;
+  leafMaterial.uniforms.uTrunkColorB.value = colors.trunkTop;
+  leafMaterial.uniforms.uTrunkTop.value = trunkMaterial.uniforms.uTrunkTop.value;
   const canopy = leaves.geometry.boundingBox;
   if (canopy && !canopy.isEmpty()) {
     const sphere = canopy.getBoundingSphere(new THREE.Sphere());
@@ -141,6 +191,16 @@ export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: stri
     leafMaterial.uniforms.uCanopyTop.value = canopy.max.y;
     const whole = canopy.clone().union(branches.geometry.boundingBox ?? canopy);
     leafMaterial.uniforms.uTreeSize.value = Math.max(whole.getBoundingSphere(new THREE.Sphere()).radius, 1e-3);
+  }
+  // Both materials bend the same way, so leaves stay on their branches.
+  const height = Math.max(trunkMaterial.uniforms.uTrunkTop.value, leaves.geometry.boundingBox?.max.y ?? 0, 1e-3);
+  const stiffness = THREE.MathUtils.clamp(genes.height / Math.max(genes.trunkRadius, 1e-3) / SLENDER_REF, 0.15, 1.5);
+  for (const material of [trunkMaterial, leafMaterial]) {
+    material.uniforms.uBendHeight.value = 1 / height;
+    material.uniforms.uMainBend.value = MAIN_BEND * height * stiffness;
+    material.uniforms.uMaxLean.value = MAX_LEAN * height;
+    material.uniforms.uLeafEdge.value = LEAF_EDGE * genes.leafSize;
+    material.uniforms.uLeafBob.value = LEAF_BOB * genes.leafSize;
   }
   branches.material = trunkMaterial;
   leaves.material = leafMaterial;

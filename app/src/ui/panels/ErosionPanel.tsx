@@ -25,8 +25,8 @@ interface ErosionPanelProps {
 // Steepness grows with Gully Size: measured 85 degrees at 1 and 88 at 2.15. Limits the worst walls. Inferred, TUNABLE.
 const GULLY_SIZE_MAX = 1.5;
 
-// Erosion lives in the Climate System's right panel with no Run button: a change reruns only what it affects. Sea
-// level comes from Ocean, rain from Climate; the engines' other rates keep their tuned defaults (Dana, 2026-11-03).
+// Erosion is a nested section of Climate, where rainfall is set (Dana, 2026-11-17), with no Run button: a change reruns
+// only what it affects. Its years play on the World Clock as a track. Sea level comes from Water, rain from Climate.
 export function ErosionPanel({ enabled, onEnabledChange, durationYears, onDurationYearsChange, strength, onStrengthChange, filterShape, onFilterShapeChange, waterProgress, meshResolution, result }: ErosionPanelProps) {
   // A run computed far finer than the chunk is drawn is real but mostly
   // invisible, which is indistinguishable from a run that did nothing. Say
@@ -34,8 +34,8 @@ export function ErosionPanel({ enabled, onEnabledChange, durationYears, onDurati
   const outrunsMesh = result !== null && meshResolution !== null && meshResolution < result.outcome.gridResolution / 2;
 
   return (
-    <div className="panel-section">
-      <Accordion title="Erosion" headerSwitch={{ value: enabled, onChange: onEnabledChange, label: 'Erosion on or off' }}>
+    <>
+      <Accordion title="Erosion" nested headerSwitch={{ value: enabled, onChange: onEnabledChange, label: 'Erosion on or off' }}>
         <Slider
           label="Duration"
           unit="years"
@@ -157,6 +157,6 @@ export function ErosionPanel({ enabled, onEnabledChange, durationYears, onDurati
           </p>
         )}
       </Accordion>
-    </div>
+    </>
   );
 }

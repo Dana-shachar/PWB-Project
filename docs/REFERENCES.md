@@ -231,6 +231,31 @@
 - Used: the trunk and limbs as built; our species genes set its options; a subclass takes over `generateLeaf` so our 3D leaf parts grow at its spots; our toon shader replaces its materials (`trees/`).
 - *[github.com/dgreenheck/ez-tree](https://github.com/dgreenheck/ez-tree). README read 2026-11-10, source 2026-11-16*
 
+**Wind on vegetation: main and detail bending** · Tiago Sousa (Crytek), GPU Gems 3 ch. 16, 2007 · `method used`
+- Wind is split in two: a main bend that leans the whole plant along the wind, more with height, and a detail bend that moves the leaves. Each instance has its own stiffness; the wind's variation over time is done outside the shader.
+- Main bend (listing 16-3): `bf = h · bendScale + 1; bf = bf²; bf = bf² − bf`; the position moves along the wind by `wind · bf`, then is rescaled to its original distance from the plant's base, so the motion stays a limited swing.
+- Detail bend (listing 16-2): phases from the object's position, a per-leaf phase and the vertex position; four triangle waves at frequencies 1.975, 0.793, 0.375, 0.193, each smoothed by `x²(3 − 2x)` (listing 16-1); edges move along the normal, leaves up and down, scaled by painted edge and leaf stiffness.
+- Used (`shaders/trees/tree.vert.glsl`): both bends as written, except edges move along one direction per leaf instead of each vertex's normal (our parts are tubes closing to a point, which the normal split open); the vertex phase is scaled down (`VERTEX_PHASE`, tree units are larger than Crysis's meters, so the raw product shook every vertex on its own) and the leaf waves run at half speed (`DETAIL_TIME`), so leaves sway instead of flicker; gusts (the wind variation Crysis does on the CPU, SpeedTree's gust settings) as two slow smoothed waves multiplied, so short bursts break calm stretches, up to 1 + `GUST_PEAK` times the calm sway at force 12; the lean capped at `MAX_LEAN` of the tree's height, as the chapter warns; leaf parts bend over their first 40% and move rigidly beyond, so discs don't stretch; the smoothed waves are centered (−1 to 1), since the listing's run 0 to 1 and pushed every leaf one way; the base-to-tip share stands in for the painted stiffness, a per-leaf random phase for the painted phase; the main bend's tip sway is a share of the tree's height times its stiffness (Dana's rule: small trees sway less, thick trunks barely sway, leaves always move; `MAIN_BEND`, `SLENDER_REF`, `LEAF_EDGE`, `LEAF_BOB` tunable); a slow smoothed wave for gusts. Full chapter pasted by Dana 2026-11-17.
+- *[GPU Gems 3, ch. 16](https://developer.nvidia.com/gpugems/gpugems3/part-iii-rendering/chapter-16-vegetation-procedural-animation-and-shading-crysis). Read 2026-11-17*
+
+**Procedural tree wind as a random process** · Renaldas Zioma (EA DICE), GPU Gems 3 ch. 6, 2007 · `method used`
+- Tree motion is treated as random rather than simulated; a heavier, less elastic tree gets a smaller amplitude and lower frequency.
+- Used: the stiffness rule behind each tree's sway (stouter trees bend less).
+- *[GPU Gems 3, ch. 6](https://developer.nvidia.com/gpugems/gpugems3/part-i-geometry/chapter-6-gpu-generated-procedural-wind-animations-trees). Search summary 2026-11-17, chapter not read in full*
+
+**Beaufort wind speed** · WMO formula `v = 0.836 · B^1.5` m/s · `method used`
+- Used: the Atmosphere's Wind (Beaufort 0 to 12) becomes a share of force 12's speed for the trees' sway (`windShare` in `trees/treeLook.ts`). Recalled, not re-read.
+
+**Selective bloom** · three.js `UnrealBloomPass`, example `webgl_postprocessing_unreal_bloom_selective` · `planned`
+- Only objects on a bloom layer glow; reported pitfalls with transparent backgrounds and render target formats.
+- Planned for tree glow, in the color grade's EffectComposer, its frame cost measured.
+- *[UnrealBloomPass docs](https://threejs.org/docs/pages/UnrealBloomPass.html) · [selective bloom thread](https://discourse.threejs.org/t/selective-unrealbloompass-issues/9331). Search results 2026-11-17*
+
+**Floating lights as points** · three.js `Points`, `threejs-fireflies` · `planned`
+- A points cloud with a custom shader, additive blending and depth writing off, drifting by a time uniform.
+- Planned for floating lights around canopies, near the camera only.
+- *[threejs-fireflies](https://uithub.com/thebenezer/threejs-fireflies) · [Points glow thread](https://discourse.threejs.org/t/three-points-glowing-effect-neon/1193). Search results 2026-11-17*
+
 **Detail by screen size** · Unity `LODGroup` · `method used`
 - A model switches detail by how much of the screen it covers, not by raw distance.
 - Used: each leaf part's tip color fades by camera distance in tree sizes (`DETAIL_NEAR`, `DETAIL_FAR` in `trees/treeLook.ts`, tunable).
@@ -588,7 +613,7 @@
 
 **Erosion as a terrain step, not a timeline** · Gaea, World Machine · `method used`
 - Both run erosion as a node or device with a Duration that sets how long it simulates; neither documents a world timeline for it.
-- Used: erosion keeps its own timeline, off the World Clock (`[S70]`).
+- Considered for erosion's own timeline (2026-11-16); replaced 2026-11-17 by Dana's call to put erosion on the World Clock as a track (`[S70]`).
 - *[Gaea Erosion](https://docs.quadspinner.com/Reference/Erosion/Erosion.html) · [World Machine Erosion](https://help.world-machine.com/topic/device-erosion/). Search summary 2026-11-16*
 
 **Time zoom slider between two mountain buttons** · After Effects, Timeline panel · `UX pattern`

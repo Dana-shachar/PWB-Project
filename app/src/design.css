@@ -1054,6 +1054,13 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   height: 100%;
   box-sizing: border-box;
 }
+/* The Tree view's turntable on/off, the square gumball button at the viewport's bottom left (trees/TreeViewCanvas.tsx). */
+.tree-view-turn-btn {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 2;
+}
 /* The square icon variant of .gumball-btn (same frame and states): accent-filled icon. */
 .gumball-btn--square {
   flex: none;

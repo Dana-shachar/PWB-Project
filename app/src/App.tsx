@@ -23,7 +23,8 @@ import { useSettingsHistory } from './projectSettings/settingsHistory';
 import type { SavedErosionRun } from './firebase/storage';
 import { engineRainfall, planetErosionPasses, useErosion, useErosionAutoRun } from './erosion/erosionControls';
 import { randomClimate } from './atmosphere/atmosphereSettings';
-import { ErosionTimeline } from './erosion/ErosionTimeline';
+import { ErosionPanel } from './ui/panels/ErosionPanel';
+import { erosionTrack, useErosionAtYear } from './erosion/erosionClock';
 import { useWorldClock, type ClockTrack } from './clock/worldClock';
 import { WorldClockDock } from './clock/WorldClockDock';
 import { TreeViewCanvas } from './trees/TreeViewCanvas';
@@ -218,13 +219,32 @@ function App() {
       // A regrowth in progress, filling from the start toward the playhead's year.
       progress: landChunk.lifeProgress ? { toYear: lifeYear, share: landChunk.lifeProgress.share, secondsLeft: landChunk.lifeProgress.secondsLeft, label: 'Growing life' } : null,
     },
+    ...(erosion.enabled ? [erosionTrack(erosion)] : []),
   ];
+  // The playhead's year for the whole clock; unset, it sits at the last track's end.
+  const clockYear = worldClock.year ?? Math.max(1, ...clockTracks.map((track) => track.start + track.length));
+  useErosionAtYear(erosion, worldClock.year);
 
   return (
     <div className="app-shell">
       <Toast notice={project.saveNotice} onDismiss={project.dismissSaveNotice} />
     <div className="app-layout">
       <Panel
+        erosionSection={
+          <ErosionPanel
+            enabled={erosion.enabled}
+            onEnabledChange={erosion.setEnabled}
+            durationYears={erosion.durationYears}
+            onDurationYearsChange={erosion.setDurationYears}
+            strength={erosion.strength}
+            onStrengthChange={erosion.setStrength}
+            filterShape={erosion.filterShape}
+            onFilterShapeChange={erosion.updateFilterShape}
+            waterProgress={waterProgress}
+            meshResolution={planetControls.displayMode === 'voxel' ? landChunk.resolution : null}
+            result={erosion.result}
+          />
+        }
         ambientLight={sceneControls.ambientLight}
         onAmbientLightChange={sceneControls.setAmbientLight}
         lightDirX={sceneControls.lightDirX}
@@ -471,7 +491,7 @@ function App() {
             </div>
             {/* The Tree view: one tree species on a turntable, tuned by its genes (Biome, Trees). */}
             <div ref={treeViewportRef} className={'land-chunk-viewport' + (landChunk.viewMode === 'tree' ? '' : ' viewport-pane--hidden')}>
-              <TreeViewCanvas viewportRef={treeViewportRef} sharedRenderer={sharedViewportRenderer} species={planetControls.biome.treeSpecies} landColor={landMiddleColor(planetControls.colorStops)} shade={treeShade} />
+              <TreeViewCanvas viewportRef={treeViewportRef} sharedRenderer={sharedViewportRenderer} species={planetControls.biome.treeSpecies} landColor={landMiddleColor(planetControls.colorStops)} shade={treeShade} wind={planetControls.drawnAtmosphere.wind} />
             </div>
             <ViewModeControl
               viewMode={landChunk.viewMode}
@@ -534,9 +554,6 @@ function App() {
         onDetailAmountChange={planetControls.setDetailAmount}
         isMapExpanded={isMapExpanded}
         onMapExpandedChange={setIsMapExpanded}
-        erosion={erosion}
-        waterProgress={waterProgress}
-        chunkMeshResolution={planetControls.displayMode === 'voxel' ? landChunk.resolution : null}
         width={rightPanel.width}
       />
     </div>
@@ -549,14 +566,8 @@ function App() {
         style={{ height: Math.max(activeStage === 'clock' ? clockDock.height : timelineDock.height, dockFitHeight) }}
       >
         {activeStage === 'clock' ? (
-          <WorldClockDock tracks={clockTracks} year={lifeYear} onYearChange={worldClock.setYear} />
-        ) : (
-          <ErosionTimeline
-            result={erosion.result}
-            onScrub={erosion.scrubTo}
-            isStale={erosion.isStale}
-          />
-        )}
+          <WorldClockDock tracks={clockTracks} year={clockYear} onYearChange={worldClock.setYear} />
+        ) : null}
       </div>
       </>
     )}

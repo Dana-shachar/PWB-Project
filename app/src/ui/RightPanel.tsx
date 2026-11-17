@@ -1,6 +1,5 @@
 import type { RefObject } from 'react';
 import { NoisePanel } from './NoisePanel';
-import { ErosionPanel } from './panels/ErosionPanel';
 import { StagePlaceholder } from './panels/StagePlaceholder';
 import { AtmospherePanel } from './panels/AtmospherePanel';
 import { BiomePanel } from './panels/BiomePanel';
@@ -10,8 +9,6 @@ import type { AtmosphereSettings } from '../atmosphere/atmosphereSettings';
 import { PIPELINE_STAGES, type PipelineStage } from './pipelineStages';
 import type { NoiseLayer, StrokeRecord } from '../map/heightmap';
 import type { SceneCanvasHandle } from '../scene/SceneCanvas';
-import type { useErosion } from '../erosion/erosionControls';
-import type { WaterProgress } from '../rivers/drainageControls';
 
 interface RightPanelProps {
   // Which stage's detail to show — selected via the left panel's pipeline
@@ -50,14 +47,6 @@ interface RightPanelProps {
   onDetailAmountChange: (value: number) => void;
   isMapExpanded: boolean;
   onMapExpandedChange: (value: boolean) => void;
-  // The Erosion stage's whole feature, passed as one bundle rather than ten
-  // separate props — it is one hook's result being handed to one panel, and
-  // this component only forwards it.
-  erosion: ReturnType<typeof useErosion>;
-  // The planet water's run, for the Erosion section's progress bar (rivers/drainageControls.ts).
-  waterProgress: WaterProgress | null;
-  // Null unless the chunk is voxel, the only style whose mesh limits what a run shows.
-  chunkMeshResolution: number | null;
   // User-resizable, not content-driven — see ui/panelResize.ts and App.tsx's
   // resize handle.
   width: number;
@@ -68,30 +57,12 @@ interface RightPanelProps {
 // (ui/Panel.tsx's `activeStage`/`onStageChange`). Terrain gets the existing
 // full `NoisePanel` and Erosion its own; every remaining stage is still an
 // empty placeholder until that stage's own feature gets built.
-export function RightPanel({ width, activeStage, atmosphere, onAtmosphereChange, biome, onBiomeChange, biomeColorStops, erosion, waterProgress, chunkMeshResolution, ...props }: RightPanelProps) {
+export function RightPanel({ width, activeStage, atmosphere, onAtmosphereChange, biome, onBiomeChange, biomeColorStops, ...props }: RightPanelProps) {
   return (
     <div className="panel-outer" style={{ width }}>
       <div className="panel-content">
         {activeStage === 'terrain' && <NoisePanel {...props} />}
-        {activeStage === 'atmosphere' && (
-          <>
-            <AtmospherePanel atmosphere={atmosphere} onAtmosphereChange={onAtmosphereChange} />
-            <div className="panel-section-divider" />
-            <ErosionPanel
-              enabled={erosion.enabled}
-              onEnabledChange={erosion.setEnabled}
-              durationYears={erosion.durationYears}
-              onDurationYearsChange={erosion.setDurationYears}
-              strength={erosion.strength}
-              onStrengthChange={erosion.setStrength}
-              filterShape={erosion.filterShape}
-              onFilterShapeChange={erosion.updateFilterShape}
-              waterProgress={waterProgress}
-              meshResolution={chunkMeshResolution}
-              result={erosion.result}
-            />
-          </>
-        )}
+        {activeStage === 'atmosphere' && <AtmospherePanel atmosphere={atmosphere} onAtmosphereChange={onAtmosphereChange} />}
         {activeStage === 'biome' && <BiomePanel biome={biome} onBiomeChange={onBiomeChange} colorStops={biomeColorStops} />}
         {activeStage !== 'terrain' && activeStage !== 'atmosphere' && activeStage !== 'biome' && (
           <StagePlaceholder label={PIPELINE_STAGES.find((stage) => stage.key === activeStage)!.label} />

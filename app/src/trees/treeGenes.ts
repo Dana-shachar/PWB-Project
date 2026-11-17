@@ -4,7 +4,7 @@ import { LEAF_PART_OPTIONS, type LeafPart } from './leafParts';
 
 // A tree species' shape and colors as genes: EZ-Tree's settings (MIT, procedural at runtime from a seed), only the ones
 // that change the tree from walking distance (BIOME-PLAN.md, Trees). Mutated per era later (Sims 1991).
-export type TreeFamily = 'clumps' | 'cone' | 'umbrella' | 'fan' | 'crown';
+export type TreeFamily = 'clumps' | 'cone' | 'umbrella' | 'fan' | 'crown' | 'shrub';
 
 export interface TreeGenes {
   family: TreeFamily;
@@ -47,6 +47,7 @@ export const TREE_FAMILY_OPTIONS: { value: TreeFamily; label: string }[] = [
   { value: 'umbrella', label: 'Umbrella' },
   { value: 'fan', label: 'Fan' },
   { value: 'crown', label: 'Crown' },
+  { value: 'shrub', label: 'Shrub' },
 ];
 
 type ShapeGenes = Omit<TreeGenes, 'family' | 'seed' | 'hueTurn' | 'leafOffset' | 'trunkOffset' | 'trunkTopOffset' | 'tipTurn'>;
@@ -54,7 +55,7 @@ export type NumericShapeGene = Exclude<keyof ShapeGenes, 'leafPart' | 'leafPart2
 
 // Each numeric shape gene's range, the sliders' and New species' own. Inferred, TUNABLE.
 export const SHAPE_GENE_RANGES: Record<NumericShapeGene, [number, number]> = {
-  height: [2, 40], trunkRadius: [0.2, 4], limbs: [1, 40], limbAngle: [0, 90], limbLength: [0.5, 25], limbStart: [0, 1],
+  height: [0.5, 40], trunkRadius: [0.2, 4], limbs: [1, 40], limbAngle: [0, 90], limbLength: [0.5, 25], limbStart: [0, 1],
   gnarliness: [0, 1], twigs: [0, 10], leafCount: [0, 30], leafSize: [0.5, 12], leafAngle: [0, 90], baseSwell: [0, 1.5], partMix: [0, 1], droop: [-1, 1],
 };
 
@@ -66,6 +67,9 @@ export const TREE_FAMILIES: Record<TreeFamily, ShapeGenes> = {
   umbrella: { height: 10, trunkRadius: 0.8, limbs: 5, limbAngle: 25, limbLength: 12, limbStart: 0.5, gnarliness: 0.15, twigs: 0, leafCount: 1, leafSize: 7, leafAngle: 90, leafPart: 'pad', leafPart2: 'none', leafPart3: 'none', partMix: 0, droop: 0.7, baseSwell: 0.3 },
   fan: { height: 14, trunkRadius: 1, limbs: 8, limbAngle: 55, limbLength: 4, limbStart: 0.92, gnarliness: 0.1, twigs: 0, leafCount: 4, leafSize: 7, leafAngle: 40, leafPart: 'fan', leafPart2: 'none', leafPart3: 'none', partMix: 0, droop: 0.7, baseSwell: 0.8 },
   // A single trunk with a star of leaves at its top, as palms grow (#29). Limb genes are unused: it has no limbs.
+  // EZ-Tree's bush presets (bush_1): almost no trunk, many limbs from the ground at a steep angle, two twig levels;
+  // scaled to shrub size. TUNABLE
+  shrub: { height: 0.5, trunkRadius: 0.5, limbs: 7, limbAngle: 22, limbLength: 5, limbStart: 0, gnarliness: 0.1, twigs: 3, leafCount: 5, leafSize: 2, leafAngle: 40, leafPart: 'blade', leafPart2: 'none', leafPart3: 'none', partMix: 0, droop: 0.4, baseSwell: 0 },
   crown: { height: 14, trunkRadius: 0.7, limbs: 1, limbAngle: 45, limbLength: 4, limbStart: 0.9, gnarliness: 0.15, twigs: 0, leafCount: 14, leafSize: 9, leafAngle: 70, leafPart: 'frond', leafPart2: 'none', leafPart3: 'none', partMix: 0, droop: 0.7, baseSwell: 0.6 },
 };
 

@@ -6,6 +6,8 @@ uniform vec3 uColorA; // canopy inner, or trunk base
 uniform vec3 uColorB; // canopy outer, or trunk top
 uniform vec3 uTipColorA; // leaf tips' pair, the canopy's turned by the tip hue
 uniform vec3 uTipColorB;
+uniform vec3 uTrunkColorA; // leaves: the trunk's gradient, so a part's base matches its branch
+uniform vec3 uTrunkColorB;
 uniform float uTreeSize; // the tree's bounding radius, for the detail fade
 uniform float uDetailNear; // camera distance in tree sizes: full per-part detail nearer, none past far
 uniform float uDetailFar;
@@ -32,6 +34,7 @@ varying float vAlong;
 
 const float TOON_DETAIL = 0.5; // as rock.frag.glsl
 const float HEIGHT_WEIGHT = 0.6; // canopy gradient: how much height counts against distance out from the center. TUNABLE
+const float JOINT_BLEND = 0.15; // share of a leaf part, from its base, that blends from its branch's color. TUNABLE
 
 void main() {
   float gradient;
@@ -50,6 +53,9 @@ void main() {
     float sizes = distance(cameraPosition, vWorldPosition) / max(uTreeSize, 1e-3);
     float detail = 1.0 - smoothstep(uDetailNear, uDetailFar, sizes);
     surfaceColor = mix(surfaceColor, mix(uTipColorA, uTipColorB, blend), smoothstep(0.0, 1.0, vAlong) * detail) * vShade;
+    // The base takes the branch's color at this height (the trunk's own gradient), so the joint shows no line.
+    vec3 branchColor = mix(uTrunkColorA, uTrunkColorB, smoothstep(0.0, 1.0, clamp(vLocal.y / max(uTrunkTop, 1e-3), 0.0, 1.0)));
+    surfaceColor = mix(branchColor, surfaceColor, smoothstep(0.0, JOINT_BLEND, vAlong));
   }
 
   vec3 normal = normalize(vWorldNormal);

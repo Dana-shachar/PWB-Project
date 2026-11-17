@@ -1,6 +1,6 @@
 import type { LifeProgress } from '../voxel/landChunk';
 import { LIQUIDS, liquidNamed, rainfallMax, referenceTemperature } from '../rivers/riverClimate';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Slider, Toggle, Select, Accordion, EditableText, IconButton, ColorPicker, HueSlider, DualHueSlider, SectionTitle, Dial, LinkMenu, ProgressBar } from './UIElements';
 import { splitHueTrackGradient, splitSwatch, type ColorGradeSettings } from '../scene/colorGrade';
 import type { SpinSettings } from '../scene/planetSpin';
@@ -29,6 +29,7 @@ const DISPLAY_MODE_OPTIONS = [
 ];
 
 interface PanelProps {
+  erosionSection: ReactNode; // the Erosion section, nested in Climate where rainfall is set (ErosionPanel)
   // Scene controls
   ambientLight: number;
   onAmbientLightChange: (value: number) => void;
@@ -224,6 +225,7 @@ function PipelineStageRow({
 // don't need to stay visible all the time), unlike Scene/Planet controls.
 
 export function Panel({
+  erosionSection,
   ambientLight,
   onAmbientLightChange,
   lightDirX,
@@ -1070,6 +1072,7 @@ export function Panel({
             />
             <Slider label="Peak cooling" unit="°C" value={atmosphere.peakCooling} onChange={(peakCooling) => onAtmosphereChange({ peakCooling })} min={0} max={300} step={1} precision={0} description="How much colder the highest ground is than the shore. Life's temperature reads it." />
             <Slider label="Pole cooling" unit="°C" value={atmosphere.poleCooling} onChange={(poleCooling) => onAtmosphereChange({ poleCooling })} min={0} max={150} step={1} precision={0} description="How much colder the poles are than the equator. Life's temperature reads it." />
+            {erosionSection}
           </Accordion>
         </div>
 
