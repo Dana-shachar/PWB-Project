@@ -852,6 +852,10 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   background: var(--color-divider);
   flex-shrink: 0;
 }
+/* Between a stage panel's top-level sections: the larger subsection gap (20px) on each side, with the panel's 12px. */
+.panel-section-divider--spaced {
+  margin: calc(var(--gap-lg) - var(--gap-md)) 0;
+}
 
 /* ── Right panel tabs (ui/RightPanel.tsx) ──────────────────── */
 /* Ported from active-geometry's buildStageTabs/.ag-stage-tab convention —
@@ -1302,6 +1306,14 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   align-items: center;
   justify-content: space-between;
   padding-right: calc(var(--font-size-sm) + var(--gap-sm)); /* its switch lines up with the accordion headers' switches */
+}
+/* A title row whose controls are buttons, not a switch: they sit at the row's right edge. */
+.panel-section-title-row--actions {
+  padding-right: 0;
+}
+.panel-title-actions {
+  display: flex;
+  gap: 4px;
 }
 
 /* ── Editable text (ui/UIElements.tsx) ─────────────────────── */

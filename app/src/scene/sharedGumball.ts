@@ -72,6 +72,11 @@ export function useSharedGumball(
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount/teardown once; retargeting is the effect below, sceneHandleRef is a stable ref
   }, []);
 
+  // The Tree view has its own turntable camera, so the gumball (zoom, walk, view) hides there.
+  useEffect(() => {
+    gumballRef.current?.setHidden(viewMode === 'tree');
+  }, [viewMode]);
+
   // Retargets (never recreates) whenever the selection changes.
   useEffect(() => {
     const gumball = gumballRef.current;

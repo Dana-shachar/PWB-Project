@@ -764,6 +764,13 @@ IDs are assigned in date order and never reused, so `ISSUES.md` and `ROADMAP.md`
 
 - Shapes are convex hulls around 20 to 40 random points (three.js ConvexGeometry) in four families, bent by noise, with a flat base sunk 10% into the ground. Colors come from the ground's: a hue range picked on a rock-color bar and a Saturation share. Plain toon facets: grain, mottling and bands were removed (2026-11-14), since on flat faces they read as noise, stains or random patches. Surface texture is to be revisited. Dana.
 
+### [S97] Trees are species of generated trunks with 3D leaf parts · `decided`
+**Decided:** 2026-11-17
+
+- A planet has a list of tree species, each a set of genes: EZ-Tree's settings for trunk and limbs, a leaf part (up to three mixed), droop, and two hue gradients. Trees are generated at runtime, never stored models.
+- Leaves are our own 3D parts at EZ-Tree's leaf spots, not its photo cards; trees are toon shaded with the planet's shade settings. Style rules in `BIOME-PLAN.md`, Trees.
+- Species are tuned in a Tree view, a fourth view beside Planet, Chunk and Split, which opens the Biome panel by itself. Randomizing has three levels (individual, Vary, new species) with group locks; Vary is the mutation evolution will use.
+
 ### [S96] The World Clock: one year, a track per living system · `decided`
 **Decided:** 2026-11-16
 

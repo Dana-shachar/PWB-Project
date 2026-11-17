@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { DEFAULT_TREE_GENES, DEFAULT_TREE_SPECIES, NO_LOCKS, TREE_FAMILIES, type TreeGenes, type TreeSpecies } from '../trees/treeGenes';
 // The life types on the life grid (biome/lifeGrid.ts), Cordonnier et al. 2017's plant functional types: plants grouped by
 // how they respond to conditions. Generation 0, the pioneers: algae and moss. Alien, so every range is ours and TUNABLE.
 
@@ -50,6 +51,8 @@ export interface BiomeSettings {
   deathRate: number; // coverage lost per year at full stress
   algae: LifeType;
   moss: LifeType;
+  treeSpecies: TreeSpecies[]; // the planet's tree species (trees/treeGenes.ts), tuned in the Tree view
+  selectedSpecies: string; // the species the Trees controls edit
 }
 
 export const DEFAULT_BIOME_SETTINGS: BiomeSettings = {
@@ -79,11 +82,24 @@ export const DEFAULT_BIOME_SETTINGS: BiomeSettings = {
     // Moss: cushions, creeping onto slopes, Berg's velvet, matte. Velvet values Berg's; the rest inferred, TUNABLE.
     look: { hueTurn: -30, hueSpread: 20, saturationShare: [0.6, 0.9], lightnessShare: [0.75, 1], patternMeters: 15, breakupShare: 0.35, relief: 0.5, edgeAmount: 0.3, edgeThickness: 4, hollowWeight: 0.35, velvetCore: 0.2, velvetPower: 3, velvetEdge: 3, shine: 0.3 },
   },
+  treeSpecies: DEFAULT_TREE_SPECIES,
+  selectedSpecies: DEFAULT_TREE_SPECIES[0].id,
 };
 
 export function migrateBiome(saved: Partial<BiomeSettings> | undefined): BiomeSettings {
   const type = (key: LifeTypeKey): LifeType => ({ ...DEFAULT_BIOME_SETTINGS[key], ...saved?.[key], look: { ...DEFAULT_BIOME_SETTINGS[key].look, ...saved?.[key]?.look } });
-  return { ...DEFAULT_BIOME_SETTINGS, ...saved, algae: type('algae'), moss: type('moss') };
+  // A save from before the species list kept one tree as treeShape: it becomes species 1.
+  const legacy = (saved as { treeShape?: Partial<TreeGenes> } | undefined)?.treeShape;
+  const species = saved?.treeSpecies?.length
+    ? saved.treeSpecies.map((each) => {
+        // Saves from before the 3D leaf parts carry a flat leafShape: dropped, the family's part taken instead.
+        const { leafShape: _flat, ...genes } = each.genes as Partial<TreeGenes> & { leafShape?: unknown };
+        return { ...each, locks: { ...NO_LOCKS, ...each.locks }, genes: { ...DEFAULT_TREE_GENES, leafPart: TREE_FAMILIES[genes.family ?? 'clumps'].leafPart, ...genes } };
+      })
+    : [{ ...DEFAULT_TREE_SPECIES[0], genes: { ...DEFAULT_TREE_GENES, ...legacy } }];
+  const selectedSpecies = species.some((each) => each.id === saved?.selectedSpecies) ? saved!.selectedSpecies! : species[0].id;
+  const { treeShape: _dropped, ...rest } = (saved ?? {}) as Partial<BiomeSettings> & { treeShape?: unknown };
+  return { ...DEFAULT_BIOME_SETTINGS, ...rest, algae: type('algae'), moss: type('moss'), treeSpecies: species, selectedSpecies };
 }
 
 // A type's actual hue (degrees) and saturation and lightness ranges on this planet, in sRGB HSL, from the land color.

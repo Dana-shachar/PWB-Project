@@ -78,6 +78,33 @@
 - 💡 A better velvet: the sheen model ([Estevez and Kulla 2017](https://blog.selfshadow.com/publications/s2017-shading-course/imageworks/s2017_pbs_imageworks_sheen.pdf)) or Naughty Dog's moss lighting (Brinck and Maksimov, SIGGRAPH 2016).
 - 📚 To download: [Andersson 2007, Frostbite terrain](https://www.advances.realtimerendering.com/s2007/Andersson-TerrainRendering(Siggraph07)-CourseNotes.pdf).
 
+### 🌳 Trees
+
+*How trees look, from Dana's references (`docs/references/nms-*`, `gris-forest`, `outer-wilds-forest`, and her No Man's Sky shots of 2026-11-16). Approved by Dana, 2026-11-16.*
+
+**Shape**
+- A few big, readable parts; a tree reads from dozens of leaves, not thousands.
+- Thick, smooth trunks, often swollen at the base, with 2 to 6 main limbs curving or twisting gently.
+- One silhouette family per species: Clumps, Cone, Umbrella, Fan, or Crown (a single trunk with a star of leaves at its top, as palms grow).
+- Leaves are 3D parts with volume, not flat stamps, after Dana's flora references: Tendril, Curl, Frond, Spikes, Antler, Blade, Fan, Pad, Cup, Bulb. Strands taper to a point and grow out of their branch along its direction; a Droop gene bends fronds, blades and fans down or up. Up to three parts mix in one tree.
+- Every leaf varies: each rolls its own size, bend, twist and brightness from a seed, so no two match and the species rebuilds the same.
+
+**Color**
+- Two gradients per species, read from walking distance: the canopy from inner and lower to outer and top, and the trunk from base to top, each a two-handle hue slider; Harmony sets the trunk from the leaves. No per-leaf gradient, bands or bark texture: they only read up close (Dana, 2026-11-16).
+- Hues come from the planet palette as turns off the land color.
+- Toon shading with the planet's own shade settings (`[S83]`), leaf normals bent outward from the canopy's center, leaves lit from both sides. Far trees flatten into silhouettes in the haze.
+
+**Randomizing**
+- Three levels: New individual (a new seed), Vary (a cousin: Sims's mutation, each gene nudged by chance, the rule evolution will use per era), New species (rolled from a family's start, many big leaves never together). A padlock on Shape, Leaves and Color keeps that group.
+
+**Grouping**
+- Woods are dense stands of one species at a shared height; scattered trees are a few of another species in the open. A Spread gene sets which (seed dispersal distance: short gives clumps, long gives lone trees), so evolution can make both on one planet.
+
+**How they're made and tested**
+- Procedural: EZ-Tree builds the trunk and limbs at runtime from a seed and its settings (the genes); its leaf step is taken over so our parts grow at its leaf spots.
+- ✅ Tuned in a Tree view: the planet's species side by side on a turntable, each shown or hidden by its eye, as the layer list does (as SpeedTree's modeler and EZ-Tree's app tune one tree in isolation).
+- ⚪ Next: placed on the chunk; then trees start at their own track's start on the World Clock and need humus (succession, Cordonnier 2017), and mutate per era.
+
 ---
 
 ## 🪜 Stages

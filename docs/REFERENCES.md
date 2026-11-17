@@ -225,9 +225,25 @@
 - The biome's era totals, both types in one 64 by 32 read (`lifeSum.frag.glsl`, `[B178]`). Cited from recall, not re-read.
 - *Harris, "Mapping Computational Concepts to GPUs", GPU Gems 2, ch. 31, 2005*
 
-**Procedural trees from parameters** · EZ-Tree (Dan Greenheck) · `considered`
-- MIT, npm `@dgreenheck/ez-tree`, three.js; a tree mesh generated at runtime from a seed and parameters (branch levels, per-level angle, children, gnarliness, length, radius, taper; twist, force; leaf count, size, angle, tint; bark tint), with built-in LODs and raw geometry for instancing. A generator for artists, not an evolution system: the evolution would be ours, on its parameters. Shrubs not documented.
-- *[github.com/dgreenheck/ez-tree](https://github.com/dgreenheck/ez-tree). README read 2026-11-10*
+**Procedural trees from parameters** · EZ-Tree (Dan Greenheck) · `method used`
+- MIT, npm `@dgreenheck/ez-tree` 1.1.0, three.js; a tree mesh generated at runtime from a seed and parameters (branch levels, per-level angle, children, gnarliness, length, radius, taper; twist, force; leaf count, size, angle). Source read 2026-11-16: no built-in detail levels; leaves are photo cards placed by public methods (`generateLeaves`, `generateLeaf`), each tilted from its branch by the leaf angle about its x axis.
+- Used: the trunk and limbs as built; our species genes set its options; a subclass takes over `generateLeaf` so our 3D leaf parts grow at its spots; our toon shader replaces its materials (`trees/`).
+- *[github.com/dgreenheck/ez-tree](https://github.com/dgreenheck/ez-tree). README read 2026-11-10, source 2026-11-16*
+
+**Tubes along a curve** · three.js `TubeGeometry` · `method used`
+- Rings placed along a curve on its Frenet frames (the curve's tangent, normal and binormal at each point).
+- Used: tendrils, curls, clubs, cups and frond ribs, with a radius that changes along the length so they taper, the way EZ-Tree tapers its branches (`trees/leafParts.ts`).
+- *three.js r185 source, `TubeGeometry` and `Curve.computeFrenetFrames`. Recalled, not re-read*
+
+**Stylized foliage: canopy clumps, spherical normals, toon ramp** · polycount, 80 Level, Blender anime foliage · `method used`
+- Leaf normals bent toward a sphere around the canopy (per group for definition), two-sided leaves, a cel ramp with little noise.
+- Used: the tree shader bends leaf normals toward the canopy's center and toon shades with the app's own shade mask (`shaders/trees/`).
+- *[polycount](https://polycount.com/discussion/comment/2676975) · [80 Level](https://origin.80.lv/articles/stylized-nature-vegetation-animation-shaders) · [Blender anime foliage](https://trungduyng.substack.com/p/tutorial-blender-anime-foliage-pipeline). Search summary 2026-11-16*
+
+**Woods versus scattered trees by seed dispersal** · USDA grid model, Unreal's Average Spread Distance · `method planned`
+- Short dispersal gives clumped stands, long dispersal at low density gives scattered trees; Unreal's foliage tool uses the same lever (low spread is clumpy).
+- Planned: a Spread gene per species when trees go on the chunk.
+- *[USDA grid model](https://research.fs.usda.gov/download/treesearch/2094.pdf) · [Epic, open world tools reference](https://dev.epicgames.com/documentation/unreal-engine/open-world-tools-property-reference-in-unreal-engine). Search summary 2026-11-16*
 
 **Foliage simulation by instances** · Unreal Engine Procedural Foliage Tool · `reference`
 - Steps of aging and seeding, spread distance, collision radius with overlap priority, shade radius, "can grow in shade", scale by age: the engine form of plants as competing circles, per instance.

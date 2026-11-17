@@ -20,7 +20,7 @@ import { DEFAULT_CHUNK_RESOLUTION, DEFAULT_CHUNK_SIZE, DEFAULT_CHUNK_DEPTH, CHUN
 import { clampPatchSamples, patchAtDepth, type TerrainPatch } from '../planet/patch';
 import type { ErosionResult } from '../erosion/erosionControls';
 
-export type ViewMode = 'planet' | 'landChunk' | 'split';
+export type ViewMode = 'planet' | 'landChunk' | 'split' | 'tree'; // tree: the Tree view (trees/TreeViewCanvas.tsx)
 
 // The whole-chunk texture's size, for the shadow march.
 const CHUNK_SHADOW_SAMPLES = 1025;
@@ -140,7 +140,7 @@ export function useLandChunk(
   // Painting isn't wired in yet (only the noise stack) — that's
   // strokeHistory/paintVersion, a separate signal.
   useEffect(() => {
-    if (viewMode === 'planet') return;
+    if (viewMode === 'planet' || viewMode === 'tree') return;
     // Real elevation (Height, per layer), not getPreviewImageData()'s
     // shape/paint composite — see map/heightmap.ts and ISSUES.md, 2026-09-24.
     //

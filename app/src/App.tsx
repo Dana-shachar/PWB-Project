@@ -2,7 +2,7 @@ import { liquidNamed } from './rivers/riverClimate';
 import { useDrainage } from './rivers/drainageControls';
 import type * as THREE from 'three';
 import type { TerrainPatch } from './planet/patch';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { SceneCanvas, type SceneCanvasHandle } from './scene/SceneCanvas';
 import { useSceneControls } from './scene/sceneControls';
 import { useSharedGumball } from './scene/sharedGumball';
@@ -26,6 +26,8 @@ import { randomClimate } from './atmosphere/atmosphereSettings';
 import { ErosionTimeline } from './erosion/ErosionTimeline';
 import { useWorldClock, type ClockTrack } from './clock/worldClock';
 import { WorldClockDock } from './clock/WorldClockDock';
+import { TreeViewCanvas } from './trees/TreeViewCanvas';
+import { landMiddleColor } from './biome/plantTypes';
 import { useLandChunk } from './voxel/landChunk';
 import { LandChunkCanvas, type LandChunkCanvasHandle } from './voxel/LandChunkCanvas';
 import { ViewModeControl } from './voxel/ViewModeControl';
@@ -51,9 +53,16 @@ function App() {
   // sharedViewportRenderer.ts for why neither canvas owns these anymore.
   const planetViewportRef = useRef<HTMLDivElement>(null);
   const chunkViewportRef = useRef<HTMLDivElement>(null);
+  const treeViewportRef = useRef<HTMLDivElement>(null);
 
   const sceneControls = useSceneControls();
   const planetControls = usePlanetControls(sceneControls);
+  // The planet's toon shade for the trees, the same settings the ground and rocks use ([S83]).
+  const shadeSource = planetControls.drawnAtmosphere;
+  const treeShade = useMemo(
+    () => ({ shadeStep: shadeSource.shadeEnabled ? shadeSource.shadeStep : 0, shadeFeather: shadeSource.shadeFeather, shadeLift: shadeSource.shadeLift, shadeChroma: shadeSource.shadeChroma, shadeHueTurn: planetControls.atmosphere.shadowHue }),
+    [shadeSource.shadeEnabled, shadeSource.shadeStep, shadeSource.shadeFeather, shadeSource.shadeLift, shadeSource.shadeChroma, planetControls.atmosphere.shadowHue],
+  );
   const waterClarityShare = clarityDepthShare(planetControls.water.clarityMeters, planetControls.water.seaLevel, planetControls.elevationRange.min, planetControls.drawnHeightScale);
   const noiseLayers = useNoiseLayers(INITIAL_LAYER_ID);
   // Terrain Randomize also rolls how the planet spins (scene/planetSpin.ts) and its climate.
@@ -128,7 +137,9 @@ function App() {
   // singly in view/selected, or null (disabled) when both are selected in
   // Split, since that slider is view-specific, not a joint control.
   const activeViewContext =
-    landChunk.viewMode !== 'split'
+    landChunk.viewMode === 'tree'
+      ? null
+      : landChunk.viewMode !== 'split'
       ? landChunk.viewMode
       : sharedGumball.selectedPanes.length === 1
         ? sharedGumball.selectedPanes[0]
@@ -156,6 +167,10 @@ function App() {
   // not built yet). Terrain starts enabled since it's the only stage with
   // real content today.
   const [activeStage, setActiveStage] = useState<PipelineStage>('terrain');
+  // Contextual menu: the Tree view opens the Biome stage, where the Trees section lives.
+  useEffect(() => {
+    if (landChunk.viewMode === 'tree') setActiveStage('biome');
+  }, [landChunk.viewMode]);
   const [stageEnabled, setStageEnabled] = useState<Record<PipelineStage, boolean>>(() =>
     Object.fromEntries(PIPELINE_STAGES.map((stage) => [stage.key, stage.key === 'terrain'])) as Record<PipelineStage, boolean>,
   );
@@ -343,7 +358,7 @@ function App() {
               ref={planetViewportRef}
               className={
                 'planet-viewport' +
-                (landChunk.viewMode === 'landChunk' ? ' viewport-pane--hidden' : '') +
+                (landChunk.viewMode === 'landChunk' || landChunk.viewMode === 'tree' ? ' viewport-pane--hidden' : '') +
                 (landChunk.viewMode === 'split' && sharedGumball.selectedPanes.includes('planet') ? ' viewport-pane--selected' : '')
               }
               style={landChunk.viewMode === 'split' ? { flexGrow: 0, flexShrink: 0, flexBasis: `${landChunk.splitRatio * 100}%` } : undefined}
@@ -392,7 +407,7 @@ function App() {
               ref={chunkViewportRef}
               className={
                 'land-chunk-viewport' +
-                (landChunk.viewMode === 'planet' ? ' viewport-pane--hidden' : '') +
+                (landChunk.viewMode === 'planet' || landChunk.viewMode === 'tree' ? ' viewport-pane--hidden' : '') +
                 (landChunk.viewMode === 'split' && sharedGumball.selectedPanes.includes('landChunk') ? ' viewport-pane--selected' : '')
               }
               onClick={(event) => sharedGumball.handlePaneClick('landChunk', event)}
@@ -451,6 +466,10 @@ function App() {
                 waterDeepest={planetControls.elevationRange.min}
               />
             </div>
+            {/* The Tree view: one tree species on a turntable, tuned by its genes (Biome, Trees). */}
+            <div ref={treeViewportRef} className={'land-chunk-viewport' + (landChunk.viewMode === 'tree' ? '' : ' viewport-pane--hidden')}>
+              <TreeViewCanvas viewportRef={treeViewportRef} sharedRenderer={sharedViewportRenderer} species={planetControls.biome.treeSpecies} landColor={landMiddleColor(planetControls.colorStops)} shade={treeShade} />
+            </div>
             <ViewModeControl
               viewMode={landChunk.viewMode}
               onChange={landChunk.setViewMode}
@@ -469,7 +488,7 @@ function App() {
                 )
               }
             />
-            {landChunk.viewMode !== 'planet' && <DebugViewControl debugView={landChunk.debugView} onChange={landChunk.setDebugView} />}
+            {landChunk.viewMode !== 'planet' && landChunk.viewMode !== 'tree' && <DebugViewControl debugView={landChunk.debugView} onChange={landChunk.setDebugView} />}
             {areaSelect.sizeLabel && (
               <div className="area-size-label" style={{ left: areaSelect.sizeLabel.x, top: areaSelect.sizeLabel.y }}>
                 {Math.round(areaSelect.sizeLabel.km).toLocaleString()} km

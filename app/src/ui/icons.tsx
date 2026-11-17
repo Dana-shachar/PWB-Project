@@ -49,6 +49,29 @@ export function DiceIcon({ className }: IconProps) {
   );
 }
 
+// Vary: two dice, one behind the other, for a cousin of the current species.
+export function VaryIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} aria-hidden="true">
+      <rect x={5.5} y={1.5} width={9} height={9} rx={1.5} />
+      <rect x={1.5} y={5.5} width={9} height={9} rx={1.5} fill="var(--color-panel-bg)" />
+      <circle cx={4.3} cy={8.3} r={0.8} fill="currentColor" stroke="none" />
+      <circle cx={7.7} cy={11.7} r={0.8} fill="currentColor" stroke="none" />
+    </svg>
+  );
+}
+
+// New individual: a sprout, two leaves off a stem, for a new seedling of the same species.
+export function SproutIcon({ className }: IconProps) {
+  return (
+    <svg className={className} width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M8 14.5V7.5" />
+      <path d="M8 9C8 6 5.5 4 2.5 4.5C2.5 7.5 5 9.5 8 9Z" />
+      <path d="M8 7.5C8 4.5 10.5 2 13.5 2.5C13.5 5.5 11 7.5 8 7.5Z" />
+    </svg>
+  );
+}
+
 export function PaletteIcon({ className }: IconProps) {
   return (
     <svg

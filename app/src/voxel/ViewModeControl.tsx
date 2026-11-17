@@ -5,6 +5,7 @@ const OPTIONS: { value: ViewMode; label: string }[] = [
   { value: 'planet', label: 'Planet' },
   { value: 'landChunk', label: 'Chunk' },
   { value: 'split', label: 'Split' },
+  { value: 'tree', label: 'Tree' },
 ];
 
 interface ViewModeControlProps {

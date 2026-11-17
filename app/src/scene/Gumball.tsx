@@ -170,6 +170,11 @@ export class Gumball {
     mountElement.appendChild(this.container);
   }
 
+  // Hidden over a view it doesn't drive (the Tree view), never recreated.
+  setHidden(hidden: boolean): void {
+    this.container.style.display = hidden ? 'none' : '';
+  }
+
   // Switches which camera(s) this instance drives — the widget itself is
   // never recreated, just repointed. Any in-progress snap animation is
   // abandoned and every previous target's controls are re-enabled, so

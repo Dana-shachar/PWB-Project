@@ -1582,6 +1582,11 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - Dana: the playhead wouldn't move. Measured: it opens at the end of the Biome bar, on the bar's length grip, and let clicks through, so a press grabbed the grip.
 - Fixed: the playhead's line and knob take the press and sit above the grip, as editors let the playhead be grabbed over a clip's edge.
 
+### [B196] Tree trunks rendered black and drooping leaves curled up · `minor`
+**✅ Fixed 2026-11-17** · **Where:** `shaders/trees/tree.frag.glsl`, `trees/leafParts.ts`
+- The trunk has no per-leaf brightness attribute, which the shader read as 0. Fixed: only leaves use it.
+- In a leaf's own frame +z points down once EZ-Tree tilts it, and drooping parts bent toward −z. Fixed, and Droop now sets the direction on purpose (−1 up, 1 down).
+
 ## 🏗️ Architecture
 
 *Structural problems, and limits tracked but not scheduled.*

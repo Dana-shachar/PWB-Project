@@ -56,6 +56,8 @@ layout(location = 0) out highp vec4 pc_fragColor;
 ${PRECISION}uniform mat4 viewMatrix;
 uniform vec3 cameraPosition;
 uniform bool isOrthographic;
+#include <colorspace_pars_fragment>
+vec4 linearToOutputTexel( vec4 value ) { return sRGBTransferOETF( vec4( value.rgb * mat3( 1.0 ), value.a ) ); }
 `;
 
 // Each material's pieces, in the order the code joins them (keep in step with the .ts files named here).
@@ -78,6 +80,7 @@ const MATERIALS = [
   { name: 'stream power seed (rivers/planetDrainage.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['erosion/streamPowerSeed.frag.glsl'] },
   // The grade's vertex is three.js's CopyShader (inline); the brush vertex stands in, a full-screen pass alike.
   { name: 'life inputs (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['terrain/terrain.glsl', 'biome/lifeInputs.frag.glsl'] },
+  { name: 'tree (trees/treeLook.ts)', vertex: ['trees/tree.vert.glsl'], fragment: ['terrain/terrain.glsl', 'terrain/landLayers.glsl', 'trees/tree.frag.glsl'] },
   { name: 'life step (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeStep.frag.glsl'] },
   { name: 'life sum (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeSum.frag.glsl'] },
   { name: 'life shore (biome/lifeGrid.ts)', vertex: ['heightmap/heightmapBrush.vert.glsl'], fragment: ['biome/lifeShore.frag.glsl'] },
