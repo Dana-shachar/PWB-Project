@@ -1587,6 +1587,11 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 - The trunk has no per-leaf brightness attribute, which the shader read as 0. Fixed: only leaves use it.
 - In a leaf's own frame +z points down once EZ-Tree tilts it, and drooping parts bent toward −z. Fixed, and Droop now sets the direction on purpose (−1 up, 1 down).
 
+### [B197] Leaf parts join their branches badly · `wrong but workable`
+**🔴 Open 2026-11-17** · **Where:** `buildLeafPart` and `grownFromBranch` in `trees/leafParts.ts`
+- Dana: the joints look bad, worst with mixed parts (Antler, Cup, Spikes). Seen in her shots: every part starts at its own full width with an open end, while EZ-Tree's twigs taper almost to nothing at their tips, so a thick open rim sits on a hairline twig.
+- Proposed fix: the part's base starts at the branch's radius where it sits (EZ-Tree's sections carry it) and widens over its first stretch; the base end closed and sunk slightly into the branch.
+
 ## 🏗️ Architecture
 
 *Structural problems, and limits tracked but not scheduled.*

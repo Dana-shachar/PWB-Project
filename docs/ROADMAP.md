@@ -1,6 +1,6 @@
 # Roadmap
 
-`Last updated: 2026-11-15`
+`Last updated: 2026-11-17`
 
 *Where the project stands and what gets built next, by stage and feature.*
 
@@ -8,15 +8,21 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-15):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
+> **Start from here (2026-11-17):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
 >
-> **State.** `main` adds the walk map redrawn only on change (`[B168]`, the 2 s hitch), the chunk's load order fix (`[B192]`), crisp walking shadows (`[B193]`, box 200 m), plain toon rocks with 20 to 40 hull points (`[S94]`), and moss as a color layer with a large-scale breakup (`[S95]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - Dana's planet has Light follows camera off now; with a fixed sun the shadows depend on the sun angle, chosen per shot.
-> - Two app tabs share the graphics card. Close Claude's tab when Dana tests.
+> **State.** `main` has the World Clock v1 (`[S96]`: the biome as a track, life grown to the playhead, erosion on its own timeline, both docks on one layout) and tree species (`[S97]`: EZ-Tree trunks with our 3D leaf parts, gradients, toon shading, the Tree view with a species list, randomizing with locks). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Species save with the planet (`treeSpecies` in Biome settings), so a template made from a planet carries them.
+> - Two app tabs share the graphics card. Close Claude's tab when Dana tests. Test species in Claude's tab on a throwaway species and remove it after: the tab autosaves to Dana's planet.
+> - Hot reload doesn't rebuild trees whose genes didn't change: reload the page after editing `trees/` or `shaders/trees/`. Run `node scripts/checkShaders.mjs` after any `.glsl` edit.
 >
-> **How to work (Dana, 2026-11-15).** Claude acts as tech lead: flag problems and recommend, but every change still needs Dana's go on a numbered plan, one change per test. Measure the cause before a fix, and check a measuring method on a known case first (confirm by screenshot that walk mode is on; the shared loop renders every animation frame, so frame intervals are real frame times). Real fixes only. Build only what reads from walking height. Keep replies short.
+> **How to work (Dana, 2026-11-15 and 11-16).** Claude acts as tech lead: flag problems and recommend, but every change still needs Dana's explicit go on a numbered plan (a new requirement added to a plan is not a go). Look at Dana's references in `docs/references/` and her shots before proposing a look; imitate them, never stamp generic flat shapes. Prioritize what reads from walking height; skip costly close-up detail. Don't remove existing controls or features without saying so. Few options in menus: replace weak ones instead of adding. Keep replies short.
 >
-> **Next, in order.** 1. Trees on the chunk: placement from the life grid (woods and scattered by a Spread gene), then their clock track, humus, and mutation per era ("Plan to the final" item 4; species, look and Tree view done, `[S97]`). 2. Stored eras and Play, after trees and before recording (item 2). 3. The run popup. `[B168]` is tabled by Dana (2026-11-16) until she asks; the shadow hard edge (`[B193]`) waits. Open alongside: rock scattering (`[B189]`), shadow flicker (`[B191]`), `[B164]` back in walk mode by lakes (Dana's planned fix stands), moss skirt at rock bases (deferred, `[S95]`).
+> **Next, in order.**
+> 1. Tree joints (`[B197]`): each leaf part's base starts at the branch's own radius where it sits (read from EZ-Tree's sections in `generateLeaves`) and widens over its first stretch; the base end closed and sunk slightly into the branch. Proposed to Dana 2026-11-17, not yet approved. Then check Vary, New species, locks and Leaf angle by clicking (built, not clicked yet).
+> 2. Trees on the chunk: placement per ground patch from the life grid (Horizon Zero Dawn's method, as rocks), woods versus lone trees by a Spread gene (seed dispersal, `REFERENCES.md`), then a Trees track on the World Clock with humus (Cordonnier) and mutation per era with Vary's rule, shown in the Tree view. Plan first ("Plan to the final" item 4).
+> 3. Stored eras and Play, after trees and before recording (item 2). 4. The run popup.
+>
+> `[B168]` is tabled by Dana until she asks; the shadow hard edge (`[B193]`) waits. Open alongside: rock scattering (`[B189]`), shadow flicker (`[B191]`), `[B164]` back in walk mode by lakes (Dana's planned fix stands), moss skirt at rock bases (deferred, `[S95]`), flowers after trees.
 ---
 
 ## 🧭 Direction
