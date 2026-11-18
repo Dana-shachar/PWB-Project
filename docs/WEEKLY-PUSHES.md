@@ -19,6 +19,8 @@
 
 ![Rocks on the chunk in walk mode: faceted boulders with grain, casting shadows on the ground.](screenshots/2026-11-11-chunk-rocks.png)
 
+![The Tree view: the planet's tree species and shrubs in a ring, with glow and fireflies.](screenshots/2026-11-17-tree-view-trees-and-shrubs.png)
+
 ### 🛠️ Done
 - **Evolution (`[S87]`):** 4 variants per life type compete for each cell's space (JeDi-DGVM), and each era the rarest is replaced by a mutant of the commonest (Sims 1991). A new mutant starts from nothing and grows in (`[B180]`). Controls: an Evolution switch, Variation, Mutation rate and Shuffle.
 - **Performance, measured (`[B178]`):** a full regrowth took 10.6 s, of which 10.5 s was waiting on GPU read-backs and 0.06 s was the simulation. One read per era instead of two brought it to 6.2 s; the rest is deferred to evolution fully on the GPU.
