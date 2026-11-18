@@ -7,7 +7,7 @@ import treeFragmentBody from '../shaders/trees/tree.frag.glsl?raw';
 import type { AlienTree } from './alienTree';
 import { buildLeafPart, PartBuilder, seededRandom, type LeafPart } from './leafParts';
 import { growth, individualTurn, treeColors, type TreeGenes } from './treeGenes';
-import { applyFireflies, showAllFireflies, updateFireflies } from './treeLights';
+import { applyFireflies, setFirefliesColor, showAllFireflies, updateFireflies } from './treeLights';
 
 // A tree's look (BIOME-PLAN.md, Trees): 3D leaf parts at EZ-Tree's leaf spots, a two-hue gradient on the canopy and
 // on the trunk, toon shaded with the planet's own shade settings, a swollen trunk base.
@@ -191,8 +191,6 @@ export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: stri
   const trunkMaterial = treeMaterial(false, colors.trunkBase, colors.trunkTop, lighting);
   trunkMaterial.uniforms.uTrunkTop.value = Math.max(branches.geometry.boundingBox?.max.y ?? 1, 1e-3);
   const leafMaterial = treeMaterial(true, colors.canopyInner, colors.canopyOuter, lighting, colors.tipInner, colors.tipOuter);
-  leafMaterial.uniforms.uTrunkColorA.value = colors.trunkBase;
-  leafMaterial.uniforms.uTrunkColorB.value = colors.trunkTop;
   leafMaterial.uniforms.uTrunkTop.value = trunkMaterial.uniforms.uTrunkTop.value;
   const canopy = leaves.geometry.boundingBox;
   if (canopy && !canopy.isEmpty()) {
@@ -215,11 +213,51 @@ export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: stri
     material.uniforms.uLeafEdge.value = LEAF_EDGE * genes.leafSize;
     material.uniforms.uLeafBob.value = LEAF_BOB * genes.leafSize;
   }
-  // Glow and fireflies grow with the tree; both in the tips' hue.
-  leafMaterial.uniforms.uGlow.value = (genes.glow ?? 0) * growth(genes);
-  const lightColor = colors.tipOuter.clone().lerp(new THREE.Color(1, 1, 1), 0.45);
-  applyFireflies(tree, genes, lightColor, leaves.geometry.boundingBox ?? new THREE.Box3(), leafMaterial.uniforms.uTreeSize.value, DETAIL_NEAR, DETAIL_FAR);
   branches.material = trunkMaterial;
   leaves.material = leafMaterial;
   leaves.layers.enable(BLOOM_LAYER);
+  rebuildFireflies(tree, genes, landColor);
+  updateTreeLook(tree, genes, landColor, lighting);
+}
+
+// The fireflies' light: the tips' outer hue, lifted toward white.
+const fireflyColor = (tipOuter: THREE.Color) => tipOuter.clone().lerp(new THREE.Color(1, 1, 1), 0.45);
+
+// Only the fireflies, for a change in their number: the tree itself stays as built.
+export function rebuildFireflies(tree: AlienTree, genes: TreeGenes, landColor: string): void {
+  const colors = treeColors({ ...genes, hueTurn: genes.hueTurn + individualTurn(genes) }, landColor);
+  const uniforms = (tree.leavesMesh.material as THREE.ShaderMaterial).uniforms;
+  applyFireflies(tree, genes, fireflyColor(colors.tipOuter), tree.leavesMesh.geometry.boundingBox ?? new THREE.Box3(), uniforms.uTreeSize.value, DETAIL_NEAR, DETAIL_FAR);
+}
+
+// A look-only change (hues, Color range, Glow, land color, shade) updates the built tree's uniforms, never rebuilds
+// it, as the performance rules ask for every look slider ([B203]).
+export function updateTreeLook(tree: AlienTree, genes: TreeGenes, landColor: string, lighting: TreeLighting): void {
+  const colors = treeColors({ ...genes, hueTurn: genes.hueTurn + individualTurn(genes) }, landColor); // this individual's colors
+  const trunk = (tree.branchesMesh.material as THREE.ShaderMaterial).uniforms;
+  const leaf = (tree.leavesMesh.material as THREE.ShaderMaterial).uniforms;
+  trunk.uColorA.value.copy(colors.trunkBase);
+  trunk.uColorB.value.copy(colors.trunkTop);
+  trunk.uTipColorA.value.copy(colors.trunkBase);
+  trunk.uTipColorB.value.copy(colors.trunkTop);
+  leaf.uColorA.value.copy(colors.canopyInner);
+  leaf.uColorB.value.copy(colors.canopyOuter);
+  leaf.uTipColorA.value.copy(colors.tipInner);
+  leaf.uTipColorB.value.copy(colors.tipOuter);
+  leaf.uTrunkColorA.value.copy(colors.trunkBase);
+  leaf.uTrunkColorB.value.copy(colors.trunkTop);
+  for (const uniforms of [trunk, leaf]) {
+    uniforms.uLightDirection.value.copy(lighting.lightDirection).normalize();
+    uniforms.uLightIntensity.value = lighting.lightIntensity;
+    uniforms.uDiffuseWrap.value = lighting.diffuseWrap;
+    uniforms.uAmbient.value = lighting.ambient;
+    uniforms.uShadeStep.value = lighting.shadeStep;
+    uniforms.uShadeFeather.value = lighting.shadeFeather;
+    uniforms.uShadeLift.value = lighting.shadeLift;
+    uniforms.uShadeChroma.value = lighting.shadeChroma;
+    uniforms.uShadeHueTurn.value = lighting.shadeHueTurn / 360;
+  }
+  // Glow and fireflies grow with the tree; both in the tips' hue.
+  leaf.uGlow.value = (genes.glow ?? 0) * growth(genes);
+  setFirefliesColor(tree, fireflyColor(colors.tipOuter));
 }

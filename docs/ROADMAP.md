@@ -8,23 +8,22 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-17, night):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
+> **Start from here (2026-11-18):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
 >
-> **State.** `main` has tree species (`[S97]`) and shrubs in their own section with six growth-form families and a Bend gene; nothing grows under the ground (`[B207]`); glow with a selective bloom halo in the Tree view; fireflies as orbs; the tree menu in Shape, Leaves, Color, Effects. Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - Dana's planet is open in Claude's test tab and autosaves: never move a slider there. The Flora template (autosave off while editing) is the place to change species.
+> **State.** `main` has tree species (`[S97]`) and shrubs in their own section (six growth-form families, a Bend gene, nothing under the ground, `[B207]`); glow with a selective bloom halo in the Tree view; look sliders update uniforms only (`[B203]`). Session 13's weekly push is in (diagram `architecture-2026-11-18.svg`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Claude's test tab opens Dana's current project, the **Flora** template in edit mode: autosave is off, so species can be changed there freely and close unsaved. Check the Project Settings header (Save Template) before moving sliders.
 > - Two app tabs share the graphics card. Close Claude's tab when Dana tests. Reload after editing `trees/` or `shaders/trees/`; run `node scripts/checkShaders.mjs` after any `.glsl` edit.
 >
 > **How to work.** Claude acts as tech lead: flag and recommend, every change needs Dana's go on a numbered plan; a clear directive is the go. Use the design system's patterns exactly (copy how neighbor sections are built). Imitate the references in `docs/references/`. Only what reads from walking height. Short replies.
 >
 > **Next, in order (Dana, 2026-11-17).**
-> 1. Color sliders update uniforms only (`[B203]`), before anything is scattered.
-> 2. Scattering: one placement plan for everything that grows, in height layers as Horizon Zero Dawn places vegetation from density maps: trees and shrubs from the species engine (Dana has saved shrubs for it), a grass layer of instanced blades near the camera, weeds as small species. Woods versus lone trees (Spread gene); per-tree hue variation; the bloom joins the chunk; then a Trees track with humus and mutation per era. A Tendril shrub family (curly limbs, Cup leaves).
-> 3. Flowers, after scattering: a stem and a flower-head part, big and small; research flower heads first.
-> 4. Thick upward limbs (`[B202]`): measure first. 5. Stored eras and Play. 6. The run popup.
+> 1. Scattering: one placement plan for everything that grows, in height layers as Horizon Zero Dawn places vegetation from density maps: trees and shrubs from the species engine (Dana has saved shrubs for it), a grass layer of instanced blades near the camera, weeds as small species. Woods versus lone trees (Spread gene); per-tree hue variation; the bloom joins the chunk; then a Trees track with humus and mutation per era. A Tendril shrub family (curly limbs, Cup leaves).
+> 2. Flowers, after scattering: a stem and a flower-head part, big and small; research flower heads first.
+> 3. Stored eras and Play. 4. The run popup.
 > - 🟡 Dana to check: erosion as a World Clock track scrubbing a real run on the chunk. 📌 Delete `erosion/ErosionTimeline.tsx` once confirmed.
 > - 💡 Glowing parts can still clip toward white at high Glow (no tone mapping in the Tree view); Dana lowered Glow instead. Tone mapping the halo only if it comes back.
 >
-> Weekly push: only when Dana says so. Pending for Session 13: the screenshot copies in `docs/screenshots/` and this week's architecture diagram (new `clock/` and `trees/` modules).
+> Weekly push: only when Dana says so; the next is Session 14.
 >
 > `[B168]` is tabled by Dana until she asks; the shadow hard edge (`[B193]`) waits. Open alongside: rock scattering (`[B189]`), shadow flicker (`[B191]`), `[B164]` in walk mode by lakes, moss skirt at rock bases (deferred, `[S95]`).
 ---

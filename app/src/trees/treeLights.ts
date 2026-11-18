@@ -137,6 +137,12 @@ export function applyFireflies(tree: AlienTree, genes: TreeGenes, color: THREE.C
   tree.add(points);
 }
 
+// A new light color on the built fireflies, for a hue change ([B203]).
+export function setFirefliesColor(tree: AlienTree, color: THREE.Color): void {
+  const points = tree.getObjectByName(FIREFLY_NAME) as THREE.Points | undefined;
+  if (points) (points.material as THREE.ShaderMaterial).uniforms.uColor.value.copy(color);
+}
+
 // Each frame, with the wind's clock.
 export function updateFireflies(tree: AlienTree, time: number): void {
   const points = tree.getObjectByName(FIREFLY_NAME) as THREE.Points | undefined;

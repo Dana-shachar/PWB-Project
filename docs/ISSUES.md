@@ -1641,13 +1641,14 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **✅ Fixed 2026-11-17** · **Where:** `SpeciesSection` in `ui/panels/BiomePanel.tsx`, `migrateBiome` in `biome/plantTypes.ts`
 - Trees and Shrubs shared one selected species, so a click in one list reset the other to its first. Fixed: each list keeps its own (`selectedSpecies`, `selectedShrub`).
 
-### [B202] Thick upward limbs stick out of the tree · `wrong but workable`
-**🔴 Open 2026-11-17** · **Where:** child branches in EZ-Tree (`generateChildBranches`), `applyTreeGenes` in `trees/treeGenes.ts`
-- Dana: when limbs are very thick and steep they poke out and look broken, in any family. Not measured yet.
+### [B202] Thick upward limbs stick out of the tree · `not a bug`
+**✅ Closed 2026-11-18** · **Where:** the limb sliders in `ui/panels/BiomePanel.tsx`
+- Thick, steep limbs come from the Limb sliders as set; Dana, 2026-11-18: not a bug.
 
 ### [B203] Every tree color slider rebuilds the whole tree · `wrong but workable`
-**🔴 Open 2026-11-17** · **Where:** the rebuild key in `trees/TreeViewCanvas.tsx`
-- The key is all the genes, so Leaves, Trunk and Tip hues regenerate the tree instead of updating uniforms, against the performance rules. Fine in the Tree view, too slow for many trees; fix before scattering.
+**✅ Fixed 2026-11-18** · **Where:** the keys in `trees/TreeViewCanvas.tsx`, `updateTreeLook` and `rebuildFireflies` in `trees/treeLook.ts`
+- The rebuild key was all the genes, so every hue regenerated the tree instead of updating uniforms, against the performance rules.
+- Fixed: three keys. Shape genes rebuild the tree (5 to 7 ms each, measured); Fireflies rebuild only the lights; hues, Color range, Glow, land color and shade only update uniforms. Logged in the Tree view: hue and Color range drags never rebuilt, and the colors changed on screen.
 
 ## 🏗️ Architecture
 

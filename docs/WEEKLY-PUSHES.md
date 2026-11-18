@@ -43,9 +43,12 @@
 - **Wind and shrubs:** trees sway with the Atmosphere's Wind by Crysis's method (a main bend of the tree and a detail bend of the leaves, GPU Gems 3 ch. 16), with gusts, each tree's own stiffness, and a lean capped as the chapter advises; a Shrub family from EZ-Tree's bush preset; species in a ring with a turntable on/off button.
 - **Glow and fireflies:** a soft glow at the leaf tips and drifting lights around the canopy, both genes that grow with the tree; a Size range for leaves and a Color range between individuals of a species. The wind was retuned with Dana into long, gentle waves, with high-wind protections that blend in gradually.
 - **Shrubs and bloom (`[B207]` to `[B210]`):** shrubs got their own section and six families by growth form (Mound, Vase, Spreading, Upright, Weeping, Creeping), from EZ-Tree's bush presets and its growth force (a Bend gene); limbs that reach the ground now run along it instead of sinking. The glow gained a halo by selective bloom, measured at no frame cost at half resolution. The tree menu was regrouped into Shape, Leaves, Color and Effects, and fireflies became softer orbs that vary in size, hue and pulse.
+- **Color sliders without rebuilds (`[B203]`):** hue, Color range and Glow now update the drawn tree's colors instead of regenerating it; only shape genes rebuild a tree, which matters before trees are scattered by the hundred.
 - **Erosion on the World Clock (`[S68]`, `[S70]`):** Erosion moved into Climate, where rainfall is set, and became a track on the World Clock; no other section has a timeline.
 - **Save feedback (`[B199]`):** a toast says whether a save worked, and a "Last saved" time sits under the Save button; a failed save used to show nothing.
 - **Turning hitch, re-measured (`[B168]`):** turning and running gave no frame over 30 ms; the slow frames left only face water, where the graphics card is the slow part. Tabled.
+
+![The architecture diagram: life (biome, trees, rocks) as its own feature state feeding the chunk, the World Clock in the interface, and the shared renderer drawing the planet, the chunk and the Tree view.](diagrams/architecture-2026-11-18.svg)
 
 ### 🤖 How AI was used
 - Claude built the evolution from the papers already in the references, and measured the regrowth's time before choosing a fix: the measurement showed that a planned shader rewrite would have gained almost nothing.
@@ -61,7 +64,7 @@
 - Rocks first appeared only in walk mode, too small for the landscape and too scarce; a fake blob shadow never showed and was removed for real shadow maps; a screen-space grain stayed on the screen instead of the rock. Each was replaced after measuring why.
 
 ### ➡️ Next
-- World Clock: stored eras (instant scrubbing and Play), then trees evolving on it, toward the final video.
+- Scattering everything that grows on the chunk in height layers (trees, shrubs, grass, weeds), then flowers, then stored eras and Play on the World Clock with trees evolving on it, toward the final video.
 
 ---
 

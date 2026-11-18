@@ -6,7 +6,7 @@ import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
 import { controls } from '../scene/controls';
 import { applyTreeGenes, type TreeSpecies } from './treeGenes';
 import { TreeBloom } from './treeBloom';
-import { applyTreeLook, showFullDetail, updateTreeWind, type TreeLighting } from './treeLook';
+import { applyTreeLook, rebuildFireflies, showFullDetail, updateTreeLook, updateTreeWind, type TreeLighting } from './treeLook';
 import { AlienTree } from './alienTree';
 
 interface TreeViewCanvasProps {
@@ -40,7 +40,7 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const orbitRef = useRef<OrbitControls | null>(null);
   const groundRef = useRef<THREE.Mesh | null>(null);
-  const treesRef = useRef(new Map<string, { tree: AlienTree; key: string }>());
+  const treesRef = useRef(new Map<string, { tree: AlienTree; shapeKey: string; fireflyKey: string; lookKey: string }>());
   const windRef = useRef(wind);
   windRef.current = wind;
   const framedRef = useRef(''); // the shown species last framed: editing a gene keeps the camera where it is
@@ -129,21 +129,32 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
         trees.delete(id);
       }
     }
+    // Only what changed is redone ([B203]): shape genes rebuild the tree, Fireflies only its lights, and the look
+    // (hues, Color range, Glow, land color, shade) only updates uniforms.
     for (const each of shown) {
-      const key = JSON.stringify([each.genes, landColor, shade]);
+      const { hueTurn, leafOffset, trunkOffset, trunkTopOffset, tipTurn, hueRange, glow, fireflies, ...shapeGenes } = each.genes;
+      const shapeKey = JSON.stringify(shapeGenes);
+      const fireflyKey = String(fireflies); // their places come from shape genes (seed, leaf size), their number from this
+      const lookKey = JSON.stringify([hueTurn, leafOffset, trunkOffset, trunkTopOffset, tipTurn, hueRange, glow, landColor, shade]);
+      const lighting = { ...VIEW_LIGHT, ...shade };
       let entry = trees.get(each.id);
       if (!entry) {
-        entry = { tree: new AlienTree(), key: '' };
+        entry = { tree: new AlienTree(), shapeKey: '', fireflyKey: '', lookKey: '' };
         trees.set(each.id, entry);
         scene.add(entry.tree);
       }
-      if (entry.key !== key) {
+      if (entry.shapeKey !== shapeKey) {
         applyTreeGenes(entry.tree, each.genes);
         entry.tree.generate();
-        applyTreeLook(entry.tree, each.genes, landColor, { ...VIEW_LIGHT, ...shade });
-        showFullDetail(entry.tree);
-        entry.key = key;
+        applyTreeLook(entry.tree, each.genes, landColor, lighting);
+      } else {
+        if (entry.fireflyKey !== fireflyKey) rebuildFireflies(entry.tree, each.genes, landColor);
+        if (entry.lookKey !== lookKey || entry.fireflyKey !== fireflyKey) updateTreeLook(entry.tree, each.genes, landColor, lighting);
       }
+      showFullDetail(entry.tree);
+      entry.shapeKey = shapeKey;
+      entry.fireflyKey = fireflyKey;
+      entry.lookKey = lookKey;
     }
     // Laid out and framed only when the shown set changes: editing a gene leaves every plant and the camera in place.
     const shownKey = shown.map((each) => each.id).join(',');
