@@ -28,6 +28,8 @@ export interface SharedViewportView {
   onFrame?: () => void;
   // Drawn through the color grade (scene/colorGrade.ts); the chunk is, the planet isn't (Dana, 2026-11-10).
   graded?: boolean;
+  // Drawn over this view right after it (the Tree view's bloom); the viewport is in canvas pixels, bottom-left origin.
+  postRender?: (renderer: THREE.WebGLRenderer, left: number, bottom: number, width: number, height: number) => void;
 }
 
 export interface SharedViewportRenderer {
@@ -164,6 +166,7 @@ export function useSharedViewportRenderer(containerRef: RefObject<HTMLElement | 
         webglRenderer.setScissorTest(true);
         webglRenderer.clear(); // only its rectangle: the scissor holds
         webglRenderer.render(entry.view.scene, entry.view.camera);
+        entry.view.postRender?.(webglRenderer, entry.left, entry.bottom, entry.width, entry.height);
       }
 
       animationFrameId = requestAnimationFrame(animate);

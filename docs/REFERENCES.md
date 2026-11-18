@@ -229,6 +229,7 @@
 **Procedural trees from parameters** · EZ-Tree (Dan Greenheck) · `method used`
 - MIT, npm `@dgreenheck/ez-tree` 1.1.0, three.js; a tree mesh generated at runtime from a seed and parameters (branch levels, per-level angle, children, gnarliness, length, radius, taper; twist, force; leaf count, size, angle). Source read 2026-11-16: no built-in detail levels; leaves are photo cards placed by public methods (`generateLeaves`, `generateLeaf`), each tilted from its branch by the leaf angle about its x axis.
 - Used: the trunk and limbs as built; our species genes set its options; a subclass takes over `generateLeaf` so our 3D leaf parts grow at its spots; our toon shader replaces its materials (`trees/`).
+- Used for shrubs: its three bush presets (`bush_1` to `bush_3`: almost no trunk, limbs from the ground) are the starts of the Mound, Vase and Spreading families; its growth force (a direction and a strength divided by each section's radius) is the Bend gene, so Weeping hangs. Its trellis hook (`calculateTrellisForce`, called once per section) is our ground: a limb heading into the ground turns level, as nothing in EZ-Tree knows where the ground is.
 - *[github.com/dgreenheck/ez-tree](https://github.com/dgreenheck/ez-tree). README read 2026-11-10, source 2026-11-16*
 
 **Wind on vegetation: main and detail bending** · Tiago Sousa (Crytek), GPU Gems 3 ch. 16, 2007 · `method used`
@@ -246,14 +247,19 @@
 **Beaufort wind speed** · WMO formula `v = 0.836 · B^1.5` m/s · `method used`
 - Used: the Atmosphere's Wind (Beaufort 0 to 12) becomes a share of force 12's speed for the trees' sway (`windShare` in `trees/treeLook.ts`). Recalled, not re-read.
 
-**Selective bloom** · three.js `UnrealBloomPass`, example `webgl_postprocessing_unreal_bloom_selective` · `planned`
-- Only objects on a bloom layer glow; reported pitfalls with transparent backgrounds and render target formats.
-- Planned for tree glow, in the color grade's EffectComposer, its frame cost measured.
+**Selective bloom** · three.js `UnrealBloomPass`, example `webgl_postprocessing_unreal_bloom_selective` · `method used`
+- Only objects on a bloom layer glow: everything else is swapped to black for one draw, that image is blurred, and the blur is added over the frame. Reported pitfalls with transparent backgrounds and render target formats.
+- Used (`trees/treeBloom.ts`): leaves and fireflies on layer 1; the leaves draw only their glow in that pass, so only the glow spreads. Unlike the example, only the pass's blurred halo (its `renderTargetsHorizontal[0]`) is added, since its final step adds the halo onto the sharp input too, and the view already has the sharp glow: added twice, glowing parts clipped to white. The glow image is half the view's resolution, as engines build bloom from a smaller image. Measured in the Tree view at 120 Hz: at full resolution 13 of 240 frames took over 12 ms, at half none, the same as with bloom off. The three.js source read from the installed package, 2026-11-17.
 - *[UnrealBloomPass docs](https://threejs.org/docs/pages/UnrealBloomPass.html) · [selective bloom thread](https://discourse.threejs.org/t/selective-unrealbloompass-issues/9331). Search results 2026-11-17*
 
-**Floating lights as points** · three.js `Points`, `threejs-fireflies` · `planned`
+**Floating lights as points** · three.js `Points`, `threejs-fireflies` · `method used`
 - A points cloud with a custom shader, additive blending and depth writing off, drifting by a time uniform.
-- Planned for floating lights around canopies, near the camera only.
+- Used for fireflies around canopies (`trees/treeLights.ts`), near the camera only, most of them just outside the canopy's box as an ellipsoid.
+
+**Shrub growth forms** · university extension guides (UF/IFAS EP433, Ohio State "Plant Growth Habits") · `method used`
+- Shrubs are described by form: mounded or round, vase, spreading, upright, weeping or cascading, and prostrate or creeping. The terms overlap between guides.
+- Used: the six shrub families (`SHRUB_FAMILY_OPTIONS` in `trees/treeGenes.ts`).
+- *[UF/IFAS EP433](https://www.scribd.com/document/617203605/EP433-14291644) · [Ohio State, Plant Growth Habits](https://erie.osu.edu/sites/erie/files/imce/Program_Pages/ANR/Plant%20Growth%20Habits.pdf). Search results 2026-11-17*
 - *[threejs-fireflies](https://uithub.com/thebenezer/threejs-fireflies) · [Points glow thread](https://discourse.threejs.org/t/three-points-glowing-effect-neon/1193). Search results 2026-11-17*
 
 **Detail by screen size** · Unity `LODGroup` · `method used`

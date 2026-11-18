@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { BLOOM_LAYER } from './treeBloom';
 import terrainGlsl from '../shaders/terrain/terrain.glsl?raw';
 import landLayersGlsl from '../shaders/terrain/landLayers.glsl?raw';
 import treeVertexGlsl from '../shaders/trees/tree.vert.glsl?raw';
@@ -134,6 +135,7 @@ function treeMaterial(isLeaf: boolean, colorA: THREE.Color, colorB: THREE.Color,
       uTipColorB: { value: tipB },
       uTreeSize: { value: 1 },
       uGlow: { value: 0 },
+      uBloomPass: { value: 0 },
       uTime: { value: 0 },
       uWind: { value: 0 },
       uWindDirection: { value: WIND_DIRECTION.clone() },
@@ -216,7 +218,8 @@ export function applyTreeLook(tree: AlienTree, genes: TreeGenes, landColor: stri
   // Glow and fireflies grow with the tree; both in the tips' hue.
   leafMaterial.uniforms.uGlow.value = (genes.glow ?? 0) * growth(genes);
   const lightColor = colors.tipOuter.clone().lerp(new THREE.Color(1, 1, 1), 0.45);
-  applyFireflies(tree, genes, lightColor, leafMaterial.uniforms.uTreeSize.value, DETAIL_NEAR, DETAIL_FAR);
+  applyFireflies(tree, genes, lightColor, leaves.geometry.boundingBox ?? new THREE.Box3(), leafMaterial.uniforms.uTreeSize.value, DETAIL_NEAR, DETAIL_FAR);
   branches.material = trunkMaterial;
   leaves.material = leafMaterial;
+  leaves.layers.enable(BLOOM_LAYER);
 }

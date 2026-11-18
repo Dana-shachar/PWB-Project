@@ -8,22 +8,21 @@
 > Current status only. Weekly reports are in `WEEKLY-PUSHES.md`. Architecture and decisions are in `SPEC.md`; bugs are in `ISSUES.md`. Outside sources are in `REFERENCES.md`. Repo layout is in `README.md`.
 
 > [!IMPORTANT]
-> **Start from here (2026-11-17, evening):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
+> **Start from here (2026-11-17, night):** *read `.claude/CLAUDE.md`, then this block, then `docs/CODE-INDEX.md`. Before proposing on any topic, read its plan doc section and `REFERENCES.md` entries and open the plan with a "Read first:" line (hooks in `.claude/settings.local.json` remind of this).*
 >
-> **State.** `main` has tree species (`[S97]`) with joints matched to the branch (`[B197]`), umbrella pads (`[B198]`), Vary at the Mutation rate, the per-part Tip color shown up close, and save feedback (a toast and a "Last saved" line, `[B199]`). Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
-> - Dana's trees live in the **Flora** template. While a template is open for editing, autosave is off: only Save Template keeps changes. Claude's test tab can change species freely there, and closes without saving.
+> **State.** `main` has tree species (`[S97]`) and shrubs in their own section with six growth-form families and a Bend gene; nothing grows under the ground (`[B207]`); glow with a selective bloom halo in the Tree view; fireflies as orbs; the tree menu in Shape, Leaves, Color, Effects. Never commit `.obsidian/workspace.json`. Rivers stay on `rivers-fork`.
+> - Dana's planet is open in Claude's test tab and autosaves: never move a slider there. The Flora template (autosave off while editing) is the place to change species.
 > - Two app tabs share the graphics card. Close Claude's tab when Dana tests. Reload after editing `trees/` or `shaders/trees/`; run `node scripts/checkShaders.mjs` after any `.glsl` edit.
 >
-> **How to work.** Claude acts as tech lead: flag and recommend, every change needs Dana's go on a numbered plan; a clear directive is the go. Imitate the references in `docs/references/`. Only what reads from walking height; close-up detail only up close. Short replies.
+> **How to work.** Claude acts as tech lead: flag and recommend, every change needs Dana's go on a numbered plan; a clear directive is the go. Use the design system's patterns exactly (copy how neighbor sections are built). Imitate the references in `docs/references/`. Only what reads from walking height. Short replies.
 >
-> **Next, in order (Dana, 2026-11-17, approved recommendations).**
-> 1. ✅ Done 2026-11-17 (Dana approved the wind at forces 8 to 12): Tree view full detail, droop toward the ground, minimum part base, Crown hides unused limb sliders, pads on arching stalks, no color line at joints, turntable button, no refit on gene edits, a Shrub family, species in a ring, wind (Crysis's bending, long gentle waves, gusts, high-wind protections blended in from force 8 to 20), Size range and Color range, Glow and Fireflies (both grow with the tree, `growth`).
-> 1a. 🟡 Dana to check: erosion as a World Clock track scrubbing a real run on the chunk (untested). 📌 Delete `erosion/ErosionTimeline.tsx` once confirmed.
-> 2. ❓ Bloom on the glow (selective, measure its frame cost): only if Glow alone doesn't read.
-> 3. Color sliders update uniforms only (`[B203]`).
-> 4. Thick upward limbs (`[B202]`): measure first.
-> 5. One placement plan for everything that grows, in height layers as Horizon Zero Dawn places vegetation from density maps: trees and shrubs from the species engine, a grass layer of instanced blades from the life grid's density near the camera, and weeds as small species (a stem with leaf parts). Woods versus lone trees (Spread gene); per-tree hue variation; then a Trees track with humus and mutation per era. A Tendril family (curly trunk, Cup leaves) as a shrub.
-> 6. Flowers in the same engine (a stem and a flower-head part, big and small): research flower heads first. 7. Stored eras and Play. 8. The run popup.
+> **Next, in order (Dana, 2026-11-17).**
+> 1. Color sliders update uniforms only (`[B203]`), before anything is scattered.
+> 2. Scattering: one placement plan for everything that grows, in height layers as Horizon Zero Dawn places vegetation from density maps: trees and shrubs from the species engine (Dana has saved shrubs for it), a grass layer of instanced blades near the camera, weeds as small species. Woods versus lone trees (Spread gene); per-tree hue variation; the bloom joins the chunk; then a Trees track with humus and mutation per era. A Tendril shrub family (curly limbs, Cup leaves).
+> 3. Flowers, after scattering: a stem and a flower-head part, big and small; research flower heads first.
+> 4. Thick upward limbs (`[B202]`): measure first. 5. Stored eras and Play. 6. The run popup.
+> - 🟡 Dana to check: erosion as a World Clock track scrubbing a real run on the chunk. 📌 Delete `erosion/ErosionTimeline.tsx` once confirmed.
+> - 💡 Glowing parts can still clip toward white at high Glow (no tone mapping in the Tree view); Dana lowered Glow instead. Tone mapping the halo only if it comes back.
 >
 > Weekly push: only when Dana says so. Pending for Session 13: the screenshot copies in `docs/screenshots/` and this week's architecture diagram (new `clock/` and `trees/` modules).
 >

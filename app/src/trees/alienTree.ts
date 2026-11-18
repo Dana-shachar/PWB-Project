@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { Tree } from '@dgreenheck/ez-tree';
 
+type Branch = Parameters<Tree['generateBranch']>[0];
+
 export interface LeafSpot {
   origin: THREE.Vector3;
   orientation: THREE.Quaternion;
@@ -35,13 +37,55 @@ function radiusAt(point: THREE.Vector3, sections: BranchSection[]): number {
 
 // EZ-Tree's tree with its leaf step taken over: generateLeaf (a public method) records where each leaf goes, at the
 // size and angle EZ-Tree picks, and trees/treeLook.ts builds our 3D leaf parts there instead of its photo cards.
+const GROUND_CLIMB = 0.35; // a sunk limb's rise per unit forward as it climbs back to the ground (about 20 degrees)
+
 export class AlienTree extends Tree {
   leafSpots: LeafSpot[] = [];
   private leafSections: BranchSection[] = []; // the branch whose leaves are being placed; empty for tip leaves
 
+  private lastOrigin: THREE.Vector3 | null = null; // the previous section's origin on the branch being grown
+
   generate(): void {
     this.leafSpots = [];
+    // EZ-Tree's trellis force runs once per section; with no trellis drawn, it's our ground (calculateTrellisForce).
+    this.options.trellis.enabled = true;
+    this.options.trellis.visible = false;
     super.generate();
+    // The thinnest twigs turn by force / radius, faster than leveling can catch: what still reaches under lies on top.
+    const position = this.branchesMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < position.count; i++) if (position.getY(i) < 0) position.setY(i, 0);
+    position.needsUpdate = true;
+    this.branchesMesh.geometry.computeBoundingBox();
+    this.branchesMesh.geometry.computeBoundingSphere();
+    for (const spot of this.leafSpots) spot.origin.y = Math.max(spot.origin.y, 0);
+  }
+
+  generateBranch(branch: Branch): void {
+    // A limb starting at the ground and pointing into it starts level instead.
+    const direction = new THREE.Vector3(0, 1, 0).applyEuler(branch.orientation);
+    if (direction.y < 0 && branch.origin.y <= branch.radius) {
+      direction.y = 0;
+      if (direction.lengthSq() < 1e-8) direction.set(1, 0, 0);
+      branch.orientation.setFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize()));
+    }
+    this.lastOrigin = branch.origin.clone();
+    super.generateBranch(branch);
+  }
+
+  // EZ-Tree knows no ground: a limb heading down within its own radius of it turns level and runs along it, as a
+  // creeping stem lies on the soil; one whose underside is already in it climbs back. Climb angle inferred, TUNABLE.
+  calculateTrellisForce(position: THREE.Vector3, radius: number): { direction: THREE.Vector3; strength: number } | null {
+    const prev = this.lastOrigin;
+    this.lastOrigin = position.clone();
+    if (!prev) return null;
+    const heading = position.clone().sub(prev);
+    // Looks one section ahead on the same heading, so the turn comes before the dip, not after.
+    if (heading.y >= 0 || position.y + heading.y > radius) return null;
+    heading.y = 0;
+    if (heading.lengthSq() < 1e-8) heading.set(1, 0, 0);
+    heading.normalize();
+    if (position.y < radius) heading.y = GROUND_CLIMB; // its underside is in the ground: climb until it rests on it
+    return { direction: heading.normalize(), strength: Math.PI }; // a full turn: the next section points exactly there
   }
 
   generateLeaves(sections: BranchSection[]): void {
@@ -51,8 +95,9 @@ export class AlienTree extends Tree {
   }
 
   generateLeaf(origin: THREE.Vector3, orientation: THREE.Euler): void {
-    const variance = this.options.leaves.sizeVariance;
-    const size = this.options.leaves.size * (1 + this.rng.random(variance, -variance));
+    // Size range as a factor: size times (1 + range) to a power from -1 to 1, as even smaller as larger, never below 0.
+    const range = this.options.leaves.sizeVariance;
+    const size = this.options.leaves.size * Math.pow(1 + range, this.rng.random(1, -1));
     this.leafSpots.push({
       origin: origin.clone(),
       orientation: new THREE.Quaternion().setFromEuler(orientation),

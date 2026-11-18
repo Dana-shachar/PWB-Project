@@ -1624,6 +1624,23 @@ IDs are assigned in date order and never reused, so a reference stays valid once
 **✅ Fixed 2026-11-17** · **Where:** `TreeViewCanvas` in `trees/TreeViewCanvas.tsx`
 - OrbitControls captures the pointer on the viewport's pointerdown, so the release never reached the button; React's stop runs after the viewport's own listener. Fixed: a native pointerdown listener on the button stops the press first. A script click had hidden it in testing.
 
+### [B207] Shrubs sank into the ground · `wrong but workable`
+**✅ Fixed 2026-11-17** · **Where:** `calculateTrellisForce`, `generateBranch` and `generate` in `trees/alienTree.ts`
+- Dana: some shrubs disappeared under the surface. Measured: every shrub reached 2 to 4 units below the ground, every tree stayed at 0. Shrub limbs start at the ground, and a downward Bend, a wide angle or Gnarl takes them under; EZ-Tree has no ground.
+- Fixed: a limb heading into the ground turns level one section ahead and climbs until it rests on top; a limb starting at the ground pointing down starts level. The thinnest twigs turn faster than that can catch, so any point still under is lifted onto the ground. All shrubs measured at 0 after.
+
+### [B208] Limb length and Height seemed to zoom the Tree view · `minor`
+**✅ Fixed 2026-11-17** · **Where:** the ring layout in `trees/TreeViewCanvas.tsx`
+- The camera stayed put, but every gene edit re-spaced the ring by the widest plant, so all plants slid in or out. Fixed: the ring is laid out only when the shown set changes, as the framing already was.
+
+### [B209] Shrubs counted as seedlings for Glow and Fireflies · `wrong but workable`
+**✅ Fixed 2026-11-17** · **Where:** `growth` in `trees/treeGenes.ts`
+- Growth came from trunk height, and a shrub's trunk is a stub, so every shrub had a fifth of its fireflies and glow. Fixed: a shrub grows by its limb length, full at 6 (`SHRUB_FULL_GROWN`).
+
+### [B210] Picking a shrub lost the picked tree · `minor`
+**✅ Fixed 2026-11-17** · **Where:** `SpeciesSection` in `ui/panels/BiomePanel.tsx`, `migrateBiome` in `biome/plantTypes.ts`
+- Trees and Shrubs shared one selected species, so a click in one list reset the other to its first. Fixed: each list keeps its own (`selectedSpecies`, `selectedShrub`).
+
 ### [B202] Thick upward limbs stick out of the tree · `wrong but workable`
 **🔴 Open 2026-11-17** · **Where:** child branches in EZ-Tree (`generateChildBranches`), `applyTreeGenes` in `trees/treeGenes.ts`
 - Dana: when limbs are very thick and steep they poke out and look broken, in any family. Not measured yet.

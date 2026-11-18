@@ -86,6 +86,7 @@
 - A few big, readable parts; a tree reads from dozens of leaves, not thousands.
 - Thick, smooth trunks, often swollen at the base, with 2 to 6 main limbs curving or twisting gently.
 - One silhouette family per species: Clumps, Cone, Umbrella, Fan, or Crown (a single trunk with a star of leaves at its top, as palms grow).
+- Shrubs have their own section and six families by growth form: Mound, Vase, Spreading, Upright, Weeping and Creeping. A Bend gene pulls limbs down to hang or up to reach, for trees too. Nothing grows below the ground: a limb reaching it runs along it.
 - Leaves are 3D parts with volume, not flat stamps, after Dana's flora references: Tendril, Curl, Frond, Spikes, Antler, Blade, Fan, Pad, Cup, Bulb. Strands taper to a point and grow out of their branch along its direction; a Droop gene bends fronds, blades and fans down or up. Up to three parts mix in one tree.
 - Every leaf varies: each rolls its own size, bend, twist and brightness from a seed, so no two match and the species rebuilds the same.
 - Parts grow out of their branch: a tube's base starts at the branch's own radius and widens, capped. Pads are umbrellas (`nms-umbrella-disc-trees`): a stalk flaring into the center of a level disc with a drooping rim.
@@ -99,7 +100,7 @@
 
 **Wind and effects**
 - Trees sway with the Atmosphere's Wind, the way Crysis bends vegetation: the whole tree leans (more with height), and leaves flutter on their own. A small or young tree sways less than a tall one; a thick trunk barely sways, but its leaves always move (Dana, 2026-11-17).
-- ✅ Glow (a soft light toward the tips, in the Tip hue) and Fireflies (lights drifting around the canopy, near the camera only) are genes that mutate per era and can start at 0; both follow the tree's size, later its age on the Trees track. ❓ Selective bloom only if the glow needs a halo.
+- ✅ Glow (a soft light toward the tips, in the Tip hue) and Fireflies (lights drifting around the canopy, near the camera only) are genes that mutate per era and can start at 0; both follow the plant's size (a tree's height, a shrub's limb length), later its age on the Trees track. ✅ Selective bloom gives the glow a halo, in the Tree view for now; it joins the chunk with the trees.
 - Effects cost only what is seen (Dana, 2026-11-17): wind and glow run in the tree shader, so only drawn trees pay; trees outside the view are culled; on the chunk the leaf flutter and floating lights run near the camera only, and bloom touches only the bloom layer.
 
 **Randomizing**

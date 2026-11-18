@@ -10,6 +10,7 @@ uniform vec3 uTrunkColorA; // leaves: the trunk's gradient, so a part's base mat
 uniform vec3 uTrunkColorB;
 uniform float uTreeSize; // the tree's bounding radius, for the detail fade
 uniform float uGlow; // leaves: a soft light at the tips in the tip hue, 0 none; grows with the tree
+uniform float uBloomPass; // 1 while trees/treeBloom.ts draws its glow-only image: the emission alone, else black
 uniform float uDetailNear; // camera distance in tree sizes: full per-part detail nearer, none past far
 uniform float uDetailFar;
 uniform vec3 uCanopyCenter;
@@ -35,7 +36,7 @@ varying float vAlong;
 
 const float TOON_DETAIL = 0.5; // as rock.frag.glsl
 const float HEIGHT_WEIGHT = 0.6; // canopy gradient: how much height counts against distance out from the center. TUNABLE
-const float GLOW_STRENGTH = 0.6; // the glow's brightness at Glow 1, added unlit so it shows in shade. TUNABLE
+const float GLOW_STRENGTH = 0.75; // the glow's brightness at Glow 1, added unlit so it shows in shade. TUNABLE
 const float JOINT_BLEND = 0.15; // share of a leaf part, from its base, that blends from its branch's color. TUNABLE
 
 void main() {
@@ -74,10 +75,11 @@ void main() {
     vec3 shade = shadeColor(surfaceColor, uShadeHueTurn, uShadeLift, uShadeChroma) + surfaceColor * fill;
     litColor = mix(baseColor, shade, shadeMask);
   }
+  vec3 glow = vec3(0.0);
   if (uIsLeaf > 0.5 && uGlow > 0.0) {
     // A soft emission toward each tip, light of its own rather than lit by the sun.
-    litColor += mix(uTipColorA, uTipColorB, 0.5) * uGlow * GLOW_STRENGTH * smoothstep(0.3, 1.0, vAlong);
+    glow = mix(uTipColorA, uTipColorB, 0.5) * uGlow * GLOW_STRENGTH * smoothstep(0.15, 1.0, vAlong);
   }
-  gl_FragColor = vec4(litColor, 1.0);
+  gl_FragColor = vec4(uBloomPass > 0.5 ? glow : litColor + glow, 1.0);
   #include <colorspace_fragment>
 }

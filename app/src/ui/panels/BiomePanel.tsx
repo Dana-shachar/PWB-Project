@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { Accordion, DualHueSlider, EditableText, HueSlider, IconButton, LockButton, Select, Slider } from '../UIElements';
-import { FIREFLIES_MAX, HUE_RANGE_MAX, randomTreeGenes, varyTreeGenes, NO_LOCKS, SHAPE_GENE_RANGES, TREE_FAMILIES, TREE_FAMILY_OPTIONS, treeColors, type GeneGroup, type NumericShapeGene, type TreeFamily, type TreeGenes, type TreeSpecies } from '../../trees/treeGenes';
+import { FIREFLIES_MAX, HUE_RANGE_MAX, randomTreeGenes, varyTreeGenes, NO_LOCKS, SHAPE_GENE_RANGES, DEFAULT_TREE_GENES, isShrub, SHRUB_FAMILY_OPTIONS, TREE_FAMILIES, TREE_FAMILY_OPTIONS, treeColors, type GeneGroup, type NumericShapeGene, type TreeFamily, type TreeGenes, type TreeSpecies } from '../../trees/treeGenes';
 import { LEAF_PART_OPTIONS, type LeafPart } from '../../trees/leafParts';
 import { HARMONY_RULES, harmonyFor } from '../../atmosphere/moonTexture';
 import { LIFE_SATURATION, landMiddleColor, lifeColors, type BiomeSettings, type LifeType, type LifeTypeKey } from '../../biome/plantTypes';
@@ -168,7 +168,11 @@ export function BiomePanel({ biome, onBiomeChange, colorStops }: BiomePanelProps
         );
       })}
       <div className="panel-section">
-        <TreesSection biome={biome} onBiomeChange={onBiomeChange} land={land} />
+        <SpeciesSection kind="tree" biome={biome} onBiomeChange={onBiomeChange} land={land} />
+      </div>
+      <div className="panel-section-divider panel-section-divider--spaced" />
+      <div className="panel-section">
+        <SpeciesSection kind="shrub" biome={biome} onBiomeChange={onBiomeChange} land={land} />
       </div>
     </>
   );
@@ -176,21 +180,49 @@ export function BiomePanel({ biome, onBiomeChange, colorStops }: BiomePanelProps
 
 // The planet's tree species as a list like the layers (an eye shows a species in the Tree view, a click selects it), then
 // the selected species' shape genes and colors (trees/treeGenes.ts). Family sets the shape genes to its starting values.
-function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; onBiomeChange: (changes: Partial<BiomeSettings>) => void; land: string }) {
-  const species = biome.treeSpecies;
-  const selected = species.find((each) => each.id === biome.selectedSpecies) ?? species[0];
-  const genes = selected.genes;
-  const setSpecies = (next: TreeSpecies[], selectedSpecies = biome.selectedSpecies) => onBiomeChange({ treeSpecies: next, selectedSpecies });
-  const updateSpecies = (id: string, changes: Partial<TreeSpecies>) => setSpecies(species.map((each) => (each.id === id ? { ...each, ...changes } : each)));
-  const onChange = (changes: Partial<TreeGenes>) => updateSpecies(selected.id, { genes: { ...genes, ...changes } });
+// Trees and Shrubs: one species list (biome.treeSpecies) shown in two sections by family, the same controls in each.
+const SPECIES_KIND = {
+  tree: { title: 'Trees', name: 'Species', add: '+ Add species', description: "The planet's tree species, seen side by side in the Tree view (the view strip over the viewport).", families: TREE_FAMILY_OPTIONS, familyHelp: 'The silhouette: round clumps, a stacked cone, discs on long limbs, leaves fanned at the top, or a crown on a bare trunk. Sets every shape gene below to its start.' },
+  shrub: { title: 'Shrubs', name: 'Shrub', add: '+ Add shrub', description: "The planet's shrubs: no trunk to speak of, limbs from the ground. Shown in the Tree view with the trees.", families: SHRUB_FAMILY_OPTIONS, familyHelp: 'The growth form: a round mound, a vase fanning up, spreading wide, upright and narrow, weeping with hanging limbs, or creeping along the ground. Sets every shape gene below to its start.' },
+} as const;
+
+function SpeciesSection({ kind, biome, onBiomeChange, land }: { kind: keyof typeof SPECIES_KIND; biome: BiomeSettings; onBiomeChange: (changes: Partial<BiomeSettings>) => void; land: string }) {
+  const text = SPECIES_KIND[kind];
+  const all = biome.treeSpecies;
+  const species = all.filter((each) => isShrub(each.genes.family) === (kind === 'shrub'));
+  const pickKey = kind === 'shrub' ? 'selectedShrub' : 'selectedSpecies'; // each list remembers its own pick
+  const picked = biome[pickKey];
+  const selected = species.find((each) => each.id === picked) ?? species[0];
+  const setSpecies = (next: TreeSpecies[], pick = picked) => onBiomeChange({ treeSpecies: next, [pickKey]: pick });
+  const updateSpecies = (id: string, changes: Partial<TreeSpecies>) => setSpecies(all.map((each) => (each.id === id ? { ...each, ...changes } : each)));
+  // A copy of the selected one with a new seed; the first shrub starts as a Mound.
   const addSpecies = () => {
     const id = `species-${Date.now()}`;
-    setSpecies([...species, { id, name: `Species ${species.length + 1}`, visible: true, genes: { ...genes, seed: Math.floor(Math.random() * 1e9) }, locks: { ...NO_LOCKS } }], id);
+    const from = selected?.genes ?? { ...DEFAULT_TREE_GENES, family: 'mound' as const, ...TREE_FAMILIES.mound };
+    setSpecies([...all, { id, name: `${text.name} ${species.length + 1}`, visible: true, genes: { ...from, seed: Math.floor(Math.random() * 1e9) }, locks: { ...NO_LOCKS } }], id);
   };
   const removeSpecies = (id: string) => {
-    const next = species.filter((each) => each.id !== id);
-    setSpecies(next, id === biome.selectedSpecies ? next[0].id : biome.selectedSpecies);
+    const next = all.filter((each) => each.id !== id);
+    const sameKind = next.find((each) => isShrub(each.genes.family) === (kind === 'shrub'));
+    setSpecies(next, id === picked ? (sameKind ?? next[0]).id : picked);
   };
+  const addButton = (
+    <div className="panel-btn-row">
+      <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={addSpecies}>
+        {text.add}
+        <span className="ui-tooltip">{selected ? `A copy of the selected ${text.name.toLowerCase()} with a new seed, to change from there` : 'A Mound shrub, to change from there'}</span>
+      </button>
+    </div>
+  );
+  if (!selected) {
+    return (
+      <Accordion title={text.title} description={text.description}>
+        {addButton}
+      </Accordion>
+    );
+  }
+  const genes = selected.genes;
+  const onChange = (changes: Partial<TreeGenes>) => updateSpecies(selected.id, { genes: { ...genes, ...changes } });
   const gene = (key: NumericShapeGene, label: string, step: number, description: string) => (
     <Slider label={label} value={genes[key] ?? TREE_FAMILIES[genes.family][key]} onChange={(value) => onChange({ [key]: value })} min={SHAPE_GENE_RANGES[key][0]} max={SHAPE_GENE_RANGES[key][1]} step={step} precision={step < 1 ? 2 : 0} description={description} />
   );
@@ -206,16 +238,19 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
     return `linear-gradient(to right, ${stops.join(', ')})`;
   };
   const colors = treeColors(genes, land);
-  // A group's title with its padlock: Vary and New species keep a locked group.
-  const groupTitle = (title: string, group: GeneGroup) => (
-    <div className="panel-section-title-row panel-section-title-row--actions">
+  // A group's padlock, in its nested section's header: Vary and New species keep a locked group.
+  const groupLock = (group: GeneGroup) => (
+    <LockButton locked={selected.locks[group] ?? false} onChange={(locked) => updateSpecies(selected.id, { locks: { ...selected.locks, [group]: locked } })} />
+  );
+  const partTitle = (title: string) => (
+    <>
+      <div className="panel-section-divider panel-section-divider--part" />
       <span className="panel-section-title">{title}</span>
-      <LockButton locked={selected.locks[group]} onChange={(locked) => updateSpecies(selected.id, { locks: { ...selected.locks, [group]: locked } })} />
-    </div>
+    </>
   );
   const trunkTurn = genes.hueTurn + genes.trunkOffset;
   return (
-    <Accordion title="Trees" defaultOpen description="The planet's tree species, seen side by side in the Tree view (the view strip over the viewport).">
+    <Accordion title={text.title} defaultOpen={kind === 'tree'} description={text.description}>
       <div className="panel-section-title-row panel-section-title-row--actions">
         <span className="panel-section-title">Species</span>
         <span className="panel-title-actions">
@@ -228,7 +263,7 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
         <div
           key={each.id}
           className={'noise-layer-row' + (each.id === selected.id ? ' noise-layer-row--selected' : '') + (each.visible ? '' : ' noise-layer-row--hidden')}
-          onMouseDown={() => onBiomeChange({ selectedSpecies: each.id })}
+          onMouseDown={() => onBiomeChange({ [pickKey]: each.id })}
         >
           <div className="noise-layer-row-main">
             <button type="button" className="panel-text-btn" onMouseDown={(event) => event.stopPropagation()} onClick={() => removeSpecies(each.id)} disabled={species.length === 1}>
@@ -246,38 +281,40 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
           </span>
         </div>
       ))}
-      <div className="panel-btn-row">
-        <button type="button" className="noise-add-layer-btn ui-tooltip-anchor" onClick={addSpecies}>
-          + Add species
-          <span className="ui-tooltip">A copy of the selected species with a new seed, to change from there</span>
-        </button>
-      </div>
-      <div className="panel-section-divider panel-section-divider--spaced" />
-      {groupTitle('Shape', 'shape')}
-      <Select label="Family" value={genes.family} onChange={(family) => onChange({ family: family as TreeFamily, ...TREE_FAMILIES[family as TreeFamily] })} options={TREE_FAMILY_OPTIONS} description="The silhouette: round clumps, a stacked cone, discs on long limbs, or leaves fanned at the top. Sets every shape gene below to its start." />
+      {addButton}
+      <Accordion title="Shape" nested trailing={groupLock('shape')} description="The trunk and limbs: the tree's silhouette.">
+      <Select label="Family" value={genes.family} onChange={(family) => onChange({ family: family as TreeFamily, ...TREE_FAMILIES[family as TreeFamily] })} options={[...text.families]} description={text.familyHelp} />
+      {partTitle('Trunk')}
       {gene('height', 'Height', 0.5, 'How tall the trunk grows.')}
       {gene('trunkRadius', 'Trunk width', 0.05, 'How thick the trunk is at its base.')}
       {gene('baseSwell', 'Base swell', 0.01, 'How much the trunk swells at its base. 0 keeps it straight.')}
+      {gene('gnarliness', 'Gnarl', 0.01, 'How much the trunk and limbs curl and twist.')}
       {/* A crown has no limbs (applyTreeGenes), so its limb sliders would do nothing. */}
-      {genes.family !== 'crown' && gene('limbs', 'Limbs', 1, 'Main limbs off the trunk.')}
-      {genes.family !== 'crown' && gene('limbAngle', 'Limb angle', 1, 'How far the limbs lean out from the trunk, in degrees.')}
-      {genes.family !== 'crown' && gene('limbLength', 'Limb length', 0.5, 'How long the main limbs are.')}
-      {genes.family !== 'crown' && gene('limbStart', 'Limb start', 0.01, 'Where along the trunk the limbs begin: 0 at the ground, 1 at the top.')}
-      {gene('gnarliness', 'Gnarl', 0.01, 'How much the limbs curl and twist.')}
-      {genes.family !== 'crown' && gene('twigs', 'Twigs', 1, 'Branches on each limb. 0 keeps bare limbs.')}
-      <div className="panel-section-divider panel-section-divider--spaced" />
-      {groupTitle('Leaves', 'leaves')}
+      {genes.family !== 'crown' && (
+        <>
+          {partTitle('Limbs')}
+          {gene('limbs', 'Limbs', 1, 'Main limbs off the trunk.')}
+          {gene('limbAngle', 'Limb angle', 1, 'How far the limbs lean out from the trunk, in degrees.')}
+          {gene('limbLength', 'Limb length', 0.5, 'How long the main limbs are.')}
+          {gene('limbStart', 'Limb start', 0.01, 'Where along the trunk the limbs begin: 0 at the ground, 1 at the top.')}
+          {gene('bend', 'Bend', 0.01, 'How the limbs bend as they grow: below 0 they arch over and hang, above 0 they reach up.')}
+          {gene('twigs', 'Twigs', 1, 'Branches on each limb. 0 keeps bare limbs.')}
+        </>
+      )}
+      </Accordion>
+      <Accordion title="Leaves" nested trailing={groupLock('leaves')} description="Which 3D parts the leaves are, and their size and pose.">
       <Select label="Leaf part" value={genes.leafPart} onChange={(leafPart) => onChange({ leafPart: leafPart as LeafPart })} options={LEAF_PART_OPTIONS} description="What each leaf is: a twisting tendril, a fiddlehead curl, a creased blade, a fan of fingers, a cupped pad, a trumpet cup, or a club on a stalk. Each one varies in size, bend and twist." />
       <Select label="Leaf part 2" value={genes.leafPart2} onChange={(leafPart2) => onChange({ leafPart2: leafPart2 as LeafPart | 'none' })} options={[{ value: 'none', label: 'None' }, ...LEAF_PART_OPTIONS]} description="A second part mixed into the same tree. Mix sets how many leaves take it." />
       <Select label="Leaf part 3" value={genes.leafPart3} onChange={(leafPart3) => onChange({ leafPart3: leafPart3 as LeafPart | 'none' })} options={[{ value: 'none', label: 'None' }, ...LEAF_PART_OPTIONS]} description="A third part mixed in, sharing Mix with the second." />
       <Slider label="Mix" value={genes.partMix} onChange={(partMix) => onChange({ partMix })} min={0} max={1} step={0.01} precision={2} disabled={genes.leafPart2 === 'none' && genes.leafPart3 === 'none'} description="The share of leaves that take the extra parts; the rest take Leaf part." />
+      {partTitle('Size and pose')}
       {gene('leafCount', 'Leaves', 1, 'Leaves on each branch tip.')}
       {gene('leafSize', 'Leaf size', 0.1, 'How big each leaf card is.')}
       {gene('leafAngle', 'Leaf angle', 1, 'How far leaves lean from their branch, in degrees.')}
-      {gene('leafSizeRange', 'Size range', 0.01, 'How much leaf sizes differ within one tree: 0 all alike, 0.9 from a tenth of Leaf size to almost double.')}
+      {gene('leafSizeRange', 'Size range', 0.01, 'How much leaf sizes differ within one tree: 0 all alike, 1 from half of Leaf size to double, 3 from a quarter to four times.')}
       {gene('droop', 'Droop', 0.01, 'How fronds, blades and fans bend: below 0 they curl up, above 0 they droop down.')}
-      <div className="panel-section-divider panel-section-divider--spaced" />
-      {groupTitle('Color', 'color')}
+      </Accordion>
+      <Accordion title="Color" nested trailing={groupLock('color')} description="The canopy's and trunk's hues, turned from the land's own.">
       <DualHueSlider
         label="Leaves"
         value={genes.hueTurn}
@@ -308,6 +345,13 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
         secondSwatchColor={colors.trunkTop.getStyle()}
         description="The trunk's own gradient: the large handle colors its base, the small one its top. Harmony below sets the base from the leaves' color."
       />
+      <Select
+        label="Harmony"
+        value={harmonyFor(genes.trunkOffset)}
+        onChange={(name) => { const rule = HARMONY_RULES.find((each) => each.name === name); if (rule) onChange({ trunkOffset: rule.offset }); }}
+        options={[...HARMONY_RULES.map((rule) => rule.name), 'Custom'].map((name) => ({ value: name, label: name }))}
+        description="A color rule for the trunk's base, measured from the leaves' inner hue: Complementary is opposite, Analogous a neighbor, Monochrome the same hue, darker."
+      />
       <Slider
         label="Color range"
         unit="°"
@@ -319,15 +363,11 @@ function TreesSection({ biome, onBiomeChange, land }: { biome: BiomeSettings; on
         precision={0}
         description="How far individuals of this species turn from its colors, each by its own amount. New individual shows another; 0 makes them all alike."
       />
+      </Accordion>
+      <Accordion title="Effects" nested trailing={groupLock('effects')} description="Light and life on the tree, growing with it.">
       <Slider label="Glow" value={genes.glow ?? 0} onChange={(glow) => onChange({ glow })} min={0} max={1} step={0.01} precision={2} description="A soft light toward the leaf tips, in the Tip hue. It grows with the tree: a young tree glows faintly. 0 is none." />
       <Slider label="Fireflies" value={genes.fireflies ?? 0} onChange={(fireflies) => onChange({ fireflies })} min={0} max={FIREFLIES_MAX} step={1} precision={0} description="Small lights drifting around the canopy, in the Tip hue, seen only up close. A young tree has fewer. 0 is none." />
-      <Select
-        label="Harmony"
-        value={harmonyFor(genes.trunkOffset)}
-        onChange={(name) => { const rule = HARMONY_RULES.find((each) => each.name === name); if (rule) onChange({ trunkOffset: rule.offset }); }}
-        options={[...HARMONY_RULES.map((rule) => rule.name), 'Custom'].map((name) => ({ value: name, label: name }))}
-        description="A color rule for the trunk's base, measured from the leaves' inner hue: Complementary is opposite, Analogous a neighbor, Monochrome the same hue, darker."
-      />
+      </Accordion>
     </Accordion>
   );
 }

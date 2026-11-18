@@ -1398,6 +1398,10 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
   margin: calc(var(--gap-lg) - var(--gap-md)) 0;
 }
 /* A divider above each nested accordion, at the same gaps as a divider between parts, so it never reads as a box. */
+/* A part title's divider inside a nested section: the regular gap only, so stacked parts don't add up to empty space. */
+.ui-accordion-content > .panel-section-divider.panel-section-divider--part {
+  margin: 0;
+}
 .ui-accordion-content > .ui-accordion--nested {
   margin-top: calc(var(--gap-lg) - var(--gap-md));
   padding-top: calc(var(--gap-lg) - var(--gap-md));
@@ -1421,9 +1425,10 @@ input[type='range'].ui-dual-hue-handle:disabled::-webkit-slider-thumb {
 .ui-accordion-trailing {
   position: absolute;
   right: calc(var(--font-size-sm) + var(--gap-sm));
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
+  bottom: 0;
   display: flex;
+  align-items: center; /* centered without a transform, which would anchor its fixed tooltips and widen the panel */
 }
 .ui-accordion-header-row > .ui-accordion-header {
   flex: 1;

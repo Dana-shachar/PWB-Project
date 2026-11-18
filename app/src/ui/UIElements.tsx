@@ -699,6 +699,8 @@ interface AccordionProps {
   actions?: ReactNode;
   // The section's on/off switch, just before the chevron; beside the header, like actions, so it never opens or closes it.
   headerSwitch?: { value: boolean; onChange: (value: boolean) => void; label: string };
+  // A small control just before the chevron, such as a group's padlock; beside the header, so it never opens or closes it.
+  trailing?: ReactNode;
   children: ReactNode;
 }
 
@@ -707,7 +709,7 @@ interface AccordionProps {
 // (Dana, 2026-09-22). `nested` styles it as a subordinate of its parent
 // section rather than a peer category (Dana, 2026-09-23 — "Project Settings"
 // and "My Projects" read as equal-weight siblings with no `nested` variant).
-export function Accordion({ title, defaultOpen = false, nested = false, onHeaderClick, active = false, description, actions, headerSwitch, children }: AccordionProps) {
+export function Accordion({ title, defaultOpen = false, nested = false, onHeaderClick, active = false, description, actions, headerSwitch, trailing, children }: AccordionProps) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
   const header = (
     <button
@@ -725,7 +727,7 @@ export function Accordion({ title, defaultOpen = false, nested = false, onHeader
   );
   return (
     <div className={'ui-accordion' + (nested ? ' ui-accordion--nested' : '')}>
-      {actions || headerSwitch ? (
+      {actions || headerSwitch || trailing ? (
         <div className="ui-accordion-header-row">
           {actions && <span className="ui-accordion-actions">{actions}</span>}
           {header}
@@ -734,6 +736,7 @@ export function Accordion({ title, defaultOpen = false, nested = false, onHeader
               <Switch value={headerSwitch.value} onChange={headerSwitch.onChange} label={headerSwitch.label} />
             </span>
           )}
+          {trailing && <span className="ui-accordion-trailing">{trailing}</span>}
         </div>
       ) : (
         header

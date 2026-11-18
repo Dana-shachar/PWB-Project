@@ -5,6 +5,7 @@ import type { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import type { SharedViewportRenderer } from '../scene/sharedViewportRenderer';
 import { controls } from '../scene/controls';
 import { applyTreeGenes, type TreeSpecies } from './treeGenes';
+import { TreeBloom } from './treeBloom';
 import { applyTreeLook, showFullDetail, updateTreeWind, type TreeLighting } from './treeLook';
 import { AlienTree } from './alienTree';
 
@@ -83,6 +84,7 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
     groundRef.current = ground;
     const trees = treesRef.current;
     const clock = new THREE.Clock();
+    const bloom = new TreeBloom();
     sharedRenderer.registerView('tree', {
       scene,
       camera,
@@ -90,11 +92,18 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
       onFrame: () => {
         orbit.update();
         const time = clock.getElapsedTime();
-        trees.forEach(({ tree }) => updateTreeWind(tree, time, windRef.current));
+        let glow = 0;
+        trees.forEach(({ tree }) => {
+          updateTreeWind(tree, time, windRef.current);
+          glow = Math.max(glow, (tree.leavesMesh.material as THREE.ShaderMaterial).uniforms?.uGlow?.value ?? 0);
+        });
+        bloom.setStrength(glow);
       },
+      postRender: (renderer, left, bottom, width, height) => bloom.render(renderer, scene, camera, left, bottom, width, height),
     });
     return () => {
       sharedRenderer.unregisterView('tree');
+      bloom.dispose();
       orbit.dispose();
       trees.forEach(({ tree }) => disposeTree(tree));
       trees.clear();
@@ -129,7 +138,6 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
         scene.add(entry.tree);
       }
       if (entry.key !== key) {
-        entry.tree.position.set(0, 0, 0);
         applyTreeGenes(entry.tree, each.genes);
         entry.tree.generate();
         applyTreeLook(entry.tree, each.genes, landColor, { ...VIEW_LIGHT, ...shade });
@@ -137,6 +145,11 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
         entry.key = key;
       }
     }
+    // Laid out and framed only when the shown set changes: editing a gene leaves every plant and the camera in place.
+    const shownKey = shown.map((each) => each.id).join(',');
+    if (shownKey === framedRef.current) return;
+    framedRef.current = shownKey;
+
     // A ring on the ground disc, neighbors spaced by the widest footprint, so the turntable shows each in turn.
     const widths = shown.map((each) => {
       const size = new THREE.Box3().setFromObject(trees.get(each.id)!.tree).getSize(new THREE.Vector3());
@@ -148,10 +161,6 @@ export function TreeViewCanvas({ viewportRef, sharedRenderer, species, landColor
       const angle = (i / shown.length) * Math.PI * 2;
       trees.get(each.id)!.tree.position.set(Math.cos(angle) * ringRadius, 0, Math.sin(angle) * ringRadius);
     });
-    const shownKey = shown.map((each) => each.id).join(',');
-    if (shownKey === framedRef.current) return;
-    framedRef.current = shownKey;
-
     // Fits the trees' bounding sphere in the narrower of the two view angles, keeping the viewing angle.
     const box = new THREE.Box3();
     trees.forEach(({ tree }) => box.expandByObject(tree));

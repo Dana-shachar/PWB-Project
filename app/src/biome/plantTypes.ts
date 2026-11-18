@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { DEFAULT_TREE_GENES, DEFAULT_TREE_SPECIES, NO_LOCKS, TREE_FAMILIES, type TreeGenes, type TreeSpecies } from '../trees/treeGenes';
+import { DEFAULT_SHRUB, DEFAULT_TREE_GENES, DEFAULT_TREE_SPECIES, isShrub, NO_LOCKS, TREE_FAMILIES, type TreeGenes, type TreeSpecies } from '../trees/treeGenes';
 // The life types on the life grid (biome/lifeGrid.ts), Cordonnier et al. 2017's plant functional types: plants grouped by
 // how they respond to conditions. Generation 0, the pioneers: algae and moss. Alien, so every range is ours and TUNABLE.
 
@@ -53,6 +53,7 @@ export interface BiomeSettings {
   moss: LifeType;
   treeSpecies: TreeSpecies[]; // the planet's tree species (trees/treeGenes.ts), tuned in the Tree view
   selectedSpecies: string; // the species the Trees controls edit
+  selectedShrub: string; // the one the Shrubs controls edit, so picking a shrub keeps the tree picked
 }
 
 export const DEFAULT_BIOME_SETTINGS: BiomeSettings = {
@@ -84,6 +85,7 @@ export const DEFAULT_BIOME_SETTINGS: BiomeSettings = {
   },
   treeSpecies: DEFAULT_TREE_SPECIES,
   selectedSpecies: DEFAULT_TREE_SPECIES[0].id,
+  selectedShrub: DEFAULT_SHRUB.id,
 };
 
 export function migrateBiome(saved: Partial<BiomeSettings> | undefined): BiomeSettings {
@@ -94,12 +96,18 @@ export function migrateBiome(saved: Partial<BiomeSettings> | undefined): BiomeSe
     ? saved.treeSpecies.map((each) => {
         // Saves from before the 3D leaf parts carry a flat leafShape: dropped, the family's part taken instead.
         const { leafShape: _flat, ...genes } = each.genes as Partial<TreeGenes> & { leafShape?: unknown };
-        return { ...each, locks: { ...NO_LOCKS, ...each.locks }, genes: { ...DEFAULT_TREE_GENES, leafPart: TREE_FAMILIES[genes.family ?? 'clumps'].leafPart, ...genes } };
+        // The one Shrub family became Mound when shrubs got their own families.
+        const family = (genes.family as string) === 'shrub' ? 'mound' : (genes.family ?? 'clumps');
+        return { ...each, locks: { ...NO_LOCKS, ...each.locks }, genes: { ...DEFAULT_TREE_GENES, leafPart: TREE_FAMILIES[family].leafPart, bend: TREE_FAMILIES[family].bend, ...genes, family } };
       })
     : [{ ...DEFAULT_TREE_SPECIES[0], genes: { ...DEFAULT_TREE_GENES, ...legacy } }];
-  const selectedSpecies = species.some((each) => each.id === saved?.selectedSpecies) ? saved!.selectedSpecies! : species[0].id;
+  // Trees and Shrubs each keep at least one species: a save from before shrubs gets a Mound.
+  if (!species.some((each) => isShrub(each.genes.family))) species.push(DEFAULT_SHRUB);
+  const pickedOf = (shrub: boolean, id?: string) => (species.find((each) => each.id === id && isShrub(each.genes.family) === shrub) ?? species.find((each) => isShrub(each.genes.family) === shrub)!).id;
+  const selectedSpecies = pickedOf(false, saved?.selectedSpecies);
+  const selectedShrub = pickedOf(true, saved?.selectedShrub ?? saved?.selectedSpecies);
   const { treeShape: _dropped, ...rest } = (saved ?? {}) as Partial<BiomeSettings> & { treeShape?: unknown };
-  return { ...DEFAULT_BIOME_SETTINGS, ...rest, algae: type('algae'), moss: type('moss'), treeSpecies: species, selectedSpecies };
+  return { ...DEFAULT_BIOME_SETTINGS, ...rest, algae: type('algae'), moss: type('moss'), treeSpecies: species, selectedSpecies, selectedShrub };
 }
 
 // A type's actual hue (degrees) and saturation and lightness ranges on this planet, in sRGB HSL, from the land color.
